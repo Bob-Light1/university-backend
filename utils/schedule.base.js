@@ -161,15 +161,12 @@ const RoomSchema = new mongoose.Schema(
  * Métadonnées de réunion virtuelle (Zoom / Teams / Meet).
  * Utilisé uniquement si isVirtual === true sur le document parent.
  */
-const VirtualMeetingSchema = new mongoose.Schema(
-  {
-    platform:  { type: String, enum: ['ZOOM', 'TEAMS', 'MEET', 'OTHER'] },
-    joinUrl:   { type: String },
-    meetingId: { type: String },
-    passcode:  { type: String },
-  },
-  { _id: false }
-);
+const VirtualMeetingSchema = new mongoose.Schema({
+  platform:   { type: String, enum: ['ZOOM', 'TEAMS', 'MEET', 'OTHER'] },
+  meetingUrl: { type: String },  // ← aligné avec frontend + Yup + controller
+  meetingId:  { type: String },
+  passcode:   { type: String },
+}, { _id: false });
 
 /**
  * Référence vers un document de cours (support pédagogique).

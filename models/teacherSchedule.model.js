@@ -4,18 +4,6 @@
  * @file teacherSchedule.model.js
  * @description Mongoose model for teacher-facing schedule sessions,
  *              availability, and workload management.
- *
- *  Alignements avec le backend foruni :
- *  ──────────────────────────────────────
- *  • Campus isolation : schoolCampus (ObjectId → 'Campus')
- *  • Teacher : ref 'Teacher' (teacher_model.js) — utilise _id du modèle Teacher
- *  • Subject : ref 'Subject' (subject_model.js)
- *  • Semester : 'S1' | 'S2' | 'Annual' (String)
- *  • ContractSnapshot aligné avec teacher_model.employmentType :
- *    'full-time' | 'part-time' | 'contract' | 'temporary'
- *  • Classes : ref 'Class' (class_model.js) et non groups
- *  • studentScheduleRef : lien vers StudentSchedule (même session)
- *  • JWT payload : req.user.id (et non req.user._id)
  */
 
 const mongoose = require('mongoose');
@@ -326,7 +314,7 @@ TeacherScheduleSchema.virtual('latestWorkloadDeviation').get(function () {
 // PRE-SAVE HOOKS
 // ─────────────────────────────────────────────
 
-TeacherScheduleSchema.pre('save', async function (next) {
+TeacherScheduleSchema.pre('save', async function () {
   try {
     if (this.startTime && this.endTime) {
       this.durationMinutes = Math.round(
@@ -346,10 +334,8 @@ TeacherScheduleSchema.pre('save', async function (next) {
     ) {
       this.publishedAt = new Date();
     }
-
-    next();
   } catch (err) {
-    next(err);
+    throw err ;
   }
 });
 

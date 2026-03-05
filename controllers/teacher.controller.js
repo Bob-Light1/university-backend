@@ -147,7 +147,7 @@ const loginTeacher = async (req, res) => {
 
     
 
-    // Generate JWT token
+    // Generate JWT token — issuer must match auth.js verification options
     const token = jwt.sign(
       { 
         id: teacher._id,
@@ -157,7 +157,7 @@ const loginTeacher = async (req, res) => {
         departmentId: teacher.department?._id
       },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '7d', issuer: 'school-management-app' }
     );
 
     // Update last login

@@ -3,18 +3,6 @@
 /**
  * @file studentSchedule.model.js
  * @description Mongoose model for student-facing schedule sessions.
- *
- *  Alignements avec le backend foruni :
- *  ──────────────────────────────────────
- *  • Campus isolation : champ schoolCampus (ObjectId → 'Campus') — cohérent avec
- *    student_model, teacher_model, class_model, studentAttendance.model.
- *  • Participants : tableau `classes` (ObjectId[] → 'Class') au lieu de `groups`.
- *    La Class contient déjà les étudiants inscrits (students[]).
- *  • Teacher : ref 'Teacher' (modèle Teacher du projet) et non 'User'.
- *  • Subject : ref 'Subject' (modèle Subject du projet) au lieu de course.code.
- *  • Semester : 'S1' | 'S2' | 'Annual' (String) — cohérent avec studentAttendance.
- *  • Soft-delete : isDeleted / deletedAt / deletedBy — cohérent avec le projet.
- *  • Pas de calendarUid ni notificationLog (complexité inutile pour MVP).
  */
 
 const mongoose = require('mongoose');
@@ -272,10 +260,8 @@ StudentScheduleSchema.pre('save', async function (next) {
     ) {
       this.publishedAt = new Date();
     }
-
-    next();
   } catch (err) {
-    next(err);
+    throw err;
   }
 });
 

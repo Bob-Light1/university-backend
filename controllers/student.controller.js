@@ -153,7 +153,7 @@ const loginStudent = async (req, res) => {
       return sendError(res, 403, 'Account is inactive or suspended. Please contact support');
     }
 
-    // Generate JWT token
+    // Generate JWT token — issuer must match auth.js verification options
     const token = jwt.sign(
       { 
         id: student._id,
@@ -162,7 +162,7 @@ const loginStudent = async (req, res) => {
         name: `${student.firstName} ${student.lastName}` 
       },
       JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: '7d', issuer: 'school-management-app' }
     );
 
     // Update last login

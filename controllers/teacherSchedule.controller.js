@@ -92,8 +92,12 @@ const getMyTeacherCalendar = asyncHandler(async (req, res) => {
   const teacherId = req.user.id;
 
   const now   = new Date();
-  const start = from ? new Date(from) : new Date(now.setDate(now.getDate() - now.getDay()));
-  const end   = to   ? new Date(to)   : new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const start = from
+    ? new Date(from)
+    : (() => { const d = new Date(now); d.setDate(d.getDate() - d.getDay()); d.setHours(0,0,0,0); return d; })();
+  const end   = to
+    ? new Date(to)
+    : new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
 
   if (isNaN(start) || isNaN(end)) {
     return sendError(res, 400, 'Invalid date range. Use ISO 8601 format.');
