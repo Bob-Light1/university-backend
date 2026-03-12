@@ -153,13 +153,18 @@ const loginStudent = async (req, res) => {
       return sendError(res, 403, 'Account is inactive or suspended. Please contact support');
     }
 
-    // Generate JWT token — issuer must match auth.js verification options
+    // Generate JWT token — issuer must match auth.js verification options.
+    // Use schoolCampus._id (the ObjectId) not the populated object, so that
+    // req.user.campusId in downstream middleware is always a plain string/ObjectId,
+    // never a serialised Mongoose document (which would break campus isolation checks).
+    const campusId = student.schoolCampus?._id ?? student.schoolCampus ?? null;
+
     const token = jwt.sign(
       { 
-        id: student._id,
-        campusId: student.schoolCampus,
-        role: 'STUDENT', 
-        name: `${student.firstName} ${student.lastName}` 
+        id:       student._id,
+        campusId: campusId,
+        role:     'STUDENT', 
+        name:     `${student.firstName} ${student.lastName}`,
       },
       JWT_SECRET,
       { expiresIn: '7d', issuer: 'school-management-app' }

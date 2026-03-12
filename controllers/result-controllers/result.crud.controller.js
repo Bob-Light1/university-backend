@@ -355,15 +355,20 @@ const getResultById = asyncHandler(async (req, res) => {
 
   if (!result) return sendNotFound(res, 'Result');
 
-  // Un STUDENT ne voit que ses propres notes publiées
+  // Students may only access their own PUBLISHED/ARCHIVED results.
+  // Ownership check is the authoritative guard for STUDENT — no need to
+  // re-validate campus (their results can only belong to their campus anyway,
+  // and a secondary campus-string comparison is fragile when the JWT campusId
+  // originates from a populated document reference).
   if (req.user.role === 'STUDENT') {
     if (result.student._id.toString() !== req.user.id)
       return sendForbidden(res, 'Access denied.');
     if (![RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED].includes(result.status))
       return sendError(res, 404, 'Result not found or not yet published.');
+    return sendSuccess(res, 200, 'Result fetched.', result);
   }
 
-  // Campus isolation pour les rôles non-globaux
+  // Campus isolation for all non-global, non-student roles
   if (!isGlobalRole(req.user.role) &&
       result.schoolCampus.toString() !== req.user.campusId?.toString())
     return sendForbidden(res, 'Access denied.');

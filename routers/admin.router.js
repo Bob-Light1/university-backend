@@ -1,21 +1,79 @@
+'use strict';
+
+/**
+ * @file admin.router.js
+ * @description Express router for platform-level Admin / Director accounts.
+ *
+ * Route matrix:
+ *  POST   /api/admin/login            → loginAdmin          (public)
+ *  POST   /api/admin/create           → createAdmin         (ADMIN only)
+ *  GET    /api/admin/me               → getMe               (ADMIN | DIRECTOR)
+ *  PUT    /api/admin/me/password      → updatePassword      (ADMIN | DIRECTOR)
+ */
+
 const express = require('express');
-const { 
-  createAdmin, 
-  loginAdmin, 
+
+const {
+  loginAdmin,
+  createAdmin,
+  getMe,
+  updatePassword,
 } = require('../controllers/admin.controller');
 
-// Import des nouvelles fonctions du middleware
-const { loginLimiter, strictLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../middleware/auth/auth');
+
+const {
+  loginLimiter,
+  strictLimiter,
+} = require('../middleware/rate-limiter/rate-limiter');
 
 const router = express.Router();
 
-// Public routes (no authentication required)
-router.post("/login", loginLimiter, loginAdmin);
+// ─── PUBLIC ───────────────────────────────────────────────────────────────────
 
+/**
+ * POST /api/admin/login
+ * Authenticate an Admin or Director.
+ * Rate-limited: 10 attempts per 15 minutes (loginLimiter).
+ */
+router.post('/login', loginLimiter, loginAdmin);
+
+// ─── PROTECTED ────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/admin/create
+ * Create a new Admin or Director account.
+ * - strictLimiter: 3 attempts per hour (brute-force / abuse protection).
+ * - Only an authenticated ADMIN can create other admins or directors.
+ */
 router.post(
-  "/create", 
+  '/create',
   strictLimiter,
-  createAdmin
+  authenticate,
+  authorize(['ADMIN']),
+  createAdmin,
+);
+
+/**
+ * GET /api/admin/me
+ * Return the authenticated admin's own profile.
+ */
+router.get(
+  '/me',
+  authenticate,
+  authorize(['ADMIN', 'DIRECTOR']),
+  getMe,
+);
+
+/**
+ * PUT /api/admin/me/password
+ * Change own password (requires current password confirmation).
+ */
+router.put(
+  '/me/password',
+  authenticate,
+  authorize(['ADMIN', 'DIRECTOR']),
+  updatePassword,
 );
 
 module.exports = router;

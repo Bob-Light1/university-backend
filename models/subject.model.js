@@ -2,8 +2,18 @@ const mongoose = require("mongoose");
 
 /**
  * Subject Schema
- * Represents an academic subject taught in a campus
- * Each subject is unique per campus (via subject_code)
+ * Represents an academic subject taught in a campus.
+ * Each subject is unique per campus (via subject_code).
+ *
+ * MODIFICATION v2:
+ *  Added optional `courseRef` field linking this campus subject to the
+ *  global course catalog (Course model). The link is informational only —
+ *  a Subject can exist without a Course reference, and a Course can exist
+ *  without being referenced by any Subject.
+ *
+ *  Validation rules for courseRef (enforced in the controller):
+ *  • The referenced Course must be APPROVED and isLatestVersion: true.
+ *  • The Course.level must match the Class level of this Subject's class.
  */
 const subjectSchema = new mongoose.Schema(
   {
@@ -21,7 +31,7 @@ const subjectSchema = new mongoose.Schema(
       ref: "Teacher",
     }],
 
-    // Department to wich the subject belongs
+    // Department to which the subject belongs
     department: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Department",
@@ -98,7 +108,20 @@ const subjectSchema = new mongoose.Schema(
         message: '{VALUE} is not a valid category'
       },
       default: 'Other'
-    }
+    },
+
+    // ── v2: Global course catalog reference ─────────────────────────────────
+    // Optional link to the global Course entity.
+    // Informational only — no cascade effects.
+    // Validated in course.resources.controller → linkSubjectCourse:
+    //   • Course must be APPROVED and isLatestVersion: true
+    //   • Course.level must match the Class level of this Subject
+    courseRef: {
+      type:    mongoose.Schema.Types.ObjectId,
+      ref:     'Course',
+      default: null,
+      index:   true,
+    },
   },
   {
     timestamps: true, // createdAt & updatedAt
@@ -112,8 +135,8 @@ const subjectSchema = new mongoose.Schema(
 // ========================================
 
 /**
- * Ensure subject code is unique per campus
- * A campus cannot have two subjects with the same code
+ * Ensure subject code is unique per campus.
+ * A campus cannot have two subjects with the same code.
  */
 subjectSchema.index(
   { schoolCampus: 1, subject_code: 1 },

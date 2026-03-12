@@ -123,7 +123,13 @@ const campusSchema = new mongoose.Schema(
         type: Number,
         default: 50,
         min: [1, 'Max classes must be at least 1']
-      }
+      },
+      maxDocumentStorageMB: {
+        type:    Number,
+        default: 5120,      
+        min:     [100, 'Storage quota must be at least 100 MB'],
+        max:     [102400, 'Storage quota cannot exceed 100 GB'],
+    },
     }
   },
   {
@@ -187,6 +193,17 @@ campusSchema.methods.canAddClass = async function () {
     status: { $ne: 'archived' }
   });
   return currentCount < this.features.maxClasses;
+};
+campusSchema.methods.canAddDocumentStorage = async function(additionalBytes) {
+  const Document = mongoose.model('Document');
+  const result = await Document.aggregate([
+    { $match: { campusId: this._id, deletedAt: null, 'importedFile.sizeBytes': { $exists: true } } },
+    { $group: { _id: null, total: { $sum: '$importedFile.sizeBytes' } } }
+  ]);
+  const usedBytes = result[0]?.total || 0;
+  const maxBytes  = (this.features.maxDocumentStorageMB || 5120) * 1024 * 1024;
+  
+  return (usedBytes + additionalBytes) <= maxBytes;
 };
 
 // **STATICS**

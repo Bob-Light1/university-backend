@@ -9,6 +9,12 @@ const {
   restoreSubject
 } = require('../controllers/subject.controller');
 
+
+const {
+  linkSubjectCourse, 
+  unlinkSubjectCourse, 
+} = require('../controllers/course-controllers/course.resources.controller');
+
 const router = express.Router();
 
 /**
@@ -69,5 +75,11 @@ router.delete("/:id", authorize(adminRoles), deleteSubject);
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 router.patch("/:id/restore", authorize(adminRoles), restoreSubject);
+
+// Link a Subject to a global Course
+ router.patch('/:id/link-course', authorize(adminRoles), linkSubjectCourse);
+ 
+ // Unlink a Subject from its Course reference
+ router.delete('/:id/link-course', authorize(adminRoles), unlinkSubjectCourse);
 
 module.exports = router;
