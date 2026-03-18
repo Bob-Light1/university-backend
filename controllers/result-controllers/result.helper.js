@@ -32,14 +32,35 @@ const isManagerRole = (role) => isGlobalRole(role) || role === 'CAMPUS_MANAGER';
 // ─── RÉSOLUTION DU CAMPUS ─────────────────────────────────────────────────────
 
 /**
- * Retourne le filtre schoolCampus à appliquer à toutes les requêtes MongoDB.
- * Utilise buildCampusFilter de validationHelpers (déjà présent dans le projet).
+ * Returns the schoolCampus MongoDB filter to be applied on every Result query.
  *
- * @param {Object} req - Express request
- * @returns {Object}   Filtre MongoDB (ex. { schoolCampus: ObjectId })
+ * Wraps buildCampusFilter from validationHelpers and converts a missing-campusId
+ * breach into an Express-compatible 403 response so no data leaks silently.
+ *
+ * Usage inside async controllers:
+ *   const filter = getCampusFilter(req, res);
+ *   if (!filter) return; // response already sent
+ *
+ * @param {Object} req - Express request (req.user must be populated by authenticate)
+ * @param {Object} res - Express response (used only when an error must be sent)
+ * @returns {Object|null} MongoDB filter, or null when a 403 has been sent
  */
-const getCampusFilter = (req) =>
-  buildCampusFilter(req.user, req.query.campusId || null);
+const getCampusFilter = (req, res) => {
+  try {
+    // Only ADMIN/DIRECTOR may pass an explicit campusId override via query param.
+    // For all other roles buildCampusFilter ignores the second argument and uses
+    // req.user.campusId exclusively — preventing cross-campus query injection.
+    return buildCampusFilter(req.user, req.query.campusId || null);
+  } catch (err) {
+    // buildCampusFilter throws when a non-global role has no valid campusId.
+    // Log the anomaly and return a 403 instead of leaking all campus data.
+    console.error('[CampusIsolation] result.helper – getCampusFilter breach:', err.message);
+    if (res && !res.headersSent) {
+      sendForbidden(res, 'Campus information is missing from your session. Please log in again.');
+    }
+    return null;
+  }
+};
 
 /**
  * Résout le campusId effectif depuis req.user + body optionnel.

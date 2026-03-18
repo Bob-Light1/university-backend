@@ -91,6 +91,21 @@ class GenericEntityController {
       const fields      = { ...req.body };
       const uploadedFile = req.file;
 
+      // ── Parse JSON-serialised nested fields sent via multipart FormData ──
+      // Multer flattens all text parts as plain strings. Fields that the
+      // frontend serialises as JSON (e.g. emergencyContact) are deserialized
+      // here so Mongoose receives the proper sub-document shape.
+      const JSON_FIELDS = ['emergencyContact'];
+      JSON_FIELDS.forEach((fieldName) => {
+        if (typeof fields[fieldName] === 'string') {
+          try {
+            fields[fieldName] = JSON.parse(fields[fieldName]);
+          } catch {
+            // Leave as-is; Mongoose validation will reject malformed data.
+          }
+        }
+      });
+
       // ── 1. Resolve the campus ──────────────────
       const campusResolution = this._resolveCampusId(req.user, fields);
       if (campusResolution.forbidden) {
@@ -126,16 +141,27 @@ class GenericEntityController {
       }
 
       // ── 4. Hook beforeCreate ─────────────────────────
+      // The hook may mutate `fields` directly (e.g. auto-generate matricule).
+      // After it runs, re-sync `rest` so any field written into `fields` is
+      // picked up when building `entityData` below.
       if (this.beforeCreate) {
         const hookResult = await this.beforeCreate(fields, campusId, session);
         if (!hookResult.success) {
           await safeAbort();
           return sendError(res, 400, hookResult.error);
         }
-        // Merge enriched data (employee number, etc.) into rest
+        // Merge explicit return data (legacy path kept for compatibility)
         if (hookResult.data) {
           Object.assign(rest, hookResult.data);
         }
+      }
+
+      // Re-destructure so mutations made directly on `fields` by the hook
+      // (e.g. fields.matricule auto-generated) are reflected in `rest`.
+      // email / username / password are already captured above — skip them.
+      {
+        const { email: _e, username: _u, password: _p, ...refreshedRest } = fields;
+        Object.assign(rest, refreshedRest);
       }
 
       // ── 5. Uniqueness of email / username ─────────────
@@ -350,8 +376,21 @@ class GenericEntityController {
         return sendError(res, 400, `Invalid ${this.entityNameLower} ID format`);
       }
 
-      const fields       = req.body;
+      const fields       = { ...req.body };
       const uploadedFile = req.file;
+
+      // ── Parse JSON-serialised nested fields sent via multipart FormData ──
+      const JSON_FIELDS = ['emergencyContact'];
+      JSON_FIELDS.forEach((fieldName) => {
+        if (typeof fields[fieldName] === 'string') {
+          try {
+            fields[fieldName] = JSON.parse(fields[fieldName]);
+          } catch {
+            // Malformed JSON — leave as-is; Mongoose will reject it.
+          }
+        }
+      });
+
       const updates      = { ...fields };
 
       // These fields should never be updated via this route

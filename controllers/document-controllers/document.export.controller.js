@@ -54,12 +54,13 @@ const printJobs = new Map();
  * Increments downloadCount and writes a DOWNLOAD audit entry.
  */
 const exportPdf = asyncHandler(async (req, res) => {
+  // req.document is already loaded and campus-verified by loadAndVerifyDocument.
+  // We only need to reload the fields not selected by that middleware (title, pdfSnapshot, etc.).
+  // This avoids the campusId filter bug where undefined campusId causes a silent DB mismatch.
+  const baseDoc = req.document; // { _id, campusId, type, status, ... }
+
   const doc = await Document
-    .findOne({
-      _id:       req.params.id,
-      campusId:  req.isGlobalRole ? undefined : req.campusId,
-      deletedAt: null,
-    })
+    .findById(baseDoc._id)
     .select('ref title pdfSnapshot currentVersion campusId status')
     .lean();
 
@@ -97,12 +98,12 @@ const exportPdf = asyncHandler(async (req, res) => {
  * Files are never served as static assets — all access is authenticated via this endpoint.
  */
 const exportRaw = asyncHandler(async (req, res) => {
+  // req.document is already loaded and campus-verified by loadAndVerifyDocument.
+  // Reload only the fields not selected by the middleware (importedFile, title).
+  const baseDoc = req.document;
+
   const doc = await Document
-    .findOne({
-      _id:       req.params.id,
-      campusId:  req.isGlobalRole ? undefined : req.campusId,
-      deletedAt: null,
-    })
+    .findById(baseDoc._id)
     .select('type importedFile campusId title')
     .lean();
 

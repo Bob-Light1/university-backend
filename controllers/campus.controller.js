@@ -15,6 +15,7 @@ const Department = require('../models/department.model');
 const campusConfig = require('../configs/campus.config');
 const studentConfig = require('../configs/student.config');
 const { uploadImage } = require('../utils/fileUpload');
+const { getFileUrl } = require('../middleware/upload/upload');
 
 const {
   sendSuccess,
@@ -143,12 +144,12 @@ class CampusController extends GenericEntityController {
         await session.abortTransaction();
         return sendConflict(res, 'A campus with this email is already registered');
       }
-
-      // Handle location
-      const location = parseLocation(fields);
       
       // Handle image
-      profileImage = await uploadImage(imageFile, this.folderName, 'campus');
+      const campus_image = req.file.filename;
+      
+      // Handle location
+      const location = parseLocation(fields);
 
       // Hash password
       const salt = await bcrypt.genSalt(SALT_ROUNDS);
@@ -163,7 +164,7 @@ class CampusController extends GenericEntityController {
         manager_phone: manager_phone?.trim(),
         location,
         password: hashedPassword,
-        profileImage // For compatibility with generic controller
+        campus_image // For compatibility with generic controller
       };
 
       const campus = new Campus(campusData);

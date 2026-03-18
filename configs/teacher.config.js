@@ -171,8 +171,8 @@ const teacherConfig = {
         }
       }
 
-      // Validate employment type
-      const validEmploymentTypes = ['full-time', 'part-time', 'contract', 'substitute'];
+      // Validate employment type — must match teacher.model.js enum exactly
+      const validEmploymentTypes = ['full-time', 'part-time', 'contract', 'temporary'];
       if (fields.employmentType && !validEmploymentTypes.includes(fields.employmentType)) {
         return {
           valid: false,

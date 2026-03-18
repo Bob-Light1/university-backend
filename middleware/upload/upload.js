@@ -1,10 +1,5 @@
 /**
  * UPLOAD MIDDLEWARE - MULTER CONFIGURATION (FIXED)
- * 
- * ✅ CORRECTIONS:
- * - Fixed imageFilter to handle missing originalname
- * - Added detailed error logging for debugging
- * - Fixed extension validation logic
  */
 
 const multer = require('multer');
@@ -109,7 +104,7 @@ const memoryStorage = multer.memoryStorage();
 
 /**
  * Image File Filter - FIXED VERSION
- * ✅ Better error handling and logging
+ * Better error handling and logging
  */
 const imageFilter = (req, file, cb) => {
   try {
@@ -125,7 +120,7 @@ const imageFilter = (req, file, cb) => {
     // Allowed extensions
     const allowedExtensions = ['.jpg', '.jpeg', '.png', '.webp', '.gif'];
     
-    // ✅ FIX: Safely extract extension
+    // Safely extract extension
     const filename = file.originalname || '';
     
     // Log pour debug (à supprimer en production)
@@ -437,7 +432,7 @@ const cleanupUploadedFiles = async (files) => {
 const getFileUrl = (file) => {
   if (!file) return null;
   
-  const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+  const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
   const publicPath = file.path.replace(/^uploads\//, '');
   
   return `${baseUrl}/uploads/${publicPath}`;

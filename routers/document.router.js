@@ -25,7 +25,7 @@
  */
 
 const express  = require('express');
-const rateLimit = require('express-rate-limit');
+const rateLimit        = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
 const multer    = require('multer');
 
@@ -65,7 +65,8 @@ const auditCtrl    = require('../controllers/document-controllers/document.audit
 const pdfLimiter = rateLimit({
   windowMs:        60 * 1000,
   max:             5,
-  // Use user ID when authenticated; fall back to IPv6-safe IP key
+  // Prefer the authenticated user's id for keying; fall back to normalized IP
+  // (ipKeyGenerator handles IPv6 normalization — required by express-rate-limit v7+).
   keyGenerator:    (req) => req.user?.id ?? ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders:   false,
@@ -80,6 +81,7 @@ const pdfLimiter = rateLimit({
 const shareLimiter = rateLimit({
   windowMs:        60 * 1000,
   max:             10,
+  // ipKeyGenerator normalizes IPv6 addresses to prevent limit bypass (required v7+)
   keyGenerator:    (req) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders:   false,
@@ -94,6 +96,7 @@ const shareLimiter = rateLimit({
 const verifyLimiter = rateLimit({
   windowMs:        60 * 1000,
   max:             10,
+  // ipKeyGenerator normalizes IPv6 addresses to prevent limit bypass (required v7+)
   keyGenerator:    (req) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders:   false,
@@ -252,8 +255,10 @@ router.post(
   '/',
   ...base,
   enforceCampusStorageQuota,
-  enforceDocumentTypeAccess,
+  // Parse multipart/form-data BEFORE enforceDocumentTypeAccess so that
+  // req.body is always populated when the type guard reads req.body.type.
   documentUpload.single('file'),
+  enforceDocumentTypeAccess,
   crudCtrl.createDocument,
 );
 

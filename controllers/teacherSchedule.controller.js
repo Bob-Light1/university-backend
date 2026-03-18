@@ -89,7 +89,12 @@ const getMyTeacherCalendar = asyncHandler(async (req, res) => {
     includeAllStatuses = 'false',
   } = req.query;
 
-  const teacherId = req.user.id;
+  // Cast to ObjectId — req.user.id is a JWT string; MongoDB requires ObjectId for ref fields.
+  // Without this cast, 'teacher.teacherId': string never matches ObjectId in the collection.
+  if (!isValidObjectId(req.user.id)) {
+    return sendError(res, 401, 'Invalid teacher identity in token.');
+  }
+  const teacherId = new mongoose.Types.ObjectId(req.user.id);
 
   const now   = new Date();
   const start = from
@@ -388,7 +393,8 @@ const reviewPostponement = asyncHandler(async (req, res) => {
  */
 const upsertAvailability = asyncHandler(async (req, res) => {
   const { slots = [], academicYear, semester } = req.body;
-  const teacherId = req.user.id;
+  // Cast to ObjectId — req.user.id is a string from the JWT payload
+  const teacherId = new mongoose.Types.ObjectId(req.user.id);
   const campusId  = req.user.campusId;
 
   if (!Array.isArray(slots)) {
@@ -443,7 +449,8 @@ const upsertAvailability = asyncHandler(async (req, res) => {
  * Retourne les créneaux de disponibilité de l'enseignant connecté.
  */
 const getMyAvailability = asyncHandler(async (req, res) => {
-  const teacherId = req.user.id;
+  // Cast to ObjectId — req.user.id is a string from the JWT payload
+  const teacherId = new mongoose.Types.ObjectId(req.user.id);
 
   const profileDoc = await TeacherSchedule.findOne(
     {
@@ -472,7 +479,8 @@ const getMyAvailability = asyncHandler(async (req, res) => {
  * Query : periodType (WEEKLY|MONTHLY), periodLabel?
  */
 const getMyWorkloadSummary = asyncHandler(async (req, res) => {
-  const teacherId = req.user.id;
+  // Cast to ObjectId — req.user.id is a string from the JWT payload
+  const teacherId = new mongoose.Types.ObjectId(req.user.id);
   const { periodType = 'MONTHLY', periodLabel } = req.query;
 
   if (!['WEEKLY', 'MONTHLY'].includes(periodType)) {

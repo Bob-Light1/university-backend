@@ -1,29 +1,25 @@
-const rateLimit = require('express-rate-limit');
+const rateLimit          = require('express-rate-limit');
+const { ipKeyGenerator } = require('express-rate-limit');
 
 /**
  * Rate limiter for login attempts
- * 5 attempts per 15 minutes
+ * 10 attempts per 15 minutes
  */
-
 const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Maximum 5 attempts
-  standardHeaders: true, // Returns information in `RateLimit-*` headers
-  legacyHeaders: false, // Disables `X-RateLimit-*` headers
-  
-  // Custom handler for the response
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  // ipKeyGenerator normalizes IPv6 to prevent bypass (required by express-rate-limit v7+)
+  keyGenerator: (req) => ipKeyGenerator(req),
+  standardHeaders: true,
+  legacyHeaders: false,
   handler: (req, res) => {
     res.status(429).json({
       success: false,
       message: 'Too many login attempts. Please try again in 15 minutes.',
-      retryAfter: Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000) // in seconds
+      retryAfter: Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000)
     });
   },
-  
-  // Skip successful requests (optional)
   skipSuccessfulRequests: false,
-  
-  // Skip failed requests (optional)
   skipFailedRequests: false
 });
 
@@ -31,13 +27,12 @@ const loginLimiter = rateLimit({
  * Rate limiter for general API requests
  * 100 requests per 15 minutes
  */
-
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Maximum 100 requests
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  keyGenerator: (req) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders: false,
-  
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -52,11 +47,11 @@ const apiLimiter = rateLimit({
  * 3 attempts per hour (account creation, password reset, etc.)
  */
 const strictLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 3, // Maximum 3 attempts
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  keyGenerator: (req) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders: false,
-  
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -70,13 +65,12 @@ const strictLimiter = rateLimit({
  * Rate limiter for file uploads
  * 10 uploads per hour
  */
-
 const uploadLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, // 1 hour
-  max: 10, // Maximum 10 uploads
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => ipKeyGenerator(req),
   standardHeaders: true,
   legacyHeaders: false,
-  
   handler: (req, res) => {
     res.status(429).json({
       success: false,
@@ -84,26 +78,22 @@ const uploadLimiter = rateLimit({
       retryAfter: Math.ceil((req.rateLimit.resetTime - Date.now()) / 1000)
     });
   },
-  
-  // Skip if the file is too large (handled by multer)
-  skip: (req) => {
-    return req.fileTooLarge === true;
-  }
+  skip: (req) => req.fileTooLarge === true
 });
 
 /**
- * Customizable rate limiter
- * @param {number} windowMinutes - Time window in minutes
- * @param {number} maxRequests - Maximum number of requests
- * @param {string} customMessage - Custom message
+ * Factory: customizable rate limiter
+ * @param {number} windowMinutes  - Time window in minutes
+ * @param {number} maxRequests    - Maximum number of requests
+ * @param {string} [customMessage]
  */
 const createCustomLimiter = (windowMinutes, maxRequests, customMessage = null) => {
   return rateLimit({
     windowMs: windowMinutes * 60 * 1000,
     max: maxRequests,
+    keyGenerator: (req) => ipKeyGenerator(req),
     standardHeaders: true,
     legacyHeaders: false,
-    
     handler: (req, res) => {
       res.status(429).json({
         success: false,

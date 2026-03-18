@@ -8,11 +8,18 @@ const studentConfig = require('../configs/student.config');
 
 const {
   sendSuccess,
-  sendError
+  sendError,
+  sendNotFound,
 } = require('../utils/responseHelpers');
 const {
-  isValidEmail
+  isValidEmail,
+  isValidObjectId,
+  validatePasswordStrength,
 } = require('../utils/validationHelpers');
+const { deleteFile } = require('../utils/fileUpload');
+
+const SALT_ROUNDS    = 10;
+const STUDENT_FOLDER = 'students';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -153,17 +160,20 @@ const loginStudent = async (req, res) => {
       return sendError(res, 403, 'Account is inactive or suspended. Please contact support');
     }
 
-    // Generate JWT token — issuer must match auth.js verification options.
-    // Use schoolCampus._id (the ObjectId) not the populated object, so that
-    // req.user.campusId in downstream middleware is always a plain string/ObjectId,
-    // never a serialised Mongoose document (which would break campus isolation checks).
-    const campusId = student.schoolCampus?._id ?? student.schoolCampus ?? null;
+    // schoolCampus may be a populated object ({ _id, campus_name }) due to the
+    // .populate() call above. JWT.sign serialises objects as-is, so campusId
+    // would become { _id, campus_name } instead of a plain ObjectId string.
+    // buildCampusFilter (validationHelpers) calls isValidObjectId(campusId) and
+    // rejects non-string values → 403. Always extract the raw _id here.
+    const campusId = student.schoolCampus?._id ?? student.schoolCampus;
 
+    // Generate JWT token — issuer must match auth.js verification options
     const token = jwt.sign(
-      { 
+      {
         id:       student._id,
-        campusId: campusId,
-        role:     'STUDENT', 
+        campusId, // plain ObjectId string — required by buildCampusFilter
+        classId:  student.studentClass ?? null, // useful for attendance scoping
+        role:     'STUDENT',
         name:     `${student.firstName} ${student.lastName}`,
       },
       JWT_SECRET,
@@ -177,14 +187,16 @@ const loginStudent = async (req, res) => {
     return sendSuccess(res, 200, 'Login successful', {
       token,
       user: {
-        id: student._id,
-        name: `${student.firstName} ${student.lastName}`,
-        email: student.email,
-        username: student.username,
-        phone: student.phone,
+        id:           student._id,
+        campusId,     // exposed to frontend — needed by ResultStudent, useResult, etc.
+        classId:      student.studentClass ?? null,
+        name:         `${student.firstName} ${student.lastName}`,
+        email:        student.email,
+        username:     student.username,
+        phone:        student.phone,
         profileImage: student.profileImage,
-        role: 'STUDENT'
-      }
+        role:         'STUDENT',
+      },
     });
 
   } catch (error) {

@@ -4,6 +4,18 @@
  * @file teacherSchedule.model.js
  * @description Mongoose model for teacher-facing schedule sessions,
  *              availability, and workload management.
+ *
+ *  Alignements avec le backend foruni :
+ *  ──────────────────────────────────────
+ *  • Campus isolation : schoolCampus (ObjectId → 'Campus')
+ *  • Teacher : ref 'Teacher' (teacher_model.js) — utilise _id du modèle Teacher
+ *  • Subject : ref 'Subject' (subject_model.js)
+ *  • Semester : 'S1' | 'S2' | 'Annual' (String)
+ *  • ContractSnapshot aligné avec teacher_model.employmentType :
+ *    'full-time' | 'part-time' | 'contract' | 'temporary'
+ *  • Classes : ref 'Class' (class_model.js) et non groups
+ *  • studentScheduleRef : lien vers StudentSchedule (même session)
+ *  • JWT payload : req.user.id (et non req.user._id)
  */
 
 const mongoose = require('mongoose');
@@ -108,9 +120,15 @@ const ContractSnapshotSchema = new mongoose.Schema(
 const TeacherScheduleSchema = new mongoose.Schema(
   {
     // ── IDENTIFICATION ──────────────────────
+    // sparse: true — allows multiple documents with reference: null/undefined.
+    // This is required because syncTeacherSchedule uses findOneAndUpdate (upsert),
+    // which does NOT trigger pre('save') hooks, so `reference` may be null on
+    // documents created before the $setOnInsert fix. Without sparse, MongoDB would
+    // throw E11000 (duplicate key) on every upsert after the first null-reference doc.
     reference: {
       type:   String,
       unique: true,
+      sparse: true,
       index:  true,
     },
 
@@ -335,7 +353,7 @@ TeacherScheduleSchema.pre('save', async function () {
       this.publishedAt = new Date();
     }
   } catch (err) {
-    throw err ;
+    throw err;
   }
 });
 
@@ -441,8 +459,13 @@ TeacherScheduleSchema.statics.getTeacherCalendar = function (
     ? {}
     : { status: { $in: [SCHEDULE_STATUS.DRAFT, SCHEDULE_STATUS.PUBLISHED, SCHEDULE_STATUS.POSTPONED] } };
 
+  // Ensure teacherId is always an ObjectId — callers may pass a string from JWT
+  const tid = teacherId instanceof mongoose.Types.ObjectId
+    ? teacherId
+    : new mongoose.Types.ObjectId(String(teacherId));
+
   return this.find({
-    'teacher.teacherId': teacherId,
+    'teacher.teacherId': tid,
     startTime:           { $gte: from },
     endTime:             { $lte: to },
     isDeleted:           false,

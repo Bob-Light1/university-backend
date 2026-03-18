@@ -133,8 +133,8 @@ const resolveStudentClass = async (userId, campusId) => {
  */
 const syncTeacherSchedule = async (ss, actorId) => {
   try {
-    const payload = {
-      // Cross-reference back to the StudentSchedule
+    // Fields that change on every mutation (status, times, participants, etc.)
+    const $setPayload = {
       studentScheduleRef: ss._id,
       schoolCampus:       ss.schoolCampus,
       status:             ss.status,
@@ -158,15 +158,28 @@ const syncTeacherSchedule = async (ss, actorId) => {
       lastModifiedBy:     actorId,
     };
 
+    // CRITICAL: findOneAndUpdate with upsert does NOT trigger pre('save') hooks.
+    // The `reference` field has a unique index — if left undefined/null on insert,
+    // every subsequent upsert throws E11000 (duplicate key on null), making
+    // syncTeacherSchedule fail silently and leaving the teacher unable to see sessions.
+    //
+    // Fix: generate the reference manually inside $setOnInsert so it is written
+    // exactly once at creation time and never touched on subsequent updates.
+    const count = await TeacherSchedule.countDocuments();
+    const reference = `TS-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+
     await TeacherSchedule.findOneAndUpdate(
       { studentScheduleRef: ss._id },   // idempotent: keyed on the StudentSchedule id
-      { $set: payload },
+      {
+        $set:         $setPayload,
+        $setOnInsert: { reference },     // written only on INSERT, never overwritten on UPDATE
+      },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
   } catch (err) {
     // Non-fatal: log and continue — the StudentSchedule write already succeeded.
     // Wire to an alerting/retry queue in production.
-    console.error('[syncTeacherSchedule] failed to sync TeacherSchedule:', err.message);
+    console.error('[syncTeacherSchedule] failed to sync TeacherSchedule:', err.message, err.code);
   }
 };
 

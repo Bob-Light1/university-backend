@@ -34,9 +34,24 @@ const { invalidateStorageCache } = require('../../middleware/document-middleware
 const createDocument = asyncHandler(async (req, res) => {
   const dto = { ...req.body };
 
+  // Resolve effective campusId:
+  //   - Regular roles: req.campusId is set by enforceCampusAccess from the JWT.
+  //   - ADMIN / DIRECTOR (global roles): req.campusId is null because they have
+  //     cross-campus access. They must supply campusId in the request body so the
+  //     document can be routed to the correct campus storage directory and DB record.
+  const effectiveCampusId = req.campusId ?? dto.campusId ?? null;
+
+  if (!effectiveCampusId) {
+    return sendError(
+      res,
+      400,
+      'campusId is required. Global roles (ADMIN, DIRECTOR) must supply campusId in the request body.',
+    );
+  }
+
   // Handle file import (IMPORTED document type)
   if (req.file) {
-    const saved = await storageService.saveFile(req.file, req.campusId, 'imported');
+    const saved = await storageService.saveFile(req.file, effectiveCampusId, 'imported');
     dto.type         = 'IMPORTED';
     dto.importedFile = {
       fileName:     saved.fileName,
@@ -46,9 +61,12 @@ const createDocument = asyncHandler(async (req, res) => {
       extension:    saved.extension,
       uploadedAt:   new Date(),
     };
-    // Invalidate storage cache after successful import
-    invalidateStorageCache(req.campusId.toString());
+    // Invalidate storage cache for the target campus after successful import
+    invalidateStorageCache(effectiveCampusId.toString());
   }
+
+  // Ensure campusId is always propagated to the service layer
+  dto.campusId = effectiveCampusId;
 
   const document = await documentService.createDocument(req, dto);
 

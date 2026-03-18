@@ -266,30 +266,42 @@ const canAccessCampus = (user, campusId) => {
 };
 
 /**
- * Build campus filter based on user role
- * CRITICAL for multi-tenant security
- * @param {Object} user - User from JWT (req.user)
- * @param {String} requestedCampusId - Campus ID from query/params (optional)
- * @returns {Object} MongoDB filter object
+ * Build a MongoDB campus isolation filter based on the authenticated user's role.
+ *
+ * CRITICAL — multi-tenant security boundary.
+ *
+ * Rules:
+ *  - ADMIN / DIRECTOR : cross-campus access. An optional `requestedCampusId`
+ *    narrows the query; without it, no campus filter is applied (full access).
+ *  - All other roles  : MUST have a valid campusId in their JWT payload.
+ *    If campusId is missing or invalid an Error is thrown so that the caller
+ *    can return a 403/500 instead of silently leaking data from every campus
+ *    (Mongoose ignores { schoolCampus: undefined } → full collection scan).
+ *
+ * @param {Object}  user               - req.user (decoded JWT payload)
+ * @param {string|null} requestedCampusId - Optional campus override (ADMIN/DIRECTOR only)
+ * @returns {Object} MongoDB filter  e.g. { schoolCampus: ObjectId }
+ * @throws  {Error}  When a non-global role has no valid campusId
  */
 const buildCampusFilter = (user, requestedCampusId = null) => {
-  const filter = {};
+  const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];
 
-  if (user.role === 'CAMPUS_MANAGER') {
-    // CAMPUS_MANAGER can ONLY access their own campus
-    filter.schoolCampus = user.campusId;
-  } else if (user.role === 'ADMIN' || user.role === 'DIRECTOR') {
-    // ADMIN and DIRECTOR can filter by campus if specified
-    if (requestedCampusId) {
-      filter.schoolCampus = requestedCampusId;
-    }
-    // Otherwise, they can see all campuses (no filter)
-  } else {
-    // Other roles (TEACHER, STUDENT, etc.) limited to their campus
-    filter.schoolCampus = user.campusId;
+  if (GLOBAL_ROLES.includes(user.role)) {
+    // Global roles: optionally scope to a specific campus
+    return requestedCampusId && isValidObjectId(requestedCampusId)
+      ? { schoolCampus: requestedCampusId }
+      : {};
   }
 
-  return filter;
+  // All non-global roles MUST have a campus bound in their JWT.
+  // Throw synchronously so callers can catch and return 403.
+  if (!user.campusId || !isValidObjectId(String(user.campusId))) {
+    throw new Error(
+      `Campus isolation breach prevented: role '${user.role}' has no valid campusId in JWT.`
+    );
+  }
+
+  return { schoolCampus: user.campusId };
 };
 
 /**

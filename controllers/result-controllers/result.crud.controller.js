@@ -308,7 +308,10 @@ const getResults = asyncHandler(async (req, res) => {
     page = 1, limit = 50,
   } = req.query;
 
-  const filter = { isDeleted: false, ...getCampusFilter(req) };
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return; // 403 already sent — campus not resolvable
+
+  const filter = { isDeleted: false, ...campusFilter };
 
   if (classId      && isValidObjectId(classId))   filter.class   = classId;
   if (subjectId    && isValidObjectId(subjectId)) filter.subject = subjectId;
@@ -355,23 +358,28 @@ const getResultById = asyncHandler(async (req, res) => {
 
   if (!result) return sendNotFound(res, 'Result');
 
-  // Students may only access their own PUBLISHED/ARCHIVED results.
-  // Ownership check is the authoritative guard for STUDENT — no need to
-  // re-validate campus (their results can only belong to their campus anyway,
-  // and a secondary campus-string comparison is fragile when the JWT campusId
-  // originates from a populated document reference).
+  // ── Layer 1: campus isolation — applies to ALL roles including STUDENT ──────
+  // Must be checked BEFORE the STUDENT ownership check to prevent a logged-in
+  // student from retrieving results that belong to a different campus by guessing
+  // result IDs (the student ownership check below does NOT imply campus membership).
+  if (!isGlobalRole(req.user.role)) {
+    // Defensive: ensure campusId is present in the JWT for non-global roles.
+    if (!req.user.campusId) {
+      return sendForbidden(res, 'Campus information is missing from your session. Please log in again.');
+    }
+    // result.schoolCampus is a raw ObjectId at this point (not populated in findOne).
+    if (result.schoolCampus.toString() !== req.user.campusId.toString()) {
+      return sendForbidden(res, 'Access denied.');
+    }
+  }
+
+  // ── Layer 2: STUDENT ownership + publication status ─────────────────────────
   if (req.user.role === 'STUDENT') {
     if (result.student._id.toString() !== req.user.id)
       return sendForbidden(res, 'Access denied.');
     if (![RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED].includes(result.status))
       return sendError(res, 404, 'Result not found or not yet published.');
-    return sendSuccess(res, 200, 'Result fetched.', result);
   }
-
-  // Campus isolation for all non-global, non-student roles
-  if (!isGlobalRole(req.user.role) &&
-      result.schoolCampus.toString() !== req.user.campusId?.toString())
-    return sendForbidden(res, 'Access denied.');
 
   return sendSuccess(res, 200, 'Result fetched.', result);
 });

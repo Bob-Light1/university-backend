@@ -7,14 +7,20 @@ const Department = require('../models/department.model');
 
 const {
   sendSuccess,
-  sendError
+  sendError,
+  sendNotFound,
 } = require('../utils/responseHelpers');
 const {
-  isValidEmail
+  isValidEmail,
+  isValidObjectId,
+  validatePasswordStrength,
 } = require('../utils/validationHelpers');
+const { deleteFile } = require('../utils/fileUpload');
 const teacherConfig = require('../configs/teacher.config');
 
-const JWT_SECRET = process.env.JWT_SECRET;
+const SALT_ROUNDS    = 10;
+const TEACHEAR_FOLDER = 'teachers';
+const JWT_SECRET      = process.env.JWT_SECRET;
 
 // ========================================
 // TEACHER CONFIGURATION

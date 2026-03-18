@@ -87,7 +87,9 @@ const loadAndVerifyDocument = async (req, res, next) => {
  */
 const enforceDocumentTypeAccess = (req, res, next) => {
   const { role } = req.user;
-  const docType  = req.body.type || req.document?.type;
+  // req.body may be undefined when multer has not yet parsed a multipart/form-data request.
+  // Treat missing body as no type context and let the controller perform full validation.
+  const docType  = req.body?.type || req.document?.type;
 
   if (!docType) return next(); // No type context — let the controller validate
 

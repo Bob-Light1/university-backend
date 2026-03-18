@@ -76,6 +76,15 @@ const CATEGORIES = Object.freeze({
  * @returns {Promise<string>} Absolute directory path
  */
 const getCategoryDir = async (campusId, category) => {
+  // Guard: campusId must never be null/undefined at this point.
+  // If it is, the caller (controller) failed to resolve the effective campusId
+  // before reaching the storage layer — surface a clear error rather than a cryptic crash.
+  if (campusId == null) {
+    throw Object.assign(
+      new Error('campusId is required to resolve the storage directory'),
+      { statusCode: 400 },
+    );
+  }
   const dir = path.join(BASE_UPLOAD_DIR, campusId.toString(), CATEGORIES[category] || category);
   await fs.mkdir(dir, { recursive: true });
   return dir;

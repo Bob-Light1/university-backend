@@ -50,8 +50,13 @@ const publishDocument = asyncHandler(async (req, res) => {
   session.startTransaction();
 
   try {
+    // Build the filter conditionally — never include campusId: undefined,
+    // which Mongoose serialises as campusId: null and matches no real document.
+    const publishFilter = { _id: req.params.id, deletedAt: null };
+    if (!req.isGlobalRole) publishFilter.campusId = req.campusId;
+
     const doc = await Document
-      .findOne({ _id: req.params.id, campusId: req.isGlobalRole ? undefined : req.campusId, deletedAt: null })
+      .findOne(publishFilter)
       .session(session);
 
     if (!doc) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
@@ -103,8 +108,13 @@ const archiveDocument = asyncHandler(async (req, res) => {
   session.startTransaction();
 
   try {
+    // Build the filter conditionally — never include campusId: undefined,
+    // which Mongoose serialises as campusId: null and matches no real document.
+    const archiveFilter = { _id: req.params.id, deletedAt: null };
+    if (!req.isGlobalRole) archiveFilter.campusId = req.campusId;
+
     const doc = await Document
-      .findOne({ _id: req.params.id, campusId: req.isGlobalRole ? undefined : req.campusId, deletedAt: null })
+      .findOne(archiveFilter)
       .session(session);
 
     if (!doc) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
@@ -160,8 +170,13 @@ const restoreDocument = asyncHandler(async (req, res) => {
   session.startTransaction();
 
   try {
+    // Build the filter conditionally — never include campusId: undefined,
+    // which Mongoose serialises as campusId: null and matches no real document.
+    const restoreFilter = { _id: req.params.id, deletedAt: null };
+    if (!req.isGlobalRole) restoreFilter.campusId = req.campusId;
+
     const doc = await Document
-      .findOne({ _id: req.params.id, campusId: req.isGlobalRole ? undefined : req.campusId, deletedAt: null })
+      .findOne(restoreFilter)
       .session(session);
 
     if (!doc) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
@@ -207,8 +222,13 @@ const duplicateDocument = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Duplicating requires CAMPUS_MANAGER or higher role');
   }
 
+  // Build the filter conditionally — never include campusId: undefined,
+  // which Mongoose serialises as campusId: null and matches no real document.
+  const duplicateFilter = { _id: req.params.id, deletedAt: null };
+  if (!req.isGlobalRole) duplicateFilter.campusId = req.campusId;
+
   const source = await Document
-    .findOne({ _id: req.params.id, campusId: req.isGlobalRole ? undefined : req.campusId, deletedAt: null })
+    .findOne(duplicateFilter)
     .lean();
 
   if (!source) return sendNotFound(res, 'Document');

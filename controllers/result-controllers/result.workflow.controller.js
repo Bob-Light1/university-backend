@@ -101,6 +101,9 @@ const submitBatch = asyncHandler(async (req, res) => {
   if (!evaluationTitle || !academicYear || !semester)
     return sendError(res, 400, 'evaluationTitle, academicYear and semester are required.');
 
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return; // 403 already sent
+
   const filter = {
     class:           classId,
     subject:         subjectId,
@@ -109,10 +112,10 @@ const submitBatch = asyncHandler(async (req, res) => {
     semester,
     status:          RESULT_STATUS.DRAFT,
     isDeleted:       false,
-    ...getCampusFilter(req),
+    ...campusFilter,
   };
 
-  // Un TEACHER ne soumet que ses propres résultats
+  // A TEACHER may only submit their own results
   if (req.user.role === 'TEACHER') filter.teacher = req.user.id;
 
   const { modifiedCount } = await Result.updateMany(filter, {
@@ -215,6 +218,9 @@ const publishBatch = asyncHandler(async (req, res) => {
   if (!isManagerRole(req.user.role))
     return sendForbidden(res, 'Only managers can publish results.');
 
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return; // 403 already sent
+
   const filter = {
     class:           classId,
     subject:         subjectId,
@@ -223,7 +229,7 @@ const publishBatch = asyncHandler(async (req, res) => {
     semester,
     status:          RESULT_STATUS.SUBMITTED,
     isDeleted:       false,
-    ...getCampusFilter(req),
+    ...campusFilter,
   };
 
   // On doit itérer pour déclencher pre-save (verificationToken + gradeBand)
@@ -293,7 +299,8 @@ const lockSemester = asyncHandler(async (req, res) => {
   if (!academicYear || !semester)
     return sendError(res, 400, 'academicYear and semester are required.');
 
-  const campusFilter = getCampusFilter(req);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return; // 403 already sent
 
   // ── 1. Verrouillage des résultats ─────────────────────────────────────────
   const { modifiedCount } = await Result.updateMany(

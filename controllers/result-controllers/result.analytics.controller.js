@@ -205,6 +205,9 @@ const getRetakeList = asyncHandler(async (req, res) => {
   if (!isManagerRole(req.user.role) && req.user.role !== 'TEACHER')
     return sendForbidden(res, 'Access denied.');
 
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return; // 403 already sent
+
   const filter = {
     class:            classId,
     academicYear,
@@ -213,7 +216,7 @@ const getRetakeList = asyncHandler(async (req, res) => {
     status:           { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] },
     isDeleted:        false,
     retakeOf:         null,
-    ...getCampusFilter(req),
+    ...campusFilter,
   };
   if (subjectId && isValidObjectId(subjectId)) filter.subject = subjectId;
 
@@ -261,7 +264,9 @@ const getCampusOverview = asyncHandler(async (req, res) => {
 
   if (!isManagerRole(req.user.role)) return sendForbidden(res, 'Access denied.');
 
-  const campusFilter = getCampusFilter(req);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return; // 403 already sent — campus not resolvable
+
   const matchFilter  = { isDeleted: false, ...campusFilter };
   if (academicYear) matchFilter.academicYear = academicYear;
   if (semester && Object.values(SEMESTER).includes(semester)) matchFilter.semester = semester;
@@ -471,7 +476,9 @@ const signTranscript = asyncHandler(async (req, res) => {
  * Liste les barèmes actifs du campus courant.
  */
 const listGradingScales = asyncHandler(async (req, res) => {
-  const campusFilter = getCampusFilter(req);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return; // 403 already sent
+
   const scales = await GradingScale.find({ isActive: true, ...campusFilter })
     .sort({ isDefault: -1, name: 1 })
     .lean();
