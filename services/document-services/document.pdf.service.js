@@ -35,7 +35,7 @@ const Document       = require('../../models/document-models/document.model');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
-const POOL_SIZE    = parseInt(process.env.PUPPETEER_POOL_SIZE    || '3', 10);
+const POOL_SIZE    = parseInt(process.env.PUPPETEER_POOL_SIZE    || '2', 10);
 const TIMEOUT_MS   = parseInt(process.env.PUPPETEER_TIMEOUT_MS   || '30000', 10);
 const UPLOAD_DIR   = process.env.UPLOAD_DIR
   ? path.join(process.env.UPLOAD_DIR, 'documents')
@@ -58,13 +58,15 @@ const initPool = async () => {
   if (poolInitialized) return;
 
   for (let i = 0; i < POOL_SIZE; i++) {
-    const browser = await puppeteer.launch({
+   const browser = await puppeteer.launch({
       headless: 'new',
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
         '--disable-gpu',
+        '--single-process',
         '--no-first-run',
         '--no-zygote',
       ],

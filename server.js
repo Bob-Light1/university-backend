@@ -5,19 +5,27 @@ const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const { apiLimiter } = require('./middleware/rate-limiter/rate-limiter');
+const mongoSanitize = require('express-mongo-sanitize');
+const { shutdownPool } = require('./services/document-services/document.pdf.service');
 
 const app = express();
 
 // ========================================
 // ENVIRONMENT VALIDATION
 // ========================================
-const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET', 'PORT'];
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
 const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
 
 if (missingEnvVars.length > 0) {
   console.error(`❌ Missing required environment variables: ${missingEnvVars.join(', ')}`);
   process.exit(1);
 }
+
+// ========================================
+// HELMET FOR HTTP PROTECTION
+// ========================================
+const helmet = require('helmet');
+app.use(helmet());
 
 // ========================================
 // CORS CONFIGURATION
@@ -57,6 +65,7 @@ app.set('trust proxy', 1);
 // Body parsers
 app.use(express.json({ limit: '10mb' })); // Limit JSON body size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(mongoSanitize());
 app.use(cookieParser());
 
 // Security headers
@@ -73,20 +82,28 @@ app.use((req, res, next) => {
 // ========================================
 // STATIC FILES SERVING
 // ========================================
+
 // Serve uploaded files (images, documents)
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
-  maxAge: '1d', // Cache for 1 day
-  etag: true,
-  lastModified: true,
-  setHeaders: (res, filePath) => {
-    // Set CORS headers for images
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    // Set cache control
-    if (filePath.endsWith('.jpg') || filePath.endsWith('.png') || filePath.endsWith('.webp')) {
-      res.setHeader('Cache-Control', 'public, max-age=86400'); // 1 day
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
+    maxAge: '1d', // Cache for 1 day
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+      // Set CORS headers for images
+      res.setHeader('Access-Control-Allow-Origin', '*');
+       // Set cache control
+      if (
+        filePath.endsWith('.jpg') ||
+        filePath.endsWith('.png') ||
+        filePath.endsWith('.webp') ||
+        filePath.endsWith('.jpeg')
+      ) {
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+      }
     }
-  }
-}));
+  }));
+}
 
 // ========================================
 // DATABASE CONNECTION
@@ -119,6 +136,16 @@ mongoose.connection.on('error', (error) => {
 // ========================================
 // Apply rate limiting to all API routes
 app.use('/api/', apiLimiter);
+
+// ========================================
+// UPTIMEROBOT PING ROUTE
+// ========================================
+app.get('/api/ping', (req, res) => {
+  res.status(200).json({
+    status: 'ok',
+    ts: Date.now()
+  });
+});
 
 // ========================================
 // HEALTH CHECK ROUTE
@@ -264,6 +291,10 @@ const gracefulShutdown = async (signal) => {
   console.log(`\n⚠️ ${signal} received. Starting graceful shutdown...`);
   
   try {
+    // Close Puppeteer pool
+    await shutdownPool().catch(() => {});
+    console.log('✅ Puppeteer pool closed');
+
     // Close MongoDB connection
     await mongoose.connection.close();
     console.log('✅ MongoDB connection closed');
