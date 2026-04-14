@@ -1,12 +1,5 @@
 require('dotenv').config();
 
-console.log('=== CLOUDINARY ENV CHECK ===');
-console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME ? '✅ Présent' : '❌ MANQUANT');
-console.log('CLOUDINARY_API_KEY:', process.env.CLOUDINARY_API_KEY ? '✅ Présent (longueur: ' + process.env.CLOUDINARY_API_KEY.length + ')' : '❌ MANQUANT');
-console.log('CLOUDINARY_API_SECRET:', process.env.CLOUDINARY_API_SECRET ? '✅ Présent (longueur: ' + process.env.CLOUDINARY_API_SECRET.length + ')' : '❌ MANQUANT');
-console.log('NODE_ENV:', process.env.NODE_ENV);
-console.log('===========================');
-
 const express = require('express');
 const cors = require('cors');
 const mongoose = require('mongoose');
