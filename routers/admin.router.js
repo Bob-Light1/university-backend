@@ -42,17 +42,11 @@ router.post('/login', loginLimiter, loginAdmin);
 
 /**
  * POST /api/admin/create
- * Create a new Admin or Director account.
- * - strictLimiter: 3 attempts per hour (brute-force / abuse protection).
- * - Only an authenticated ADMIN can create other admins or directors.
+ * - Bootstrap (DB empty)  : public — creates the very first admin.
+ * - After setup           : requires an authenticated ADMIN (checked in controller).
+ * - strictLimiter         : 3 attempts per hour (brute-force protection).
  */
-router.post(
-  '/create',
-  strictLimiter,
-  authenticate,
-  authorize(['ADMIN']),
-  createAdmin,
-);
+router.post('/create', strictLimiter, createAdmin);
 
 /**
  * GET /api/admin/me

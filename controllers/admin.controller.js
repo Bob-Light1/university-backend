@@ -169,6 +169,25 @@ const loginAdmin = asyncHandler(async (req, res) => {
 const createAdmin = asyncHandler(async (req, res) => {
   const { admin_name, email, password, role = 'ADMIN' } = req.body ?? {};
 
+  // ── Bootstrap / auth guard ──────────────────────────────────────────────────
+  // If at least one admin already exists, the caller must be an authenticated ADMIN.
+  const adminCount = await Admin.countDocuments();
+  if (adminCount > 0) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith('Bearer ')) {
+      return sendError(res, 401, 'Authentication required to create an admin account.');
+    }
+    let payload;
+    try {
+      payload = jwt.verify(authHeader.slice(7), JWT_SECRET, { issuer: JWT_ISSUER });
+    } catch {
+      return sendError(res, 401, 'Invalid or expired token.');
+    }
+    if (payload.role !== 'ADMIN') {
+      return sendError(res, 403, 'Only an ADMIN can create new accounts.');
+    }
+  }
+
   // ── Input validation ────────────────────────────────────────────────────────
   if (!admin_name || !email || !password) {
     return sendError(res, 400, 'admin_name, email and password are required.');
