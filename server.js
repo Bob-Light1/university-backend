@@ -30,9 +30,10 @@ app.use(helmet());
 // ========================================
 // CORS CONFIGURATION
 // ========================================
-const allowedOrigins = process.env.FRONTEND_URL 
-  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
-  : ['http://localhost:5173', 'http://localhost:3000', 'https://university-frontend-mu.vercel.app'];
+const defaultOrigins = ['http://localhost:5173', 'http://localhost:3000', 'https://university-frontend-mu.vercel.app'];
+const allowedOrigins = process.env.FRONTEND_URL
+  ? [...new Set([...defaultOrigins, ...process.env.FRONTEND_URL.split(',').map(url => url.trim())])]
+  : defaultOrigins;
 
 const corsOptions = {
   origin: function (origin, callback) {
