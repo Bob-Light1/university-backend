@@ -58,6 +58,7 @@ cloudinary.config({
   api_key    : process.env.CLOUDINARY_API_KEY,
   api_secret : process.env.CLOUDINARY_API_SECRET,
 });
+console.log('Cloudinary configured with cloud_name:', cloudinary.config().cloud_name);
 
 // ── Ensure local upload directories exist (dev only) ─────────────────────────
 
