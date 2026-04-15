@@ -115,8 +115,12 @@ if (process.env.NODE_ENV !== 'production') {
 // ========================================
 mongoose
   .connect(process.env.MONGODB_URI, {
-    serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-    socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
+    serverSelectionTimeoutMS: 15000, // Give Atlas up to 15 s to respond (cold start)
+    socketTimeoutMS: 120000,         // Keep idle sockets alive for 2 min
+    connectTimeoutMS: 20000,         // Initial TCP connection timeout
+    heartbeatFrequencyMS: 10000,     // Ping Atlas every 10 s to keep connection alive
+    minPoolSize: 1,                  // Always maintain at least 1 connection
+    maxPoolSize: 5,                  // Cap connections (sufficient for Render free tier)
   })
   .then(() => {
     console.log('✅ MongoDB connected successfully');
@@ -149,6 +153,26 @@ app.get('/api/ping', (req, res) => {
   res.status(200).json({
     status: 'ok',
     ts: Date.now()
+  });
+});
+
+// ========================================
+// API HEALTH CHECK (includes real DB ping)
+// ========================================
+app.get('/api/health', async (_req, res) => {
+  let dbOk = false;
+  try {
+    if (mongoose.connection.readyState === 1) {
+      await mongoose.connection.db.admin().command({ ping: 1 });
+      dbOk = true;
+    }
+  } catch {
+    dbOk = false;
+  }
+  res.status(dbOk ? 200 : 503).json({
+    database: dbOk ? 'connected' : 'disconnected',
+    uptime: process.uptime(),
+    timestamp: Date.now(),
   });
 });
 
