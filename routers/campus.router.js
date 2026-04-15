@@ -25,12 +25,6 @@ const {
 const { authenticate, authorize } = require('../middleware/auth/auth');
 const { loginLimiter, strictLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
 
-// MULTER: Import upload middleware
-const {
-  uploadCampusImage,
-  uploadCampusImageMemory,
-  handleMulterError
-} = require('../middleware/upload/upload');
 
 const router = express.Router();
 
@@ -104,10 +98,8 @@ router.get(
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER (own campus only)
  */
 router.put(
-  "/:id", 
+  "/:id",
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadCampusImage,     //Optional image upload
-  handleMulterError,
   updateCampus
 );
 
