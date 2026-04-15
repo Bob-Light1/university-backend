@@ -9,7 +9,6 @@ const {
   updateCampusPassword,
   deleteCampus,
   getCampusContext,
-  getCampusStaff,
   getCampusClasses,
   getCampusTeachers,
   getCampusStudents,
@@ -61,11 +60,11 @@ router.use(authenticate);
  * @route   GET /api/campus/upload-signature
  * @desc    Return a signed Cloudinary upload params so the browser can upload
  *          the campus image directly to Cloudinary (no backend file transfer).
- * @access  ADMIN, DIRECTOR only
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 router.get(
   "/upload-signature",
-  authorize(['ADMIN', 'DIRECTOR']),
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
   getUploadSignature
 );
 
