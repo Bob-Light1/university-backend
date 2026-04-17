@@ -290,6 +290,23 @@ studentSchema.statics.countByCampus = function (campusId) {
   });
 };
 
+// ── POST-DELETE ORPHAN CLEANUP ────────────────────────────────────────────────
+
+/**
+ * When a student is hard-deleted, remove them from every parent's children[].
+ * Fire-and-forget — never blocks the delete operation.
+ */
+studentSchema.post('findOneAndDelete', function (doc) {
+  if (!doc) return;
+  const Parent = require('./parent.model');
+  Parent.updateMany(
+    { children: doc._id },
+    { $pull: { children: doc._id } }
+  ).exec().catch((err) => {
+    console.warn('[Student post-delete] Failed to clean up parent children:', err.message);
+  });
+});
+
 const Student = mongoose.model('Student', studentSchema);
 
 module.exports = Student;

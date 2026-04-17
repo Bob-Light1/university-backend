@@ -212,7 +212,8 @@ const studentScheduleRouter = require('./routers/studentSchedule.router');
 const teacherScheduleRouter = require('./routers/teacherSchedule.router');
 const studentAttendanceRouter = require('./routers/studentAttendance.router');
 const teacherAttendanceRouter = require('./routers/teacherAttendance.router');
-const documentRouter = require('./routers/document.router')
+const documentRouter = require('./routers/document.router');
+const parentRouter = require('./routers/parent.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -229,6 +230,7 @@ app.use('/api/schedules/teacher', teacherScheduleRouter);
 app.use('/api/attendance/student', studentAttendanceRouter);
 app.use('/api/attendance/teacher', teacherAttendanceRouter);
 app.use('/api/documents', documentRouter);
+app.use('/api/parents',   parentRouter);
 
 // ========================================
 // 404 HANDLER
