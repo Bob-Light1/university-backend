@@ -1,4 +1,3 @@
-'use strict';
 
 /**
  * @file parent_analytics_controller.js
@@ -16,12 +15,12 @@
 
 const mongoose = require('mongoose');
 
-const Parent = require('../models/parent.model');
+const Parent = require('../../models/parent.model');
 const {
   sendSuccess,
   sendError,
-} = require('../utils/responseHelpers');
-const { buildCampusFilter } = require('../utils/validationHelpers');
+} = require('../../utils/responseHelpers');
+const { buildCampusFilter } = require('../../utils/validationHelpers');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 

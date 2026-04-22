@@ -1,5 +1,5 @@
 const Class = require('../models/class.model');
-const Teacher = require('../models/teacher.model');
+const Teacher = require('../models/teacher-models/teacher.model');
 const Campus = require('../models/campus.model');
 const {
   sendSuccess,

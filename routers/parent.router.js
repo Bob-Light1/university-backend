@@ -61,7 +61,7 @@ const {
   updatePassword,
   updateProfile,
   uploadProfileImage,
-} = require('../controllers/parent_auth_controller');
+} = require('../controllers/parent-controllers/parent.auth.controller');
 
 const {
   createParent,
@@ -72,7 +72,7 @@ const {
   updateParentChildren,
   resetParentPassword,
   deleteParent,
-} = require('../controllers/parent_crud_controller');
+} = require('../controllers/parent-controllers/parent.crud.controller');
 
 const {
   getChildren,
@@ -84,13 +84,13 @@ const {
   getChildTeachers,
   getChildComments,
   getDashboard,
-} = require('../controllers/parent_portal_controller');
+} = require('../controllers/parent-controllers/parent.portal.controller');
 
 const {
   getParentStats,
   getCampusParentStats,
   getParentsByStudent,
-} = require('../controllers/parent_analytics_controller');
+} = require('../controllers/parent-controllers/parent.analytics.controller');
 
 // ── VALIDATION MIDDLEWARE ─────────────────────────────────────────────────────
 const { validateCreateParent, validateUpdateParent, validateUpdateProfile } =

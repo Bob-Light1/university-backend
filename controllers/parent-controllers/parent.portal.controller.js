@@ -23,17 +23,17 @@
 
 const mongoose = require('mongoose');
 
-const Parent              = require('../models/parent.model');
-const Student             = require('../models/student.model');
-const { Result }          = require('../models/result.model');
-const { FinalTranscript } = require('../models/finalTranscript.model');
-const StudentAttendance   = require('../models/studentAttend.model');
-const StudentSchedule     = require('../models/studentSchedule.model');
+const Parent              = require('../../models/parent.model');
+const Student             = require('../../models/student-models/student.model');
+const { Result }          = require('../../models/result.model');
+const { FinalTranscript } = require('../../models/finalTranscript.model');
+const StudentAttendance   = require('../../models/student-models/studentAttend.model');
+const StudentSchedule     = require('../../models/student-models/studentSchedule.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../utils/responseHelpers');
+} = require('../../utils/responseHelpers');
 
 // ── CONSTANTS ─────────────────────────────────────────────────────────────────
 

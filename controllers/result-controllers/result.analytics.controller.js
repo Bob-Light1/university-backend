@@ -26,7 +26,7 @@ const mongoose = require('mongoose');
 const { Result, RESULT_STATUS, SEMESTER }  = require('../../models/result.model');
 const { GradingScale, GRADING_SYSTEM }     = require('../../models/gradinScale.model');
 const { FinalTranscript, TRANSCRIPT_STATUS } = require('../../models/finalTranscript.model');
-const Student = require('../../models/student.model');
+const Student = require('../../models/student-models/student.model');
 
 const {
   asyncHandler,

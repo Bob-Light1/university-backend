@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
-const studentController = require('../controllers/student.controller');
+const studentController = require('../controllers/student-controllers/student.controller');
 const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
 const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
 const { 

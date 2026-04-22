@@ -42,7 +42,7 @@ const {
   getStudentStats,
   getClassStats,
   getCampusOverview,
-} = require('../controllers/studentAttendance.controller');
+} = require('../controllers/student-controllers/studentAttendance.controller');
 
 // ─────────────────────────────────────────────
 // MIDDLEWARE GLOBAL

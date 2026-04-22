@@ -6,12 +6,12 @@ const mongoose = require('mongoose');
 const GenericEntityController = require('./genericEntity.controller');
 
 const Campus = require('../models/campus.model');
-const Teacher = require('../models/teacher.model');
-const Student = require('../models/student.model');
+const Teacher = require('../models/teacher-models/teacher.model');
+const Student = require('../models/student-models/student.model');
 const Class = require('../models/class.model');
 const Subject = require('../models/subject.model');
 const Department = require('../models/department.model');
-const StudentAttendance = require('../models/studentAttend.model');
+const StudentAttendance = require('../models/student-models/studentAttend.model');
 const Income = require('../models/income.model');
 
 const campusConfig = require('../configs/campus.config');

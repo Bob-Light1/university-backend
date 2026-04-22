@@ -27,7 +27,7 @@ const {
   getCampusStats,
   getPayrollReport,
   getCampusOverview,
-} = require('../controllers/teacherAttendance.controller');
+} = require('../controllers/teacher-controllers/teacherAttendance.controller');
 
 // ─────────────────────────────────────────────
 // MIDDLEWARE GLOBAL

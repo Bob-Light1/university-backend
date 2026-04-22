@@ -29,8 +29,8 @@ const { AUDIT_ACTION }     = require('../../models/document-models/documentAudit
 const documentService      = require('../../services/document-services/document.service');
 const { validateContentBlocks, validateTemplateData } = require('../../services/document-services/document.validation.service');
 
-const Student = require('../../models/student.model');
-const Teacher = require('../../models/teacher.model');
+const Student = require('../../models/student-models/student.model');
+const Teacher = require('../../models/teacher-models/teacher.model');
 const Class   = require('../../models/class.model');
 const Campus  = require('../../models/campus.model');
 

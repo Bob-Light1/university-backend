@@ -15,7 +15,7 @@ const {
   VirtualMeetingSchema,
   CourseMaterialSchema,
   PostponementRequestSchema,
-} = require('../utils/schedule.base');
+} = require('../../utils/schedule.base');
 
 // ─────────────────────────────────────────────
 // ATTENDANCE SUMMARY SUB-SCHEMA

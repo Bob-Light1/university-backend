@@ -37,7 +37,7 @@ const {
   softDeleteSession,
   getCampusOverview,
   getRoomOccupancyReport,
-} = require('../controllers/studentSchedule.controller');
+} = require('../controllers/student-controllers/studentSchedule.controller');
 
 // ─────────────────────────────────────────────
 // MIDDLEWARE GLOBAL

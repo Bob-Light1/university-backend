@@ -38,7 +38,7 @@ const {
   getTeacherSessionsAdmin,
   reviewPostponement,
   getAllTeachersWorkload,
-} = require('../controllers/teacherSchedule.controller');
+} = require('../controllers/teacher-controllers/teacherSchedule.controller');
 
 // ─────────────────────────────────────────────
 // MIDDLEWARE GLOBAL

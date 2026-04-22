@@ -20,7 +20,7 @@ const { parse: csvParse } = require('csv-parse/sync');
 
 const { Result, RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../../models/result.model');
 const Class   = require('../../models/class.model');
-const Student = require('../../models/student.model');
+const Student = require('../../models/student-models/student.model');
 
 const {
   asyncHandler,

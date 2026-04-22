@@ -21,18 +21,18 @@
  */
 
 const mongoose        = require('mongoose');
-const TeacherSchedule = require('../models/teacherSchedule.model');
-const StudentSchedule = require('../models/studentSchedule.model');
-const { SCHEDULE_STATUS, SEMESTER } = require('../utils/schedule.base');
+const TeacherSchedule = require('../../models/teacher-models/teacherSchedule.model');
+const StudentSchedule = require('../../models/student-models/studentSchedule.model');
+const { SCHEDULE_STATUS, SEMESTER } = require('../../utils/schedule.base');
 
 const {
   sendSuccess,
   sendError,
   sendPaginated,
   asyncHandler,
-} = require('../utils/responseHelpers');
+} = require('../../utils/responseHelpers');
 
-const { isValidObjectId } = require('../utils/validationHelpers');
+const { isValidObjectId } = require('../../utils/validationHelpers');
 
 // ─────────────────────────────────────────────
 // HELPERS INTERNES

@@ -11,7 +11,7 @@
  */
 
 const mongoose          = require('mongoose');
-const TeacherAttendance = require('../models/teacherAttend.model');
+const TeacherAttendance = require('../../models/teacher-models/teacherAttend.model');
 
 const {
   asyncHandler,
@@ -21,12 +21,12 @@ const {
   sendPaginated,
   sendNotFound,
   sendForbidden,
-} = require('../utils/responseHelpers');
+} = require('../../utils/responseHelpers');
 
 const {
   isValidObjectId,
   validateTeacherBelongsToCampus,
-} = require('../utils/validationHelpers');
+} = require('../../utils/validationHelpers');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 

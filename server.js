@@ -212,8 +212,9 @@ const studentScheduleRouter = require('./routers/studentSchedule.router');
 const teacherScheduleRouter = require('./routers/teacherSchedule.router');
 const studentAttendanceRouter = require('./routers/studentAttendance.router');
 const teacherAttendanceRouter = require('./routers/teacherAttendance.router');
-const documentRouter = require('./routers/document.router');
-const parentRouter = require('./routers/parent.router');
+const documentRouter    = require('./routers/document.router');
+const parentRouter      = require('./routers/parent.router');
+const examinationRouter = require('./routers/examination.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -229,8 +230,9 @@ app.use('/api/schedules/student', studentScheduleRouter);
 app.use('/api/schedules/teacher', teacherScheduleRouter);
 app.use('/api/attendance/student', studentAttendanceRouter);
 app.use('/api/attendance/teacher', teacherAttendanceRouter);
-app.use('/api/documents', documentRouter);
-app.use('/api/parents',   parentRouter);
+app.use('/api/documents',   documentRouter);
+app.use('/api/parents',     parentRouter);
+app.use('/api/examination', examinationRouter);
 
 // ========================================
 // 404 HANDLER
@@ -353,6 +355,19 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
   gracefulShutdown('unhandledRejection');
 });
+
+// ========================================
+// CRON JOBS
+// ========================================
+try {
+  const cron = require('node-cron');
+  const { runRetentionJob }  = require('./crons/document.retention.cron');
+  const { runAntiCheatJob }  = require('./crons/exam_anticheat.cron');
+  cron.schedule('0 2 * * 0', runRetentionJob);   // Every Sunday at 02:00
+  cron.schedule('0 3 * * *', runAntiCheatJob);   // Nightly at 03:00
+} catch {
+  console.warn('⚠️  node-cron not available — cron jobs disabled.');
+}
 
 // ========================================
 // START SERVER

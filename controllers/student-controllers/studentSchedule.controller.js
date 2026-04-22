@@ -30,23 +30,23 @@
  */
 
 const mongoose        = require('mongoose');
-const StudentSchedule = require('../models/studentSchedule.model');
-const TeacherSchedule = require('../models/teacherSchedule.model');
-const Student         = require('../models/student.model');
+const StudentSchedule = require('../../models/student-models/studentSchedule.model');
+const TeacherSchedule = require('../../models/teacher-models/teacherSchedule.model');
+const Student         = require('../../models/student-models/student.model');
 
-const { SCHEDULE_STATUS, SESSION_TYPE, SEMESTER } = require('../utils/schedule.base');
+const { SCHEDULE_STATUS, SESSION_TYPE, SEMESTER } = require('../../utils/schedule.base');
 
 const {
   sendSuccess,
   sendError,
   sendPaginated,
   asyncHandler,
-} = require('../utils/responseHelpers');
+} = require('../../utils/responseHelpers');
 
-const { isValidObjectId } = require('../utils/validationHelpers');
+const { isValidObjectId } = require('../../utils/validationHelpers');
 
 // Shared helper: resolves subjectId / teacherId / classIds → denormalised objects
-const { resolveSessionParticipants } = require('../utils/scheduleHelpers');
+const { resolveSessionParticipants } = require('../../utils/scheduleHelpers');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL HELPERS

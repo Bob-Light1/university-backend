@@ -28,7 +28,7 @@ const {
   VirtualMeetingSchema,
   PostponementRequestSchema,
   WEEKDAY,
-} = require('../utils/schedule.base');
+} = require('../../utils/schedule.base');
 
 // ─────────────────────────────────────────────
 // AVAILABILITY SUB-SCHEMA

@@ -1,4 +1,4 @@
-const Student = require('../models/student.model');
+const Student = require('../models/student-models/student.model');
 const Class = require('../models/class.model');
 const mongoose = require('mongoose');
 

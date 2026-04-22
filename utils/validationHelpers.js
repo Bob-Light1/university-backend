@@ -7,8 +7,8 @@
 const mongoose = require('mongoose');
 const Campus = require('../models/campus.model');
 const Class = require('../models/class.model');
-const Teacher = require('../models/teacher.model');
-const Student = require('../models/student.model');
+const Teacher = require('../models/teacher-models/teacher.model');
+const Student = require('../models/student-models/student.model');
 
 /**
  * Validate MongoDB ObjectId format

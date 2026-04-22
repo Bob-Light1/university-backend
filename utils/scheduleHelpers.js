@@ -23,7 +23,7 @@ const mongoose = require('mongoose');
 // Lazy-loaded to avoid circular dependency issues at module load time
 const getClass   = () => require('../models/class.model');
 const getSubject = () => require('../models/subject.model');
-const getTeacher = () => require('../models/teacher.model');
+const getTeacher = () => require('../models/teacher-models/teacher.model');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CLASSES
