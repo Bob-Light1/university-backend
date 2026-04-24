@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 
-const studentController = require('../controllers/student-controllers/student.controller');
+const studentController          = require('../controllers/student-controllers/student.controller');
+const studentDashboardController = require('../controllers/student-controllers/student.dashboard.controller');
 const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
 const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
 const { 
@@ -57,6 +58,100 @@ router.get(
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER']),
   apiLimiter,
   studentController.getAllStudents
+);
+
+// ========================================
+// STUDENT SELF-SERVICE
+// ========================================
+
+/**
+ * @route   GET /api/students/me/dashboard
+ * @desc    Student's personal dashboard (KPIs, today's schedule, results, exams)
+ * @access  STUDENT (own)
+ * @note    Must be declared BEFORE /:id to avoid Express matching "me" as an ID
+ */
+router.get(
+  '/me/dashboard',
+  authorize(['STUDENT']),
+  studentDashboardController.getDashboard
+);
+
+// ========================================
+// IMPORT/EXPORT OPERATIONS
+// ========================================
+
+/**
+ * @route   GET /api/students/export/csv
+ * @desc    Export student information to CSV
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.get(
+  '/export/csv',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  studentController.exportToCSV
+);
+
+
+/**
+ * @route   GET /api/students/export/excel
+ * @desc    Export student information to Excel
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.get(
+  '/export/excel',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  studentController.exportToExcel
+);
+
+/**
+ * @route   GET /api/students/export
+ * @desc    Alias for backward compatibility
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ * @note    Must be declared BEFORE /:id to avoid Express matching "export" as an ID
+ */
+router.get(
+  '/export',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  studentController.exportToCSV
+);
+
+/**
+ * @route   POST /api/students/import
+ * @desc    Import student information from CSV/Excel
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.post(
+  '/import',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  uploadDocument,        // Upload CSV/Excel file
+  handleMulterError,
+  studentController.importFromFile
+);
+
+/**
+ * @route   POST /api/students/template/csv
+ * @desc    Import CSV template
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.post(
+  '/import/template/csv',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  uploadDocument,        // Upload CSV file
+  handleMulterError,
+  studentController.getImportTemplateCSV
+);
+
+/**
+ * @route   POST /api/students/template/excel
+ * @desc    Import Excel template
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.post(
+  '/import/template/excel',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  uploadDocument,        // Upload Excel file
+  handleMulterError,
+  studentController.getImportTemplateExcel
 );
 
 // ========================================
@@ -181,83 +276,6 @@ router.post(
   '/bulk/archive',
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
   studentController.bulkArchive
-);
-
-// ========================================
-// IMPORT/EXPORT OPERATIONS
-// ========================================
-
-/**
- * @route   GET /api/students/export/csv
- * @desc    Export student information to CSV
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.get(
-  '/export/csv',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  studentController.exportToCSV
-);
-
-
-/**
- * @route   GET /api/students/export/excel
- * @desc    Export student information to Excel
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.get(
-  '/export/excel',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  studentController.exportToExcel
-);
-
-/**
- * @route   GET /api/students/export
- * @desc    Alias for backward compatibility
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.get(
-  '/export',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  studentController.exportToCSV
-);
-
-/**
- * @route   POST /api/students/import
- * @desc    Import student information from CSV/Excel
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.post(
-  '/import',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload CSV/Excel file
-  handleMulterError,
-  studentController.importFromFile
-);
-
-/**
- * @route   POST /api/students/template/csv
- * @desc    Import CSV template
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.post(
-  '/import/template/csv',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload CSV file
-  handleMulterError,
-  studentController.getImportTemplateCSV
-);
-
-/**
- * @route   POST /api/students/template/excel
- * @desc    Import Excel template
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.post(
-  '/import/template/excel',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload Excel file
-  handleMulterError,
-  studentController.getImportTemplateExcel
 );
 
 module.exports = router;

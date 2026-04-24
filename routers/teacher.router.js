@@ -1,7 +1,8 @@
 const express = require('express');
 const router = express.Router();
 
-const teacherController = require('../controllers/teacher-controllers/teacher.controller');
+const teacherController          = require('../controllers/teacher-controllers/teacher.controller');
+const teacherDashboardController = require('../controllers/teacher-controllers/teacher.dashboard.controller');
 const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
 const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
 const { 
@@ -12,7 +13,6 @@ const {
 
 // Role configurations
 const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
-const STAFF_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER'];
 
 // ========================================
 // PUBLIC ROUTES (No Authentication)
@@ -64,6 +64,100 @@ router.get(
 );
 
 // ========================================
+// TEACHER SELF-SERVICE
+// ========================================
+
+/**
+ * @route   GET /api/teachers/me/dashboard
+ * @desc    Teacher's personal dashboard (KPIs, today's sessions, pending roll-calls)
+ * @access  TEACHER (own)
+ * @note    Must be declared BEFORE /:id to avoid Express matching "me" as an ID
+ */
+router.get(
+  '/me/dashboard',
+  authorize(['TEACHER']),
+  teacherDashboardController.getDashboard
+);
+
+// ========================================
+// IMPORT/EXPORT OPERATIONS
+// ========================================
+
+/**
+ * @route   GET /api/teachers/export/csv
+ * @desc    Export teacher's information to CSV
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.get(
+  '/export/csv',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  teacherController.exportToCSV
+);
+
+
+/**
+ * @route   GET /api/teachers/export/excel
+ * @desc    Export teacher's information to Excel
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.get(
+  '/export/excel',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  teacherController.exportToExcel
+);
+
+/**
+ * @route   GET /api/teachers/export
+ * @desc    Alias for backward compatibility
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ * @note    Must be declared BEFORE /:id to avoid Express matching "export" as an ID
+ */
+router.get(
+  '/export',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  teacherController.exportToCSV
+);
+
+/**
+ * @route   POST /api/teachers/import
+ * @desc    Import teacher's information from CSV/Excel
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.post(
+  '/import',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  uploadDocument,        // Upload CSV/Excel file
+  handleMulterError,
+  teacherController.importFromFile
+);
+
+/**
+ * @route   POST /api/teachers/import/template/csv
+ * @desc    Import CSV template
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.post(
+  '/import/template/csv',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  uploadDocument,        // Upload CSV file
+  handleMulterError,
+  teacherController.getImportTemplateCSV
+);
+
+/**
+ * @route   POST /api/teachers/import/template/excel
+ * @desc    Import Excel template
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
+ */
+router.post(
+  '/import/template/excel',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  uploadDocument,        // Upload Excel file
+  handleMulterError,
+  teacherController.getImportTemplateExcel
+);
+
+// ========================================
 // INDIVIDUAL TEACHER ROUTES
 // ========================================
 
@@ -81,12 +175,12 @@ router.get(
 );
 
 /**
- * @route   PATCH /api/teachers/:id
+ * @route   PUT /api/teachers/:id
  * @desc    Update teacher information
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  * @note    Cannot change campus, password, or salary via this route
  *          Classes must belong to the same campus
- * **/
+ */
 
 router.put(
   '/:id',
@@ -188,82 +282,5 @@ router.post(
   teacherController.bulkArchive
 );
 
-
-// ========================================
-// IMPORT/EXPORT OPERATIONS
-// ========================================
-
-/**
- * @route   GET /api/teachers/export/csv
- * @desc    Export teacher's information to CSV
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.get(
-  '/export/csv',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  teacherController.exportToCSV
-);
-
-
-/**
- * @route   GET /api/teachers/export/excel
- * @desc    Export teacher's information to Excel
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.get(
-  '/export/excel',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  teacherController.exportToExcel
-);
-
-/**
- * @route   GET /api/teachers/export
- * @desc    Alias for backward compatibility
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.get(
-  '/export',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  teacherController.exportToCSV
-);
-
-/**
- * @route   POST /api/teachers/import
- * @desc    Import teacher's information from CSV/Excel
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.post(
-  '/import',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload CSV/Excel file
-  handleMulterError,
-  teacherController.importFromFile
-);
-
-/**
- * @route   POST /api/teachers/import/template/csv
- * @desc    Import CSV template
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.post(
-  '/import/template/csv',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload CSV file
-  handleMulterError,
-  teacherController.getImportTemplateCSV
-);
-
-/**
- * @route   POST /api/teachers/import/template/excel
- * @desc    Import Excel template
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.post(
-  '/import/template/excel',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload Excel file
-  handleMulterError,
-  teacherController.getImportTemplateExcel
-);
 
 module.exports = router;
