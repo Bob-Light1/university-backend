@@ -38,6 +38,7 @@ const {
   getTeacherSessionsAdmin,
   reviewPostponement,
   getAllTeachersWorkload,
+  getPendingPostponements,
 } = require('../controllers/teacher-controllers/teacherSchedule.controller');
 
 // ─────────────────────────────────────────────
@@ -59,6 +60,17 @@ router.get(
   '/admin/workload',
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
   getAllTeachersWorkload
+);
+
+/**
+ * GET /api/schedules/teacher/admin/postponements
+ * Liste les demandes de report pour le campus (filtrées par statut).
+ * Query : status (PENDING|APPROVED|REJECTED), page, limit
+ */
+router.get(
+  '/admin/postponements',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  getPendingPostponements
 );
 
 /**

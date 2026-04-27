@@ -382,6 +382,77 @@ const reviewPostponement = asyncHandler(async (req, res) => {
   );
 });
 
+/**
+ * GET /api/schedules/teacher/admin/postponements
+ * Liste toutes les demandes de report filtrées par statut pour le campus.
+ * Query : status (PENDING|APPROVED|REJECTED, default PENDING), page, limit
+ */
+const getPendingPostponements = asyncHandler(async (req, res) => {
+  const {
+    status = 'PENDING',
+    page   = 1,
+    limit  = 50,
+  } = req.query;
+
+  const VALID_STATUSES = ['PENDING', 'APPROVED', 'REJECTED'];
+  if (!VALID_STATUSES.includes(status)) {
+    return sendError(res, 400, `status must be one of ${VALID_STATUSES.join(', ')}.`);
+  }
+
+  const pageNum  = parsePositiveInt(page, 1);
+  const limitNum = parsePositiveInt(limit, 50);
+  const skip     = (pageNum - 1) * limitNum;
+
+  const campusFilter = buildCampusFilter(req);
+
+  const sessions = await TeacherSchedule.find({
+    ...campusFilter,
+    'postponementRequests.status': status,
+    isDeleted: false,
+  })
+    .select('reference teacher subject startTime endTime postponementRequests')
+    .lean();
+
+  const rows = [];
+  for (const session of sessions) {
+    for (const preq of session.postponementRequests) {
+      if (preq.status !== status) continue;
+      rows.push({
+        requestId:     preq._id,
+        sessionId:     session._id,
+        reference:     session.reference,
+        teacher: {
+          id:        session.teacher?.teacherId,
+          firstName: session.teacher?.firstName,
+          lastName:  session.teacher?.lastName,
+          email:     session.teacher?.email,
+        },
+        subject:       session.subject?.name,
+        sessionStart:  session.startTime,
+        sessionEnd:    session.endTime,
+        reason:        preq.reason,
+        proposedStart: preq.proposedStart,
+        proposedEnd:   preq.proposedEnd,
+        requestedAt:   preq._id?.toString ? new Date(parseInt(preq._id.toString().substring(0, 8), 16) * 1000) : null,
+        status:        preq.status,
+        reviewNote:    preq.reviewNote,
+        reviewedAt:    preq.reviewedAt,
+      });
+    }
+  }
+
+  rows.sort((a, b) => new Date(b.requestedAt) - new Date(a.requestedAt));
+
+  const total = rows.length;
+  const paged = rows.slice(skip, skip + limitNum);
+
+  return sendPaginated(res, 200, 'Postponement requests fetched.', paged, {
+    total,
+    page:  pageNum,
+    limit: limitNum,
+  });
+});
+
 // ─────────────────────────────────────────────
 // DISPONIBILITÉS
 // ─────────────────────────────────────────────
@@ -700,4 +771,5 @@ module.exports = {
   getTeacherSessionsAdmin,
   reviewPostponement,
   getAllTeachersWorkload,
+  getPendingPostponements,
 };
