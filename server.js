@@ -7,7 +7,8 @@ const cookieParser = require('cookie-parser');
 const path = require('path');
 const { apiLimiter } = require('./middleware/rate-limiter/rate-limiter');
 const mongoSanitize = require('express-mongo-sanitize');
-const { shutdownPool } = require('./services/document-services/document.pdf.service');
+const { shutdownPool }         = require('./services/document-services/document.pdf.service');
+const { shutdownAcademicPool } = require('./services/academic_pdf.service');
 
 const app = express();
 
@@ -215,6 +216,7 @@ const teacherAttendanceRouter = require('./routers/teacherAttendance.router');
 const documentRouter    = require('./routers/document.router');
 const parentRouter      = require('./routers/parent.router');
 const examinationRouter = require('./routers/examination.router');
+const academicPrintRouter = require('./routers/academic_print.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -233,6 +235,7 @@ app.use('/api/attendance/teacher', teacherAttendanceRouter);
 app.use('/api/documents',   documentRouter);
 app.use('/api/parents',     parentRouter);
 app.use('/api/examination', examinationRouter);
+app.use('/api/print',      academicPrintRouter);
 
 // ========================================
 // 404 HANDLER
@@ -324,9 +327,9 @@ const gracefulShutdown = async (signal) => {
   console.log(`\n⚠️ ${signal} received. Starting graceful shutdown...`);
   
   try {
-    // Close Puppeteer pool
-    await shutdownPool().catch(() => {});
-    console.log('✅ Puppeteer pool closed');
+    // Close Puppeteer pools
+    await Promise.all([shutdownPool(), shutdownAcademicPool()]).catch(() => {});
+    console.log('✅ Puppeteer pools closed');
 
     // Close MongoDB connection
     await mongoose.connection.close();

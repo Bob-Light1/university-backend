@@ -16,8 +16,9 @@
  *   cron.schedule('0 2 * * 0', runRetentionJob); // Every Sunday at 02:00
  */
 
-const Document      = require('./models/document.model');
-const DocumentAudit = require('./models/documentAudit.model');
+const Document      = require('../models/document-models/document.model');
+const DocumentAudit = require('../models/document-models/documentAudit.model');
+const { cleanupExpiredPrintFiles } = require('../services/academic_pdf.service');
 
 const BATCH_SIZE = 100;
 
@@ -81,6 +82,15 @@ const runRetentionJob = async () => {
   }
 
   console.log(`[RetentionCron] Completed. Processed: ${processed}, Errors: ${errors}`);
+
+  // Also purge expired academic print PDFs (30-day TTL)
+  try {
+    const removed = await cleanupExpiredPrintFiles(30);
+    if (removed > 0) console.log(`[RetentionCron] Removed ${removed} expired print PDF(s).`);
+  } catch (err) {
+    console.error('[RetentionCron] Print cleanup error:', err.message);
+  }
+
   return { processed, errors };
 };
 

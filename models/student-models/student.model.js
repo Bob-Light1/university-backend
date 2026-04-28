@@ -157,6 +157,18 @@ const studentSchema = new mongoose.Schema(
       default: null
     },
 
+    // **PRINT / ID CARD**
+    cardNumber: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    cardValidUntil: {
+      type: Date,
+      default: null,
+    },
+
     // **EMERGENCY CONTACT**
     emergencyContact: {
       name: { type: String, trim: true },
