@@ -57,19 +57,27 @@ const waitQueue = [];
 const initPool = async () => {
   if (poolInitialized) return;
 
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    || process.env.CHROME_EXECUTABLE_PATH
+    || puppeteer.executablePath();
+
+  const launchArgs = [
+    '--no-sandbox', '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage', '--disable-gpu',
+    '--single-process', '--no-first-run', '--no-zygote',
+    '--disable-extensions', '--disable-background-networking',
+  ];
+
   for (let i = 0; i < POOL_SIZE; i++) {
-   const browser = await puppeteer.launch({
-      headless: 'new',
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-gpu',
-        '--single-process',
-        '--no-first-run',
-        '--no-zygote',
-      ],
+    const browser = await puppeteer.launch({
+      headless: true,
+      executablePath,
+      args: launchArgs,
+    }).catch((err) => {
+      const hint = err.message?.includes('Could not find Chrome')
+        ? ' → Run: npx puppeteer browsers install chrome  (or set PUPPETEER_EXECUTABLE_PATH)'
+        : '';
+      throw new Error(`PDF engine unavailable: ${err.message}${hint}`);
     });
     browserPool.push(browser);
   }

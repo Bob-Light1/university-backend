@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "postinstall": "node -e \"console.log('Dependencies installed')\"",
+    "postinstall": "npx puppeteer browsers install chrome && node -e \"console.log('Chrome + dependencies ready')\"",
     "test": "echo \"No tests configured\"",
     "lint": "echo 'No lint configured'"
   },

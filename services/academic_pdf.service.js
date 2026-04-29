@@ -87,22 +87,39 @@ const getBrowser = async () => {
   if (_browser) return _browser;
   if (_launchPromise) return _launchPromise;
 
+  const launchArgs = [
+    '--no-sandbox', '--disable-setuid-sandbox',
+    '--disable-dev-shm-usage', '--disable-gpu',
+    '--single-process', '--no-first-run', '--no-zygote',
+    '--disable-extensions', '--disable-background-networking',
+  ];
+
+  // Resolve executable path: env var takes priority, then puppeteer's own cache
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    || process.env.CHROME_EXECUTABLE_PATH
+    || puppeteer.executablePath();
+
   _launchPromise = puppeteer.launch({
-    headless: 'new',
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-    args: [
-      '--no-sandbox', '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage', '--disable-gpu',
-      '--single-process', '--no-first-run', '--no-zygote',
-    ],
+    headless: true,
+    executablePath,
+    args: launchArgs,
   }).then((browser) => {
     _browser       = browser;
     _launchPromise = null;
-    _browser.on('disconnected', () => { _browser = null; });
+    _browser.on('disconnected', () => {
+      _browser = null;
+      console.warn('[AcademicPDF] Browser disconnected — will re-launch on next request.');
+    });
     return _browser;
   }).catch((err) => {
     _launchPromise = null;
-    throw err;
+    const hint = err.message?.includes('Could not find Chrome')
+      ? ' → Run: npx puppeteer browsers install chrome  (or set PUPPETEER_EXECUTABLE_PATH)'
+      : '';
+    throw Object.assign(
+      new Error(`PDF engine unavailable: ${err.message}${hint}`),
+      { statusCode: 503 }
+    );
   });
 
   return _launchPromise;
