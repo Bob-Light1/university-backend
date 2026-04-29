@@ -77,12 +77,17 @@ const getCampusBranding = async (campusId) => {
 };
 
 // ── Singleton Puppeteer Browser ───────────────────────────────────────────────
+// Uses a launch-promise to prevent the race condition where two concurrent
+// callers both see _browser=null and both call puppeteer.launch().
 
-let _browser = null;
+let _browser        = null;
+let _launchPromise  = null;
 
 const getBrowser = async () => {
   if (_browser) return _browser;
-  _browser = await puppeteer.launch({
+  if (_launchPromise) return _launchPromise;
+
+  _launchPromise = puppeteer.launch({
     headless: 'new',
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: [
@@ -90,15 +95,25 @@ const getBrowser = async () => {
       '--disable-dev-shm-usage', '--disable-gpu',
       '--single-process', '--no-first-run', '--no-zygote',
     ],
+  }).then((browser) => {
+    _browser       = browser;
+    _launchPromise = null;
+    _browser.on('disconnected', () => { _browser = null; });
+    return _browser;
+  }).catch((err) => {
+    _launchPromise = null;
+    throw err;
   });
-  _browser.on('disconnected', () => { _browser = null; });
-  return _browser;
+
+  return _launchPromise;
 };
 
 const shutdownAcademicPool = async () => {
+  if (_launchPromise) await _launchPromise.catch(() => {});
   if (_browser) {
     await _browser.close().catch(() => {});
-    _browser = null;
+    _browser        = null;
+    _launchPromise  = null;
   }
 };
 

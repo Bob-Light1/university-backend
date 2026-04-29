@@ -48,6 +48,19 @@ const pruneJobs = () => {
 };
 setInterval(pruneJobs, 60 * 60 * 1000).unref(); // every hour, non-blocking
 
+/**
+ * Resolve campusId from the request.
+ * - CAMPUS_MANAGER : always uses JWT campusId (campus isolation enforced server-side)
+ * - ADMIN/DIRECTOR : may supply campusId in body or query (required for scoped operations)
+ */
+const resolveCampusId = (req) => {
+  const { role, campusId: jwtCampusId } = req.user;
+  if (['ADMIN', 'DIRECTOR'].includes(role)) {
+    return req.body?.campusId || req.query?.campusId || null;
+  }
+  return jwtCampusId || null;
+};
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const buildCampusFilter = (req) => {
@@ -206,8 +219,9 @@ const processBatchJob = async (job) => {
  */
 const previewPdf = asyncHandler(async (req, res) => {
   const { type, studentId, classId, params = {} } = req.body;
-  const campusId = req.user.campusId;
+  const campusId = resolveCampusId(req);
 
+  if (!campusId) return sendError(res, 400, 'campusId is required for ADMIN/DIRECTOR — pass it in the request body.');
   if (!VALID_TYPES.includes(type)) return sendError(res, 400, `Invalid type. Must be one of: ${VALID_TYPES.join(', ')}`);
 
   let buffer;
@@ -249,7 +263,7 @@ const previewPdf = asyncHandler(async (req, res) => {
  * List batch jobs for this campus (most recent first).
  */
 const listJobs = asyncHandler(async (req, res) => {
-  const campusId = req.user.campusId;
+  const campusId = resolveCampusId(req);
   const { page = 1, limit = 20 } = req.query;
 
   const campusJobs = [...JOBS.values()]
@@ -286,9 +300,10 @@ const listJobs = asyncHandler(async (req, res) => {
  */
 const startBatch = asyncHandler(async (req, res) => {
   const { type, classId, studentIds, params = {} } = req.body;
-  const campusId    = req.user.campusId;
+  const campusId    = resolveCampusId(req);
   const requestedBy = req.user.id;
 
+  if (!campusId) return sendError(res, 400, 'campusId is required for ADMIN/DIRECTOR — pass it in the request body.');
   if (!VALID_TYPES.includes(type)) return sendError(res, 400, `Invalid type. Must be one of: ${VALID_TYPES.join(', ')}`);
 
   let targets = [];
