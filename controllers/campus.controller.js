@@ -278,6 +278,7 @@ class CampusController extends GenericEntityController {
         token,
         user: {
           id: campus._id,
+          campusId: campus._id,
           manager_name: campus.manager_name,
           campus_name: campus.campus_name,
           email: campus.email,

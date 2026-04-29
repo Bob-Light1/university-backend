@@ -367,10 +367,10 @@ const startBatch = asyncHandler(async (req, res) => {
  */
 const getBatchJobStatus = asyncHandler(async (req, res) => {
   const { jobId }  = req.params;
-  const campusId   = req.user.campusId;
+  const campusId   = resolveCampusId(req);
   const job        = JOBS.get(jobId);
 
-  if (!job || String(job.campusId) !== String(campusId)) {
+  if (!job || (campusId && String(job.campusId) !== String(campusId))) {
     return sendError(res, 404, 'Job not found');
   }
 
@@ -393,10 +393,10 @@ const getBatchJobStatus = asyncHandler(async (req, res) => {
  */
 const downloadBatchResult = asyncHandler(async (req, res) => {
   const { jobId, fileName } = req.params;
-  const campusId = req.user.campusId;
+  const campusId = resolveCampusId(req);
 
   const job = JOBS.get(jobId);
-  if (!job || String(job.campusId) !== String(campusId)) return sendError(res, 404, 'Job not found');
+  if (!job || (campusId && String(job.campusId) !== String(campusId))) return sendError(res, 404, 'Job not found');
 
   // Verify this fileName belongs to this job (security: prevent path traversal)
   const isOwned = job.results.some((r) => r.fileName === fileName);
