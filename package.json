@@ -5,7 +5,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "postinstall": "npx puppeteer browsers install chrome && node -e \"console.log('Chrome + dependencies ready')\"",
+    "postinstall": "node -e \"console.log('Dependencies ready')\"",
     "test": "echo \"No tests configured\"",
     "lint": "echo 'No lint configured'"
   },
@@ -13,6 +13,7 @@
     "node": "20.x"
   },
   "dependencies": {
+    "@sparticuz/chromium": "^147.0.0",
     "bcrypt": "^6.0.0",
     "cloudinary": "^1.41.3",
     "cookie-parser": "^1.4.7",

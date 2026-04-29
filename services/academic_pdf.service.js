@@ -15,6 +15,7 @@
  */
 
 const puppeteer = require('puppeteer');
+const chromium  = require('@sparticuz/chromium');
 const path      = require('path');
 const fs        = require('fs').promises;
 
@@ -83,27 +84,26 @@ const getCampusBranding = async (campusId) => {
 let _browser        = null;
 let _launchPromise  = null;
 
+// Resolve the Chrome executable path for both cloud and local environments.
+// Priority: explicit env var → @sparticuz/chromium (cloud) → puppeteer cache (local dev)
+const resolveChromePath = async () => {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  try   { return await chromium.executablePath(); }
+  catch { return puppeteer.executablePath(); }
+};
+
 const getBrowser = async () => {
   if (_browser) return _browser;
   if (_launchPromise) return _launchPromise;
 
-  const launchArgs = [
-    '--no-sandbox', '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage', '--disable-gpu',
-    '--single-process', '--no-first-run', '--no-zygote',
-    '--disable-extensions', '--disable-background-networking',
-  ];
-
-  // Resolve executable path: env var takes priority, then puppeteer's own cache
-  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-    || process.env.CHROME_EXECUTABLE_PATH
-    || puppeteer.executablePath();
-
-  _launchPromise = puppeteer.launch({
-    headless: true,
-    executablePath,
-    args: launchArgs,
-  }).then((browser) => {
+  _launchPromise = resolveChromePath().then((executablePath) =>
+    puppeteer.launch({
+      headless:        chromium.headless ?? true,
+      executablePath,
+      args:            chromium.args,
+      defaultViewport: chromium.defaultViewport,
+    })
+  ).then((browser) => {
     _browser       = browser;
     _launchPromise = null;
     _browser.on('disconnected', () => {
@@ -113,13 +113,7 @@ const getBrowser = async () => {
     return _browser;
   }).catch((err) => {
     _launchPromise = null;
-    const hint = err.message?.includes('Could not find Chrome')
-      ? ' → Run: npx puppeteer browsers install chrome  (or set PUPPETEER_EXECUTABLE_PATH)'
-      : '';
-    throw Object.assign(
-      new Error(`PDF engine unavailable: ${err.message}${hint}`),
-      { statusCode: 503 }
-    );
+    throw Object.assign(new Error(`PDF engine unavailable: ${err.message}`), { statusCode: 503 });
   });
 
   return _launchPromise;

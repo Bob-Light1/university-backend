@@ -26,6 +26,7 @@
  */
 
 const puppeteer = require('puppeteer');
+const chromium  = require('@sparticuz/chromium');
 const path      = require('path');
 const fs        = require('fs').promises;
 const crypto    = require('crypto');
@@ -54,30 +55,25 @@ const waitQueue = [];
  * Initializes the Puppeteer browser pool.
  * Called once at server startup. Subsequent calls are no-ops.
  */
+const resolveChromePath = async () => {
+  if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
+  try   { return await chromium.executablePath(); }
+  catch { return puppeteer.executablePath(); }
+};
+
 const initPool = async () => {
   if (poolInitialized) return;
 
-  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
-    || process.env.CHROME_EXECUTABLE_PATH
-    || puppeteer.executablePath();
-
-  const launchArgs = [
-    '--no-sandbox', '--disable-setuid-sandbox',
-    '--disable-dev-shm-usage', '--disable-gpu',
-    '--single-process', '--no-first-run', '--no-zygote',
-    '--disable-extensions', '--disable-background-networking',
-  ];
+  const executablePath = await resolveChromePath();
 
   for (let i = 0; i < POOL_SIZE; i++) {
     const browser = await puppeteer.launch({
-      headless: true,
+      headless:        chromium.headless ?? true,
       executablePath,
-      args: launchArgs,
+      args:            chromium.args,
+      defaultViewport: chromium.defaultViewport,
     }).catch((err) => {
-      const hint = err.message?.includes('Could not find Chrome')
-        ? ' → Run: npx puppeteer browsers install chrome  (or set PUPPETEER_EXECUTABLE_PATH)'
-        : '';
-      throw new Error(`PDF engine unavailable: ${err.message}${hint}`);
+      throw new Error(`PDF engine unavailable: ${err.message}`);
     });
     browserPool.push(browser);
   }
