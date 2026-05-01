@@ -14,7 +14,7 @@
  * Campus branding (logo as base64) is cached in memory with a 10-min TTL.
  */
 
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 const chromium  = require('@sparticuz/chromium');
 const path      = require('path');
 const fs        = require('fs').promises;
@@ -88,8 +88,8 @@ let _launchPromise  = null;
 // Priority: explicit env var → @sparticuz/chromium (cloud) → puppeteer cache (local dev)
 const resolveChromePath = async () => {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
-  try   { return await chromium.executablePath(); }
-  catch { return puppeteer.executablePath(); }
+  // @sparticuz/chromium extracts the binary to /tmp/chromium on first call
+  return chromium.executablePath();
 };
 
 const getBrowser = async () => {

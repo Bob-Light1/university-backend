@@ -25,7 +25,7 @@
  *   7. Update Document.pdfSnapshot filename
  */
 
-const puppeteer = require('puppeteer');
+const puppeteer = require('puppeteer-core');
 const chromium  = require('@sparticuz/chromium');
 const path      = require('path');
 const fs        = require('fs').promises;
@@ -57,8 +57,8 @@ const waitQueue = [];
  */
 const resolveChromePath = async () => {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
-  try   { return await chromium.executablePath(); }
-  catch { return puppeteer.executablePath(); }
+  // @sparticuz/chromium extracts the binary to /tmp/chromium on first call
+  return chromium.executablePath();
 };
 
 const initPool = async () => {
