@@ -38,6 +38,12 @@ const esc = (str) =>
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 
+// Renders a circular campus logo <img> or empty string if no logo.
+const logoCircleHtml = (logoDataUrl, size = '18mm') =>
+  logoDataUrl
+    ? `<img src="${logoDataUrl}" alt="logo" style="width:${size};height:${size};border-radius:50%;object-fit:cover;flex-shrink:0;" />`
+    : '';
+
 // ── Branding Cache (10-min TTL) ───────────────────────────────────────────────
 
 const brandingCache = new Map(); // campusId → { logoDataUrl, campus_name, location, cachedAt }
@@ -168,8 +174,8 @@ const buildStudentCardHtml = async (student, branding, params = {}) => {
     : (academicYear ? academicYear.split('-')[1] : String(new Date().getFullYear() + 1));
 
   const logoHtml = branding.logoDataUrl
-    ? `<img src="${branding.logoDataUrl}" alt="logo" style="height:14mm;max-width:16mm;object-fit:contain;" />`
-    : `<div style="width:14mm;height:14mm;background:#003366;border-radius:3px;"></div>`;
+    ? logoCircleHtml(branding.logoDataUrl, '12mm')
+    : `<div style="width:12mm;height:12mm;background:#003366;border-radius:50%;flex-shrink:0;"></div>`;
 
   const photoHtml = student.profileImage
     ? `<img src="${esc(student.profileImage)}" alt="photo" style="width:22mm;height:28mm;object-fit:cover;border:0.5mm solid rgba(255,255,255,0.4);border-radius:1mm;" />`
@@ -286,9 +292,7 @@ const buildTranscriptHtml = async (transcript, student, branding, params = {}) =
   const qrPayload = `${BASE_URL}/verify-transcript/${token}`;
   const qrDataUrl = await generateQrCodeDataUrl(qrPayload, 120).catch(() => null);
 
-  const logoHtml  = branding.logoDataUrl
-    ? `<img src="${branding.logoDataUrl}" alt="logo" style="height:18mm;max-width:28mm;object-fit:contain;" />`
-    : '';
+  const logoHtml  = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '18mm') : '';
 
   const avgColor = (avg) => avg >= 16 ? '#1b5e20' : avg >= 12 ? '#33691e' : avg >= 10 ? '#e65100' : '#b71c1c';
 
@@ -429,9 +433,7 @@ const buildEnrollmentCertHtml = async (student, branding, params = {}) => {
   const qrPayload = `${BASE_URL}/verify-cert/${certRef}`;
   const qrDataUrl = await generateQrCodeDataUrl(qrPayload, 120).catch(() => null);
 
-  const logoHtml  = branding.logoDataUrl
-    ? `<img src="${branding.logoDataUrl}" alt="logo" style="height:20mm;max-width:30mm;object-fit:contain;" />`
-    : '';
+  const logoHtml  = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '20mm') : '';
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -439,27 +441,27 @@ const buildEnrollmentCertHtml = async (student, branding, params = {}) => {
 <meta charset="UTF-8"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
-  @page{size:A4;margin:18mm;}
+  @page{size:A4;margin:15mm;}
   body{font-family:Arial,Helvetica,sans-serif;font-size:11pt;color:#1a1a1a;}
-  .outer{border:3px solid #003366;padding:7mm;min-height:240mm;position:relative;}
-  .inner{border:1px solid #c5cae9;padding:6mm;min-height:226mm;position:relative;}
+  .outer{border:3px solid #003366;padding:7mm;min-height:248mm;position:relative;}
+  .inner{border:1px solid #c5cae9;padding:6mm;min-height:230mm;position:relative;}
   .corner{position:absolute;width:7mm;height:7mm;border-color:#003366;border-style:solid;}
   .tl{top:2mm;left:2mm;border-width:2px 0 0 2px;} .tr{top:2mm;right:2mm;border-width:2px 2px 0 0;}
   .bl{bottom:2mm;left:2mm;border-width:0 0 2px 2px;} .br{bottom:2mm;right:2mm;border-width:0 2px 2px 0;}
-  .cert-header{text-align:center;border-bottom:2px solid #003366;padding-bottom:6mm;margin-bottom:7mm;}
+  .cert-header{text-align:center;border-bottom:2px solid #003366;padding-bottom:5mm;margin-bottom:4mm;}
   .campus-name{font-size:15pt;font-weight:bold;color:#003366;text-transform:uppercase;letter-spacing:1px;margin:3mm 0 1mm;}
   .campus-sub{font-size:9pt;color:#666;}
-  .cert-title{font-size:17pt;font-weight:bold;color:#003366;text-transform:uppercase;letter-spacing:2.5px;margin:7mm 0 2mm;}
+  .cert-title{font-size:17pt;font-weight:bold;color:#003366;text-transform:uppercase;letter-spacing:2.5px;margin:4mm 0 1mm;}
   .cert-subtitle{font-size:10pt;color:#888;letter-spacing:0.5px;font-style:italic;}
-  .cert-body{text-align:center;line-height:2.4;margin:7mm 0;}
+  .cert-body{text-align:center;line-height:1.9;margin:5mm 0;}
   .cert-body p{font-size:11.5pt;}
   .highlight{font-size:14pt;font-weight:bold;color:#003366;text-decoration:underline;text-underline-offset:2px;}
   .ref-tag{display:inline-block;background:#f5f7fa;border:1px solid #e0e0e0;border-radius:2mm;padding:1.5mm 5mm;font-size:8.5pt;color:#666;font-family:monospace;margin-top:5mm;}
-  .signatures{display:flex;justify-content:space-around;margin-top:18mm;}
+  .signatures{display:flex;justify-content:space-around;margin-top:10mm;}
   .sig-block{text-align:center;}
-  .sig-line{border-bottom:1.5px solid #555;width:48mm;margin:20mm auto 3mm;}
+  .sig-line{border-bottom:1.5px solid #555;width:48mm;margin:12mm auto 3mm;}
   .sig-label{font-size:8.5pt;color:#555;}
-  .qr-wrap{text-align:center;margin-top:7mm;}
+  .qr-wrap{text-align:center;margin-top:5mm;}
   .qr-wrap img{width:22mm;height:22mm;}
   .qr-label{font-size:7pt;color:#aaa;margin-top:1.5mm;}
   .cert-footer{position:absolute;bottom:3mm;left:3mm;right:3mm;border-top:1px solid #ddd;padding-top:2mm;font-size:7pt;color:#999;text-align:center;}
@@ -516,9 +518,7 @@ const PALETTE = ['#1565c0', '#4527a0', '#2e7d32', '#bf360c', '#6a1b9a', '#00695c
 const buildTimetableHtml = async (sessions, cls, branding, params = {}) => {
   const { weekStart, academicYear, semester } = params;
 
-  const logoHtml = branding.logoDataUrl
-    ? `<img src="${branding.logoDataUrl}" alt="logo" style="height:11mm;max-width:20mm;object-fit:contain;" />`
-    : '';
+  const logoHtml = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '11mm') : '';
 
   // Build time slots (sorted) from session boundaries
   const slotSet = new Set();
@@ -619,6 +619,148 @@ const buildTimetableHtml = async (sessions, cls, branding, params = {}) => {
 </html>`;
 };
 
+// ── Template 5 — STUDENT LIST (A4) ───────────────────────────────────────────
+
+const buildStudentListHtml = async (students, cls, branding, params = {}) => {
+  const { academicYear } = params;
+  const logoHtml = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '18mm') : '';
+
+  const rows = students.map((s, i) => {
+    const dob    = s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString('en-GB') : '—';
+    const gender = s.gender ? esc(s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : '—';
+    const status = s.status || 'active';
+    const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
+    const statusBg    = status === 'active' ? '#e8f5e9' : '#fafafa';
+    const statusColor = status === 'active' ? '#2e7d32' : '#888';
+    return `<tr>
+      <td style="text-align:center;color:#999;">${i + 1}</td>
+      <td style="font-weight:500;">${esc(s.firstName)} ${esc(s.lastName)}</td>
+      <td style="text-align:center;font-family:monospace;font-size:8pt;">${esc(s.matricule || '—')}</td>
+      <td style="text-align:center;">${dob}</td>
+      <td style="text-align:center;">${gender}</td>
+      <td style="text-align:center;"><span style="background:${statusBg};color:${statusColor};padding:1px 7px;border-radius:10px;font-size:7.5pt;">${statusLabel}</span></td>
+    </tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  @page{size:A4;margin:15mm;}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1a1a1a;}
+  .header{display:flex;align-items:center;gap:5mm;border-bottom:2.5px solid #003366;padding-bottom:5mm;margin-bottom:6mm;}
+  .campus-name{font-size:13pt;font-weight:bold;color:#003366;text-transform:uppercase;}
+  .doc-title{font-size:9.5pt;color:#555;margin-top:1mm;}
+  .meta{font-size:8pt;color:#888;margin-top:1mm;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{background:#003366;color:#fff;padding:5px 7px;font-size:8.5pt;font-weight:bold;}
+  tbody td{padding:4.5px 7px;font-size:8.5pt;border-bottom:1px solid #eee;vertical-align:middle;}
+  tbody tr:nth-child(even) td{background:#f9fafb;}
+  .footer{margin-top:6mm;border-top:1px solid #ddd;padding-top:3mm;display:flex;justify-content:space-between;font-size:7.5pt;color:#888;}
+</style>
+</head>
+<body>
+<div class="header">
+  ${logoHtml}
+  <div>
+    <div class="campus-name">${esc(branding.campus_name)}</div>
+    <div class="doc-title">Student List — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}</div>
+    <div class="meta">${students.length} student${students.length !== 1 ? 's' : ''} · Printed: ${new Date().toLocaleDateString('en-GB')}</div>
+  </div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:6%;text-align:center;">#</th>
+      <th style="width:34%;text-align:left;">Full Name</th>
+      <th style="width:17%;text-align:center;">Matricule</th>
+      <th style="width:15%;text-align:center;">Date of Birth</th>
+      <th style="width:12%;text-align:center;">Gender</th>
+      <th style="width:16%;text-align:center;">Status</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rows || '<tr><td colspan="6" style="padding:14px;text-align:center;color:#aaa;">No students found.</td></tr>'}
+  </tbody>
+</table>
+<div class="footer">
+  <span>${esc(branding.campus_name)} — Official Document</span>
+  <span>Total: ${students.length} student${students.length !== 1 ? 's' : ''}</span>
+  <span>Generated: ${new Date().toLocaleString('en-GB')}</span>
+</div>
+</body>
+</html>`;
+};
+
+// ── Template 6 — TEACHER LIST (A4) ───────────────────────────────────────────
+
+const buildTeacherListHtml = async (teachers, cls, branding, params = {}) => {
+  const { academicYear } = params;
+  const logoHtml = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '18mm') : '';
+
+  const rows = teachers.map((t, i) => {
+    const subjectTags = t.subjects.length > 0
+      ? t.subjects.map((s) =>
+          `<span style="display:inline-block;background:#e3f2fd;color:#1565c0;border-radius:10px;padding:1px 7px;font-size:7pt;margin:1px 2px 1px 0;">${esc(s)}</span>`
+        ).join('')
+      : '<span style="color:#aaa;font-size:8pt;">—</span>';
+    return `<tr>
+      <td style="text-align:center;color:#999;">${i + 1}</td>
+      <td style="font-weight:500;">${esc(t.fullName || '—')}</td>
+      <td>${subjectTags}</td>
+    </tr>`;
+  }).join('');
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  @page{size:A4;margin:15mm;}
+  body{font-family:Arial,Helvetica,sans-serif;font-size:10pt;color:#1a1a1a;}
+  .header{display:flex;align-items:center;gap:5mm;border-bottom:2.5px solid #003366;padding-bottom:5mm;margin-bottom:6mm;}
+  .campus-name{font-size:13pt;font-weight:bold;color:#003366;text-transform:uppercase;}
+  .doc-title{font-size:9.5pt;color:#555;margin-top:1mm;}
+  .meta{font-size:8pt;color:#888;margin-top:1mm;}
+  table{width:100%;border-collapse:collapse;}
+  thead th{background:#003366;color:#fff;padding:5px 7px;font-size:8.5pt;font-weight:bold;}
+  tbody td{padding:5px 7px;font-size:8.5pt;border-bottom:1px solid #eee;vertical-align:middle;}
+  tbody tr:nth-child(even) td{background:#f9fafb;}
+  .footer{margin-top:6mm;border-top:1px solid #ddd;padding-top:3mm;display:flex;justify-content:space-between;font-size:7.5pt;color:#888;}
+</style>
+</head>
+<body>
+<div class="header">
+  ${logoHtml}
+  <div>
+    <div class="campus-name">${esc(branding.campus_name)}</div>
+    <div class="doc-title">Teaching Staff — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}</div>
+    <div class="meta">${teachers.length} instructor${teachers.length !== 1 ? 's' : ''} · Printed: ${new Date().toLocaleDateString('en-GB')}</div>
+  </div>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th style="width:6%;text-align:center;">#</th>
+      <th style="width:38%;text-align:left;">Full Name</th>
+      <th style="width:56%;text-align:left;">Subject(s)</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rows || '<tr><td colspan="3" style="padding:14px;text-align:center;color:#aaa;">No teaching staff found for this class.</td></tr>'}
+  </tbody>
+</table>
+<div class="footer">
+  <span>${esc(branding.campus_name)} — Official Document</span>
+  <span>Total: ${teachers.length} instructor${teachers.length !== 1 ? 's' : ''}</span>
+  <span>Generated: ${new Date().toLocaleString('en-GB')}</span>
+</div>
+</body>
+</html>`;
+};
+
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
@@ -657,6 +799,18 @@ const generateAcademicPdf = async ({ type, data, campusId, params = {} }) => {
       return renderPdf(
         await buildTimetableHtml(data.sessions || [], data.cls, branding, params),
         { format: 'A4', landscape: true, margins: { top: '10mm', right: '12mm', bottom: '10mm', left: '12mm' } }
+      );
+
+    case 'STUDENT_LIST':
+      return renderPdf(
+        await buildStudentListHtml(data.students || [], data.cls, branding, params),
+        { format: 'A4', margins: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } }
+      );
+
+    case 'TEACHER_LIST':
+      return renderPdf(
+        await buildTeacherListHtml(data.teachers || [], data.cls, branding, params),
+        { format: 'A4', margins: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } }
       );
 
     default:

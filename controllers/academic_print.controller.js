@@ -37,7 +37,10 @@ const { FinalTranscript } = require('../models/finalTranscript.model');
 const JOBS = new Map();
 const JOB_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days before job metadata expires
 
-const VALID_TYPES = ['STUDENT_CARD', 'TRANSCRIPT', 'ENROLLMENT', 'TIMETABLE'];
+const VALID_TYPES = ['STUDENT_CARD', 'TRANSCRIPT', 'ENROLLMENT', 'TIMETABLE', 'STUDENT_LIST', 'TEACHER_LIST'];
+
+// Types that produce one PDF per class (not per student)
+const CLASS_LEVEL_TYPES = ['TIMETABLE', 'STUDENT_LIST', 'TEACHER_LIST'];
 
 // Clean up old job metadata on startup and periodically
 const pruneJobs = () => {
@@ -101,6 +104,39 @@ const loadStudentsByClass = async (classId, campusId) => {
     .lean();
 
   return students.map((s) => ({ ...s, _className: cls.className }));
+};
+
+/**
+ * Extract unique teachers (with their subjects) from all sessions of a class.
+ * No date filter — returns the full instructor roster.
+ */
+const loadClassTeachers = async (classId, campusId) => {
+  const StudentSchedule = require('../models/student-models/studentSchedule.model');
+  const sessions = await StudentSchedule.find({
+    'classes.classId': classId,
+    schoolCampus:      campusId,
+    status:            { $in: ['PUBLISHED', 'DRAFT'] },
+    isDeleted:         { $ne: true },
+  }).select('subject teacher').lean();
+
+  const teacherMap = new Map();
+  for (const s of sessions) {
+    if (!s.teacher) continue;
+    const id = s.teacher._id
+      ? String(s.teacher._id)
+      : `${s.teacher.firstName || ''}_${s.teacher.lastName || ''}`;
+    if (!teacherMap.has(id)) {
+      teacherMap.set(id, {
+        fullName: s.teacher.fullName || `${s.teacher.firstName || ''} ${s.teacher.lastName || ''}`.trim(),
+        subjects: new Set(),
+      });
+    }
+    if (s.subject?.subject_name) teacherMap.get(id).subjects.add(s.subject.subject_name);
+  }
+
+  return [...teacherMap.values()]
+    .map((t) => ({ fullName: t.fullName, subjects: [...t.subjects] }))
+    .sort((a, b) => a.fullName.localeCompare(b.fullName));
 };
 
 /**
@@ -191,6 +227,30 @@ const processBatchJob = async (job) => {
         const safeName = (cls?.className || String(target.id)).replace(/[^A-Z0-9a-z]/g, '_');
         fileName       = `timetable_${safeName}_${Date.now()}.pdf`;
         await savePrintPdf(buffer, job.campusId, fileName);
+
+      } else if (job.type === 'STUDENT_LIST') {
+        const cls      = await Class.findById(target.id).select('className').lean();
+        const students = await Student
+          .find({ studentClass: target.id, schoolCampus: job.campusId, status: { $ne: 'archived' } })
+          .select('firstName lastName matricule dateOfBirth gender status')
+          .sort({ lastName: 1, firstName: 1 })
+          .lean();
+        const buffer   = await generateAcademicPdf({
+          type: 'STUDENT_LIST', data: { students, cls }, campusId: job.campusId, params: job.params,
+        });
+        const safeName = (cls?.className || String(target.id)).replace(/[^A-Z0-9a-z]/g, '_');
+        fileName       = `student_list_${safeName}_${Date.now()}.pdf`;
+        await savePrintPdf(buffer, job.campusId, fileName);
+
+      } else if (job.type === 'TEACHER_LIST') {
+        const cls      = await Class.findById(target.id).select('className').lean();
+        const teachers = await loadClassTeachers(target.id, job.campusId);
+        const buffer   = await generateAcademicPdf({
+          type: 'TEACHER_LIST', data: { teachers, cls }, campusId: job.campusId, params: job.params,
+        });
+        const safeName = (cls?.className || String(target.id)).replace(/[^A-Z0-9a-z]/g, '_');
+        fileName       = `teacher_list_${safeName}_${Date.now()}.pdf`;
+        await savePrintPdf(buffer, job.campusId, fileName);
       }
 
       job.results.push({ targetId: String(target.id), targetName: target.name, fileName, completedAt: new Date() });
@@ -247,6 +307,24 @@ const previewPdf = asyncHandler(async (req, res) => {
     if (!cls) return sendError(res, 404, 'Class not found');
     const sessions = await loadClassSessions(classId, campusId, params);
     buffer = await generateAcademicPdf({ type: 'TIMETABLE', data: { sessions, cls }, campusId, params });
+
+  } else if (type === 'STUDENT_LIST') {
+    if (!classId) return sendError(res, 400, 'classId is required for STUDENT_LIST');
+    const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
+    if (!cls) return sendError(res, 404, 'Class not found');
+    const students = await Student
+      .find({ studentClass: classId, schoolCampus: campusId, status: { $ne: 'archived' } })
+      .select('firstName lastName matricule dateOfBirth gender status')
+      .sort({ lastName: 1, firstName: 1 })
+      .lean();
+    buffer = await generateAcademicPdf({ type: 'STUDENT_LIST', data: { students, cls }, campusId, params });
+
+  } else if (type === 'TEACHER_LIST') {
+    if (!classId) return sendError(res, 400, 'classId is required for TEACHER_LIST');
+    const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
+    if (!cls) return sendError(res, 404, 'Class not found');
+    const teachers = await loadClassTeachers(classId, campusId);
+    buffer = await generateAcademicPdf({ type: 'TEACHER_LIST', data: { teachers, cls }, campusId, params });
   }
 
   res.set({
@@ -308,9 +386,9 @@ const startBatch = asyncHandler(async (req, res) => {
 
   let targets = [];
 
-  if (type === 'TIMETABLE') {
-    // Timetable batch: one PDF per class
-    if (!classId) return sendError(res, 400, 'classId is required for TIMETABLE batch');
+  if (CLASS_LEVEL_TYPES.includes(type)) {
+    // Class-level batch: one PDF per class (TIMETABLE, STUDENT_LIST, TEACHER_LIST)
+    if (!classId) return sendError(res, 400, `classId is required for ${type} batch`);
     const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
     if (!cls) return sendError(res, 404, 'Class not found');
     targets = [{ id: String(classId), name: cls.className }];
