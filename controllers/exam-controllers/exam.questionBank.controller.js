@@ -23,7 +23,7 @@ const {
   sendCreated,
   handleDuplicateKeyError,
 } = require('../../utils/responseHelpers');
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId, escapeRegex } = require('../../utils/validationHelpers');
 const {
   getCampusFilter,
   resolveCampusId,
@@ -47,7 +47,7 @@ const listQuestions = async (req, res) => {
     if (questionType) match.questionType = questionType;
     if (tag)          match.tags         = { $in: [tag] };
     if (isActive !== undefined) match.isActive = isActive === 'true';
-    if (search) match.questionText = { $regex: search, $options: 'i' };
+    if (search) match.questionText = { $regex: escapeRegex(search), $options: 'i' };
 
     const [questions, total] = await Promise.all([
       QuestionBank.find(match)

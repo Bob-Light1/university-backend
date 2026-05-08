@@ -305,6 +305,16 @@ const buildCampusFilter = (user, requestedCampusId = null) => {
 };
 
 /**
+ * Escape special regex characters in a string to prevent ReDoS / injection
+ * when using user-supplied input in MongoDB $regex queries.
+ *
+ * @param {string} str - Raw user input
+ * @returns {string} Escaped string safe for use as a regex pattern
+ */
+const escapeRegex = (str) =>
+  String(str ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
  * Sanitize user input to prevent injection attacks
  * @param {String} input - User input
  * @returns {String} Sanitized input
@@ -365,5 +375,6 @@ module.exports = {
   isValidPhone,
   validatePasswordStrength,
   sanitizeInput,
-  isDateNotFuture
+  isDateNotFuture,
+  escapeRegex,
 };

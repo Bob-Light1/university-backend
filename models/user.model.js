@@ -35,13 +35,13 @@ const userSchema = new mongoose.Schema(
 
     phone: {
       type: String,
-      unique:true,
+      unique: true,
+      sparse: true,  // allows multiple documents with no phone (null is not "unique")
     },
 
     password: {
       type: String,
       required: true,
-      unique:true,
       select: false,
     },
 

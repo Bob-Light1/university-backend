@@ -11,7 +11,8 @@ const {
 } = require('../utils/responseHelpers');
 const {
   isValidObjectId,
-  buildCampusFilter
+  buildCampusFilter,
+  escapeRegex,
 } = require('../utils/validationHelpers');
 
 /**
@@ -130,8 +131,8 @@ exports.getSubjects = async (req, res) => {
     // Search by name or code
     if (search) {
       filter.$or = [
-        { subject_name: { $regex: search, $options: 'i' } },
-        { subject_code: { $regex: search, $options: 'i' } }
+        { subject_name: { $regex: escapeRegex(search), $options: 'i' } },
+        { subject_code: { $regex: escapeRegex(search), $options: 'i' } }
       ];
     }
 

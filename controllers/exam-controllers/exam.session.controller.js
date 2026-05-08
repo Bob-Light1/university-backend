@@ -29,7 +29,7 @@ const {
   sendCreated,
   sendPaginated,
 } = require('../../utils/responseHelpers');
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId, escapeRegex } = require('../../utils/validationHelpers');
 const {
   getCampusFilter,
   resolveCampusId,
@@ -54,7 +54,7 @@ const listSessions = async (req, res) => {
     if (status)       match.status      = status;
     if (academicYear) match.academicYear = academicYear;
     if (semester)     match.semester    = semester;
-    if (search)       match.title       = { $regex: search, $options: 'i' };
+    if (search)       match.title       = { $regex: escapeRegex(search), $options: 'i' };
 
     const [sessions, total] = await Promise.all([
       ExamSession.find(match)

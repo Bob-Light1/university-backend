@@ -18,7 +18,7 @@
  */
 
 const mongoose = require('mongoose');
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId, escapeRegex } = require('../../utils/validationHelpers');
 const { APPROVAL_STATUS }  = require('../../models/course.model');
 
 // ─── ROLE GUARDS ──────────────────────────────────────────────────────────────
@@ -213,7 +213,7 @@ const buildCourseFilter = (query, user) => {
 
   // Discipline (case-insensitive regex)
   if (query.discipline) {
-    filter.discipline = { $regex: query.discipline, $options: 'i' };
+    filter.discipline = { $regex: escapeRegex(query.discipline), $options: 'i' };
   }
 
   // Language

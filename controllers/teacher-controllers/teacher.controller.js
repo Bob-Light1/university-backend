@@ -280,18 +280,11 @@ const restoreTeacher= async (req, res) => {
       return sendNotFound(res, 'Teacher');
     }
 
-    // Authorization
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (teacher.schoolCampus.toString() !== req.user.campusId) {
-        return sendError(res, 403, 'You can only restore teachers from your own campus');
-      }
-    }
-
     // Update status to active
     teacher.status = 'active';
     await teacher.save();
 
-    return sendSuccess(res, 200, 'Seacher restored successfully');
+    return sendSuccess(res, 200, 'Teacher restored successfully');
 
   } catch (error) {
     console.error('❌ Error restoring teacher:', error);

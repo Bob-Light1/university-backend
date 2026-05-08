@@ -5,6 +5,9 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const GenericEntityController = require('./genericEntity.controller');
 
+// Escape user input before embedding in MongoDB $regex to prevent ReDoS / injection
+const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const Campus = require('../models/campus.model');
 const Teacher = require('../models/teacher-models/teacher.model');
 const Student = require('../models/student-models/student.model');
@@ -317,15 +320,15 @@ class CampusController extends GenericEntityController {
       }
 
       if (city) {
-        filter['location.city'] = { $regex: city, $options: 'i' };
+        filter['location.city'] = { $regex: escapeRegex(city), $options: 'i' };
       }
 
       if (search) {
         filter.$or = [
-          { campus_name: { $regex: search, $options: 'i' } },
-          { manager_name: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } },
-          { campus_number: { $regex: search, $options: 'i' } }
+          { campus_name: { $regex: escapeRegex(search), $options: 'i' } },
+          { manager_name: { $regex: escapeRegex(search), $options: 'i' } },
+          { email: { $regex: escapeRegex(search), $options: 'i' } },
+          { campus_number: { $regex: escapeRegex(search), $options: 'i' } }
         ];
       }
 
@@ -611,7 +614,7 @@ class CampusController extends GenericEntityController {
       }
 
       // Authorization
-      if (req.user.role === 'CAMPUS_MANAGER' && req.user.campusId !== campusId) {
+      if (req.user.role === 'CAMPUS_MANAGER' && String(req.user.campusId) !== String(campusId)) {
         return sendError(res, 403, 'You can only access students from your own campus');
       }
 
@@ -622,10 +625,10 @@ class CampusController extends GenericEntityController {
 
       if (search) {
         filter.$or = [
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName: { $regex: search, $options: 'i' } },
-          { matricule: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } }
+          { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+          { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+          { matricule: { $regex: escapeRegex(search), $options: 'i' } },
+          { email: { $regex: escapeRegex(search), $options: 'i' } }
         ];
       }
 
@@ -670,7 +673,7 @@ class CampusController extends GenericEntityController {
       }
 
       // Authorization
-      if (req.user.role === 'CAMPUS_MANAGER' && req.user.campusId !== campusId) {
+      if (req.user.role === 'CAMPUS_MANAGER' && String(req.user.campusId) !== String(campusId)) {
         return sendError(res, 403, 'You can only access teachers from your own campus');
       }
 
@@ -679,9 +682,9 @@ class CampusController extends GenericEntityController {
 
       if (search) {
         filter.$or = [
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } }
+          { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+          { lastName: { $regex: escapeRegex(search), $options: 'i' } },
+          { email: { $regex: escapeRegex(search), $options: 'i' } }
         ];
       }
 
@@ -739,11 +742,11 @@ class CampusController extends GenericEntityController {
 
       if (search) {
         filter.$or = [
-          { firstName: { $regex: search, $options: 'i' } },
-          { lastName:  { $regex: search, $options: 'i' } },
-          { email:     { $regex: search, $options: 'i' } },
-          { phone:     { $regex: search, $options: 'i' } },
-          { matricule: { $regex: search, $options: 'i' } },
+          { firstName: { $regex: escapeRegex(search), $options: 'i' } },
+          { lastName:  { $regex: escapeRegex(search), $options: 'i' } },
+          { email:     { $regex: escapeRegex(search), $options: 'i' } },
+          { phone:     { $regex: escapeRegex(search), $options: 'i' } },
+          { matricule: { $regex: escapeRegex(search), $options: 'i' } },
         ];
       }
 
@@ -798,12 +801,12 @@ class CampusController extends GenericEntityController {
 
       if (search) {
         filter.$or = [
-          { firstName:      { $regex: search, $options: 'i' } },
-          { lastName:       { $regex: search, $options: 'i' } },
-          { email:          { $regex: search, $options: 'i' } },
-          { phone:          { $regex: search, $options: 'i' } },
-          { specialization: { $regex: search, $options: 'i' } },
-          { matricule:      { $regex: search, $options: 'i' } },
+          { firstName:      { $regex: escapeRegex(search), $options: 'i' } },
+          { lastName:       { $regex: escapeRegex(search), $options: 'i' } },
+          { email:          { $regex: escapeRegex(search), $options: 'i' } },
+          { phone:          { $regex: escapeRegex(search), $options: 'i' } },
+          { specialization: { $regex: escapeRegex(search), $options: 'i' } },
+          { matricule:      { $regex: escapeRegex(search), $options: 'i' } },
         ];
       }
 
@@ -860,10 +863,10 @@ class CampusController extends GenericEntityController {
 
       if (search) {
         filter.$or = [
-          { name:         { $regex: search, $options: 'i' } },
-          { email:        { $regex: search, $options: 'i' } },
-          { phone:        { $regex: search, $options: 'i' } },
-          { organization: { $regex: search, $options: 'i' } },
+          { name:         { $regex: escapeRegex(search), $options: 'i' } },
+          { email:        { $regex: escapeRegex(search), $options: 'i' } },
+          { phone:        { $regex: escapeRegex(search), $options: 'i' } },
+          { organization: { $regex: escapeRegex(search), $options: 'i' } },
         ];
       }
 
@@ -993,9 +996,9 @@ class CampusController extends GenericEntityController {
 
       if (search) {
         filter.$or = [
-          { name:        { $regex: search, $options: 'i' } },
-          { code:        { $regex: search, $options: 'i' } },
-          { description: { $regex: search, $options: 'i' } },
+          { name:        { $regex: escapeRegex(search), $options: 'i' } },
+          { code:        { $regex: escapeRegex(search), $options: 'i' } },
+          { description: { $regex: escapeRegex(search), $options: 'i' } },
         ];
       }
 

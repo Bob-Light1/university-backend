@@ -70,29 +70,23 @@ const _syncTeacherInClasses = async (teacherId, addedIds, removedIds, campusId) 
  * @param {string}      campusId        - Campus safety filter
  */
 const _syncClassManager = async (teacherId, newManagerOfId, oldManagerOfId, campusId) => {
-  const ops = [];
-
-  // Remove teacher as classManager from the previously managed class
+  // Clear old assignment FIRST (sequential — must finish before setting new to avoid
+  // a transient state where the same teacher appears as classManager in two documents,
+  // which would violate the unique sparse index on Class.classManager).
   if (oldManagerOfId && oldManagerOfId !== newManagerOfId) {
-    ops.push(
-      Class.updateOne(
-        { _id: oldManagerOfId, classManager: teacherId, schoolCampus: campusId },
-        { $set: { classManager: null } }
-      )
+    await Class.updateOne(
+      { _id: oldManagerOfId, classManager: teacherId, schoolCampus: campusId },
+      { $set: { classManager: null } }
     );
   }
 
-  // Assign teacher as classManager of the newly designated class
+  // Then assign the new class manager
   if (newManagerOfId) {
-    ops.push(
-      Class.updateOne(
-        { _id: newManagerOfId, schoolCampus: campusId },
-        { $set: { classManager: teacherId } }
-      )
+    await Class.updateOne(
+      { _id: newManagerOfId, schoolCampus: campusId },
+      { $set: { classManager: teacherId } }
     );
   }
-
-  await Promise.all(ops);
 };
 
 // ─── Teacher config ───────────────────────────────────────────────────────────

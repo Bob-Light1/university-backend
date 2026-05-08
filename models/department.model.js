@@ -6,14 +6,12 @@ const departmentSchema = new mongoose.Schema(
       type: String,
       required: [true, 'Department name is required'],
       trim: true,
-      unique: true,
       maxlength: [100, 'Name cannot exceed 100 characters']
     },
 
     code: {
       type: String,
       required: [true, 'Department code is required'],
-      unique: true,
       uppercase: true,
       trim: true,
       minlength: [2, 'Code must be at least 2 characters'],
@@ -44,7 +42,7 @@ const departmentSchema = new mongoose.Schema(
     // Status
     status: {
       type: String,
-      enum: ['active', 'inactive'],
+      enum: ['active', 'inactive', 'archived'],
       default: 'active'
     }
   },
@@ -56,7 +54,8 @@ const departmentSchema = new mongoose.Schema(
 );
 
 // **INDEXES**
-departmentSchema.index({ schoolCampus: 1, name: 1 }, { unique: true }); // Un nom de département unique PAR campus
+departmentSchema.index({ schoolCampus: 1, name: 1 }, { unique: true }); // Nom unique par campus
+departmentSchema.index({ schoolCampus: 1, code: 1 }, { unique: true }); // Code unique par campus
 
 // **VIRTUALS**
 departmentSchema.virtual('teachers', {

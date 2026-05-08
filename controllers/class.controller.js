@@ -13,7 +13,8 @@ const {
 const {
   isValidObjectId,
   validateTeacherBelongsToCampus,
-  buildCampusFilter
+  buildCampusFilter,
+  escapeRegex,
 } = require('../utils/validationHelpers');
 
 /**
@@ -145,7 +146,7 @@ exports.getAllClass = async (req, res) => {
     }
 
     if (search) {
-      filter.className = { $regex: search, $options: 'i' };
+      filter.className = { $regex: escapeRegex(search), $options: 'i' };
     }
 
     const pageNumber = parseInt(page, 10);

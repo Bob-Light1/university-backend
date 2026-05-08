@@ -11,7 +11,7 @@ const {
   sendConflict,
   sendPaginated,
 } = require('../utils/responseHelpers');
-const { isValidObjectId, buildCampusFilter } = require('../utils/validationHelpers');
+const { isValidObjectId, buildCampusFilter, escapeRegex } = require('../utils/validationHelpers');
 
 // ── Generic controller (used only for getAll, getOne, getStats) ──
 const genericController = new GenericEntityController(departmentConfig);
@@ -105,9 +105,9 @@ const getAllDepartments = async (req, res) => {
 
     if (search) {
       filter.$or = [
-        { name:        { $regex: search, $options: 'i' } },
-        { code:        { $regex: search, $options: 'i' } },
-        { description: { $regex: search, $options: 'i' } },
+        { name:        { $regex: escapeRegex(search), $options: 'i' } },
+        { code:        { $regex: escapeRegex(search), $options: 'i' } },
+        { description: { $regex: escapeRegex(search), $options: 'i' } },
       ];
     }
 

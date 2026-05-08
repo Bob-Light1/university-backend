@@ -15,7 +15,8 @@ const {
   isValidObjectId,
   isValidEmail,
   validatePasswordStrength,
-  buildCampusFilter
+  buildCampusFilter,
+  escapeRegex,
 } = require('../utils/validationHelpers');
 
 const SALT_ROUNDS = 10;
@@ -280,7 +281,7 @@ class GenericEntityController {
 
       if (search && this.searchFields.length > 0) {
         filter.$or = this.searchFields.map(field => ({
-          [field]: { $regex: search, $options: 'i' },
+          [field]: { $regex: escapeRegex(search), $options: 'i' },
         }));
       }
 

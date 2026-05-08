@@ -105,8 +105,8 @@ classSchema.index(
 // For queries filtering by campus and status
 classSchema.index({ schoolCampus: 1, status: 1 });
 
-// For queries by class manager
-classSchema.index({ classManager: 1 });
+// Each teacher can be classManager of at most one class (sparse = nulls excluded)
+classSchema.index({ classManager: 1 }, { unique: true, sparse: true });
 
 // ========================================
 // VIRTUAL FIELDS
