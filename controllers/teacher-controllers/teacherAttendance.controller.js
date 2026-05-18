@@ -12,6 +12,7 @@
 
 const mongoose          = require('mongoose');
 const TeacherAttendance = require('../../models/teacher-models/teacherAttend.model');
+const TeacherSchedule   = require('../../models/teacher-models/teacherSchedule.model');
 
 const {
   asyncHandler,
@@ -55,6 +56,17 @@ const assertTeacherOnCampus = async (teacherId, campusId) => {
   }
 };
 
+// ─── HELPERS ─────────────────────────────────────────────────────────────────
+
+/** Compute arrival time string (HH:mm) given a start time and a delay in minutes. */
+const computeArrivalTime = (sessionStartTime, lateMinutes) => {
+  if (!sessionStartTime || !lateMinutes) return undefined;
+  const [h, m] = sessionStartTime.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return undefined;
+  const total = h * 60 + m + parseInt(lateMinutes, 10);
+  return `${String(Math.floor(total / 60) % 24).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+};
+
 // ─── INIT SESSION ATTENDANCE ─────────────────────────────────────────────────
 
 const initSessionAttendance = asyncHandler(async (req, res) => {
@@ -62,6 +74,7 @@ const initSessionAttendance = asyncHandler(async (req, res) => {
   const {
     teacherId, classId, subjectId, attendanceDate,
     academicYear, semester, sessionStartTime, sessionEndTime,
+    status = false, isLate = false, lateMinutes, remarks,
   } = req.body;
 
   if (!isValidObjectId(scheduleId)) return sendError(res, 400, 'Invalid scheduleId.');
@@ -88,36 +101,50 @@ const initSessionAttendance = asyncHandler(async (req, res) => {
   const dayStart = new Date(sessionDate); dayStart.setHours(0,  0,  0,   0);
   const dayEnd   = new Date(sessionDate); dayEnd.setHours(23, 59, 59, 999);
 
-  const record = await TeacherAttendance.findOneAndUpdate(
-    {
-      teacher:        new mongoose.Types.ObjectId(teacherId),
-      schedule:       new mongoose.Types.ObjectId(scheduleId),
-      attendanceDate: { $gte: dayStart, $lte: dayEnd },
-    },
-    {
-      $setOnInsert: {
-        teacher:          new mongoose.Types.ObjectId(teacherId),
-        schedule:         new mongoose.Types.ObjectId(scheduleId),
-        schoolCampus:     new mongoose.Types.ObjectId(campusId),
-        class:            new mongoose.Types.ObjectId(classId),
-        subject:          new mongoose.Types.ObjectId(subjectId),
-        attendanceDate:   sessionDate,
-        academicYear,
-        semester,
-        sessionStartTime: sessionStartTime || null,
-        sessionEndTime:   sessionEndTime   || null,
-        recordedBy:       req.user.id,  // JWT: req.user.id (string)
-        status:           false,
-      },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  const arrivalTime = Boolean(isLate) ? computeArrivalTime(sessionStartTime, lateMinutes) : undefined;
 
-  const isNew = record.createdAt && (Date.now() - new Date(record.createdAt).getTime()) < 3000;
+  // Check for existing record
+  const existing = await TeacherAttendance.findOne({
+    teacher:        new mongoose.Types.ObjectId(teacherId),
+    schedule:       new mongoose.Types.ObjectId(scheduleId),
+    attendanceDate: { $gte: dayStart, $lte: dayEnd },
+  });
 
-  return isNew
-    ? sendCreated(res, 'Attendance record created.', record)
-    : sendSuccess(res, 200, 'Attendance record already exists.', record);
+  if (existing) {
+    if (existing.isLocked) {
+      return sendForbidden(res, 'This attendance record is locked. Use justify to modify it.');
+    }
+    existing.status         = typeof status === 'boolean' ? status : false;
+    existing.isLate         = Boolean(isLate);
+    if (arrivalTime !== undefined) existing.arrivalTime = arrivalTime;
+    if (remarks !== undefined)     existing.remarks     = remarks || null;
+    if (sessionStartTime)          existing.sessionStartTime = sessionStartTime;
+    if (sessionEndTime)            existing.sessionEndTime   = sessionEndTime;
+    existing.lastModifiedBy = req.user.id;
+    existing.lastModifiedAt = new Date();
+    await existing.save();
+    return sendSuccess(res, 200, 'Attendance record updated.', existing);
+  }
+
+  const record = await TeacherAttendance.create({
+    teacher:          new mongoose.Types.ObjectId(teacherId),
+    schedule:         new mongoose.Types.ObjectId(scheduleId),
+    schoolCampus:     new mongoose.Types.ObjectId(campusId),
+    class:            new mongoose.Types.ObjectId(classId),
+    subject:          new mongoose.Types.ObjectId(subjectId),
+    attendanceDate:   sessionDate,
+    academicYear,
+    semester,
+    sessionStartTime: sessionStartTime || null,
+    sessionEndTime:   sessionEndTime   || null,
+    recordedBy:       req.user.id,
+    status:           typeof status === 'boolean' ? status : false,
+    isLate:           Boolean(isLate),
+    arrivalTime:      arrivalTime || null,
+    remarks:          remarks || null,
+  });
+
+  return sendCreated(res, 'Attendance record created.', record);
 });
 
 // ─── GET SESSION ATTENDANCE ──────────────────────────────────────────────────
@@ -407,7 +434,7 @@ const getPayrollReport = asyncHandler(async (req, res) => {
 });
 
 const getCampusOverview = asyncHandler(async (req, res) => {
-  const { from, to, teacherId, status, isPaid, page = 1, limit = 50 } = req.query;
+  const { from, to, teacherId, classId, status, isPaid, page = 1, limit = 50 } = req.query;
 
   const filter = { ...buildCampusFilter(req) };
 
@@ -418,15 +445,21 @@ const getCampusOverview = asyncHandler(async (req, res) => {
   }
 
   if (teacherId && isValidObjectId(teacherId)) filter.teacher = new mongoose.Types.ObjectId(teacherId);
+  if (classId   && isValidObjectId(classId))   filter.class   = new mongoose.Types.ObjectId(classId);
   if (status === 'true')  filter.status = true;
   if (status === 'false') filter.status = false;
   if (isPaid === 'true')  filter.isPaid = true;
   if (isPaid === 'false') filter.isPaid = false;
 
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
-  const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+  const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200));
 
-  const [records, total] = await Promise.all([
+  // summaryFilter omits status so KPIs reflect the full scope (campus/class/date),
+  // not just the display-filtered subset — prevents negative absent count and >100% rate.
+  const summaryFilter = { ...filter };
+  delete summaryFilter.status;
+
+  const [records, total, presentCount] = await Promise.all([
     TeacherAttendance.find(filter)
       .populate('teacher',            'firstName lastName email employmentType')
       .populate('replacementTeacher', 'firstName lastName')
@@ -436,12 +469,61 @@ const getCampusOverview = asyncHandler(async (req, res) => {
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
       .lean(),
-    TeacherAttendance.countDocuments(filter),
+    TeacherAttendance.countDocuments(summaryFilter),
+    TeacherAttendance.countDocuments({ ...summaryFilter, status: true }),
   ]);
 
+  const summary = {
+    total,
+    present: presentCount,
+    absent:  total - presentCount,
+    rate:    total > 0 ? Math.round((presentCount / total) * 100) : 0,
+  };
+
   return sendPaginated(res, 200, 'Campus teacher attendance overview retrieved.', records, {
-    total, page: pageNum, limit: limitNum,
+    total, page: pageNum, limit: limitNum, summary,
   });
+});
+
+// ─── PENDING SESSIONS (no attendance record yet) ─────────────────────────────
+
+const getPendingSessions = asyncHandler(async (req, res) => {
+  const { teacherId, date } = req.query;
+
+  if (!isValidObjectId(teacherId)) return sendError(res, 400, 'Invalid teacherId.');
+  if (!date)                       return sendError(res, 400, 'date is required.');
+
+  const d = new Date(date);
+  if (isNaN(d)) return sendError(res, 400, 'Invalid date format.');
+
+  const dayStart = new Date(d); dayStart.setHours(0,  0,  0,   0);
+  const dayEnd   = new Date(d); dayEnd.setHours(23, 59, 59, 999);
+
+  const campusFilter = buildCampusFilter(req);
+
+  const sessions = await TeacherSchedule.find({
+    'teacher.teacherId': new mongoose.Types.ObjectId(teacherId),
+    startTime:   { $gte: dayStart, $lte: dayEnd },
+    isDeleted:   false,
+    ...campusFilter,
+  }).lean();
+
+  if (sessions.length === 0) {
+    return sendSuccess(res, 200, 'No sessions found for this teacher on this date.', []);
+  }
+
+  const scheduleIds = sessions.map((s) => s._id);
+
+  const existing = await TeacherAttendance.find({
+    teacher:        new mongoose.Types.ObjectId(teacherId),
+    schedule:       { $in: scheduleIds },
+    attendanceDate: { $gte: dayStart, $lte: dayEnd },
+  }).select('schedule').lean();
+
+  const recorded = new Set(existing.map((e) => String(e.schedule)));
+  const pending  = sessions.filter((s) => !recorded.has(String(s._id)));
+
+  return sendSuccess(res, 200, 'Pending sessions retrieved.', pending);
 });
 
 // ─── EXPORTS ─────────────────────────────────────────────────────────────────
@@ -449,6 +531,7 @@ const getCampusOverview = asyncHandler(async (req, res) => {
 module.exports = {
   initSessionAttendance,
   getSessionAttendance,
+  getPendingSessions,
   toggleTeacherStatus,
   justifyAbsence,
   assignReplacement,

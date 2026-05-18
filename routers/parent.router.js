@@ -72,6 +72,7 @@ const {
   updateParentChildren,
   resetParentPassword,
   deleteParent,
+  restoreParent,
 } = require('../controllers/parent-controllers/parent.crud.controller');
 
 const {
@@ -322,6 +323,12 @@ router.patch(
   validateParentChildren,
   updateParentChildren
 );
+
+/**
+ * @route  PATCH /api/parents/:id/restore
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+router.patch('/:id/restore', authorize(MANAGERS), restoreParent);
 
 /**
  * @route  PATCH /api/parents/:id/reset-password

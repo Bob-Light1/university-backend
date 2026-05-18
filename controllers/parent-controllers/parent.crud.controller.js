@@ -237,7 +237,7 @@ const getParentById = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
-    const parent = await Parent.findOne({ _id: id, ...campusFilter, isArchived: false })
+    const parent = await Parent.findOne({ _id: id, ...campusFilter })
       .select('-password -__v')
       .populate('schoolCampus', 'campus_name location')
       .populate('children',     'firstName lastName profileImage studentClass status')
@@ -514,6 +514,39 @@ const deleteParent = async (req, res) => {
   }
 };
 
+// ── RESTORE ───────────────────────────────────────────────────────────────────
+
+/**
+ * Restore an archived parent.
+ *
+ * @route  PATCH /api/parents/:id/restore
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+const restoreParent = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid parent ID format.');
+
+    const campusFilter = getCampusFilter(req);
+
+    const parent = await Parent.findOneAndUpdate(
+      { _id: id, ...campusFilter, isArchived: true },
+      { $set: { isArchived: false } },
+      { new: true }
+    );
+
+    if (!parent) return sendNotFound(res, 'Archived parent');
+
+    auditLog(req, 'RESTORE_PARENT', id);
+    return sendSuccess(res, 200, 'Parent restored successfully.');
+
+  } catch (error) {
+    if (error.statusCode === 403) return sendError(res, 403, error.message);
+    console.error('❌ restoreParent error:', error);
+    return sendError(res, 500, 'Failed to restore parent.');
+  }
+};
+
 // ── EXPORTS ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -525,4 +558,5 @@ module.exports = {
   updateParentChildren,
   resetParentPassword,
   deleteParent,
+  restoreParent,
 };

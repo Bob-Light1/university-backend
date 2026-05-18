@@ -348,6 +348,11 @@ const getCampusOverview = asyncHandler(async (req, res) => {
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
   const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200));
 
+  // summaryFilter omits status so KPIs reflect the full scope (campus/class/date),
+  // not just the display-filtered subset — prevents negative absent count and >100% rate.
+  const summaryFilter = { ...filter };
+  delete summaryFilter.status;
+
   const [records, total, presentCount] = await Promise.all([
     StudentAttendance.find(filter)
       .populate('student',  'firstName lastName matricule')
@@ -357,8 +362,8 @@ const getCampusOverview = asyncHandler(async (req, res) => {
       .skip((pageNum - 1) * limitNum)
       .limit(limitNum)
       .lean(),
-    StudentAttendance.countDocuments(filter),
-    StudentAttendance.countDocuments({ ...filter, status: true }),
+    StudentAttendance.countDocuments(summaryFilter),
+    StudentAttendance.countDocuments({ ...summaryFilter, status: true }),
   ]);
 
   const summary = {

@@ -16,6 +16,7 @@ const { apiLimiter }              = require('../middleware/rate-limiter/rate-lim
 const {
   initSessionAttendance,
   getSessionAttendance,
+  getPendingSessions,
   toggleTeacherStatus,
   justifyAbsence,
   assignReplacement,
@@ -80,10 +81,11 @@ router.get(
  * PATCH /api/attendance/teacher/lock-daily
  * Verrouille toutes les présences enseignants d'une date sur le campus.
  * Body : { date? } – défaut : aujourd'hui
+ * Réservé au CAMPUS_MANAGER uniquement.
  */
 router.patch(
   '/lock-daily',
-  authorize(['CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['CAMPUS_MANAGER']),
   lockDailyAttendance
 );
 
@@ -114,21 +116,33 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// ROUTES AU NIVEAU DE LA SÉANCE (CAMPUS_MANAGER / ADMIN / DIRECTOR)
-// Seul le Campus Manager (et ADMIN/DIRECTOR) peut enregistrer
-// la présence d'un enseignant.
+// ROUTES AU NIVEAU DE LA SÉANCE
+// Seul le CAMPUS_MANAGER peut enregistrer la présence d'un enseignant.
 // ─────────────────────────────────────────────
 
 /**
+ * GET /api/attendance/teacher/sessions/pending
+ * Sessions sans enregistrement de présence pour un enseignant à une date.
+ * Query : teacherId (requis), date (requis, YYYY-MM-DD)
+ * Doit être déclaré AVANT /sessions/:scheduleId pour éviter le shadowing.
+ */
+router.get(
+  '/sessions/pending',
+  authorize(['CAMPUS_MANAGER']),
+  getPendingSessions
+);
+
+/**
  * POST /api/attendance/teacher/sessions/:scheduleId/init
- * Crée l'enregistrement de présence enseignant pour une séance (upsert).
+ * Crée ou met à jour l'enregistrement de présence enseignant pour une séance.
  * Body : { teacherId, classId, subjectId, attendanceDate,
  *           academicYear, semester, sessionStartTime?, sessionEndTime?,
- *           schoolCampus? (ADMIN/DIRECTOR uniquement) }
+ *           status?, isLate?, lateMinutes?, remarks? }
+ * Réservé au CAMPUS_MANAGER uniquement.
  */
 router.post(
   '/sessions/:scheduleId/init',
-  authorize(['CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['CAMPUS_MANAGER']),
   initSessionAttendance
 );
 
@@ -151,10 +165,11 @@ router.get(
  * PATCH /api/attendance/teacher/:attendanceId/toggle
  * Marque un enseignant comme présent ou absent.
  * Body : { status: boolean }
+ * Réservé au CAMPUS_MANAGER uniquement.
  */
 router.patch(
   '/:attendanceId/toggle',
-  authorize(['CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['CAMPUS_MANAGER']),
   toggleTeacherStatus
 );
 
@@ -162,10 +177,11 @@ router.patch(
  * PATCH /api/attendance/teacher/:attendanceId/justify
  * Ajoute une justification pour une absence enseignant.
  * Body : { justification (string), justificationDocument? (URL) }
+ * Réservé au CAMPUS_MANAGER uniquement.
  */
 router.patch(
   '/:attendanceId/justify',
-  authorize(['CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['CAMPUS_MANAGER']),
   justifyAbsence
 );
 
@@ -173,10 +189,11 @@ router.patch(
  * PATCH /api/attendance/teacher/:attendanceId/replacement
  * Affecte un enseignant remplaçant pour une session manquée.
  * Body : { replacementTeacherId, replacementNotes? }
+ * Réservé au CAMPUS_MANAGER uniquement.
  */
 router.patch(
   '/:attendanceId/replacement',
-  authorize(['CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['CAMPUS_MANAGER']),
   assignReplacement
 );
 
@@ -184,6 +201,7 @@ router.patch(
  * PATCH /api/attendance/teacher/:attendanceId/pay
  * Marque une séance comme payée.
  * Body : { paymentRef (string) }
+ * Accessible aux 3 rôles de gestion (paiement = validation financière).
  */
 router.patch(
   '/:attendanceId/pay',
