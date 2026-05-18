@@ -116,6 +116,23 @@ const teacherConfig = {
     },
   ],
 
+  // ─── Extra filters ─────────────────────────────────────────────────────────
+
+  buildExtraFilters: (query) => {
+    const filters = {};
+    // Department filter — frontend sends the department ObjectId
+    if (query.department) filters.department = query.department;
+    // Subject filter — teacher.subjects is an array; $elemMatch or $in both work;
+    // $in is simpler and indexed.
+    if (query.subject) filters.subjects = query.subject;
+    // Qualification filter
+    const VALID_QUALIFICATIONS = ['bachelor', 'master', 'phd'];
+    if (query.qualification && VALID_QUALIFICATIONS.includes(query.qualification)) {
+      filters.qualification = query.qualification;
+    }
+    return filters;
+  },
+
   // ─── Custom validation ─────────────────────────────────────────────────────
 
   /**

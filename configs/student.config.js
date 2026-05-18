@@ -26,7 +26,13 @@ const studentConfig = {
 
   buildExtraFilters: (query) => {
     const filters = {};
-    if (query.classId) filters.studentClass = query.classId;
+    // Class filter — frontend sends `studentClass`; classId kept as legacy alias.
+    if (query.studentClass) filters.studentClass = query.studentClass;
+    else if (query.classId) filters.studentClass = query.classId;
+    // Gender filter
+    if (query.gender && ['male', 'female'].includes(query.gender)) {
+      filters.gender = query.gender;
+    }
     return filters;
   },
 

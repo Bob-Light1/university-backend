@@ -63,8 +63,8 @@ const sendError = (res, statusCode = 500, message = 'Internal server error', err
  * @param {Object} pagination - Pagination info
  */
 const sendPaginated = (res, statusCode = 200, message = 'Success', data = [], pagination = {}) => {
-  const { total = 0, page = 1, limit = 10 } = pagination;
-  
+  const { total = 0, page = 1, limit = 10, ...paginationRest } = pagination;
+
   const response = {
     success: true,
     message,
@@ -75,7 +75,8 @@ const sendPaginated = (res, statusCode = 200, message = 'Success', data = [], pa
       limit: Number(limit),
       pages: Math.ceil(total / Number(limit)),
       hasNext: Number(page) < Math.ceil(total / Number(limit)),
-      hasPrev: Number(page) > 1
+      hasPrev: Number(page) > 1,
+      ...paginationRest,
     }
   };
 

@@ -330,7 +330,7 @@ const getClassStats = asyncHandler(async (req, res) => {
 });
 
 const getCampusOverview = asyncHandler(async (req, res) => {
-  const { from, to, classId, status, page = 1, limit = 50 } = req.query;
+  const { from, to, classId, studentId, status, page = 1, limit = 50 } = req.query;
 
   const filter = { ...buildCampusFilter(req) };
 
@@ -340,14 +340,15 @@ const getCampusOverview = asyncHandler(async (req, res) => {
     if (to)   filter.attendanceDate.$lte = new Date(to);
   }
 
-  if (classId && isValidObjectId(classId)) filter.class = new mongoose.Types.ObjectId(classId);
+  if (classId   && isValidObjectId(classId))   filter.class   = new mongoose.Types.ObjectId(classId);
+  if (studentId && isValidObjectId(studentId)) filter.student = new mongoose.Types.ObjectId(studentId);
   if (status === 'true')  filter.status = true;
   if (status === 'false') filter.status = false;
 
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
-  const limitNum = Math.max(1, parseInt(limit, 10) || 50);
+  const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 50, 200));
 
-  const [records, total] = await Promise.all([
+  const [records, total, presentCount] = await Promise.all([
     StudentAttendance.find(filter)
       .populate('student',  'firstName lastName matricule')
       .populate('class',    'className')
@@ -357,10 +358,18 @@ const getCampusOverview = asyncHandler(async (req, res) => {
       .limit(limitNum)
       .lean(),
     StudentAttendance.countDocuments(filter),
+    StudentAttendance.countDocuments({ ...filter, status: true }),
   ]);
 
+  const summary = {
+    total,
+    present: presentCount,
+    absent:  total - presentCount,
+    rate:    total > 0 ? Math.round((presentCount / total) * 100) : 0,
+  };
+
   return sendPaginated(res, 200, 'Campus attendance overview retrieved.', records, {
-    total, page: pageNum, limit: limitNum,
+    total, page: pageNum, limit: limitNum, summary,
   });
 });
 

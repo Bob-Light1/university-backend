@@ -1,6 +1,7 @@
 node_modules
 usage_guides
 /api/uploads/
+docs
 oldCode.md
 .env
 claude.md

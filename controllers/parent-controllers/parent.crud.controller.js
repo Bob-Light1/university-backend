@@ -168,7 +168,9 @@ const getAllParents = async (req, res) => {
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit) || 20));
     const skip  = (page - 1) * limit;
 
-    const filter = { ...campusFilter, isArchived: false };
+    // includeArchived toggle — mirrors the behaviour of GenericEntityController
+    const includeArchived = req.query.includeArchived === 'true';
+    const filter = { ...campusFilter, ...(includeArchived ? {} : { isArchived: false }) };
 
     // Optional campusId override for ADMIN/DIRECTOR
     if (GLOBAL_ROLES.includes(req.user.role) && req.query.campusId) {
@@ -182,7 +184,13 @@ const getAllParents = async (req, res) => {
       filter.status = req.query.status;
     }
 
-    // Search by name or email
+    // Relationship filter
+    const VALID_RELATIONSHIPS = ['father', 'mother', 'guardian', 'other'];
+    if (req.query.relationship && VALID_RELATIONSHIPS.includes(req.query.relationship)) {
+      filter.relationship = req.query.relationship;
+    }
+
+    // Search by name, email or reference
     if (req.query.search) {
       const rx = new RegExp(req.query.search.trim(), 'i');
       filter.$or = [

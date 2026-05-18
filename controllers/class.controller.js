@@ -224,7 +224,7 @@ exports.getClassById = async (req, res) => {
 exports.getClassesByCampus = async (req, res) => {
   try {
     const { campusId } = req.params;
-    const { status, includeArchived } = req.query;
+    const { status, includeArchived, search, level } = req.query;
 
     if (!isValidObjectId(campusId)) {
       return sendError(res, 400, 'Invalid campus ID format');
@@ -241,6 +241,14 @@ exports.getClassesByCampus = async (req, res) => {
       filter.status = 'active';
     } else if (status) {
       filter.status = status;
+    }
+
+    if (search) {
+      filter.className = { $regex: escapeRegex(search), $options: 'i' };
+    }
+
+    if (level && isValidObjectId(level)) {
+      filter.level = level;
     }
 
     const classes = await Class.find(filter)

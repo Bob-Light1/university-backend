@@ -189,11 +189,16 @@ const studentSchema = new mongoose.Schema(
 );
 
 // **COMPOUND INDEXES FOR PERFORMANCE**
-// These indexes optimize common queries
-studentSchema.index({ schoolCampus: 1, status: 1 }); // Filter by campus and status
-studentSchema.index({ schoolCampus: 1, studentClass: 1 }); // Filter by campus and class
-studentSchema.index({ firstName: 1, lastName: 1 }); // Search by name
-studentSchema.index({ createdAt: -1 }); // Sort by creation date
+studentSchema.index({ schoolCampus: 1, status: 1 });       // Filter by campus + status
+studentSchema.index({ schoolCampus: 1, studentClass: 1 }); // Filter by campus + class
+studentSchema.index({ firstName: 1, lastName: 1 });        // Name search / sort
+studentSchema.index({ createdAt: -1 });                    // Default sort
+
+// **SEARCH INDEXES** — one per searchField to support regex $or queries.
+// Without these, search on email/matricule/phone performs a collection scan.
+studentSchema.index({ email:     1 });
+studentSchema.index({ matricule: 1 });
+studentSchema.index({ phone:     1 });
 
 // **VIRTUAL FIELDS**
 // Virtual for full name

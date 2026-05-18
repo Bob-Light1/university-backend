@@ -149,9 +149,10 @@ subjectSchema.index(
 subjectSchema.index({ schoolCampus: 1, isActive: 1 });
 
 /**
- * For searching by name
+ * For searching by name (regex $or — consistent with the rest of the system).
+ * A separate single-field index on subject_name supports regex prefix queries.
  */
-subjectSchema.index({ subject_name: 'text' });
+subjectSchema.index({ subject_name: 1 });
 
 // ========================================
 // PRE-SAVE MIDDLEWARE
