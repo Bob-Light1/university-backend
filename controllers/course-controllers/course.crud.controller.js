@@ -36,9 +36,9 @@ const {
   sendNotFound,
   sendConflict,
   handleDuplicateKeyError,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 
 const {
   isGlobalRole,

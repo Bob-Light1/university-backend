@@ -643,7 +643,7 @@ ResultSchema.statics.computeSubjectAverage = async function (
  *
  * Performance : tous les index nécessaires sont déclarés (idx_student_transcript).
  * Pour les bulletins définitifs, le résultat est stocké dans FinalTranscript
- * (finalTranscript.model.js) à la clôture du semestre pour éviter de
+ * (final-transcript.model.js) à la clôture du semestre pour éviter de
  * recalculer sur une collection massive.
  *
  * @returns {Promise<{generalAverage: number|null, subjects: Array}>}

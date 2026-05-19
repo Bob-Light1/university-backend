@@ -8,7 +8,7 @@ const path = require('path');
 const { apiLimiter } = require('./middleware/rate-limiter/rate-limiter');
 const mongoSanitize = require('express-mongo-sanitize');
 const { shutdownPool }         = require('./services/document-services/document.pdf.service');
-const { shutdownAcademicPool } = require('./services/academic_pdf.service');
+const { shutdownAcademicPool } = require('./services/academic-pdf.service');
 
 const app = express();
 
@@ -209,14 +209,15 @@ const adminRouter = require('./routers/admin.router');
 const resultRouter = require('./routers/result.router');
 const courseRouter = require('./routers/course.router');
 const departmentRouter = require('./routers/department.router');
-const studentScheduleRouter = require('./routers/studentSchedule.router');
-const teacherScheduleRouter = require('./routers/teacherSchedule.router');
-const studentAttendanceRouter = require('./routers/studentAttendance.router');
-const teacherAttendanceRouter = require('./routers/teacherAttendance.router');
+const studentScheduleRouter = require('./routers/student-schedule.router');
+const teacherScheduleRouter = require('./routers/teacher-schedule.router');
+const studentAttendanceRouter = require('./routers/student-attendance.router');
+const teacherAttendanceRouter = require('./routers/teacher-attendance.router');
 const documentRouter    = require('./routers/document.router');
 const parentRouter      = require('./routers/parent.router');
 const examinationRouter = require('./routers/examination.router');
-const academicPrintRouter = require('./routers/academic_print.router');
+const academicPrintRouter = require('./routers/academic-print.router');
+const partnerRouter       = require('./routers/partner.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -236,6 +237,7 @@ app.use('/api/documents',   documentRouter);
 app.use('/api/parents',     parentRouter);
 app.use('/api/examination', examinationRouter);
 app.use('/api/print',      academicPrintRouter);
+app.use('/api/partners',   partnerRouter);
 
 // ========================================
 // 404 HANDLER
@@ -365,7 +367,7 @@ process.on('unhandledRejection', (reason, promise) => {
 try {
   const cron = require('node-cron');
   const { runRetentionJob }  = require('./crons/document.retention.cron');
-  const { runAntiCheatJob }  = require('./crons/exam_anticheat.cron');
+  const { runAntiCheatJob }  = require('./crons/exam-anticheat.cron');
   cron.schedule('0 2 * * 0', runRetentionJob);   // Every Sunday at 02:00
   cron.schedule('0 3 * * *', runAntiCheatJob);   // Nightly at 03:00
 } catch {

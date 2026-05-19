@@ -16,23 +16,23 @@
  *    PATCH /grading/:id/mediate            → mediate               [MANAGER]
  */
 
-const ExamSession    = require('../../models/exam-models/examSession.model');
-const ExamSubmission = require('../../models/exam-models/examSubmission.model');
-const ExamGrading    = require('../../models/exam-models/examGrading.model');
+const ExamSession    = require('../../models/exam-models/exam.session.model');
+const ExamSubmission = require('../../models/exam-models/exam.submission.model');
+const ExamGrading    = require('../../models/exam-models/exam.grading.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendCreated,
   sendPaginated,
-} = require('../../utils/responseHelpers');
-const { isValidObjectId } = require('../../utils/validationHelpers');
+} = require('../../utils/response-helpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 const {
   getCampusFilter,
   isManagerRole,
   parsePagination,
 } = require('./exam.helper');
-const { examAnalyticsWorker } = require('../../services/exam_analytics.worker');
+const { examAnalyticsWorker } = require('../../services/exam-analytics.worker');
 
 // ─── List gradings ────────────────────────────────────────────────────────────
 

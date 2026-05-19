@@ -24,14 +24,14 @@ const mongoose = require('mongoose');
 
 const Document        = require('../../models/document-models/document.model');
 const { DOCUMENT_STATUS } = require('../../models/document-models/document.model');
-const { AUDIT_ACTION }    = require('../../models/document-models/documentAudit.model');
+const { AUDIT_ACTION }    = require('../../models/document-models/document.audit.model');
 const documentService     = require('../../services/document-services/document.service');
 const { nanoid }          = require('nanoid');
 const slugify             = require('slugify');
 
 const {
   sendSuccess, sendError, sendForbidden, sendNotFound, asyncHandler,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
 // ── Publish ───────────────────────────────────────────────────────────────────
 

@@ -31,12 +31,12 @@ const {
   sendNotFound,
   sendForbidden,
   handleDuplicateKeyError,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
 const {
   isValidObjectId,
   validateStudentBelongsToCampus,
-} = require('../../utils/validationHelpers');
+} = require('../../utils/validation-helpers');
 
 const {
   isGlobalRole,

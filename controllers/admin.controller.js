@@ -40,9 +40,9 @@ const {
   sendConflict,
   asyncHandler,
   handleDuplicateKeyError,
-} = require('../utils/responseHelpers');
+} = require('../utils/response-helpers');
 
-const { isValidEmail } = require('../utils/validationHelpers');
+const { isValidEmail } = require('../utils/validation-helpers');
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 

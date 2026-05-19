@@ -20,8 +20,8 @@ const slugify  = require('slugify');
 const { nanoid } = require('nanoid');
 
 const Document         = require('../../models/document-models/document.model');
-const DocumentAudit    = require('../../models/document-models/documentAudit.model');
-const DocumentVersion  = require('../../models/document-models/documentVersion.model');
+const DocumentAudit    = require('../../models/document-models/document.audit.model');
+const DocumentVersion  = require('../../models/document-models/document.version.model');
 const Campus           = require('../../models/campus.model');
 
 const { invalidateStorageCache } = require('../../middleware/document-middleware/document.campus.middleware');
@@ -33,7 +33,7 @@ const {
   RETENTION_POLICY,
 } = require('../../models/document-models/document.model');
 
-const { AUDIT_ACTION } = require('../../models/document-models/documentAudit.model');
+const { AUDIT_ACTION } = require('../../models/document-models/document.audit.model');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

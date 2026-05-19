@@ -107,6 +107,40 @@ const campusSchema = new mongoose.Schema(
       default: null
     },
 
+    // Commission config for the partner module
+    commissionConfig: {
+      ruleType: {
+        type:   String,
+        enum:   ['FIXED', 'PERCENTAGE'],
+        default: null,
+      },
+      fixedAmount: {
+        type:    Number,
+        default: null,
+        min:     0,
+      },
+      percentage: {
+        type:    Number,
+        default: null,
+        min:     0,
+        max:     100,
+      },
+      defaultCurrency: {
+        type:    String,
+        default: 'XAF',
+        trim:    true,
+      },
+      updatedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref:  'Campus',
+        default: null,
+      },
+      updatedAt: {
+        type:    Date,
+        default: null,
+      },
+    },
+
     // Features configuration (for premium features)
     features: {
       maxStudents: {

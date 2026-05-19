@@ -31,11 +31,11 @@ const {
   sendNotFound,
   sendPaginated,
   handleDuplicateKeyError,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 const {
   isValidObjectId,
   buildCampusFilter,
-} = require('../../utils/validationHelpers');
+} = require('../../utils/validation-helpers');
 
 const { getFileUrl } = require('../../middleware/upload/upload');
 

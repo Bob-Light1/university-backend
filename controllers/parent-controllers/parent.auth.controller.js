@@ -21,11 +21,11 @@ const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 const {
   isValidEmail,
   validatePasswordStrength,
-} = require('../../utils/validationHelpers');
+} = require('../../utils/validation-helpers');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;

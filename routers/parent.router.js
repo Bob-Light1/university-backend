@@ -95,11 +95,11 @@ const {
 
 // ── VALIDATION MIDDLEWARE ─────────────────────────────────────────────────────
 const { validateCreateParent, validateUpdateParent, validateUpdateProfile } =
-  require('../validations/createParentSchema');
+  require('../validations/parent.create.schema');
 const { validateChangePassword } =
-  require('../validations/parentPasswordSchema');
+  require('../validations/parent.password.schema');
 const { validateParentChildren } =
-  require('../validations/parentChildrenSchema');
+  require('../validations/parent.children.schema');
 
 // ── ROLE SHORTHANDS ───────────────────────────────────────────────────────────
 const MANAGERS = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];

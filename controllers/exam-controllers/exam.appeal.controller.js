@@ -11,17 +11,17 @@
  *    PATCH  /appeals/:id/resolve    → resolveAppeal   [MANAGER, TEACHER]
  */
 
-const ExamGrading = require('../../models/exam-models/examGrading.model');
-const ExamAppeal  = require('../../models/exam-models/examAppeal.model');
-const ExamSession = require('../../models/exam-models/examSession.model');
+const ExamGrading = require('../../models/exam-models/exam.grading.model');
+const ExamAppeal  = require('../../models/exam-models/exam.appeal.model');
+const ExamSession = require('../../models/exam-models/exam.session.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendCreated,
   sendPaginated,
-} = require('../../utils/responseHelpers');
-const { isValidObjectId } = require('../../utils/validationHelpers');
+} = require('../../utils/response-helpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 const {
   getCampusFilter,
   parsePagination,

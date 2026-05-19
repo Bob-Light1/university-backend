@@ -8,12 +8,12 @@ const {
   sendConflict,
   sendPaginated,
   handleDuplicateKeyError
-} = require('../utils/responseHelpers');
+} = require('../utils/response-helpers');
 const {
   isValidObjectId,
   buildCampusFilter,
   escapeRegex,
-} = require('../utils/validationHelpers');
+} = require('../utils/validation-helpers');
 
 /**
  * @desc    Create a new subject

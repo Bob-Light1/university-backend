@@ -282,7 +282,7 @@ const handleMulterError = (err, req, res, next) => {
 /**
  * Delete a locally uploaded file on error (development only).
  * In production (Cloudinary), files are managed remotely; this is a no-op.
- * Called by genericEntity.controller.js in catch blocks.
+ * Called by generic-entity.controller.js in catch blocks.
  *
  * @param {Express.Multer.File} file - The file object from req.file
  */

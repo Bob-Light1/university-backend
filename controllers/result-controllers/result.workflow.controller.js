@@ -34,7 +34,7 @@ const mongoose   = require('mongoose');
 const { randomUUID } = require('crypto');
 
 const { Result, RESULT_STATUS }    = require('../../models/result.model');
-const { FinalTranscript }          = require('../../models/finalTranscript.model');
+const { FinalTranscript }          = require('../../models/final-transcript.model');
 
 const {
   asyncHandler,
@@ -42,9 +42,9 @@ const {
   sendError,
   sendNotFound,
   sendForbidden,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 
 const {
   isGlobalRole,

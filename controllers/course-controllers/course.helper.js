@@ -18,7 +18,7 @@
  */
 
 const mongoose = require('mongoose');
-const { isValidObjectId, escapeRegex } = require('../../utils/validationHelpers');
+const { isValidObjectId, escapeRegex } = require('../../utils/validation-helpers');
 const { APPROVAL_STATUS }  = require('../../models/course.model');
 
 // ─── ROLE GUARDS ──────────────────────────────────────────────────────────────

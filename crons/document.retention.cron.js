@@ -17,8 +17,8 @@
  */
 
 const Document      = require('../models/document-models/document.model');
-const DocumentAudit = require('../models/document-models/documentAudit.model');
-const { cleanupExpiredPrintFiles } = require('../services/academic_pdf.service');
+const DocumentAudit = require('../models/document-models/document.audit.model');
+const { cleanupExpiredPrintFiles } = require('../services/academic-pdf.service');
 
 const BATCH_SIZE = 100;
 

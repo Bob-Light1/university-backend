@@ -18,7 +18,7 @@
 const {
   sendSuccess, sendCreated, sendError, sendNotFound,
   sendForbidden, sendPaginated, asyncHandler,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
 const documentService = require('../../services/document-services/document.service');
 const storageService  = require('../../services/document-services/document.storage.service');

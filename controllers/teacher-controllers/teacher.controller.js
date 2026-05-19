@@ -1,7 +1,7 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const GenericEntityController = require('../genericEntity.controller');
-const GenericBulkController = require('../genericBulk.controller');
+const GenericEntityController = require('../generic-entity.controller');
+const GenericBulkController = require('../generic-bulk.controller');
 const Teacher = require('../../models/teacher-models/teacher.model');
 const Department = require('../../models/department.model');
 
@@ -9,13 +9,13 @@ const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 const {
   isValidEmail,
   isValidObjectId,
   validatePasswordStrength,
-} = require('../../utils/validationHelpers');
-const { deleteFile } = require('../../utils/fileUpload');
+} = require('../../utils/validation-helpers');
+const { deleteFile } = require('../../utils/file-upload');
 const teacherConfig = require('../../configs/teacher.config');
 
 const SALT_ROUNDS    = 10;

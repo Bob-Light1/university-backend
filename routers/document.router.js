@@ -170,7 +170,7 @@ router.get('/verify/:ref', verifyLimiter, async (req, res) => {
   try {
     const Document = require('../models/document.model');
     const Campus   = require('../../models/campus.model');
-    const { sendSuccess, sendNotFound } = require('../../utils/responseHelpers');
+    const { sendSuccess, sendNotFound } = require('../../utils/response-helpers');
 
     const doc = await Document
       .findOne({ ref: req.params.ref.toUpperCase(), deletedAt: null })
@@ -204,7 +204,7 @@ router.get('/verify/:ref', verifyLimiter, async (req, res) => {
  */
 router.get('/search', ...base, async (req, res) => {
   const documentService = require('../services/document.service');
-  const { sendPaginated } = require('../../utils/responseHelpers');
+  const { sendPaginated } = require('../../utils/response-helpers');
   const { data, total, page, limit } = await documentService.searchDocuments(req, req.query);
   return sendPaginated(res, 200, 'Search results', data, { total, page, limit });
 });
@@ -228,13 +228,13 @@ router.post('/templates/:id/preview',  ...base, templateCtrl.previewTemplate);
 router.post('/generate/student-card/:studentId',       ...base, templateCtrl.generateStudentCard);
 router.post('/generate/student-transcript/:studentId', ...base, async (req, res) => {
   // Transcript generation delegated to template with student data — Phase 2
-  const { sendError } = require('../../utils/responseHelpers');
+  const { sendError } = require('../../utils/response-helpers');
   return sendError(res, 501, 'Student transcript generation will be available in Phase 2');
 });
 router.post('/generate/teacher-payslip/:teacherId',    ...base, templateCtrl.generateTeacherPayslip);
 router.post('/generate/class-list/:classId',           ...base, templateCtrl.generateClassList);
 router.post('/generate/badge/:entityType/:entityId',   ...base, async (req, res) => {
-  const { sendError } = require('../../utils/responseHelpers');
+  const { sendError } = require('../../utils/response-helpers');
   return sendError(res, 501, 'Badge generation will be available in Phase 2');
 });
 

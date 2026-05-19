@@ -16,7 +16,6 @@ const {
   getCampusStudentsStats,
   getCampusDepartments,
   getCampusMentors,
-  getCampusPartners,
   getCampusParents,
   getCampusSubjects
 } = require('../controllers/campus.controller');
@@ -196,17 +195,6 @@ router.get(
   "/:campusId/mentors", 
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']), 
   getCampusMentors
-);
-
-/**
- * @route   GET /api/campus/:campusId/partners
- * @desc    Get all partners from a specific campus
- * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
- */
-router.get(
-  "/:campusId/partners", 
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']), 
-  getCampusPartners
 );
 
 /**

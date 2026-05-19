@@ -24,8 +24,8 @@
 const mongoose = require('mongoose');
 
 const { Result, RESULT_STATUS, SEMESTER }  = require('../../models/result.model');
-const { GradingScale, GRADING_SYSTEM }     = require('../../models/gradinScale.model');
-const { FinalTranscript, TRANSCRIPT_STATUS } = require('../../models/finalTranscript.model');
+const { GradingScale, GRADING_SYSTEM }     = require('../../models/grading-scale.model');
+const { FinalTranscript, TRANSCRIPT_STATUS } = require('../../models/final-transcript.model');
 const Student = require('../../models/student-models/student.model');
 
 const {
@@ -35,9 +35,9 @@ const {
   sendCreated,
   sendNotFound,
   sendForbidden,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 
 const {
   isGlobalRole,

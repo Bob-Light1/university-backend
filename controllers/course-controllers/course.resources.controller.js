@@ -39,9 +39,9 @@ const {
   sendNotFound,
   sendConflict,
   sendForbidden,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 const { RESOURCE_WRITABLE_FIELDS, isManagerRole, pickFields } = require('./course.helper');
 
 // ─── ADD RESOURCE ─────────────────────────────────────────────────────────────

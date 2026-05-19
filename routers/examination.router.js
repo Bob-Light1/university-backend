@@ -42,7 +42,7 @@ const {
   deleteQuestion,
   importQuestions,
   getQuestionStats,
-} = require('../controllers/exam-controllers/exam.questionBank.controller');
+} = require('../controllers/exam-controllers/exam.question-bank.controller');
 
 const {
   listSessions,

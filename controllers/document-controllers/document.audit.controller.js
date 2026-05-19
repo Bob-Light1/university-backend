@@ -12,15 +12,15 @@
  *   POST /api/documents/:id/versions/:version/restore — Restore to a version (requires reason)
  */
 
-const DocumentAudit   = require('../../models/document-models/documentAudit.model');
-const DocumentVersion = require('../../models/document-models/documentVersion.model');
+const DocumentAudit   = require('../../models/document-models/document.audit.model');
+const DocumentVersion = require('../../models/document-models/document.version.model');
 const Document        = require('../../models/document-models/document.model');
-const { AUDIT_ACTION }    = require('../../models/document-models/documentAudit.model');
+const { AUDIT_ACTION }    = require('../../models/document-models/document.audit.model');
 const documentService     = require('../../services/document-services/document.service');
 
 const {
   sendSuccess, sendError, sendForbidden, sendNotFound, sendPaginated, asyncHandler,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
 // ── Audit: Single Document ────────────────────────────────────────────────────
 

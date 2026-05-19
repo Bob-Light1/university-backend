@@ -13,16 +13,16 @@
  */
 
 const mongoose = require('mongoose');
-const ExamSession            = require('../../models/exam-models/examSession.model');
-const ExamGrading            = require('../../models/exam-models/examGrading.model');
-const ExamEnrollment         = require('../../models/exam-models/examEnrollment.model');
-const ExamAnalyticsSnapshot  = require('../../models/exam-models/examAnalyticsSnapshot.model');
+const ExamSession            = require('../../models/exam-models/exam.session.model');
+const ExamGrading            = require('../../models/exam-models/exam.grading.model');
+const ExamEnrollment         = require('../../models/exam-models/exam.enrollment.model');
+const ExamAnalyticsSnapshot  = require('../../models/exam-models/exam.analytics-snapshot.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/responseHelpers');
-const { isValidObjectId } = require('../../utils/validationHelpers');
+} = require('../../utils/response-helpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 const {
   getCampusFilter,
   isManagerRole,

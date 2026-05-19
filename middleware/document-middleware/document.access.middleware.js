@@ -21,7 +21,7 @@
 const mongoose = require('mongoose');
 const Document = require('../../models/document-models/document.model');
 const Course   = require('../../models/course.model');
-const { sendError, sendForbidden, sendNotFound } = require('../../utils/responseHelpers');
+const { sendError, sendForbidden, sendNotFound } = require('../../utils/response-helpers');
 const { RESTRICTED_DOCUMENT_TYPES, DOCUMENT_STATUS } = require('../../models/document-models/document.model');
 
 /** Roles with global (cross-campus) access */

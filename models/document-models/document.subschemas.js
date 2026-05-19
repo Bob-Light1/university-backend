@@ -9,8 +9,8 @@
  * ContentBlockSchema, BrandingSchema, and PrintConfigSchema were previously
  * duplicated verbatim in three separate files:
  *   - document.model.js
- *   - documentTemplate.model.js
- *   - documentVersion.model.js
+ *   - document.template.model.js
+ *   - document.version.model.js
  *
  * Duplication = divergence risk: if an enum value is added (e.g., a new block
  * type), the developer must update three files. One miss = silent inconsistency

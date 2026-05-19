@@ -20,14 +20,14 @@
 const mongoose = require('mongoose');
 
 const Teacher        = require('../../models/teacher-models/teacher.model');
-const TeacherSchedule = require('../../models/teacher-models/teacherSchedule.model');
+const TeacherSchedule = require('../../models/teacher-models/teacher.schedule.model');
 const Student        = require('../../models/student-models/student.model');
-const ExamGrading    = require('../../models/exam-models/examGrading.model');
+const ExamGrading    = require('../../models/exam-models/exam.grading.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

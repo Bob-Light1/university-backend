@@ -23,9 +23,9 @@
 
 const mongoose = require('mongoose');
 
-const DocumentTemplate = require('../../models/document-models/documentTemplate.model');
+const DocumentTemplate = require('../../models/document-models/document.template.model');
 const Document         = require('../../models/document-models/document.model');
-const { AUDIT_ACTION }     = require('../../models/document-models/documentAudit.model');
+const { AUDIT_ACTION }     = require('../../models/document-models/document.audit.model');
 const documentService      = require('../../services/document-services/document.service');
 const { validateContentBlocks, validateTemplateData } = require('../../services/document-services/document.validation.service');
 
@@ -36,7 +36,7 @@ const Campus  = require('../../models/campus.model');
 
 const {
   sendSuccess, sendCreated, sendError, sendForbidden, sendNotFound, asyncHandler,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
 // ── Template CRUD ─────────────────────────────────────────────────────────────
 

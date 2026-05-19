@@ -19,17 +19,17 @@
  *    PATCH  /sessions/:id/postpone        → postponeSession
  */
 
-const ExamSession    = require('../../models/exam-models/examSession.model');
-const ExamEnrollment = require('../../models/exam-models/examEnrollment.model');
-const QuestionBank   = require('../../models/exam-models/questionBank.model');
+const ExamSession    = require('../../models/exam-models/exam.session.model');
+const ExamEnrollment = require('../../models/exam-models/exam.enrollment.model');
+const QuestionBank   = require('../../models/exam-models/question-bank.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendCreated,
   sendPaginated,
-} = require('../../utils/responseHelpers');
-const { isValidObjectId, escapeRegex } = require('../../utils/validationHelpers');
+} = require('../../utils/response-helpers');
+const { isValidObjectId, escapeRegex } = require('../../utils/validation-helpers');
 const {
   getCampusFilter,
   resolveCampusId,
@@ -323,7 +323,7 @@ const completeSession = async (req, res) => {
     if (!updated) return;
 
     // Dispatch async analytics computation
-    const { examAnalyticsWorker } = require('../../services/exam_analytics.worker');
+    const { examAnalyticsWorker } = require('../../services/exam-analytics.worker');
     examAnalyticsWorker.emit('examAnalytics:compute', updated._id.toString());
 
     return sendSuccess(res, 200, 'Session completed.', updated);

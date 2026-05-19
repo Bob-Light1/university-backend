@@ -34,9 +34,9 @@ const {
   sendError,
   sendNotFound,
   sendConflict,
-} = require('../../utils/responseHelpers');
+} = require('../../utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validationHelpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 const { COURSE_POPULATE }  = require('./course.helper');
 
 // ─── VALID TRANSITION GUARD ───────────────────────────────────────────────────

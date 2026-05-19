@@ -10,13 +10,13 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const ExamGrading = require('../../models/exam-models/examGrading.model');
+const ExamGrading = require('../../models/exam-models/exam.grading.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/responseHelpers');
-const { isValidObjectId } = require('../../utils/validationHelpers');
+} = require('../../utils/response-helpers');
+const { isValidObjectId } = require('../../utils/validation-helpers');
 const { getCampusFilter, isManagerRole } = require('./exam.helper');
 
 // In-memory token store is sufficient for MVP — persisted on ExamGrading via certificateToken.

@@ -19,8 +19,8 @@ const Parent = require('../../models/parent.model');
 const {
   sendSuccess,
   sendError,
-} = require('../../utils/responseHelpers');
-const { buildCampusFilter } = require('../../utils/validationHelpers');
+} = require('../../utils/response-helpers');
+const { buildCampusFilter } = require('../../utils/validation-helpers');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 

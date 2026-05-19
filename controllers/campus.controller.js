@@ -3,7 +3,7 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const GenericEntityController = require('./genericEntity.controller');
+const GenericEntityController = require('./generic-entity.controller');
 
 // Escape user input before embedding in MongoDB $regex to prevent ReDoS / injection
 const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -14,14 +14,14 @@ const Student = require('../models/student-models/student.model');
 const Class = require('../models/class.model');
 const Subject = require('../models/subject.model');
 const Department = require('../models/department.model');
-const StudentAttendance = require('../models/student-models/studentAttend.model');
+const StudentAttendance = require('../models/student-models/student.attend.model');
 const Income = require('../models/income.model');
 
 const campusConfig = require('../configs/campus.config');
 const studentConfig = require('../configs/student.config');
 const crypto = require('crypto');
 
-const { uploadImage } = require('../utils/fileUpload');
+const { uploadImage } = require('../utils/file-upload');
 const { getFileUrl } = require('../middleware/upload/upload');
 
 const {
@@ -30,12 +30,12 @@ const {
   sendPaginated,
   sendNotFound,
   sendConflict
-} = require('../utils/responseHelpers');
+} = require('../utils/response-helpers');
 const {
   isValidObjectId,
   isValidEmail,
   validatePasswordStrength
-} = require('../utils/validationHelpers');
+} = require('../utils/validation-helpers');
 
 // ========================================
 // INITIALIZE GENERIC CONTROLLERS
@@ -193,13 +193,13 @@ class CampusController extends GenericEntityController {
       const response = savedCampus.toObject();
       delete response.password;
 
-      const { sendCreated } = require('../utils/responseHelpers');
+      const { sendCreated } = require('../utils/response-helpers');
       return sendCreated(res, 'Campus registered successfully', response);
 
     } catch (error) {
       console.error('❌ Campus creation error:', error);
 
-      const { handleDuplicateKeyError } = require('../utils/responseHelpers');
+      const { handleDuplicateKeyError } = require('../utils/response-helpers');
       if (error.code === 11000) return handleDuplicateKeyError(res, error);
 
       if (error.name === 'ValidationError') {
@@ -833,65 +833,6 @@ class CampusController extends GenericEntityController {
   };
 
   /**
-   * Get Campus Partners
-   * @route   GET /api/campus/:campusId/partners
-   * @access  Private (ADMIN, DIRECTOR, CAMPUS_MANAGER)
-   * @query   type — optional filter on partner type (e.g. 'company', 'ngo'…)
-   */
-  getPartners = async (req, res) => {
-    try {
-      const { campusId } = req.params;
-      const { page = 1, limit = 20, search = '', status, type } = req.query;
-
-      if (!isValidObjectId(campusId)) {
-        return sendError(res, 400, 'Invalid campus ID format');
-      }
-
-      if (
-        req.user.role === 'CAMPUS_MANAGER' &&
-        req.user.campusId.toString() !== campusId.toString()
-      ) {
-        return sendError(res, 403, 'You can only access partners from your own campus');
-      }
-
-      const Partner = mongoose.model('Partner');
-
-      const filter = { schoolCampus: campusId };
-      if (status) filter.status = status;
-      else filter.status = { $ne: 'archived' };
-      if (type) filter.type = type;
-
-      if (search) {
-        filter.$or = [
-          { name:         { $regex: escapeRegex(search), $options: 'i' } },
-          { email:        { $regex: escapeRegex(search), $options: 'i' } },
-          { phone:        { $regex: escapeRegex(search), $options: 'i' } },
-          { organization: { $regex: escapeRegex(search), $options: 'i' } },
-        ];
-      }
-
-      const skip = (Number(page) - 1) * Number(limit);
-
-      const [partners, total] = await Promise.all([
-        Partner.find(filter)
-          .select('-password')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(Number(limit))
-          .lean(),
-        Partner.countDocuments(filter),
-      ]);
-
-      return sendPaginated(res, 200, 'Partners fetched successfully', partners, {
-        total, page, limit,
-      });
-    } catch (error) {
-      console.error('❌ getPartners error:', error);
-      return sendError(res, 500, 'Failed to fetch partners');
-    }
-  };
-
-  /**
  * Get Campus Classes
  * @route  GET /api/campus/:campusId/classes
  * @access Private
@@ -1040,7 +981,6 @@ module.exports = {
   getCampusStudents: campusController.getStudents,
   getCampusTeachers: campusController.getTeachers,
   getCampusParents: campusController.getParents,
-  getCampusPartners: campusController.getPartners,
   getCampusMentors: campusController.getMentors,
   getCampusDepartments: campusController.getDepartments,
   getCampusClasses: campusController.getClasses,
