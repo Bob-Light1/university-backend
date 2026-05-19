@@ -17,7 +17,7 @@ const { ipKeyGenerator } = require('express-rate-limit');
 const { authenticate, authorize } = require('../middleware/auth/auth');
 const { loginLimiter, strictLimiter, createCustomLimiter } = require('../middleware/rate-limiter/rate-limiter');
 
-const authCtrl       = require('../controllers/partner-controllers/partner_auth_controller');
+const authCtrl       = require('../controllers/partner-controllers/partner.auth.controller');
 const crudCtrl       = require('../controllers/partner-controllers/partner.crud.controller');
 const leadCtrl       = require('../controllers/partner-controllers/partner.lead.controller');
 const commissionCtrl = require('../controllers/partner-controllers/partner.commission.controller');
