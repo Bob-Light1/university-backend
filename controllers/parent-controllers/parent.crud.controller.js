@@ -178,8 +178,13 @@ const getAllParents = async (req, res) => {
       }
     }
 
-    // Status filter
-    if (req.query.status && ['active', 'inactive', 'suspended', 'archived'].includes(req.query.status)) {
+    // Status filter — 'archived' is only meaningful when includeArchived=true,
+    // otherwise it would silently overwrite the { $ne: 'archived' } base filter.
+    const allowedStatuses = includeArchived
+      ? ['active', 'inactive', 'suspended', 'archived']
+      : ['active', 'inactive', 'suspended'];
+
+    if (req.query.status && allowedStatuses.includes(req.query.status)) {
       filter.status = req.query.status;
     }
 
