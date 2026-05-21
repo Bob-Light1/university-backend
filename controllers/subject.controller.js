@@ -104,7 +104,7 @@ exports.getSubjects = async (req, res) => {
   try {
     const {
       campusId,
-      isActive = 'true',
+      status,
       category,
       search,
       page = 1,
@@ -113,13 +113,12 @@ exports.getSubjects = async (req, res) => {
     } = req.query;
 
     // Build campus filter based on user role
-    const filter = buildCampusFilter(req.user, campusId, );
-
-    // Active/Inactive filter
-    const showActive = isActive === 'true' || isActive === true || isActive === '1';
+    const filter = buildCampusFilter(req.user, campusId);
 
     if (includeArchived !== 'true') {
-      filter.isActive = showActive;
+      filter.status = (status === 'archived') ? 'archived' : 'active';
+    } else if (status) {
+      filter.status = status;
     }
     
 
@@ -315,12 +314,12 @@ exports.deleteSubject = async (req, res) => {
     }
 
     // Check if already archived
-    if (!subject.isActive) {
+    if (subject.status === 'archived') {
       return sendError(res, 400, 'Subject is already archived');
     }
 
     // Archive
-    subject.isActive = false;
+    subject.status = 'archived';
     await subject.save();
 
     return sendSuccess(res, 200, 'Subject archived successfully');
@@ -360,12 +359,12 @@ exports.restoreSubject = async (req, res) => {
     }
 
     // Check if not archived
-    if (subject.isActive) {
+    if (subject.status !== 'archived') {
       return sendError(res, 400, 'Subject is already active');
     }
 
     // Restore
-    subject.isActive = true;
+    subject.status = 'active';
     await subject.save();
 
     // Populate for response

@@ -185,3 +185,25 @@ exports.deleteLevel = async (req, res) => {
     });
   }
 };
+
+exports.restoreLevel = async (req, res) => {
+  try {
+    const level = await Level.findById(req.params.id);
+
+    if (!level) {
+      return res.status(404).json({ success: false, message: "Level not found" });
+    }
+
+    if (level.status !== 'archived') {
+      return res.status(400).json({ success: false, message: "Level is not archived" });
+    }
+
+    level.status = 'active';
+    await level.save();
+
+    res.status(200).json({ success: true, message: "Level restored successfully" });
+  } catch (error) {
+    console.error("Restore level error:", error);
+    res.status(500).json({ success: false, message: "Failed to restore level" });
+  }
+};

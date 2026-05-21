@@ -176,7 +176,7 @@ const hasPedagogicalFields = (body) =>
  * @returns {Object} MongoDB filter
  */
 const buildCourseFilter = (query, user) => {
-  const filter = { isDeleted: false };
+  const filter = { status: { $ne: 'archived' } };
 
   // Non-global roles always see latest APPROVED only
   const canSeeAllStatuses = isGlobalRole(user.role);
@@ -194,7 +194,7 @@ const buildCourseFilter = (query, user) => {
       filter.approvalStatus = query.approvalStatus;
     }
     if (query.includeDeleted === 'true' && user.role === 'ADMIN') {
-      delete filter.isDeleted; // ADMIN only
+      delete filter.status; // ADMIN only — show all including archived
     }
   }
 

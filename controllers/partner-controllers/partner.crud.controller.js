@@ -300,6 +300,24 @@ const archivePartner = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Partner archived.', updated);
 });
 
+// ── RESTORE (undo archive) ────────────────────────────────────────────────────
+
+const restorePartner = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
+
+  const campusFilter = buildCampusFilter(req);
+  const updated = await Partner.findOneAndUpdate(
+    { _id: new mongoose.Types.ObjectId(id), ...campusFilter, status: 'archived' },
+    { $set: { status: 'active' } },
+    { new: true }
+  ).select('-password -__v').lean({ virtuals: true });
+
+  if (!updated) return sendNotFound(res, 'Partner (archived)');
+
+  return sendSuccess(res, 200, 'Partner restored.', updated);
+});
+
 // ── REGENERATE QR ─────────────────────────────────────────────────────────────
 
 const regenerateQR = asyncHandler(async (req, res) => {
@@ -477,6 +495,7 @@ module.exports = {
   updatePartner,
   toggleStatus,
   archivePartner,
+  restorePartner,
   regenerateQR,
   downloadKit,
   exportPartners,

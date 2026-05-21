@@ -968,7 +968,8 @@ module.exports = {
   // Generic CRUD operations (inherited)
   getAllCampus: campusController.getAll,
   updateCampus: campusController.update,
-  deleteCampus: campusController.archive,
+  deleteCampus:   campusController.archive,
+  restoreCampus:  campusController.restore,
 
   // Campus-specific operations
   getUploadSignature: campusController.getUploadSignature,

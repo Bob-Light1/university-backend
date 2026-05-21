@@ -10,8 +10,8 @@
  *  • Password          : bcrypt hash (salt=12), select:false
  *  • children[]        : source of truth for parent-child relationship (max 10)
  *  • parentRef         : auto-generated PAR-YYYY-NNNNN via counter.model.js
- *  • Soft-delete       : isArchived boolean (not a status value)
- *  • Status            : active | inactive | suspended  (NOT archived)
+ *  • Soft-delete       : status = 'archived' (unified with other entities)
+ *  • Status            : active | inactive | suspended | archived
  */
 
 const mongoose = require('mongoose');
@@ -168,7 +168,7 @@ const parentSchema = new mongoose.Schema(
     status: {
       type:    String,
       enum:    {
-        values:  ['active', 'inactive', 'suspended'],
+        values:  ['active', 'inactive', 'suspended', 'archived'],
         message: '{VALUE} is not a valid status',
       },
       default: 'active',
@@ -204,15 +204,6 @@ const parentSchema = new mongoose.Schema(
     },
 
     /**
-     * Soft-delete flag. isArchived:true removes the parent from all
-     * default list queries. Hard delete available to ADMIN only.
-     */
-    isArchived: {
-      type:    Boolean,
-      default: false,
-    },
-
-    /**
      * Human-readable reference: PAR-YYYY-NNNNN
      * Auto-generated in pre-save via counter.model.js.
      * Required — never supplied by the caller.
@@ -236,11 +227,6 @@ const parentSchema = new mongoose.Schema(
 parentSchema.index({ schoolCampus: 1, status: 1 });
 parentSchema.index({ schoolCampus: 1, firstName: 1, lastName: 1 });
 parentSchema.index({ children: 1 });
-// Partial index: only index documents where isArchived is false
-parentSchema.index(
-  { isArchived: 1 },
-  { partialFilterExpression: { isArchived: false } }
-);
 
 // ── VIRTUAL ───────────────────────────────────────────────────────────────────
 parentSchema.virtual('fullName').get(function () {

@@ -69,6 +69,7 @@ if (!IS_PRODUCTION) {
       `${UPLOAD_DIR}/teachers`,
       `${UPLOAD_DIR}/parents`,
       `${UPLOAD_DIR}/documents`,
+      `${UPLOAD_DIR}/imports`,
       `${UPLOAD_DIR}/temp`,
     ];
     for (const dir of dirs) {
@@ -157,8 +158,15 @@ const buildLocalDiskStorage = (subFolder) =>
 
 // ── File filters ──────────────────────────────────────────────────────────────
 
-const ALLOWED_IMAGE_TYPES = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
-const ALLOWED_DOC_TYPES   = new Set(['application/pdf']);
+const ALLOWED_IMAGE_TYPES  = new Set(['image/jpeg', 'image/jpg', 'image/png', 'image/webp']);
+const ALLOWED_DOC_TYPES    = new Set(['application/pdf']);
+const ALLOWED_IMPORT_TYPES = new Set([
+  'text/csv',
+  'text/plain',                                                   // some OS send CSV as text/plain
+  'application/vnd.ms-excel',                                     // .xls
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+  'application/octet-stream',                                     // generic binary — checked by ext below
+]);
 
 /** Accept JPEG / PNG / WEBP only — GIF excluded (not useful for school management). */
 const imageFilter = (req, file, cb) => {
@@ -180,12 +188,27 @@ const imageFilter = (req, file, cb) => {
 
 /**
  * Accept PDF documents only.
- * CSV/Excel import files bypass this filter — they use memoryStorage directly.
  */
 const documentFilter = (req, file, cb) => {
   if (!ALLOWED_DOC_TYPES.has(file.mimetype)) {
     return cb(
       new Error(`Invalid document type "${file.mimetype}". Only PDF is accepted.`),
+      false,
+    );
+  }
+  cb(null, true);
+};
+
+/**
+ * Accept CSV / Excel import files only.
+ * Some browsers send CSV with generic MIME types, so we also check the extension.
+ */
+const importFileFilter = (req, file, cb) => {
+  const ext = path.extname(file.originalname || '').toLowerCase();
+  const validExts = new Set(['.csv', '.xlsx', '.xls']);
+  if (!ALLOWED_IMPORT_TYPES.has(file.mimetype) && !validExts.has(ext)) {
+    return cb(
+      new Error(`Invalid file type. Only CSV or Excel files (.csv, .xlsx, .xls) are accepted.`),
       false,
     );
   }
@@ -232,17 +255,41 @@ const uploadCampusImageMemory = multer({
  * Upload a PDF document.
  * Field name: 'document'
  * Limit: 10 MB
- *
- * Note: CSV/Excel import files are NOT handled here.
- * They use multer.memoryStorage() inline in their respective routers
- * (result.router.js, student.router.js, teacher.router.js) so they are
- * parsed in memory and never written to disk or Cloudinary.
  */
 const uploadDocument = multer({
   storage    : IS_PRODUCTION ? cloudinaryDocumentStorage : buildLocalDiskStorage('documents'),
   limits     : { fileSize: MAX_DOC_SIZE, files: 1 },
   fileFilter : documentFilter,
 }).single('document');
+
+/**
+ * Upload a CSV / Excel import file.
+ * Field name: 'file'  (matches formData.append('file', ...) in the frontend)
+ * Limit: 10 MB
+ *
+ * Always uses local disk storage — import files are parsed from the filesystem
+ * by ImportService (createReadStream / ExcelJS.readFile) and deleted immediately
+ * after processing. They must NEVER be sent to Cloudinary.
+ *
+ * In production (Render.com ephemeral FS), /tmp is always writable.
+ * In development, files land in UPLOAD_DIR/imports/.
+ */
+const importTempDir = IS_PRODUCTION ? '/tmp' : `${UPLOAD_DIR}/imports`;
+
+const uploadImportFile = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, importTempDir),
+    filename: (_req, file, cb) => {
+      const ext    = path.extname(file.originalname || '').toLowerCase();
+      const base   = path.basename(file.originalname || 'file', ext)
+        .replace(/[^a-z0-9]/gi, '-').toLowerCase().slice(0, 50);
+      const suffix = crypto.randomBytes(8).toString('hex');
+      cb(null, `import-${base}-${suffix}${ext}`);
+    },
+  }),
+  limits     : { fileSize: MAX_DOC_SIZE, files: 1 },
+  fileFilter : importFileFilter,
+}).single('file');
 
 // ── Error handling ────────────────────────────────────────────────────────────
 
@@ -372,6 +419,7 @@ module.exports = {
   uploadCampusImage,
   uploadCampusImageMemory,
   uploadDocument,
+  uploadImportFile,
 
   // Cloudinary direct upload with timeout (used by campus.controller create)
   uploadBufferToCloudinary,

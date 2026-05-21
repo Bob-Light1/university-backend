@@ -267,33 +267,6 @@ const archiveDepartment = async (req, res) => {
 };
 
 // ============================================================
-// RESTORE DEPARTMENT
-// ============================================================
-const restoreDepartment = async (req, res) => {
-  try {
-    const { id } = req.params;
-    if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid department ID');
-
-    const department = await Department.findById(id);
-    if (!department) return sendNotFound(res, 'Department');
-
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (department.schoolCampus.toString() !== req.user.campusId.toString()) {
-        return sendError(res, 403, 'Can only restore departments from your campus');
-      }
-    }
-
-    department.status = 'active';
-    await department.save();
-
-    return sendSuccess(res, 200, 'Department restored successfully');
-  } catch (err) {
-    console.error('❌ restoreDepartment:', err);
-    return sendError(res, 500, 'Failed to restore department');
-  }
-};
-
-// ============================================================
 // EXPORTS
 // ============================================================
 module.exports = {
@@ -302,7 +275,7 @@ module.exports = {
   getOneDepartment,
   updateDepartment,
   archiveDepartment,
-  restoreDepartment,
+  restoreDepartment: genericController.restore,
   // Stats delegated to generic controller
   getDepartmentStats: genericController.getStats,
 };

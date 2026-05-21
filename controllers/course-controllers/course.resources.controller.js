@@ -58,7 +58,7 @@ const addResource = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: false });
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
   if (!course) return sendNotFound(res, 'Course');
 
   // Whitelist — prevents CAMPUS_MANAGER from injecting other course fields
@@ -114,7 +114,7 @@ const removeResource = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id))         return sendError(res, 400, 'Invalid course ID.');
   if (!isValidObjectId(resourceId)) return sendError(res, 400, 'Invalid resource ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: false });
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
   if (!course) return sendNotFound(res, 'Course');
 
   const resourceExists = course.resources.some(
@@ -179,9 +179,9 @@ const linkSubjectCourse = asyncHandler(async (req, res) => {
 
   // Validate the Course: must be APPROVED and latest version
   const course = await Course.findOne({
-    _id:             courseId,
-    isDeleted:       false,
-    approvalStatus:  APPROVAL_STATUS.APPROVED,
+    _id:            courseId,
+    status:         { $ne: 'archived' },
+    approvalStatus: APPROVAL_STATUS.APPROVED,
     isLatestVersion: true,
   }).populate('level', 'name');
 

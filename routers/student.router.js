@@ -5,10 +5,11 @@ const studentController          = require('../controllers/student-controllers/s
 const studentDashboardController = require('../controllers/student-controllers/student.dashboard.controller');
 const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
 const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
-const { 
+const {
   uploadProfileImage,
   uploadDocument,
-  handleMulterError 
+  uploadImportFile,
+  handleMulterError
 } = require('../middleware/upload/upload');
 
 // ========================================
@@ -117,40 +118,36 @@ router.get(
 
 /**
  * @route   POST /api/students/import
- * @desc    Import student information from CSV/Excel
+ * @desc    Import students from CSV/Excel
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 router.post(
   '/import',
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload CSV/Excel file
+  uploadImportFile,
   handleMulterError,
   studentController.importFromFile
 );
 
 /**
- * @route   POST /api/students/template/csv
- * @desc    Import CSV template
+ * @route   GET /api/students/import/template/csv
+ * @desc    Download CSV import template
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
-router.post(
+router.get(
   '/import/template/csv',
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload CSV file
-  handleMulterError,
   studentController.getImportTemplateCSV
 );
 
 /**
- * @route   POST /api/students/template/excel
- * @desc    Import Excel template
+ * @route   GET /api/students/import/template/excel
+ * @desc    Download Excel import template
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
-router.post(
+router.get(
   '/import/template/excel',
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  uploadDocument,        // Upload Excel file
-  handleMulterError,
   studentController.getImportTemplateExcel
 );
 

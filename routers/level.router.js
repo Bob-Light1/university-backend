@@ -5,6 +5,7 @@ const {
   getLevelById,
   updateLevel,
   deleteLevel,
+  restoreLevel,
 } = require("../controllers/level.controller");
 
 const { authenticate, authorize } = require("../middleware/auth/auth");
@@ -47,9 +48,16 @@ router.put("/update/:id", authorize(adminRoles), updateLevel);
 
 /**
  * @route   DELETE /api/level/delete/:id
- * @desc    Delete a level
+ * @desc    Archive a level
  * @access  CAMPUS_MANAGER, DIRECTOR
  */
 router.delete("/delete/:id", authorize(adminRoles), deleteLevel);
+
+/**
+ * @route   PATCH /api/level/:id/restore
+ * @desc    Restore an archived level
+ * @access  CAMPUS_MANAGER, DIRECTOR
+ */
+router.patch("/:id/restore", authorize(adminRoles), restoreLevel);
 
 module.exports = router;

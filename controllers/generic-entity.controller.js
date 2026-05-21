@@ -516,6 +516,40 @@ class GenericEntityController {
   };
 
   // ─────────────────────────────────────────────
+  // RESTORE (undo soft-delete)
+  // ─────────────────────────────────────────────
+  restore = async (req, res) => {
+    try {
+      const { id } = req.params;
+
+      if (!isValidObjectId(id)) {
+        return sendError(res, 400, `Invalid ${this.entityNameLower} ID format`);
+      }
+
+      const entity = await this.Model.findById(id);
+      if (!entity) {
+        return sendNotFound(res, this.entityName);
+      }
+
+      if (req.user.role === 'CAMPUS_MANAGER') {
+        const campusRef = entity.schoolCampus ?? entity._id;
+        if (campusRef.toString() !== req.user.campusId) {
+          return sendError(res, 403, `Can only restore ${this.entityNameLower}s from your campus`);
+        }
+      }
+
+      entity.status = 'active';
+      await entity.save();
+
+      return sendSuccess(res, 200, `${this.entityName} restored successfully`);
+
+    } catch (error) {
+      console.error(`❌ Error restoring ${this.entityNameLower}:`, error);
+      return sendError(res, 500, `Failed to restore ${this.entityNameLower}`);
+    }
+  };
+
+  // ─────────────────────────────────────────────
   // GET STATS
   // ─────────────────────────────────────────────
   getStats = async (req, res) => {

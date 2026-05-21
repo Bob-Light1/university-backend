@@ -262,37 +262,6 @@ const updateTeacherPassword = async (req, res) => {
 
 
 /**
-   * Restore archived teacher
-   * @route   PATCH /api/teachers/:id/restore
-   * @access  Private (ADMIN, CAMPUS_MANAGER, DIRECTOR)
-   */
-const restoreTeacher= async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return sendError(res, 400, 'Invalid teacher ID format');
-    }
-
-    const teacher = await Teacher.findById(id);
-    if (!teacher) {
-      return sendNotFound(res, 'Teacher');
-    }
-
-    // Update status to active
-    teacher.status = 'active';
-    await teacher.save();
-
-    return sendSuccess(res, 200, 'Teacher restored successfully');
-
-  } catch (error) {
-    console.error('❌ Error restoring teacher:', error);
-    return sendError(res, 500, 'Failed to restore teacher');
-  }
-};
-
-/**
  * Permanently delete teacher
  * @route   DELETE /api/teachers/:id/permanent
  * @access  Private (ADMIN only)
@@ -357,7 +326,7 @@ module.exports = {
   updateTeacherPassword,
 
   //Restore Archived Teacher
-  restoreTeacher,
+  restoreTeacher: entityController.restore,
 
   //Delete Teacher Permanently
   deleteTeacherPermanently

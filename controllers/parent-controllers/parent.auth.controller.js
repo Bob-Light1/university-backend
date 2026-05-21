@@ -49,7 +49,7 @@ const buildTokenPayload = (parent) => ({
 
 /**
  * Builds the safe user object returned in the login response body.
- * Never includes password, __v, isArchived, or notes.
+ * Never includes password, __v, or notes.
  */
 const buildUserResponse = (parent) => ({
   id:               parent._id,
@@ -121,13 +121,8 @@ const loginParent = async (req, res) => {
       return sendError(res, 403, 'You are not registered on this campus.');
     }
 
-    // Status check — never reveal suspended vs non-existent
+    // Status check — blocks inactive, suspended, and archived accounts
     if (parent.status !== 'active') {
-      return sendError(res, 403, 'Your account is not active. Please contact support.');
-    }
-
-    // Archived accounts cannot log in
-    if (parent.isArchived) {
       return sendError(res, 403, 'Your account is not active. Please contact support.');
     }
 

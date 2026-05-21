@@ -71,11 +71,12 @@ const subjectSchema = new mongoose.Schema(
       max: [10, 'Coefficient cannot exceed 10']
     },
 
-    // Subject status (active / archived)
-    isActive: {
-      type: Boolean,
-      default: true,
-      index: true,
+    // Subject status
+    status: {
+      type:    String,
+      enum:    { values: ['active', 'archived'], message: '{VALUE} is not a valid status' },
+      default: 'active',
+      index:   true,
     },
 
     // Optional color for UI display (hex format)
@@ -146,7 +147,7 @@ subjectSchema.index(
 /**
  * For filtering active subjects by campus
  */
-subjectSchema.index({ schoolCampus: 1, isActive: 1 });
+subjectSchema.index({ schoolCampus: 1, status: 1 });
 
 /**
  * For searching by name (regex $or — consistent with the rest of the system).
@@ -185,7 +186,7 @@ subjectSchema.virtual('displayName').get(function() {
  * Archive the subject (soft delete)
  */
 subjectSchema.methods.archive = async function() {
-  this.isActive = false;
+  this.status = 'archived';
   await this.save();
   return this;
 };
@@ -194,7 +195,7 @@ subjectSchema.methods.archive = async function() {
  * Restore archived subject
  */
 subjectSchema.methods.restore = async function() {
-  this.isActive = true;
+  this.status = 'active';
   await this.save();
   return this;
 };
@@ -209,7 +210,7 @@ subjectSchema.methods.restore = async function() {
 subjectSchema.statics.findActiveByCampus = function(campusId) {
   return this.find({ 
     schoolCampus: campusId, 
-    isActive: true 
+    status: 'active' 
   }).sort({ subject_name: 1 });
 };
 
@@ -217,7 +218,7 @@ subjectSchema.statics.findActiveByCampus = function(campusId) {
  * Find subjects by category
  */
 subjectSchema.statics.findByCategory = function(category, campusId) {
-  const filter = { category, isActive: true };
+  const filter = { category, status: 'active' };
   if (campusId) {
     filter.schoolCampus = campusId;
   }
@@ -230,7 +231,7 @@ subjectSchema.statics.findByCategory = function(category, campusId) {
 subjectSchema.statics.countByCampus = function(campusId) {
   return this.countDocuments({ 
     schoolCampus: campusId, 
-    isActive: true 
+    status: 'active' 
   });
 };
 
@@ -243,7 +244,7 @@ subjectSchema.statics.search = function(query, campusId) {
       { subject_name: { $regex: query, $options: 'i' } },
       { subject_code: { $regex: query, $options: 'i' } }
     ],
-    isActive: true
+    status: 'active'
   };
   
   if (campusId) {

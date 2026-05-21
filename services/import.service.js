@@ -159,16 +159,17 @@ class ImportService {
   }
 
   /**
-   * Check for duplicates
+   * Check for duplicates.
+   * Email is normalized to lowercase; all other fields are compared as-is.
    */
   async checkDuplicates(row) {
     const duplicates = [];
 
     for (const field of this.entityConfig.uniqueFields) {
       if (row[field]) {
-        const query = { [field]: row[field].toLowerCase() };
-        const exists = await this.Model.findOne(query);
-        
+        const value = field === 'email' ? row[field].toLowerCase() : row[field];
+        const exists = await this.Model.findOne({ [field]: value }).lean();
+
         if (exists) {
           duplicates.push(`${field} "${row[field]}" already exists`);
         }
@@ -196,7 +197,7 @@ class ImportService {
 
     // Handle password
     const password = row.password || this.entityConfig.defaultPassword || 'Default@123';
-    data.password = await bcrypt.hash(password, 10);
+    data.password = await bcrypt.hash(password, 12);
 
     // Additional entity-specific fields
     if (row.matricule) data.matricule = row.matricule;
@@ -323,15 +324,50 @@ class ImportService {
   }
 
   /**
+   * Build the ordered list of template columns.
+   * Merges required fields, default-value keys, and the extra optional
+   * fields that prepareEntityData always handles.
+   */
+  _templateColumns() {
+    const EXTRA_OPTIONAL = ['phone', 'matricule', 'dateOfBirth', 'gender', 'username'];
+    const seen = new Set();
+    const columns = [];
+
+    const add = (field) => {
+      if (!seen.has(field)) {
+        seen.add(field);
+        columns.push(field);
+      }
+    };
+
+    (this.entityConfig.requiredFields || []).forEach(add);
+    Object.keys(this.entityConfig.defaultValues || {}).forEach(add);
+    EXTRA_OPTIONAL.forEach(add);
+
+    // Additional entity-specific columns declared in config
+    (this.entityConfig.templateColumns || []).forEach(add);
+
+    return columns;
+  }
+
+  /**
+   * Human-readable header label from a camelCase / snake_case field name.
+   */
+  _label(field) {
+    return field
+      .replace(/_/g, ' ')
+      .replace(/([A-Z])/g, ' $1')
+      .replace(/\b\w/g, (l) => l.toUpperCase())
+      .trim();
+  }
+
+  /**
    * Get import template (CSV)
    */
   getTemplateCSV() {
-    const headers = this.entityConfig.requiredFields
-      .concat(Object.keys(this.entityConfig.defaultValues || {}))
-      .map(field => field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+    const columns = this._templateColumns();
+    const csv = '\uFEFF' + columns.map(this._label).join(',') + '\n';
 
-    const csv = '\uFEFF' + headers.join(',') + '\n';
-    
     return {
       data: csv,
       filename: `${this.entityConfig.nameLower}_import_template.csv`,
@@ -343,39 +379,49 @@ class ImportService {
    * Get import template (Excel)
    */
   async getTemplateExcel() {
-    const workbook = new ExcelJS.Workbook();
+    const workbook  = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet('Template');
+    const columns   = this._templateColumns();
 
-    // Headers
-    const headers = this.entityConfig.requiredFields
-      .concat(Object.keys(this.entityConfig.defaultValues || {}));
-
-    worksheet.columns = headers.map(field => ({
-      header: field.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      key: field,
-      width: 20,
+    worksheet.columns = columns.map((field) => ({
+      header: this._label(field),
+      key:    field,
+      width:  22,
     }));
 
-    // Style header
-    worksheet.getRow(1).font = { bold: true, size: 12, color: { argb: 'FFFFFF' } };
+    // Style header row
+    worksheet.getRow(1).font = { bold: true, size: 11, color: { argb: 'FFFFFF' } };
     worksheet.getRow(1).fill = {
-      type: 'pattern',
-      pattern: 'solid',
-      fgColor: { argb: '1F4E78' },
+      type:     'pattern',
+      pattern:  'solid',
+      fgColor:  { argb: '1F4E78' },
     };
+    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
-    // Add example row
+    // Example row with realistic placeholder values
+    const EXAMPLES = {
+      firstName:   'Jean',
+      lastName:    'Dupont',
+      email:       'jean.dupont@example.com',
+      phone:       '+33600000000',
+      matricule:   'TCH-2025-001',
+      dateOfBirth: '1990-01-15',
+      gender:      'male',
+      username:    'jean.dupont',
+      status:      'active',
+    };
     const exampleRow = {};
-    headers.forEach(field => {
-      exampleRow[field] = `Example ${field}`;
+    columns.forEach((field) => {
+      exampleRow[field] = EXAMPLES[field] ?? `example_${field}`;
     });
-    worksheet.addRow(exampleRow);
+    const row = worksheet.addRow(exampleRow);
+    row.font = { italic: true, color: { argb: '555555' } };
 
     const buffer = await workbook.xlsx.writeBuffer();
 
     return {
-      data: buffer,
-      filename: `${this.entityConfig.nameLower}_import_template.xlsx`,
+      data:        buffer,
+      filename:    `${this.entityConfig.nameLower}_import_template.xlsx`,
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     };
   }

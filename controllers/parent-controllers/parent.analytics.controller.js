@@ -72,25 +72,25 @@ const getParentStats = async (req, res) => {
 
         // Status breakdown
         Parent.aggregate([
-          { $match: { ...castForAggregation(campusFilter), isArchived: false } },
+          { $match: { ...castForAggregation(campusFilter), status: { $ne: 'archived' } } },
           { $group: { _id: '$status', count: { $sum: 1 } } },
         ]),
 
         // Relationship breakdown
         Parent.aggregate([
-          { $match: { ...castForAggregation(campusFilter), isArchived: false } },
+          { $match: { ...castForAggregation(campusFilter), status: { $ne: 'archived' } } },
           { $group: { _id: '$relationship', count: { $sum: 1 } } },
         ]),
 
         // Parents created in the last 30 days
         Parent.countDocuments({
           ...campusFilter,
-          isArchived: false,
-          createdAt:  { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+          status:    { $ne: 'archived' },
+          createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
         }),
 
         // Archived parents
-        Parent.countDocuments({ ...campusFilter, isArchived: true }),
+        Parent.countDocuments({ ...campusFilter, status: 'archived' }),
       ]);
 
     const total  = statusBreakdown.reduce((sum, s) => sum + s.count, 0);
@@ -149,25 +149,25 @@ const getCampusParentStats = async (req, res) => {
 
       // Status breakdown
       Parent.aggregate([
-        { $match: { ...aggFilter, isArchived: false } },
+        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
         { $group: { _id: '$status', count: { $sum: 1 } } },
       ]),
 
       // Relationship breakdown
       Parent.aggregate([
-        { $match: { ...aggFilter, isArchived: false } },
+        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
         { $group: { _id: '$relationship', count: { $sum: 1 } } },
       ]),
 
       // Gender breakdown
       Parent.aggregate([
-        { $match: { ...aggFilter, isArchived: false } },
+        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
         { $group: { _id: '$gender', count: { $sum: 1 } } },
       ]),
 
       // Distribution of children count per parent
       Parent.aggregate([
-        { $match: { ...aggFilter, isArchived: false } },
+        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
         {
           $group: {
             _id:   { $size: '$children' },
@@ -200,8 +200,8 @@ const getCampusParentStats = async (req, res) => {
       // Parents created in the last 30 days (countDocuments auto-casts, no need for aggFilter)
       Parent.countDocuments({
         ...campusFilter,
-        isArchived: false,
-        createdAt:  { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
+        status:    { $ne: 'archived' },
+        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
       }),
     ]);
 
@@ -256,10 +256,10 @@ const getParentsByStudent = async (req, res) => {
 
     const parents = await Parent.find({
       ...campusFilter,
-      children:   studentId,
-      isArchived: false,
+      children: studentId,
+      status:   { $ne: 'archived' },
     })
-      .select('-password -__v -notes -isArchived')
+      .select('-password -__v -notes')
       .populate('schoolCampus', 'campus_name location')
       .lean({ virtuals: true });
 

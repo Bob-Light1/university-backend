@@ -107,7 +107,6 @@ const createParent = async (req, res) => {
 
     // Strip fields that must not be set by the caller
     delete body.parentRef;
-    delete body.isArchived;
     delete body.lastLogin;
 
     // Strip notes for non-admin roles
@@ -170,7 +169,7 @@ const getAllParents = async (req, res) => {
 
     // includeArchived toggle — mirrors the behaviour of GenericEntityController
     const includeArchived = req.query.includeArchived === 'true';
-    const filter = { ...campusFilter, ...(includeArchived ? {} : { isArchived: false }) };
+    const filter = { ...campusFilter, ...(includeArchived ? {} : { status: { $ne: 'archived' } }) };
 
     // Optional campusId override for ADMIN/DIRECTOR
     if (GLOBAL_ROLES.includes(req.user.role) && req.query.campusId) {
@@ -180,7 +179,7 @@ const getAllParents = async (req, res) => {
     }
 
     // Status filter
-    if (req.query.status && ['active', 'inactive', 'suspended'].includes(req.query.status)) {
+    if (req.query.status && ['active', 'inactive', 'suspended', 'archived'].includes(req.query.status)) {
       filter.status = req.query.status;
     }
 
@@ -258,7 +257,7 @@ const getParentById = async (req, res) => {
 
 /**
  * Full update of a parent's profile (admin-facing).
- * Protected fields that cannot be updated here: password, parentRef, isArchived, lastLogin.
+ * Protected fields that cannot be updated here: password, parentRef, lastLogin.
  *
  * @route  PUT /api/parents/:id
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
@@ -271,7 +270,7 @@ const updateParent = async (req, res) => {
     const campusFilter = getCampusFilter(req);
 
     // Strip immutable / sensitive fields
-    const { password, parentRef, isArchived, lastLogin, schoolCampus: _sc, ...updates } = req.body;
+    const { password, parentRef, lastLogin, schoolCampus: _sc, ...updates } = req.body;
 
     // Profile image uploaded via multer (multipart/form-data)
     if (req.file) {
@@ -284,7 +283,7 @@ const updateParent = async (req, res) => {
     }
 
     const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, isArchived: false },
+      { _id: id, ...campusFilter, status: { $ne: 'archived' } },
       { $set: updates },
       { new: true, runValidators: true }
     )
@@ -333,7 +332,7 @@ const updateParentStatus = async (req, res) => {
     const campusFilter = getCampusFilter(req);
 
     const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, isArchived: false },
+      { _id: id, ...campusFilter, status: { $ne: 'archived' } },
       { $set: { status } },
       { new: true }
     )
@@ -376,7 +375,7 @@ const updateParentChildren = async (req, res) => {
     const campusFilter = getCampusFilter(req);
 
     // Fetch parent to get schoolCampus
-    const parent = await Parent.findOne({ _id: id, ...campusFilter, isArchived: false })
+    const parent = await Parent.findOne({ _id: id, ...campusFilter, status: { $ne: 'archived' } })
       .select('schoolCampus');
     if (!parent) return sendNotFound(res, 'Parent');
 
@@ -443,7 +442,7 @@ const resetParentPassword = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
-    const parent = await Parent.findOne({ _id: id, ...campusFilter, isArchived: false })
+    const parent = await Parent.findOne({ _id: id, ...campusFilter, status: { $ne: 'archived' } })
       .select('+password');
     if (!parent) return sendNotFound(res, 'Parent');
 
@@ -473,7 +472,7 @@ const resetParentPassword = async (req, res) => {
 
 /**
  * Delete a parent.
- *  - CAMPUS_MANAGER / DIRECTOR : soft-delete (isArchived = true)
+ *  - CAMPUS_MANAGER / DIRECTOR : soft-delete (status = 'archived')
  *  - ADMIN                     : hard-delete (permanent removal from DB)
  *
  * @route  DELETE /api/parents/:id
@@ -498,8 +497,8 @@ const deleteParent = async (req, res) => {
 
     // Soft-delete
     const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, isArchived: false },
-      { $set: { isArchived: true } },
+      { _id: id, ...campusFilter, status: { $ne: 'archived' } },
+      { $set: { status: 'archived' } },
       { new: true }
     );
     if (!parent) return sendNotFound(res, 'Parent');
@@ -530,8 +529,8 @@ const restoreParent = async (req, res) => {
     const campusFilter = getCampusFilter(req);
 
     const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, isArchived: true },
-      { $set: { isArchived: false } },
+      { _id: id, ...campusFilter, status: 'archived' },
+      { $set: { status: 'active' } },
       { new: true }
     );
 

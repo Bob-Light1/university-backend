@@ -61,7 +61,7 @@ const submitForReview = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: false });
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
   if (!course) return sendNotFound(res, 'Course');
 
   if (!isValidTransition(course.approvalStatus, APPROVAL_STATUS.PENDING_REVIEW)) {
@@ -96,7 +96,7 @@ const approveCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: false });
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
   if (!course) return sendNotFound(res, 'Course');
 
   if (!isValidTransition(course.approvalStatus, APPROVAL_STATUS.APPROVED)) {
@@ -142,7 +142,7 @@ const rejectCourse = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Rejection note must not exceed 500 characters.');
   }
 
-  const course = await Course.findOne({ _id: id, isDeleted: false });
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
   if (!course) return sendNotFound(res, 'Course');
 
   if (!isValidTransition(course.approvalStatus, APPROVAL_STATUS.REJECTED)) {
@@ -194,7 +194,7 @@ const createNewVersion = asyncHandler(async (req, res) => {
   // Load outside session for a quick 404 check
   const original = await Course.findOne({
     _id:             id,
-    isDeleted:       false,
+    status:          { $ne: 'archived' },
     isLatestVersion: true,
   }).lean();
 

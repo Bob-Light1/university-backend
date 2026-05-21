@@ -138,7 +138,7 @@ const resolveTeacher = async (teacherId, campusId) => {
   const doc = await Teacher.findOne({
     _id:          teacherId,
     schoolCampus: campusId,   // campus-isolation guard
-    isArchived:   { $ne: true },
+    status:       { $ne: 'archived' },
   })
     .select('_id firstName lastName email matricule')
     .lean();

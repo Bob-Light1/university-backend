@@ -155,8 +155,15 @@ router.patch(
 router.delete(
   '/:id',
   authenticate,
-  authorize(['ADMIN']),
+  authorize(['ADMIN', 'CAMPUS_MANAGER']),
   crudCtrl.archivePartner
+);
+
+router.patch(
+  '/:id/restore',
+  authenticate,
+  authorize(['ADMIN', 'CAMPUS_MANAGER']),
+  crudCtrl.restorePartner
 );
 
 router.post(

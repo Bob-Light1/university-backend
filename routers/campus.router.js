@@ -8,6 +8,7 @@ const {
   getOneCampus,
   updateCampusPassword,
   deleteCampus,
+  restoreCampus,
   getCampusContext,
   getCampusClasses,
   getCampusTeachers,
@@ -118,9 +119,15 @@ router.patch(
  * @access  ADMIN, DIRECTOR only
  */
 router.delete(
-  "/:id", 
-  authorize(['ADMIN', 'DIRECTOR']), 
+  "/:id",
+  authorize(['ADMIN', 'DIRECTOR']),
   deleteCampus
+);
+
+router.patch(
+  "/:id/restore",
+  authorize(['ADMIN', 'DIRECTOR']),
+  restoreCampus
 );
 
 // ========================================

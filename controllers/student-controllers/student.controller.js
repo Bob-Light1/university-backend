@@ -273,44 +273,6 @@ const loginStudent = async (req, res) => {
 };
 
 /**
-   * Restore archived student
-   * @route   PATCH /api/students/:id/restore
-   * @access  Private (ADMIN, CAMPUS_MANAGER, DIRECTOR)
-   */
-const restoreStudent= async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return sendError(res, 400, 'Invalid student ID format');
-    }
-
-    const student = await Student.findById(id);
-    if (!student) {
-      return sendNotFound(res, 'Student');
-    }
-
-    // Authorization
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (student.schoolCampus.toString() !== req.user.campusId) {
-        return sendError(res, 403, 'You can only restore students from your own campus');
-      }
-    }
-
-    // Update status to active
-    student.status = 'active';
-    await student.save();
-
-    return sendSuccess(res, 200, 'Student restored successfully');
-
-  } catch (error) {
-    console.error('❌ Error restoring student:', error);
-    return sendError(res, 500, 'Failed to restore student');
-  }
-};
-
-/**
  * Permanently delete student
  * @route   DELETE /api/students/:id/permanent
  * @access  Private (ADMIN only)
@@ -376,7 +338,7 @@ module.exports = {
   updateStudentPassword,
 
   //Restore Archived Student
-  restoreStudent,
+  restoreStudent: entityController.restore,
 
   //Delete Student Permanently 
   deleteStudentPermanently

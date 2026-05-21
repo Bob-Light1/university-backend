@@ -320,18 +320,14 @@ const CourseSchema = new mongoose.Schema(
     },
 
     // ── Lifecycle ────────────────────────────────────────────────────────────
-    isActive: {
-      type:    Boolean,
-      default: true,
-      index:   true,
-    },
-    isDeleted: {
-      type:    Boolean,
-      default: false,
+    status: {
+      type:    String,
+      enum:    { values: ['active', 'archived'], message: '{VALUE} is not a valid status' },
+      default: 'active',
       index:   true,
     },
     deletedAt: { type: Date },
-    deletedBy: { type: String },   // req.user.id
+    deletedBy: { type: String },   // req.user.id — set on archive
   },
   {
     timestamps: true,
@@ -342,7 +338,7 @@ const CourseSchema = new mongoose.Schema(
 
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
 
-CourseSchema.index({ isActive: 1, isDeleted: 1, isLatestVersion: 1 });
+CourseSchema.index({ status: 1, isLatestVersion: 1 });
 CourseSchema.index({ approvalStatus: 1, isLatestVersion: 1 });
 CourseSchema.index({ level: 1, category: 1, approvalStatus: 1 });
 CourseSchema.index({ 'prerequisites.course': 1 });
@@ -501,7 +497,7 @@ CourseSchema.pre('save', async function (next) {
  * @param {Object} [filter={}] - Additional MongoDB filter
  */
 CourseSchema.statics.findLatest = function (filter = {}) {
-  return this.find({ ...filter, isLatestVersion: true, isDeleted: false });
+  return this.find({ ...filter, isLatestVersion: true, status: { $ne: 'archived' } });
 };
 
 /**
@@ -509,7 +505,7 @@ CourseSchema.statics.findLatest = function (filter = {}) {
  * @param {string} courseCode
  */
 CourseSchema.statics.findVersionHistory = function (courseCode) {
-  return this.find({ courseCode, isDeleted: false }).sort({ version: -1 });
+  return this.find({ courseCode, status: { $ne: 'archived' } }).sort({ version: -1 });
 };
 
 // ─── MODEL EXPORT ─────────────────────────────────────────────────────────────

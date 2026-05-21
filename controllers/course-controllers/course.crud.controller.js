@@ -86,7 +86,7 @@ const createCourse = asyncHandler(async (req, res) => {
     const prereqIds = payload.prerequisites.map((p) => p.course);
     const foundCount = await Course.countDocuments({
       _id:       { $in: prereqIds },
-      isDeleted: false,
+      status: { $ne: 'archived' },
     });
     if (foundCount !== prereqIds.length) {
       return sendError(res, 400, 'One or more prerequisite courses do not exist.');
@@ -137,7 +137,7 @@ const listCourses = asyncHandler(async (req, res) => {
 
   // isLinked filter — ADMIN / DIRECTOR only
   if (req.query.isLinked !== undefined && isGlobalRole(req.user.role)) {
-    const linkedIds = await Subject.distinct('courseRef', { isActive: true, courseRef: { $ne: null } });
+    const linkedIds = await Subject.distinct('courseRef', { status: 'active', courseRef: { $ne: null } });
     if (req.query.isLinked === 'true') {
       filter._id = { $in: linkedIds };
     } else {
@@ -185,7 +185,7 @@ const getCourseById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: false })
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } })
     .populate(COURSE_POPULATE.DETAIL)
     .lean({ virtuals: true });
 
@@ -216,7 +216,7 @@ const getCourseByCode = asyncHandler(async (req, res) => {
   const course = await Course.findOne({
     courseCode: courseCode.toUpperCase().trim(),
     isLatestVersion: true,
-    isDeleted: false,
+    status: { $ne: 'archived' },
   })
     .populate(COURSE_POPULATE.DETAIL)
     .lean({ virtuals: true });
@@ -251,7 +251,7 @@ const getCourseVersions = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
   // Find the reference course to get the courseCode
-  const ref = await Course.findOne({ _id: id, isDeleted: false }).select('courseCode').lean();
+  const ref = await Course.findOne({ _id: id, status: { $ne: 'archived' } }).select('courseCode').lean();
   if (!ref) return sendNotFound(res, 'Course');
 
   const page  = parsePositiveInt(req.query.page, 1);
@@ -259,7 +259,7 @@ const getCourseVersions = asyncHandler(async (req, res) => {
   const skip  = (page - 1) * limit;
 
   const [versions, total] = await Promise.all([
-    Course.find({ courseCode: ref.courseCode, isDeleted: false })
+    Course.find({ courseCode: ref.courseCode, status: { $ne: 'archived' } })
       .sort({ version: -1 })
       .skip(skip)
       .limit(limit)
@@ -268,7 +268,7 @@ const getCourseVersions = asyncHandler(async (req, res) => {
         { path: 'approvalHistory.actor', select: 'firstName lastName' },
       ])
       .lean({ virtuals: true }),
-    Course.countDocuments({ courseCode: ref.courseCode, isDeleted: false }),
+    Course.countDocuments({ courseCode: ref.courseCode, status: { $ne: 'archived' } }),
   ]);
 
   return sendPaginated(res, 200, 'Version history retrieved successfully.', versions, {
@@ -293,7 +293,7 @@ const updateCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: false });
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
   if (!course) return sendNotFound(res, 'Course');
 
   const isApproved = course.approvalStatus === APPROVAL_STATUS.APPROVED;
@@ -357,18 +357,18 @@ const softDeleteCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: false });
+  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
   if (!course) return sendNotFound(res, 'Course');
 
   // Guard: check for active Subject references
   const hasActiveSubjects = await Subject.exists({
     courseRef: id,
-    isActive:  true,
+    status:    'active',
   });
 
   if (hasActiveSubjects) {
     // Return the list of affected campuses for transparency
-    const affected = await Subject.find({ courseRef: id, isActive: true })
+    const affected = await Subject.find({ courseRef: id, status: 'active' })
       .select('schoolCampus subject_name')
       .populate('schoolCampus', 'name')
       .lean();
@@ -383,16 +383,15 @@ const softDeleteCourse = asyncHandler(async (req, res) => {
     );
   }
 
-  course.isDeleted  = true;
-  course.isActive   = false;
-  course.deletedAt  = new Date();
-  course.deletedBy  = req.user.id;
+  course.status    = 'archived';
+  course.deletedAt = new Date();
+  course.deletedBy = req.user.id;
   await course.save();
 
   // Warn if other courses reference this one as a prerequisite (non-blocking)
   const dependentCourses = await Course.find({
     'prerequisites.course': id,
-    isDeleted:              false,
+    status:                 { $ne: 'archived' },
   })
     .select('courseCode title version approvalStatus')
     .lean();
@@ -423,11 +422,10 @@ const restoreCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, isDeleted: true });
+  const course = await Course.findOne({ _id: id, status: 'archived' });
   if (!course) return sendNotFound(res, 'Deleted course');
 
-  course.isDeleted = false;
-  course.isActive  = true;
+  course.status    = 'active';
   course.deletedAt = undefined;
   course.deletedBy = undefined;
   await course.save();
