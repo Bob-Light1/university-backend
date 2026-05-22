@@ -116,8 +116,10 @@ exports.getSubjects = async (req, res) => {
     const filter = buildCampusFilter(req.user, campusId);
 
     if (includeArchived !== 'true') {
-      filter.status = (status === 'archived') ? 'archived' : 'active';
-    } else if (status) {
+      // Defensive filter: excludes archived docs even if status field is missing.
+      // Never allows status=archived to pass when toggle is off.
+      filter.status = { $ne: 'archived' };
+    } else if (status && ['active', 'archived'].includes(status)) {
       filter.status = status;
     }
     
