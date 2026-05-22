@@ -98,7 +98,9 @@ const createSession = async (req, res) => {
     } = req.body;
 
     const required = { title, subject, classes, teacher, academicYear, semester, examPeriod, mode, startTime, endTime, duration, maxScore };
-    const missing  = Object.entries(required).filter(([, v]) => !v).map(([k]) => k);
+    const missing  = Object.entries(required)
+      .filter(([k, v]) => k === 'classes' ? !v?.length : !v)
+      .map(([k]) => k);
     if (missing.length) return sendError(res, 400, `Missing required fields: ${missing.join(', ')}.`);
 
     const session = await ExamSession.create({
