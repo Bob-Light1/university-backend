@@ -6,22 +6,24 @@
  *
  *  Routes (all prefixed /api/examination):
  *    GET    /sessions                     → listSessions
- *    POST   /sessions                     → createSession
+ *    POST   /sessions                     → createSession   (CAMPUS_MANAGER only)
  *    GET    /sessions/:id                 → getSession
- *    PATCH  /sessions/:id                 → updateSession  (DRAFT only)
- *    DELETE /sessions/:id                 → deleteSession  (DRAFT only)
- *    PATCH  /sessions/:id/submit          → submitSession
- *    PATCH  /sessions/:id/approve         → approveSession
- *    PATCH  /sessions/:id/publish         → publishSession
- *    PATCH  /sessions/:id/start           → startSession
- *    PATCH  /sessions/:id/complete        → completeSession
- *    PATCH  /sessions/:id/cancel          → cancelSession
- *    PATCH  /sessions/:id/postpone        → postponeSession
+ *    PATCH  /sessions/:id                 → updateSession   (CAMPUS_MANAGER only, DRAFT only)
+ *    DELETE /sessions/:id                 → deleteSession   (CAMPUS_MANAGER only, DRAFT only)
+ *    PATCH  /sessions/:id/submit          → submitSession   (CAMPUS_MANAGER only, DRAFT → SCHEDULED)
+ *    PATCH  /sessions/:id/start           → startSession    (CAMPUS_MANAGER only, SCHEDULED → ONGOING)
+ *    PATCH  /sessions/:id/complete        → completeSession (CAMPUS_MANAGER only, ONGOING → COMPLETED)
+ *    PATCH  /sessions/:id/cancel          → cancelSession   (CAMPUS_MANAGER only)
+ *    PATCH  /sessions/:id/postpone        → postponeSession (CAMPUS_MANAGER only, SCHEDULED → POSTPONED)
+ *    PATCH  /sessions/:id/reschedule      → rescheduleSession (CAMPUS_MANAGER only, POSTPONED → SCHEDULED)
  */
 
 const ExamSession    = require('../../models/exam-models/exam.session.model');
 const ExamEnrollment = require('../../models/exam-models/exam.enrollment.model');
 const QuestionBank   = require('../../models/exam-models/question-bank.model');
+const Subject        = require('../../models/subject.model');
+const Class          = require('../../models/class.model');
+const Teacher        = require('../../models/teacher-models/teacher.model');
 const {
   sendSuccess,
   sendError,
@@ -33,9 +35,22 @@ const { isValidObjectId, escapeRegex } = require('../../utils/validation-helpers
 const {
   getCampusFilter,
   resolveCampusId,
-  isManagerRole,
   parsePagination,
 } = require('./exam.helper');
+const {
+  injectExamIntoSchedule,
+  syncExamScheduleStatus,
+} = require('./exam.schedule.helper');
+
+// ─── Role guard ───────────────────────────────────────────────────────────────
+
+const requireCampusManager = (res, role) => {
+  if (role !== 'CAMPUS_MANAGER') {
+    sendError(res, 403, 'Only Campus Managers can perform this action.');
+    return false;
+  }
+  return true;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -48,19 +63,22 @@ const listSessions = async (req, res) => {
     const { classId, subject, examPeriod, status, academicYear, semester, search } = req.query;
 
     const match = { ...campusFilter, isDeleted: false };
-    if (classId)      match.classes     = classId;
-    if (subject)      match.subject     = subject;
-    if (examPeriod)   match.examPeriod  = examPeriod;
-    if (status)       match.status      = status;
+    if (classId)      match.classes      = classId;
+    if (subject)      match.subject      = subject;
+    if (examPeriod)   match.examPeriod   = examPeriod;
+    if (status) {
+      const statuses = status.split(',').map((s) => s.trim()).filter(Boolean);
+      match.status = statuses.length === 1 ? statuses[0] : { $in: statuses };
+    }
     if (academicYear) match.academicYear = academicYear;
-    if (semester)     match.semester    = semester;
-    if (search)       match.title       = { $regex: escapeRegex(search), $options: 'i' };
+    if (semester)     match.semester     = semester;
+    if (search)       match.title        = { $regex: escapeRegex(search), $options: 'i' };
 
     const [sessions, total] = await Promise.all([
       ExamSession.find(match)
         .select('-__v')
         .populate('subject',    'subject_name subject_code')
-        .populate('classes',    'name level')
+        .populate('classes',    'className level')
         .populate('teacher',    'firstName lastName')
         .sort({ startTime: 1 })
         .skip(skip)
@@ -80,9 +98,7 @@ const listSessions = async (req, res) => {
 
 const createSession = async (req, res) => {
   try {
-    if (!isManagerRole(req.user.role)) {
-      return sendError(res, 403, 'Only managers can create exam sessions.');
-    }
+    if (!requireCampusManager(res, req.user.role)) return;
 
     const campusId = resolveCampusId(req, req.body.schoolCampus);
     if (!campusId) return sendError(res, 400, 'schoolCampus is required.');
@@ -103,6 +119,35 @@ const createSession = async (req, res) => {
       .map(([k]) => k);
     if (missing.length) return sendError(res, 400, `Missing required fields: ${missing.join(', ')}.`);
 
+    // Val 1 — endTime must be after startTime
+    if (new Date(endTime) <= new Date(startTime)) {
+      return sendError(res, 400, 'endTime must be after startTime.');
+    }
+
+    // Val 2 — cross-campus validation for subject, classes, teacher
+    const [subjectDoc, ...classDocs] = await Promise.all([
+      Subject.findById(subject).select('schoolCampus').lean(),
+      ...classes.map((cId) => Class.findById(cId).select('schoolCampus').lean()),
+    ]);
+
+    if (!subjectDoc) return sendError(res, 400, 'Subject not found.');
+    if (subjectDoc.schoolCampus.toString() !== campusId.toString()) {
+      return sendError(res, 400, 'Subject does not belong to this campus.');
+    }
+
+    for (const cls of classDocs) {
+      if (!cls) return sendError(res, 400, 'One or more classes not found.');
+      if (cls.schoolCampus.toString() !== campusId.toString()) {
+        return sendError(res, 400, 'One or more classes do not belong to this campus.');
+      }
+    }
+
+    const teacherDoc = await Teacher.findById(teacher).select('schoolCampus').lean();
+    if (!teacherDoc) return sendError(res, 400, 'Teacher not found.');
+    if (teacherDoc.schoolCampus.toString() !== campusId.toString()) {
+      return sendError(res, 400, 'Teacher does not belong to this campus.');
+    }
+
     const session = await ExamSession.create({
       schoolCampus: campusId,
       title, subject, classes, teacher, invigilators,
@@ -116,8 +161,7 @@ const createSession = async (req, res) => {
       createdBy: req.user.id,
     });
 
-    // Increment usageCount on referenced questions
-    if (questions && questions.length) {
+    if (questions?.length) {
       const ids = questions.map((q) => q.questionId).filter(Boolean);
       await QuestionBank.updateMany(
         { _id: { $in: ids } },
@@ -144,7 +188,7 @@ const getSession = async (req, res) => {
 
     const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false })
       .populate('subject',      'subject_name subject_code')
-      .populate('classes',      'name level')
+      .populate('classes',      'className level')
       .populate('teacher',      'firstName lastName email')
       .populate('invigilators', 'firstName lastName email')
       .populate('gradingScale', 'name passMark')
@@ -152,10 +196,7 @@ const getSession = async (req, res) => {
 
     if (!session) return sendNotFound(res, 'Exam session');
 
-    const enrolledCount = await ExamEnrollment.countDocuments({
-      examSession: id,
-      isDeleted:   false,
-    });
+    const enrolledCount = await ExamEnrollment.countDocuments({ examSession: id, isDeleted: false });
 
     return sendSuccess(res, 200, 'Exam session retrieved.', { ...session.toObject(), enrolledCount });
   } catch (err) {
@@ -168,6 +209,8 @@ const getSession = async (req, res) => {
 
 const updateSession = async (req, res) => {
   try {
+    if (!requireCampusManager(res, req.user.role)) return;
+
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
@@ -180,15 +223,25 @@ const updateSession = async (req, res) => {
       return sendError(res, 400, 'Only DRAFT sessions can be updated.');
     }
 
+    // Val 1 — endTime must be after startTime (when both are present in body)
+    const newStart = req.body.startTime ?? session.startTime;
+    const newEnd   = req.body.endTime   ?? session.endTime;
+    if (new Date(newEnd) <= new Date(newStart)) {
+      return sendError(res, 400, 'endTime must be after startTime.');
+    }
+
     const IMMUTABLE = ['_id', 'schoolCampus', 'status', 'createdBy', 'createdAt', 'publishedAt', 'completedAt'];
     const updates   = { ...req.body, updatedBy: req.user.id };
     IMMUTABLE.forEach((f) => delete updates[f]);
 
-    const updated = await ExamSession.findByIdAndUpdate(
-      id,
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
+    await ExamSession.findByIdAndUpdate(id, { $set: updates }, { runValidators: true });
+
+    const updated = await ExamSession.findById(id)
+      .populate('subject',      'subject_name subject_code')
+      .populate('classes',      'className level')
+      .populate('teacher',      'firstName lastName email')
+      .populate('invigilators', 'firstName lastName email')
+      .lean();
 
     return sendSuccess(res, 200, 'Exam session updated.', updated);
   } catch (err) {
@@ -201,6 +254,8 @@ const updateSession = async (req, res) => {
 
 const deleteSession = async (req, res) => {
   try {
+    if (!requireCampusManager(res, req.user.role)) return;
+
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
@@ -221,7 +276,7 @@ const deleteSession = async (req, res) => {
   }
 };
 
-// ─── Status-machine helpers ───────────────────────────────────────────────────
+// ─── Status-machine helper ────────────────────────────────────────────────────
 
 const _transition = async (req, res, { fromStatuses, toStatus, extraUpdates = {}, requiredBody = [] }) => {
   const { id } = req.params;
@@ -235,8 +290,7 @@ const _transition = async (req, res, { fromStatuses, toStatus, extraUpdates = {}
 
   if (!fromStatuses.includes(session.status)) {
     return sendError(
-      res,
-      400,
+      res, 400,
       `Cannot transition from ${session.status} to ${toStatus}. Allowed from: ${fromStatuses.join(', ')}.`
     );
   }
@@ -258,51 +312,33 @@ const _transition = async (req, res, { fromStatuses, toStatus, extraUpdates = {}
 
 const submitSession = async (req, res) => {
   try {
-    const updated = await _transition(req, res, {
-      fromStatuses: ['DRAFT'],
-      toStatus:     'SCHEDULED',
-    });
-    if (!updated) return;
-    return sendSuccess(res, 200, 'Session submitted for review.', updated);
-  } catch (err) {
-    console.error('❌ submitSession:', err);
-    return sendError(res, 500, 'Failed to submit session.');
-  }
-};
+    if (!requireCampusManager(res, req.user.role)) return;
 
-const approveSession = async (req, res) => {
-  try {
-    if (!isManagerRole(req.user.role)) return sendError(res, 403, 'Managers only.');
-    const updated = await _transition(req, res, {
-      fromStatuses: ['DRAFT'],
-      toStatus:     'SCHEDULED',
-    });
-    if (!updated) return;
-    return sendSuccess(res, 200, 'Session approved.', updated);
-  } catch (err) {
-    console.error('❌ approveSession:', err);
-    return sendError(res, 500, 'Failed to approve session.');
-  }
-};
-
-const publishSession = async (req, res) => {
-  try {
-    if (!isManagerRole(req.user.role)) return sendError(res, 403, 'Managers only.');
     const updated = await _transition(req, res, {
       fromStatuses: ['DRAFT'],
       toStatus:     'SCHEDULED',
       extraUpdates: { publishedAt: new Date() },
     });
     if (!updated) return;
-    return sendSuccess(res, 200, 'Session published.', updated);
+
+    // Inject exam into StudentSchedule + TeacherSchedule (non-blocking)
+    injectExamIntoSchedule(updated._id).catch((err) =>
+      console.error('❌ injectExamIntoSchedule:', err)
+    );
+
+    return sendSuccess(res, 200, 'Session scheduled and published.', updated);
   } catch (err) {
-    console.error('❌ publishSession:', err);
-    return sendError(res, 500, 'Failed to publish session.');
+    console.error('❌ submitSession:', err);
+    return sendError(res, 500, 'Failed to schedule session.');
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 const startSession = async (req, res) => {
   try {
+    if (!requireCampusManager(res, req.user.role)) return;
+
     const updated = await _transition(req, res, {
       fromStatuses: ['SCHEDULED'],
       toStatus:     'ONGOING',
@@ -315,8 +351,12 @@ const startSession = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 const completeSession = async (req, res) => {
   try {
+    if (!requireCampusManager(res, req.user.role)) return;
+
     const updated = await _transition(req, res, {
       fromStatuses: ['ONGOING'],
       toStatus:     'COMPLETED',
@@ -324,7 +364,6 @@ const completeSession = async (req, res) => {
     });
     if (!updated) return;
 
-    // Dispatch async analytics computation
     const { examAnalyticsWorker } = require('../../services/exam-analytics.worker');
     examAnalyticsWorker.emit('examAnalytics:compute', updated._id.toString());
 
@@ -335,15 +374,24 @@ const completeSession = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 const cancelSession = async (req, res) => {
   try {
+    if (!requireCampusManager(res, req.user.role)) return;
+
     const updated = await _transition(req, res, {
-      fromStatuses:  ['DRAFT', 'SCHEDULED', 'ONGOING'],
-      toStatus:      'CANCELLED',
-      requiredBody:  ['reason'],
-      extraUpdates:  { cancellationReason: req.body.reason },
+      fromStatuses: ['SCHEDULED', 'ONGOING'],
+      toStatus:     'CANCELLED',
+      requiredBody: ['reason'],
+      extraUpdates: { cancellationReason: req.body.reason },
     });
     if (!updated) return;
+
+    syncExamScheduleStatus(updated._id, 'CANCELLED').catch((err) =>
+      console.error('❌ syncExamScheduleStatus cancel:', err)
+    );
+
     return sendSuccess(res, 200, 'Session cancelled.', updated);
   } catch (err) {
     console.error('❌ cancelSession:', err);
@@ -351,22 +399,68 @@ const cancelSession = async (req, res) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+
 const postponeSession = async (req, res) => {
   try {
+    if (!requireCampusManager(res, req.user.role)) return;
+
     const { startTime, endTime, reason } = req.body;
     if (!startTime || !endTime || !reason) {
       return sendError(res, 400, 'startTime, endTime and reason are required.');
     }
+    if (new Date(endTime) <= new Date(startTime)) {
+      return sendError(res, 400, 'endTime must be after startTime.');
+    }
+
     const updated = await _transition(req, res, {
       fromStatuses: ['SCHEDULED'],
       toStatus:     'POSTPONED',
       extraUpdates: { startTime, endTime, postponeReason: reason },
     });
     if (!updated) return;
+
+    syncExamScheduleStatus(updated._id, 'POSTPONED', { startTime, endTime }).catch((err) =>
+      console.error('❌ syncExamScheduleStatus postpone:', err)
+    );
+
     return sendSuccess(res, 200, 'Session postponed.', updated);
   } catch (err) {
     console.error('❌ postponeSession:', err);
     return sendError(res, 500, 'Failed to postpone session.');
+  }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+const rescheduleSession = async (req, res) => {
+  try {
+    if (!requireCampusManager(res, req.user.role)) return;
+
+    const { startTime, endTime, reason } = req.body;
+    if (!startTime || !endTime || !reason) {
+      return sendError(res, 400, 'startTime, endTime and reason are required.');
+    }
+    if (new Date(endTime) <= new Date(startTime)) {
+      return sendError(res, 400, 'endTime must be after startTime.');
+    }
+
+    const updated = await _transition(req, res, {
+      fromStatuses: ['POSTPONED'],
+      toStatus:     'SCHEDULED',
+      extraUpdates: { startTime, endTime, rescheduleReason: reason },
+    });
+    if (!updated) return;
+
+    // Re-inject with updated times (idempotent upsert)
+    injectExamIntoSchedule(updated._id).catch((err) =>
+      console.error('❌ injectExamIntoSchedule reschedule:', err)
+    );
+
+    return sendSuccess(res, 200, 'Session rescheduled.', updated);
+  } catch (err) {
+    console.error('❌ rescheduleSession:', err);
+    return sendError(res, 500, 'Failed to reschedule session.');
   }
 };
 
@@ -379,10 +473,9 @@ module.exports = {
   updateSession,
   deleteSession,
   submitSession,
-  approveSession,
-  publishSession,
   startSession,
   completeSession,
   cancelSession,
   postponeSession,
+  rescheduleSession,
 };

@@ -51,12 +51,11 @@ const {
   updateSession,
   deleteSession,
   submitSession,
-  approveSession,
-  publishSession,
   startSession,
   completeSession,
   cancelSession,
   postponeSession,
+  rescheduleSession,
 } = require('../controllers/exam-controllers/exam.session.controller');
 
 const {
@@ -202,13 +201,13 @@ router.get(
 
 router.patch(
   '/sessions/:id',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   updateSession
 );
 
 router.delete(
   '/sessions/:id',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   deleteSession
 );
 
@@ -216,32 +215,12 @@ router.delete(
 
 /**
  * PATCH /api/examination/sessions/:id/submit
- * DRAFT → SCHEDULED (teacher/manager submits for scheduling).
+ * DRAFT → SCHEDULED. Publishes the session and injects it into all schedule views.
  */
 router.patch(
   '/sessions/:id/submit',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   submitSession
-);
-
-/**
- * PATCH /api/examination/sessions/:id/approve
- * DRAFT → SCHEDULED (manager formal approval step).
- */
-router.patch(
-  '/sessions/:id/approve',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  approveSession
-);
-
-/**
- * PATCH /api/examination/sessions/:id/publish
- * DRAFT → SCHEDULED with publishedAt timestamp (makes session visible to students).
- */
-router.patch(
-  '/sessions/:id/publish',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
-  publishSession
 );
 
 /**
@@ -250,7 +229,7 @@ router.patch(
  */
 router.patch(
   '/sessions/:id/start',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   startSession
 );
 
@@ -260,28 +239,38 @@ router.patch(
  */
 router.patch(
   '/sessions/:id/complete',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   completeSession
 );
 
 /**
  * PATCH /api/examination/sessions/:id/cancel
- * Body: { reason }
+ * SCHEDULED|ONGOING → CANCELLED. Body: { reason }
  */
 router.patch(
   '/sessions/:id/cancel',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   cancelSession
 );
 
 /**
  * PATCH /api/examination/sessions/:id/postpone
- * Body: { startTime, endTime, reason }
+ * SCHEDULED → POSTPONED. Body: { startTime, endTime, reason }
  */
 router.patch(
   '/sessions/:id/postpone',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   postponeSession
+);
+
+/**
+ * PATCH /api/examination/sessions/:id/reschedule
+ * POSTPONED → SCHEDULED. Body: { startTime, endTime, reason }
+ */
+router.patch(
+  '/sessions/:id/reschedule',
+  authorize(['CAMPUS_MANAGER']),
+  rescheduleSession
 );
 
 /**
