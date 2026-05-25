@@ -678,7 +678,11 @@ class CampusController extends GenericEntityController {
       }
 
       const filter = { schoolCampus: campusId };
-      if (status) filter.status = status;
+      if (status) {
+        filter.status = status;
+      } else {
+        filter.status = { $ne: 'archived' };
+      }
 
       if (search) {
         filter.$or = [

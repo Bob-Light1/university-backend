@@ -95,7 +95,7 @@ const resolveSubject = async (subjectId, campusId) => {
   const doc = await Subject.findOne({
     _id:          subjectId,
     schoolCampus: campusId,   // campus-isolation guard
-    isActive:     true,
+    status:       { $ne: 'archived' },
   })
     .select('_id subject_name subject_code coefficient department')
     .lean();
