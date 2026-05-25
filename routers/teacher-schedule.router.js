@@ -8,13 +8,14 @@
  *  Base path (registered in server.js):
  *    /api/schedules/teacher
  *
- *  Alignements avec le backend foruni :
+ *  Access policy:
  *  ──────────────────────────────────────
- *  • Middleware : authenticate + authorize() depuis '../middleware/auth/auth'
- *  • Rôles : 'ADMIN' | 'DIRECTOR' | 'CAMPUS_MANAGER' | 'TEACHER'
- *  • DIRECTOR = même droits qu'ADMIN
- *  • Campus isolation gérée dans les controllers via req.user.campusId
- *  • apiLimiter depuis '../middleware/rate-limiter/rate-limiter'
+ *  • OPERATIONAL actions (roll-call open/submit, postponement review):
+ *      CAMPUS_MANAGER + TEACHER only.
+ *      ADMIN / DIRECTOR must not perform campus-level operational tasks.
+ *
+ *  • READ / REPORTING (workload, postponement list, session detail):
+ *      ADMIN / DIRECTOR / CAMPUS_MANAGER — cross-campus visibility for oversight.
  */
 
 const express = require('express');
@@ -91,7 +92,7 @@ router.get(
  */
 router.patch(
   '/admin/postpone/:requestId/review',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   reviewPostponement
 );
 
@@ -157,7 +158,7 @@ router.put(
  */
 router.patch(
   '/:id/rollcall/open',
-  authorize(['TEACHER', 'CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['TEACHER', 'CAMPUS_MANAGER']),
   openRollCall
 );
 
@@ -168,7 +169,7 @@ router.patch(
  */
 router.patch(
   '/:id/rollcall/submit',
-  authorize(['TEACHER', 'CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['TEACHER', 'CAMPUS_MANAGER']),
   submitRollCall
 );
 
@@ -178,7 +179,7 @@ router.patch(
  */
 router.get(
   '/:id/students',
-  authorize(['TEACHER', 'CAMPUS_MANAGER', 'ADMIN', 'DIRECTOR']),
+  authorize(['TEACHER', 'CAMPUS_MANAGER']),
   getStudentRoster
 );
 

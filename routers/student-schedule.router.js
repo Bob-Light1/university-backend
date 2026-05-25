@@ -7,14 +7,19 @@
  *  Base path (registered in server.js):
  *    /api/schedules/student
  *
- *  Alignements avec le backend foruni :
+ *  Access policy:
  *  ──────────────────────────────────────
- *  • Middleware : authenticate + authorize() depuis '../middleware/auth/auth'
- *    (PAS protect() ni campusIsolation — ces abstractions n'existent pas dans foruni)
- *  • Rôles disponibles : 'ADMIN' | 'DIRECTOR' | 'CAMPUS_MANAGER' | 'TEACHER' | 'STUDENT'
- *  • DIRECTOR a les mêmes droits qu'ADMIN dans foruni
- *  • Campus isolation : gérée dans chaque controller via req.user.campusId
- *  • apiLimiter importé depuis '../middleware/rate-limiter/rate-limiter'
+ *  • WRITE operations (create, update, publish, cancel, delete):
+ *      CAMPUS_MANAGER only — schedule creation is an operational campus task.
+ *      ADMIN / DIRECTOR have strategic oversight; they must not bypass the
+ *      campus manager by writing sessions directly into a campus.
+ *
+ *  • READ operations (overview, reports, session detail):
+ *      ADMIN / DIRECTOR / CAMPUS_MANAGER — cross-campus visibility for reporting.
+ *
+ *  • Campus isolation on reads: enforced in the controller via buildCampusFilter().
+ *    ADMIN/DIRECTOR receive an unrestricted filter; CAMPUS_MANAGER is locked to
+ *    their own campusId.
  */
 
 const express = require('express');
@@ -111,7 +116,7 @@ router.get(
  */
 router.post(
   '/admin/sessions',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   createSession
 );
 
@@ -122,7 +127,7 @@ router.post(
  */
 router.put(
   '/admin/sessions/:id',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   updateSession
 );
 
@@ -132,7 +137,7 @@ router.put(
  */
 router.patch(
   '/admin/sessions/:id/publish',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   publishSession
 );
 
@@ -143,7 +148,7 @@ router.patch(
  */
 router.patch(
   '/admin/sessions/:id/cancel',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   cancelSession
 );
 
@@ -153,7 +158,7 @@ router.patch(
  */
 router.delete(
   '/admin/sessions/:id',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  authorize(['CAMPUS_MANAGER']),
   softDeleteSession
 );
 

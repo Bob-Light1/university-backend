@@ -4,9 +4,12 @@
  * @file student.schedule.controller.js
  * @description Express controller for student-facing schedule operations.
  *
- * Campus isolation contract (enforced in every write operation):
- *   • CAMPUS_MANAGER / TEACHER / STUDENT → locked to req.user.campusId
- *   • ADMIN / DIRECTOR                   → cross-campus, campusId from body/query
+ * Campus isolation contract:
+ *   • Write operations (create/update/publish/cancel/delete):
+ *       CAMPUS_MANAGER only — locked to req.user.campusId.
+ *   • Read operations (overview, reports):
+ *       ADMIN / DIRECTOR receive an unrestricted filter (all campuses).
+ *       CAMPUS_MANAGER is locked to their own campusId via buildCampusFilter().
  *
  * Key change vs original:
  *   createSession and updateSession now call resolveSessionParticipants()
@@ -70,16 +73,12 @@ const buildCampusFilter = (req) => {
 };
 
 /**
- * Resolves the effective campusId for write operations:
- *   ADMIN/DIRECTOR may pass campusId in the request body.
- *   All other roles are locked to their JWT campusId.
+ * Resolves the effective campusId for write operations.
+ * Only CAMPUS_MANAGER reaches write endpoints — always locked to their JWT campusId.
+ * The campusFromBody param is ignored: accepting a caller-supplied campus on writes
+ * would allow cross-campus injection if the route guard ever changes.
  */
-const resolveWriteCampus = (req, campusFromBody) => {
-  const { role, campusId: userCampusId } = req.user;
-  return ['ADMIN', 'DIRECTOR'].includes(role)
-    ? (campusFromBody || userCampusId)
-    : userCampusId;
-};
+const resolveWriteCampus = (req) => req.user.campusId;
 
 /**
  * Stub notification dispatcher (wire to Bull / RabbitMQ / SNS in production).
@@ -370,7 +369,6 @@ const createSession = asyncHandler(async (req, res) => {
     subjectId,
     teacherId,
     classIds = [],
-    schoolCampus: campusFromBody,
     sessionType,
     startTime: startRaw,
     endTime:   endRaw,
@@ -386,7 +384,7 @@ const createSession = asyncHandler(async (req, res) => {
   } = req.body;
 
   // ── Campus resolution ───────────────────────────────────────────────────────
-  const resolvedCampus = resolveWriteCampus(req, campusFromBody);
+  const resolvedCampus = resolveWriteCampus(req);
   if (!resolvedCampus) return sendError(res, 400, 'Campus is required.');
 
   // ── Basic field validation ──────────────────────────────────────────────────
