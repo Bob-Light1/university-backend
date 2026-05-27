@@ -9,6 +9,9 @@
  *  - email is normalised to lowercase at the model level.
  *  - role is constrained to ADMIN | DIRECTOR — no other value can be stored.
  *  - status allows soft-disabling an account without deletion.
+ *  - isBootstrap marks the very first account created (cannot be suspended).
+ *  - createdBy records which admin created this account (null = bootstrap).
+ *  - statusHistory provides a full audit trail of every status change.
  *  - timestamps (createdAt / updatedAt) are enabled for audit trails.
  */
 
@@ -19,15 +22,27 @@ const mongoose = require('mongoose');
 const ADMIN_ROLES    = Object.freeze(['ADMIN', 'DIRECTOR']);
 const ADMIN_STATUSES = Object.freeze(['active', 'inactive', 'suspended']);
 
+// ─── SUB-SCHEMA: STATUS HISTORY ───────────────────────────────────────────────
+
+const statusHistorySchema = new mongoose.Schema(
+  {
+    status:    { type: String, enum: ADMIN_STATUSES, required: true },
+    changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin', default: null },
+    changedAt: { type: Date, default: () => new Date() },
+    note:      { type: String, trim: true, maxlength: 300, default: null },
+  },
+  { _id: false },
+);
+
 // ─── SCHEMA ───────────────────────────────────────────────────────────────────
 
 const adminSchema = new mongoose.Schema(
   {
     admin_name: {
-      type:     String,
-      required: [true, 'Admin name is required'],
-      trim:     true,
-      minlength: [2, 'Name must be at least 2 characters'],
+      type:      String,
+      required:  [true, 'Admin name is required'],
+      trim:      true,
+      minlength: [2,   'Name must be at least 2 characters'],
       maxlength: [100, 'Name must not exceed 100 characters'],
     },
 
@@ -37,20 +52,19 @@ const adminSchema = new mongoose.Schema(
       unique:    true,
       lowercase: true,
       trim:      true,
-      match:     [/^\S+@\S+\.\S+$/, 'Invalid email format'],
+      match:     [/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/, 'Invalid email format'],
       index:     true,
     },
 
     password: {
       type:     String,
       required: [true, 'Password is required'],
-      select:   false, // Never returned in queries unless explicitly requested
+      select:   false,
     },
 
     /**
-     * Role determines the permission level in the application.
-     * ADMIN    — full platform access.
-     * DIRECTOR — broad access, typically restricted from destructive operations.
+     * ADMIN    — full platform access (can create accounts, change statuses).
+     * DIRECTOR — oversight and reporting only.
      */
     role: {
       type:    String,
@@ -66,6 +80,35 @@ const adminSchema = new mongoose.Schema(
       index:   true,
     },
 
+    /**
+     * True only for the very first account created (bootstrap).
+     * This account cannot be suspended or deactivated via the API.
+     */
+    isBootstrap: {
+      type:    Boolean,
+      default: false,
+      index:   true,
+    },
+
+    /**
+     * The Admin who created this account.
+     * Null means the account was self-created during bootstrap.
+     */
+    createdBy: {
+      type:    mongoose.Schema.Types.ObjectId,
+      ref:     'Admin',
+      default: null,
+    },
+
+    /**
+     * Full audit trail of every status change.
+     * The initial 'active' entry is written at creation time.
+     */
+    statusHistory: {
+      type:    [statusHistorySchema],
+      default: [],
+    },
+
     lastLogin: {
       type: Date,
     },
@@ -76,7 +119,7 @@ const adminSchema = new mongoose.Schema(
     },
   },
   {
-    timestamps: true, // Adds createdAt and updatedAt automatically
+    timestamps: true,
     toJSON:     { virtuals: true },
     toObject:   { virtuals: true },
   },
@@ -85,6 +128,7 @@ const adminSchema = new mongoose.Schema(
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
 
 adminSchema.index({ role: 1, status: 1 });
+adminSchema.index({ isBootstrap: 1 });
 
 // ─── MODEL ────────────────────────────────────────────────────────────────────
 

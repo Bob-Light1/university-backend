@@ -38,11 +38,12 @@ const {
   sendError,
   sendNotFound,
   sendConflict,
+  sendPaginated,
   asyncHandler,
   handleDuplicateKeyError,
 } = require('../utils/response-helpers');
 
-const { isValidEmail } = require('../utils/validation-helpers');
+const { isValidEmail, validatePasswordStrength } = require('../utils/validation-helpers');
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -172,7 +173,10 @@ const createAdmin = asyncHandler(async (req, res) => {
   // ── Bootstrap / auth guard ──────────────────────────────────────────────────
   // If at least one admin already exists, the caller must be an authenticated ADMIN.
   const adminCount = await Admin.countDocuments();
-  if (adminCount > 0) {
+  const isBootstrap = adminCount === 0;
+  let callerId = null;
+
+  if (!isBootstrap) {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith('Bearer ')) {
       return sendError(res, 401, 'Authentication required to create an admin account.');
@@ -186,6 +190,7 @@ const createAdmin = asyncHandler(async (req, res) => {
     if (payload.role !== 'ADMIN') {
       return sendError(res, 403, 'Only an ADMIN can create new accounts.');
     }
+    callerId = payload.id;
   }
 
   // ── Input validation ────────────────────────────────────────────────────────
@@ -206,14 +211,9 @@ const createAdmin = asyncHandler(async (req, res) => {
   }
 
   // ── Password strength ───────────────────────────────────────────────────────
-  if (password.length < 8) {
-    return sendError(res, 400, 'Password must be at least 8 characters long.');
-  }
-  if (!/[A-Z]/.test(password)) {
-    return sendError(res, 400, 'Password must contain at least one uppercase letter.');
-  }
-  if (!/[0-9]/.test(password)) {
-    return sendError(res, 400, 'Password must contain at least one number.');
+  const pwCheck = validatePasswordStrength(password);
+  if (!pwCheck.valid) {
+    return sendError(res, 400, pwCheck.errors[0]);
   }
 
   // ── Uniqueness check ────────────────────────────────────────────────────────
@@ -227,13 +227,19 @@ const createAdmin = asyncHandler(async (req, res) => {
 
   try {
     const newAdmin = await Admin.create({
-      admin_name: admin_name.trim(),
-      email:      email.toLowerCase().trim(),
-      password:   hashedPassword,
+      admin_name:    admin_name.trim(),
+      email:         email.toLowerCase().trim(),
+      password:      hashedPassword,
       role,
+      isBootstrap,
+      createdBy:     callerId,
+      statusHistory: [{
+        status:    'active',
+        changedBy: callerId,
+        note:      isBootstrap ? 'Bootstrap account created.' : 'Account created by admin.',
+      }],
     });
 
-    // Never return the password hash
     const response = newAdmin.toObject();
     delete response.password;
 
@@ -273,16 +279,9 @@ const updatePassword = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'currentPassword and newPassword are required.');
   }
 
-  if (newPassword.length < 8) {
-    return sendError(res, 400, 'New password must be at least 8 characters long.');
-  }
-
-  if (!/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
-    return sendError(
-      res,
-      400,
-      'New password must contain at least one uppercase letter and one number.',
-    );
+  const pwCheck = validatePasswordStrength(newPassword);
+  if (!pwCheck.valid) {
+    return sendError(res, 400, pwCheck.errors[0]);
   }
 
   // Load with password for comparison
@@ -304,6 +303,83 @@ const updatePassword = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Password updated successfully.');
 });
 
+// ─── LIST ALL ADMINS ──────────────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/all
+ * Return a paginated list of Admin and Director accounts.
+ * Only accessible by ADMIN.
+ * Query: { role?, status?, search?, page?, limit? }
+ */
+const listAdmins = asyncHandler(async (req, res) => {
+  const { role, status, search, page = 1, limit = 20 } = req.query;
+
+  const filter = {};
+  if (role   && ['ADMIN', 'DIRECTOR'].includes(role))             filter.role   = role;
+  if (status && ['active', 'inactive', 'suspended'].includes(status)) filter.status = status;
+  if (search) {
+    const re = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
+    filter.$or = [{ admin_name: re }, { email: re }];
+  }
+
+  const pageNum  = Math.max(1, parseInt(page,  10) || 1);
+  const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
+
+  const [admins, total] = await Promise.all([
+    Admin.find(filter)
+      .select('-password')
+      .populate('createdBy', 'admin_name email')
+      .sort({ createdAt: -1 })
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
+      .lean(),
+    Admin.countDocuments(filter),
+  ]);
+
+  return sendPaginated(res, 200, 'Admins retrieved.', admins, { total, page: pageNum, limit: limitNum });
+});
+
+// ─── UPDATE ADMIN STATUS ──────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/admin/:id/status
+ * Activate, deactivate or suspend an admin account.
+ * Only ADMIN can perform this. Cannot target own account.
+ * Body: { status: 'active' | 'inactive' | 'suspended' }
+ */
+const updateAdminStatus = asyncHandler(async (req, res) => {
+  const { id }        = req.params;
+  const { status, note } = req.body;
+
+  const VALID_STATUSES = ['active', 'inactive', 'suspended'];
+  if (!status || !VALID_STATUSES.includes(status)) {
+    return sendError(res, 400, `status must be one of: ${VALID_STATUSES.join(', ')}.`);
+  }
+
+  if (req.user.id.toString() === id.toString()) {
+    return sendError(res, 403, 'You cannot change your own account status.');
+  }
+
+  const admin = await Admin.findById(id).select('-password');
+  if (!admin) return sendNotFound(res, 'Admin account');
+
+  // Bootstrap account is permanently protected
+  if (admin.isBootstrap) {
+    return sendError(res, 403, 'The bootstrap account status cannot be changed.');
+  }
+
+  admin.status = status;
+  admin.statusHistory.push({
+    status,
+    changedBy: req.user.id,
+    changedAt: new Date(),
+    note:      note?.trim() || null,
+  });
+  await admin.save();
+
+  return sendSuccess(res, 200, `Account status updated to '${status}'.`, buildUserResponse(admin.toObject()));
+});
+
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -311,4 +387,6 @@ module.exports = {
   createAdmin,
   getMe,
   updatePassword,
+  listAdmins,
+  updateAdminStatus,
 };

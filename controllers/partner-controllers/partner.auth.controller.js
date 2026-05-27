@@ -35,7 +35,7 @@ const {
   sendCreated,
   sendNotFound,
 } = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+const { isValidObjectId, validatePasswordStrength } = require('../../utils/validation-helpers');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;
@@ -116,6 +116,8 @@ const register = async (req, res) => {
     if (!lastName?.trim())  return sendError(res, 400, 'lastName is required.');
     if (!email?.trim())     return sendError(res, 400, 'email is required.');
     if (!password)          return sendError(res, 400, 'password is required.');
+    const pwCheck = validatePasswordStrength(password);
+    if (!pwCheck.valid)     return sendError(res, 400, pwCheck.errors[0]);
     if (!partnerType)       return sendError(res, 400, 'partnerType is required.');
 
     // Résolution du campus
@@ -415,8 +417,9 @@ const changeMyPassword = async (req, res) => {
     if (!currentPassword || !newPassword) {
       return sendError(res, 400, 'currentPassword and newPassword are required.');
     }
-    if (newPassword.length < 8) {
-      return sendError(res, 400, 'New password must be at least 8 characters.');
+    const pwCheck = validatePasswordStrength(newPassword);
+    if (!pwCheck.valid) {
+      return sendError(res, 400, pwCheck.errors[0]);
     }
     if (currentPassword === newPassword) {
       return sendError(res, 400, 'New password must differ from the current password.');

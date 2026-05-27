@@ -215,15 +215,20 @@ const isValidPhone = (phone) => {
 };
 
 /**
- * Validate password strength
- * @param {String} password - Password to validate
- * @returns {Object} { valid: Boolean, errors: Array }
+ * Validate password strength.
+ * Policy (all user types): ≥8 chars · lowercase · uppercase · digit · symbol · no spaces.
+ * @param {String} password
+ * @returns {{ valid: Boolean, errors: String[] }}
  */
 const validatePasswordStrength = (password) => {
   const errors = [];
 
   if (!password || password.length < 8) {
     errors.push('Password must be at least 8 characters long');
+  }
+
+  if (password && password.length > 128) {
+    errors.push('Password must not exceed 128 characters');
   }
 
   if (!/[a-z]/.test(password)) {
@@ -238,9 +243,18 @@ const validatePasswordStrength = (password) => {
     errors.push('Password must contain at least one number');
   }
 
+  // eslint-disable-next-line no-useless-escape
+  if (!/[!@#$%^&*()_\-+=\[\]{};:'",.<>?\/\\|~]/.test(password)) {
+    errors.push('Password must contain at least one special character (e.g. !@#$%)');
+  }
+
+  if (/\s/.test(password)) {
+    errors.push('Password must not contain spaces');
+  }
+
   return {
     valid: errors.length === 0,
-    errors
+    errors,
   };
 };
 
