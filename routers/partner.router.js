@@ -131,63 +131,8 @@ router.get(
   crudCtrl.listPartners
 );
 
-router.get(
-  '/:id',
-  authenticate,
-  authorize(MGR_ROLES),
-  crudCtrl.getPartner
-);
-
-router.put(
-  '/:id',
-  authenticate,
-  authorize(MGR_ROLES),
-  crudCtrl.updatePartner
-);
-
-router.patch(
-  '/:id/status',
-  authenticate,
-  authorize(MGR_ROLES),
-  crudCtrl.toggleStatus
-);
-
-router.delete(
-  '/:id',
-  authenticate,
-  authorize(['ADMIN', 'CAMPUS_MANAGER']),
-  crudCtrl.archivePartner
-);
-
-router.patch(
-  '/:id/restore',
-  authenticate,
-  authorize(['ADMIN', 'CAMPUS_MANAGER']),
-  crudCtrl.restorePartner
-);
-
-router.post(
-  '/:id/qr-code',
-  authenticate,
-  authorize(MGR_ROLES),
-  crudCtrl.regenerateQR
-);
-
-router.get(
-  '/:id/kit',
-  authenticate,
-  authorize(MGR_ROLES),
-  crudCtrl.downloadKit
-);
-
-router.get(
-  '/:id/commission-summary',
-  authenticate,
-  authorize(MGR_ROLES),
-  crudCtrl.getCommissionSummary
-);
-
 // ── CAMPUS MANAGER — LEADS ────────────────────────────────────────────────────
+// Déclarées AVANT /:id pour éviter que Express ne matche /leads contre /:id.
 
 router.get(
   '/leads/export',
@@ -225,6 +170,7 @@ router.delete(
 );
 
 // ── CAMPUS MANAGER — COMMISSIONS ──────────────────────────────────────────────
+// Déclarées AVANT /:id pour la même raison.
 
 router.get(
   '/commissions/export',
@@ -280,6 +226,64 @@ router.put(
   authenticate,
   authorize(['ADMIN', 'CAMPUS_MANAGER']),
   commissionCtrl.updateCommissionConfig
+);
+
+// ── ROUTES PAR :id — à déclarer EN DERNIER pour ne pas masquer les routes nommées ──
+
+router.get(
+  '/:id',
+  authenticate,
+  authorize(MGR_ROLES),
+  crudCtrl.getPartner
+);
+
+router.put(
+  '/:id',
+  authenticate,
+  authorize(MGR_ROLES),
+  crudCtrl.updatePartner
+);
+
+router.patch(
+  '/:id/status',
+  authenticate,
+  authorize(MGR_ROLES),
+  crudCtrl.toggleStatus
+);
+
+router.delete(
+  '/:id',
+  authenticate,
+  authorize(['ADMIN', 'CAMPUS_MANAGER']),
+  crudCtrl.archivePartner
+);
+
+router.patch(
+  '/:id/restore',
+  authenticate,
+  authorize(['ADMIN', 'CAMPUS_MANAGER']),
+  crudCtrl.restorePartner
+);
+
+router.post(
+  '/:id/qr-code',
+  authenticate,
+  authorize(MGR_ROLES),
+  crudCtrl.regenerateQR
+);
+
+router.get(
+  '/:id/kit',
+  authenticate,
+  authorize(MGR_ROLES),
+  crudCtrl.downloadKit
+);
+
+router.get(
+  '/:id/commission-summary',
+  authenticate,
+  authorize(MGR_ROLES),
+  crudCtrl.getCommissionSummary
 );
 
 module.exports = router;
