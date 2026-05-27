@@ -214,7 +214,7 @@ const partnerSchema = new mongoose.Schema(
       uppercase: true,
       maxlength: [16, 'Partner code must not exceed 16 characters'],
       default:   null,
-      sparse:    true,
+      // index declared below via partnerSchema.index({ partnerCode: 1 }, { unique: true, sparse: true })
     },
 
     referralLink: {

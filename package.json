@@ -31,6 +31,7 @@
     "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
     "nanoid": "^5.1.6",
+    "node-cron": "^4.2.1",
     "pdf-lib": "^1.17.1",
     "puppeteer-core": "^24.42.0",
     "qrcode": "^1.5.4",

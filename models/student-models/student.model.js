@@ -195,10 +195,9 @@ studentSchema.index({ firstName: 1, lastName: 1 });        // Name search / sort
 studentSchema.index({ createdAt: -1 });                    // Default sort
 
 // **SEARCH INDEXES** — one per searchField to support regex $or queries.
-// Without these, search on email/matricule/phone performs a collection scan.
-studentSchema.index({ email:     1 });
-studentSchema.index({ matricule: 1 });
-studentSchema.index({ phone:     1 });
+// email and matricule already have indexes via `unique: true` on the field definition.
+// Without this, search on phone performs a collection scan.
+studentSchema.index({ phone: 1 });
 
 // **VIRTUAL FIELDS**
 // Virtual for full name

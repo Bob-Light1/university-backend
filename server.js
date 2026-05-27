@@ -124,8 +124,14 @@ mongoose
     maxPoolSize: 5,                  // Cap connections (sufficient for Render free tier)
   })
   .then(() => {
+    const dbName = mongoose.connection.name;
     console.log('✅ MongoDB connected successfully');
-    console.log(`📦 Database: ${mongoose.connection.name}`);
+    console.log(`📦 Database: ${dbName}`);
+    if (dbName === 'test' && process.env.NODE_ENV === 'production') {
+      console.error('❌ FATAL: Connected to the "test" database in production.');
+      console.error('   Set a database name in MONGODB_URI: mongodb+srv://...cluster.net/<dbName>');
+      process.exit(1);
+    }
   })
   .catch((error) => {
     console.error('❌ MongoDB connection error:', error.message);

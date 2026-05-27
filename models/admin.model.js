@@ -128,7 +128,7 @@ const adminSchema = new mongoose.Schema(
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
 
 adminSchema.index({ role: 1, status: 1 });
-adminSchema.index({ isBootstrap: 1 });
+// isBootstrap: single-field index already declared via `index: true` on the field.
 
 // ─── MODEL ────────────────────────────────────────────────────────────────────
 
