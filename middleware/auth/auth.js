@@ -182,7 +182,7 @@ const authMiddleware = (roles = []) => {
  * Attaches user info if token is valid, but doesn't require it
  * Useful for endpoints that work differently for authenticated users
  */
-const optionalAuth = (req, res, next) => {
+const optionalAuth = (req, _res, next) => {
   try {
     const authHeader = req.header("Authorization");
     
@@ -343,10 +343,34 @@ const requireCampusAccess = () => {
  * Can be used with rate limiters to exempt admin users
  * @returns {Function} Express middleware
  */
-const skipRateLimitForAdmin = (req, res, next) => {
+const skipRateLimitForAdmin = (req, _res, next) => {
   if (req.user && (req.user.role === 'ADMIN' || req.user.role === 'DIRECTOR')) {
     req.rateLimit = { skip: true };
   }
+  next();
+};
+
+/**
+ * Permission-based authorization for Staff members.
+ * Must be used AFTER authenticate middleware.
+ * Checks that req.user.permissions includes the given key.
+ *
+ * @param {string} key - A permission key from staff-permissions.js
+ * @returns {Function} Express middleware
+ */
+const requirePermission = (key) => (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required.' });
+  }
+
+  const perms = req.user.permissions;
+  if (!Array.isArray(perms) || !perms.includes(key)) {
+    return res.status(403).json({
+      success: false,
+      message: `Access denied. Missing permission: ${key}`,
+    });
+  }
+
   next();
 };
 
@@ -356,17 +380,20 @@ module.exports = {
   authenticate,
   authorize,
   authMiddleware,
-  
+
   // Optional/conditional auth
   optionalAuth,
-  
+
   // Ownership checks
   isOwner,
   isOwnerOrRole,
-  
+
   // Campus-specific
   requireCampusAccess,
-  
+
+  // Staff permission check
+  requirePermission,
+
   // Utilities
-  skipRateLimitForAdmin
+  skipRateLimitForAdmin,
 };

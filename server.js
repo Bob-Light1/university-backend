@@ -224,6 +224,9 @@ const parentRouter      = require('./routers/parent.router');
 const examinationRouter = require('./routers/examination.router');
 const academicPrintRouter = require('./routers/academic-print.router');
 const partnerRouter       = require('./routers/partner.router');
+const mentorRouter        = require('./routers/mentor.router');
+const staffRouter         = require('./routers/staff.router');
+const staffRoleRouter     = require('./routers/staffRole.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -243,7 +246,10 @@ app.use('/api/documents',   documentRouter);
 app.use('/api/parents',     parentRouter);
 app.use('/api/examination', examinationRouter);
 app.use('/api/print',      academicPrintRouter);
-app.use('/api/partners',   partnerRouter);
+app.use('/api/partners',    partnerRouter);
+app.use('/api/mentors',    mentorRouter);
+app.use('/api/staff',      staffRouter);
+app.use('/api/staff-roles', staffRoleRouter);
 
 // ========================================
 // 404 HANDLER
