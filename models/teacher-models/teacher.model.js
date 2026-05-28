@@ -1,11 +1,15 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
-/**
- * Teacher Model
- * Represents a teacher assigned to a campus
- * Campus isolation enforced through middleware and controllers
- */
+const NotificationPrefsSchema = new mongoose.Schema(
+  {
+    email: { type: Boolean, default: true  },
+    sms:   { type: Boolean, default: false },
+    push:  { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 const teacherSchema = new mongoose.Schema(
   {
     // **ACADEMIC ASSIGNMENT**
@@ -208,6 +212,11 @@ const teacherSchema = new mongoose.Schema(
     lastLogin: {
       type: Date,
       default: null
+    },
+
+    notificationPrefs: {
+      type:    NotificationPrefsSchema,
+      default: () => ({ email: true, sms: false, push: false }),
     },
 
 

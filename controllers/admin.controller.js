@@ -8,7 +8,7 @@
  *  POST /api/admin/login           → loginAdmin
  *  POST /api/admin/create          → createAdmin
  *  GET  /api/admin/me              → getMe
- *  PUT  /api/admin/me/password     → updatePassword
+ *  PATCH /api/admin/me/password    → updatePassword
  *
  * Response shape (all endpoints):
  *  All responses use the centralised sendSuccess / sendError helpers so that
@@ -30,7 +30,8 @@ require('dotenv').config();
 const bcrypt  = require('bcrypt');
 const jwt     = require('jsonwebtoken');
 
-const Admin = require('../models/admin.model');
+const Admin      = require('../models/admin.model');
+const profileSvc = require('../services/profile.service');
 
 const {
   sendSuccess,
@@ -73,13 +74,14 @@ const buildTokenPayload = (admin) => ({
  * @returns {Object}
  */
 const buildUserResponse = (admin) => ({
-  id:           admin._id,
-  admin_name:   admin.admin_name,
-  email:        admin.email,
-  role:         admin.role,
-  status:       admin.status,
-  profileImage: admin.profileImage ?? null,
-  lastLogin:    admin.lastLogin ?? null,
+  id:                admin._id,
+  admin_name:        admin.admin_name,
+  email:             admin.email,
+  role:              admin.role,
+  status:            admin.status,
+  profileImage:      admin.profileImage      ?? null,
+  notificationPrefs: admin.notificationPrefs ?? { email: true, sms: false, push: false },
+  lastLogin:         admin.lastLogin         ?? null,
 });
 
 // ─── LOGIN ────────────────────────────────────────────────────────────────────
@@ -268,7 +270,7 @@ const getMe = asyncHandler(async (req, res) => {
 // ─── UPDATE PASSWORD ──────────────────────────────────────────────────────────
 
 /**
- * PUT /api/admin/me/password
+ * PATCH /api/admin/me/password
  * Change own password.
  * Body: { currentPassword: string, newPassword: string }
  */
@@ -297,11 +299,42 @@ const updatePassword = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'New password must differ from the current password.');
   }
 
-  admin.password = await bcrypt.hash(newPassword, SALT_ROUNDS);
-  await admin.save();
+  const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await Admin.findByIdAndUpdate(admin._id, { password: hashed });
 
   return sendSuccess(res, 200, 'Password updated successfully.');
 });
+
+// ─── UPDATE OWN PROFILE ───────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/admin/me/profile
+ * Allowed self-editable field: admin_name.
+ * Email and role cannot be changed by the admin themselves.
+ */
+const updateMyProfile = (req, res) =>
+  profileSvc.updateProfile(res, Admin, { _id: req.user.id }, ['admin_name'], req.body);
+
+// ─── UPLOAD PROFILE IMAGE ─────────────────────────────────────────────────────
+
+/**
+ * PATCH /api/admin/me/profile-image
+ * Body: { profileImageUrl: string } (Cloudinary URL after client-side upload)
+ */
+const uploadProfileImage = (req, res) =>
+  profileSvc.uploadProfileImage(res, Admin, { _id: req.user.id }, req.body);
+
+// ─── UPDATE NOTIFICATION PREFERENCES ─────────────────────────────────────────
+
+/**
+ * PATCH /api/admin/me/notifications
+ * Body: { email?: boolean, sms?: boolean, push?: boolean }
+ */
+const updateMyNotifications = (req, res) =>
+  profileSvc.updateNotifications(res, Admin, { _id: req.user.id }, req.body);
+
+const getUploadSignature = (_req, res) =>
+  profileSvc.getUploadSignature(res);
 
 // ─── LIST ALL ADMINS ──────────────────────────────────────────────────────────
 
@@ -387,6 +420,10 @@ module.exports = {
   createAdmin,
   getMe,
   updatePassword,
+  updateMyProfile,
+  uploadProfileImage,
+  updateMyNotifications,
+  getUploadSignature,
   listAdmins,
   updateAdminStatus,
 };

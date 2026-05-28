@@ -3,11 +3,11 @@ const router = express.Router();
 
 const studentController          = require('../controllers/student-controllers/student.controller');
 const studentDashboardController = require('../controllers/student-controllers/student.dashboard.controller');
+const studentProfileController   = require('../controllers/student-controllers/student.profile.controller');
 const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
 const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
 const {
   uploadProfileImage,
-  uploadDocument,
   uploadImportFile,
   handleMulterError
 } = require('../middleware/upload/upload');
@@ -62,15 +62,45 @@ router.get(
 );
 
 // ========================================
-// STUDENT SELF-SERVICE
+// STUDENT SELF-SERVICE  (all /me/* before /:id)
 // ========================================
 
-/**
- * @route   GET /api/students/me/dashboard
- * @desc    Student's personal dashboard (KPIs, today's schedule, results, exams)
- * @access  STUDENT (own)
- * @note    Must be declared BEFORE /:id to avoid Express matching "me" as an ID
- */
+router.get(
+  '/me',
+  authorize(['STUDENT']),
+  studentProfileController.getMe
+);
+
+router.patch(
+  '/me/profile',
+  authorize(['STUDENT']),
+  studentProfileController.updateProfile
+);
+
+router.patch(
+  '/me/password',
+  authorize(['STUDENT']),
+  studentProfileController.changePassword
+);
+
+router.patch(
+  '/me/profile-image',
+  authorize(['STUDENT']),
+  studentProfileController.uploadProfileImage
+);
+
+router.patch(
+  '/me/notifications',
+  authorize(['STUDENT']),
+  studentProfileController.updateNotifications
+);
+
+router.get(
+  '/me/upload-signature',
+  authorize(['STUDENT']),
+  studentProfileController.getUploadSignature
+);
+
 router.get(
   '/me/dashboard',
   authorize(['STUDENT']),

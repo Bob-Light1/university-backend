@@ -1,10 +1,14 @@
 const mongoose = require('mongoose');
 
-/**
- * Student Model
- * Represents a student enrolled in a campus
- * Campus isolation is enforced through middleware and controllers
- */
+const NotificationPrefsSchema = new mongoose.Schema(
+  {
+    email: { type: Boolean, default: true  },
+    sms:   { type: Boolean, default: false },
+    push:  { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 const studentSchema = new mongoose.Schema(
   {
     // **PERSONAL INFORMATION**
@@ -155,6 +159,12 @@ const studentSchema = new mongoose.Schema(
     lastLogin: {
       type: Date,
       default: null
+    },
+
+    // **NOTIFICATION PREFERENCES**
+    notificationPrefs: {
+      type:    NotificationPrefsSchema,
+      default: () => ({ email: true, sms: false, push: false }),
     },
 
     // **PRINT / ID CARD**

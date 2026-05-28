@@ -17,6 +17,17 @@
 
 const mongoose = require('mongoose');
 
+// ─── SUB-SCHEMA ───────────────────────────────────────────────────────────────
+
+const NotificationPrefsSchema = new mongoose.Schema(
+  {
+    email: { type: Boolean, default: true  },
+    sms:   { type: Boolean, default: false },
+    push:  { type: Boolean, default: false },
+  },
+  { _id: false }
+);
+
 // ─── ENUMS ────────────────────────────────────────────────────────────────────
 
 const ADMIN_ROLES    = Object.freeze(['ADMIN', 'DIRECTOR']);
@@ -116,6 +127,11 @@ const adminSchema = new mongoose.Schema(
     profileImage: {
       type: String,
       trim: true,
+    },
+
+    notificationPrefs: {
+      type:    NotificationPrefsSchema,
+      default: () => ({ email: true, sms: false, push: false }),
     },
   },
   {
