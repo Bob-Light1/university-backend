@@ -119,30 +119,28 @@ const bulkController = new GenericBulkController(Student, {
  */
 const loginStudent = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, username, password } = req.body;
 
-    // Validate required fields
-    if (!email || !password) {
-      return sendError(res, 400, 'Email and password are required');
+    if ((!email && !username) || !password) {
+      return sendError(res, 400, 'Email (or username) and password are required.');
     }
 
-    // JWT_SECRET verification
     if (!JWT_SECRET) {
       console.error('❌ JWT_SECRET is not defined');
-      return sendError(res, 500, 'Server configuration error');
+      return sendError(res, 500, 'Server configuration error.');
     }
 
-    // Validate email format
-    if (!isValidEmail(email)) {
-      return sendError(res, 400, 'Invalid email format');
+    const query = email
+      ? { email: email.toLowerCase().trim() }
+      : { username: username.toLowerCase().trim() };
+
+    if (email && !isValidEmail(email)) {
+      return sendError(res, 400, 'Invalid email format.');
     }
 
-    // Find student with password field
-    const student = await Student.findOne({ 
-      email: email.toLowerCase() 
-    })
-    .select('+password')
-    .populate('schoolCampus', 'campus_name');;
+    const student = await Student.findOne(query)
+      .select('+password')
+      .populate('schoolCampus', 'campus_name');
 
     // Generic error for security
     if (!student) {

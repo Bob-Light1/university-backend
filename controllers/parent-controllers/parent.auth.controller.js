@@ -85,10 +85,10 @@ const buildUserResponse = (parent) => ({
  */
 const loginParent = async (req, res) => {
   try {
-    const { email, password, campusId } = req.body;
+    const { email, username, password, campusId } = req.body;
 
-    if (!email || !password) {
-      return sendError(res, 400, 'Email and password are required.');
+    if ((!email && !username) || !password) {
+      return sendError(res, 400, 'Email (or username) and password are required.');
     }
 
     if (!JWT_SECRET) {
@@ -96,12 +96,15 @@ const loginParent = async (req, res) => {
       return sendError(res, 500, 'Server configuration error.');
     }
 
-    if (!isValidEmail(email)) {
+    const query = email
+      ? { email: email.toLowerCase().trim() }
+      : { username: username.toLowerCase().trim() };
+
+    if (email && !isValidEmail(email)) {
       return sendError(res, 400, 'Invalid email format.');
     }
 
-    // Fetch parent with password (select:false by default)
-    const parent = await Parent.findOne({ email: email.toLowerCase().trim() })
+    const parent = await Parent.findOne(query)
       .select('+password')
       .lean({ virtuals: true });
 

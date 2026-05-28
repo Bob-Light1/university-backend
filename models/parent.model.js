@@ -75,6 +75,17 @@ const parentSchema = new mongoose.Schema(
       ],
     },
 
+    username: {
+      type:      String,
+      unique:    true,
+      sparse:    true, // allows null — enforces uniqueness only when set
+      lowercase: true,
+      trim:      true,
+      minlength: [3,  'Username must be at least 3 characters'],
+      maxlength: [30, 'Username must not exceed 30 characters'],
+      match:     [/^[a-z0-9_.-]+$/, 'Username may only contain letters, numbers, _ . -'],
+    },
+
     phone: {
       type:     String,
       required: [true, 'Phone number is required'],
