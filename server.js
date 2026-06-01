@@ -225,8 +225,9 @@ const examinationRouter = require('./routers/examination.router');
 const academicPrintRouter = require('./routers/academic-print.router');
 const partnerRouter       = require('./routers/partner.router');
 const mentorRouter        = require('./routers/mentor.router');
-const staffRouter         = require('./routers/staff.router');
-const staffRoleRouter     = require('./routers/staffRole.router');
+const staffRouter             = require('./routers/staff.router');
+const staffRoleRouter         = require('./routers/staffRole.router');
+const announcementRouter      = require('./routers/announcement.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -248,8 +249,9 @@ app.use('/api/examination', examinationRouter);
 app.use('/api/print',      academicPrintRouter);
 app.use('/api/partners',    partnerRouter);
 app.use('/api/mentors',    mentorRouter);
-app.use('/api/staff',      staffRouter);
-app.use('/api/staff-roles', staffRoleRouter);
+app.use('/api/staff',          staffRouter);
+app.use('/api/staff-roles',    staffRoleRouter);
+app.use('/api/announcements',  announcementRouter);
 
 // ========================================
 // 404 HANDLER
@@ -380,8 +382,10 @@ try {
   const cron = require('node-cron');
   const { runRetentionJob }  = require('./crons/document.retention.cron');
   const { runAntiCheatJob }  = require('./crons/exam-anticheat.cron');
+  const { runExpiryJob }     = require('./crons/announcement.expiry.cron');
   cron.schedule('0 2 * * 0', runRetentionJob);   // Every Sunday at 02:00
   cron.schedule('0 3 * * *', runAntiCheatJob);   // Nightly at 03:00
+  cron.schedule('0 1 * * *', runExpiryJob);      // Nightly at 01:00
 } catch {
   console.warn('⚠️  node-cron not available — cron jobs disabled.');
 }
