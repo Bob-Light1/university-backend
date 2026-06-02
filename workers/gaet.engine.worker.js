@@ -74,6 +74,7 @@ function sortByConstraintDensity(courseRequirements, constraint) {
  *  5. No teacher double-booking in already-placed sessions
  *  6. No room double-booking in already-placed sessions
  *  7. No class double-booking in already-placed sessions
+ *  8. Teacher maxConsecutiveHours not exceeded on this day
  *
  * @param {{ crId, teacherId, classId, slot, roomName, room, cr }} candidate
  * @param {Array} assignment - Already-placed sessions (plain objects)
@@ -99,6 +100,36 @@ function isHardConstraintSatisfied(candidate, assignment, prefMap) {
   if (pref) {
     for (const us of pref.unavailableSlots) {
       if (us.day === day && timeRangesOverlap(startHour, endHour, us.startHour, us.endHour)) return false;
+    }
+
+    // Enforce maxConsecutiveHours: the longest unbroken teaching block on this day
+    // must not exceed the teacher's limit once this candidate is added.
+    if (pref.maxConsecutiveHours) {
+      const sameDaySessions = assignment.filter(
+        (p) => p.teacherId === teacherId && p.slot.day === day
+      );
+      const allSessions = [
+        ...sameDaySessions.map((p) => p.slot),
+        { startHour, endHour },
+      ].sort((a, b) => a.startHour - b.startHour);
+
+      let maxBlock = 0;
+      let blockStart = allSessions[0].startHour;
+      let blockEnd   = allSessions[0].endHour;
+
+      for (let i = 1; i < allSessions.length; i++) {
+        const s = allSessions[i];
+        if (s.startHour <= blockEnd) {
+          blockEnd = Math.max(blockEnd, s.endHour);
+        } else {
+          maxBlock = Math.max(maxBlock, blockEnd - blockStart);
+          blockStart = s.startHour;
+          blockEnd   = s.endHour;
+        }
+      }
+      maxBlock = Math.max(maxBlock, blockEnd - blockStart);
+
+      if (maxBlock > pref.maxConsecutiveHours) return false;
     }
   }
 
@@ -235,8 +266,11 @@ function buildQualityReport(assignment, allToPlace, constraint, durationMs) {
   const usedRooms     = new Set(assignment.map(a => a.roomName)).size;
   const roomUtilPct   = roomCount > 0 ? Math.round((usedRooms / roomCount) * 100) : 0;
 
+  // Hard constraints weighted 70%, soft 30%.
+  // Rationale: a timetable with 100% hard + 0% soft (no preferences defined) scores 700 ("Good")
+  // rather than 500 ("Needs review") as the previous equal-weight formula produced.
   return {
-    score:                    Math.round((hardPct + softScore) / 2 * 10),
+    score:                    Math.round((hardPct * 0.7 + softScore * 0.3) * 10),
     hardConstraintsSatisfied: hardPct,
     softConstraintsSatisfied: softScore,
     roomUtilizationPct:       roomUtilPct,

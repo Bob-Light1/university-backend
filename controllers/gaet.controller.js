@@ -321,7 +321,9 @@ const generateSchedule = asyncHandler(async (req, res) => {
   if (!campusFilter) return;
   const { academicYear, semester } = req.body;
 
-  // Atomically set GENERATING — fails if already GENERATING or PUBLISHED
+  // Atomically set GENERATING — fails if already GENERATING or PUBLISHED.
+  // Use { new: false } to get the document BEFORE the update so we can restore
+  // the original status if pre-flight checks fail (instead of always resetting to DRAFT).
   const constraint = await GaetConstraint.findOneAndUpdate(
     {
       ...campusFilter,
@@ -330,7 +332,7 @@ const generateSchedule = asyncHandler(async (req, res) => {
       status: { $nin: [GAET_STATUS.GENERATING, GAET_STATUS.PUBLISHED] },
     },
     { $set: { status: GAET_STATUS.GENERATING, generatingStartedAt: new Date() } },
-    { new: true }
+    { new: false }
   );
 
   if (!constraint) {
@@ -347,24 +349,27 @@ const generateSchedule = asyncHandler(async (req, res) => {
     return sendError(res, 409, `Cannot start generation from current status "${existing.status}".`);
   }
 
+  // The original status before we set GENERATING (used to restore on pre-flight failure).
+  const originalStatus = constraint.status;
+
   // Pre-flight: reject early if mandatory constraints are missing (avoids a worker thread for a trivially invalid config)
   if (!constraint.courseRequirements?.length) {
     await GaetConstraint.findByIdAndUpdate(constraint._id, {
-      $set: { status: GAET_STATUS.DRAFT, generatingStartedAt: null },
+      $set: { status: originalStatus, generatingStartedAt: null },
     });
     return sendError(res, 422, 'Cannot generate: no course requirements defined. Add courseRequirements first.');
   }
 
   if (!constraint.timeSlots?.length) {
     await GaetConstraint.findByIdAndUpdate(constraint._id, {
-      $set: { status: GAET_STATUS.DRAFT, generatingStartedAt: null },
+      $set: { status: originalStatus, generatingStartedAt: null },
     });
     return sendError(res, 422, 'Cannot generate: no time slots defined. Add timeSlots first.');
   }
 
   if (!constraint.roomRegistry?.length) {
     await GaetConstraint.findByIdAndUpdate(constraint._id, {
-      $set: { status: GAET_STATUS.DRAFT, generatingStartedAt: null },
+      $set: { status: originalStatus, generatingStartedAt: null },
     });
     return sendError(res, 422, 'Cannot generate: no rooms defined. Add roomRegistry first.');
   }
@@ -515,6 +520,14 @@ const publishSchedule = asyncHandler(async (req, res) => {
     }
   }
 
+  if (created.length === 0) {
+    return sendError(
+      res, 422,
+      `Publication failed: 0 sessions could be created (${errors.length} error(s)). Fix constraints and retry.`,
+      { errors }
+    );
+  }
+
   constraint.status      = GAET_STATUS.PUBLISHED;
   constraint.publishedAt = new Date();
   constraint.publishedBy = req.user.id;
@@ -529,10 +542,10 @@ const publishSchedule = asyncHandler(async (req, res) => {
 
 /**
  * DELETE /api/gaet/generated/:constraintId
- * Cancels a generated (not yet published) timetable and resets to DRAFT.
+ * Cancels a generated (not yet published) timetable — sets status to CANCELLED.
  *
  * Allowed from: GENERATED, PARTIALLY_GENERATED, FAILED.
- * Rejected from: PUBLISHING, PUBLISHED (use schedule cancellation flow instead),
+ * Rejected from: PUBLISHED (use schedule cancellation flow instead),
  *                GENERATING (wait for the worker to finish).
  */
 const cancelGenerated = asyncHandler(async (req, res) => {

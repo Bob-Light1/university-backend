@@ -139,7 +139,7 @@ router.post(
 
 /**
  * DELETE /api/gaet/generated/:constraintId
- * Cancel a generated (not yet published) timetable — resets status to DRAFT.
+ * Cancel a generated (not yet published) timetable — sets status to CANCELLED.
  * Cannot cancel a PUBLISHED timetable (use the schedule cancellation flow instead).
  */
 router.delete(
