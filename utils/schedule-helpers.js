@@ -21,9 +21,10 @@
 const mongoose = require('mongoose');
 
 // Lazy-loaded to avoid circular dependency issues at module load time
-const getClass   = () => require('../models/class.model');
-const getSubject = () => require('../models/subject.model');
-const getTeacher = () => require('../models/teacher-models/teacher.model');
+const getClass           = () => require('../models/class.model');
+const getSubject         = () => require('../models/subject.model');
+const getTeacher         = () => require('../models/teacher-models/teacher.model');
+const getTeacherSchedule = () => require('../models/teacher-models/teacher.schedule.model');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CLASSES
@@ -206,9 +207,73 @@ const resolveSessionParticipants = async ({ subjectId, teacherId, classIds }, ca
   return { subject, teacher, classes, errors };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TEACHER SCHEDULE SYNC
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Upserts the TeacherSchedule mirror document for a given StudentSchedule.
+ *
+ * Both collections share the same real-world session but serve different audiences.
+ * This function must be called after every StudentSchedule create/update so both
+ * views stay consistent.
+ *
+ * Non-fatal: errors are logged but never rethrown — the StudentSchedule write
+ * already succeeded.
+ *
+ * @param {Object} ss      - Lean or Mongoose StudentSchedule document (.toObject())
+ * @param {string} actorId - req.user.id of the person triggering the change
+ */
+const syncTeacherSchedule = async (ss, actorId) => {
+  const TeacherSchedule = getTeacherSchedule();
+  try {
+    const $setPayload = {
+      studentScheduleRef: ss._id,
+      schoolCampus:       ss.schoolCampus,
+      status:             ss.status,
+      academicYear:       ss.academicYear,
+      semester:           ss.semester,
+      sessionType:        ss.sessionType,
+      startTime:          ss.startTime,
+      endTime:            ss.endTime,
+      durationMinutes:    ss.durationMinutes,
+      isVirtual:          ss.isVirtual,
+      room:               ss.room,
+      virtualMeeting:     ss.virtualMeeting,
+      subject:            ss.subject,
+      teacher:            ss.teacher,
+      classes:            ss.classes,
+      recurrence:         ss.recurrence,
+      isDeleted:          ss.isDeleted,
+      deletedAt:          ss.deletedAt,
+      publishedAt:        ss.publishedAt,
+      publishedBy:        ss.publishedBy,
+      lastModifiedBy:     actorId,
+    };
+
+    // CRITICAL: findOneAndUpdate with upsert does NOT trigger pre('save') hooks.
+    // Generate reference manually in $setOnInsert so it is written once at creation
+    // and never overwritten on subsequent updates (avoids E11000 on null unique index).
+    const count = await TeacherSchedule.countDocuments();
+    const reference = `TS-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
+
+    await TeacherSchedule.findOneAndUpdate(
+      { studentScheduleRef: ss._id },
+      {
+        $set:         $setPayload,
+        $setOnInsert: { reference },
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+  } catch (err) {
+    console.error('[syncTeacherSchedule] failed to sync TeacherSchedule:', err.message, err.code);
+  }
+};
+
 module.exports = {
   resolveClasses,
   resolveSubject,
   resolveTeacher,
   resolveSessionParticipants,
+  syncTeacherSchedule,
 };

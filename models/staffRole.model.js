@@ -15,7 +15,7 @@ const staffRoleSchema = new mongoose.Schema(
     // ─── Campus scope ─────────────────────────────────────────────────────────
     campus: {
       type:     mongoose.Schema.Types.ObjectId,
-      ref:      'SchoolCampus',
+      ref:      'Campus',
       required: [true, 'Campus is required'],
       index:    true,
     },

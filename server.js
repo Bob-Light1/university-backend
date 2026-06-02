@@ -123,7 +123,7 @@ mongoose
     minPoolSize: 1,                  // Always maintain at least 1 connection
     maxPoolSize: 5,                  // Cap connections (sufficient for Render free tier)
   })
-  .then(() => {
+  .then(async () => {
     const dbName = mongoose.connection.name;
     console.log('✅ MongoDB connected successfully');
     console.log(`📦 Database: ${dbName}`);
@@ -131,6 +131,26 @@ mongoose
       console.error('❌ FATAL: Connected to the "test" database in production.');
       console.error('   Set a database name in MONGODB_URI: mongodb+srv://...cluster.net/<dbName>');
       process.exit(1);
+    }
+
+    // ── GAET zombie recovery ──────────────────────────────────────────────────
+    // Any GaetConstraint that was left in GENERATING status when the server
+    // crashed / restarted is a zombie job.  Recover them to FAILED so the
+    // campus manager can re-trigger generation cleanly.
+    try {
+      const GaetConstraint  = require('./models/gaet-constraint.model');
+      const { GAET_STATUS } = GaetConstraint;
+      const ZOMBIE_THRESHOLD_MS  = 15 * 60 * 1000; // 15 minutes
+      const zombieThreshold = new Date(Date.now() - ZOMBIE_THRESHOLD_MS);
+      const result = await GaetConstraint.updateMany(
+        { status: GAET_STATUS.GENERATING, generatingStartedAt: { $lt: zombieThreshold } },
+        { $set: { status: GAET_STATUS.FAILED, generatingStartedAt: null } }
+      );
+      if (result.modifiedCount > 0) {
+        console.warn(`⚠️  [GAET] Recovered ${result.modifiedCount} zombie generation job(s) → FAILED.`);
+      }
+    } catch (gaetErr) {
+      console.error('❌ [GAET] Zombie recovery failed:', gaetErr.message);
     }
   })
   .catch((error) => {
@@ -228,6 +248,7 @@ const mentorRouter        = require('./routers/mentor.router');
 const staffRouter             = require('./routers/staff.router');
 const staffRoleRouter         = require('./routers/staffRole.router');
 const announcementRouter      = require('./routers/announcement.router');
+const gaetRouter              = require('./routers/gaet.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -252,6 +273,7 @@ app.use('/api/mentors',    mentorRouter);
 app.use('/api/staff',          staffRouter);
 app.use('/api/staff-roles',    staffRoleRouter);
 app.use('/api/announcements',  announcementRouter);
+app.use('/api/gaet',          gaetRouter);
 
 // ========================================
 // 404 HANDLER
