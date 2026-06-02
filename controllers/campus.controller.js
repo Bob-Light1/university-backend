@@ -16,6 +16,7 @@ const Subject = require('../models/subject.model');
 const Department = require('../models/department.model');
 const StudentAttendance = require('../models/student-models/student.attend.model');
 const Income = require('../models/income.model');
+const Staff  = require('../models/staff.model');
 
 const campusConfig = require('../configs/campus.config');
 const studentConfig = require('../configs/student.config');
@@ -534,6 +535,9 @@ class CampusController extends GenericEntityController {
         recentTeachers,
         attendanceStats,
         paymentAlerts,
+        staffTotal,
+        staffActive,
+        staffWithRole,
       ] = await Promise.all([
         Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
         Teacher.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
@@ -572,6 +576,9 @@ class CampusController extends GenericEntityController {
         ]),
         // Pending income records as payment alerts
         Income.countDocuments({ campus: campusId, status: 'pending' }),
+        Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
+        Staff.countDocuments({ schoolCampus: campusId, status: 'active' }),
+        Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' }, subRole: { $exists: true, $ne: null } }),
       ]);
 
       const avgAbsenceRate = attendanceStats[0]?.avgAbsenceRate ?? 0;
@@ -588,6 +595,12 @@ class CampusController extends GenericEntityController {
         classes: {
           total: classesTotal,
           active: activeClasses
+        },
+        staff: {
+          total:       staffTotal,
+          active:      staffActive,
+          withRole:    staffWithRole,
+          withoutRole: staffTotal - staffWithRole,
         },
         avgAbsenceRate: Math.round(avgAbsenceRate * 10) / 10,
         paymentAlerts,
