@@ -22,7 +22,8 @@ const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-const Mentor = require('../../models/mentor.model');
+const Mentor     = require('../../models/mentor.model');
+const profileSvc = require('../../services/profile.service');
 const {
   sendSuccess,
   sendError,
@@ -439,6 +440,14 @@ const deleteMentor = async (req, res) => {
   }
 };
 
+// ── CLOUDINARY UPLOAD SIGNATURE (CM) ─────────────────────────────────────────
+
+/**
+ * @route  GET /api/mentors/upload-signature
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+const getUploadSignature = (_req, res) => profileSvc.getUploadSignature(res);
+
 module.exports = {
   loginMentor,
   createMentor,
@@ -450,4 +459,5 @@ module.exports = {
   archiveMentor,
   restoreMentor,
   deleteMentor,
+  getUploadSignature,
 };

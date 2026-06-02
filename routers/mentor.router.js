@@ -92,6 +92,12 @@ router.post('/', authorize(MGMT_ROLES), mentorController.createMentor);
  */
 router.get('/', authorize(MGMT_ROLES), mentorController.getAllMentors);
 
+/**
+ * @route  GET /api/mentors/upload-signature
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+router.get('/upload-signature', authorize(MGMT_ROLES), mentorController.getUploadSignature);
+
 // ========================================
 // INDIVIDUAL MENTOR ROUTES (/:id last)
 // ========================================

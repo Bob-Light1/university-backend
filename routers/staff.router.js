@@ -92,6 +92,12 @@ router.post('/', authorize(MGMT_ROLES), staffController.createStaff);
  */
 router.get('/', authorize(MGMT_ROLES), staffController.getAllStaff);
 
+/**
+ * @route  GET /api/staff/upload-signature
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+router.get('/upload-signature', authorize(MGMT_ROLES), staffController.getUploadSignature);
+
 // ========================================
 // INDIVIDUAL STAFF ROUTES (/:id last)
 // ========================================

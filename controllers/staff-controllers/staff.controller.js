@@ -26,6 +26,7 @@ const mongoose = require('mongoose');
 
 const Staff     = require('../../models/staff.model');
 const StaffRole = require('../../models/staffRole.model');
+const profileSvc = require('../../services/profile.service');
 const {
   sendSuccess,
   sendError,
@@ -514,6 +515,14 @@ const deleteStaff = async (req, res) => {
   }
 };
 
+// ── CLOUDINARY UPLOAD SIGNATURE (CM) ─────────────────────────────────────────
+
+/**
+ * @route  GET /api/staff/upload-signature
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+const getUploadSignature = (_req, res) => profileSvc.getUploadSignature(res);
+
 module.exports = {
   loginStaff,
   createStaff,
@@ -526,4 +535,5 @@ module.exports = {
   archiveStaff,
   restoreStaff,
   deleteStaff,
+  getUploadSignature,
 };
