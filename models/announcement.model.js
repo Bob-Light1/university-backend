@@ -11,7 +11,7 @@ const announcementSchema = new mongoose.Schema(
   {
     schoolCampus: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'SchoolCampus',
+      ref: 'Campus',
       required: true,
     },
     title: {

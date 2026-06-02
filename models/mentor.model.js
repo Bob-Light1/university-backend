@@ -24,7 +24,7 @@ const mentorSchema = new mongoose.Schema(
     // ─── Campus assignment ────────────────────────────────────────────────────
     schoolCampus: {
       type:     mongoose.Schema.Types.ObjectId,
-      ref:      'SchoolCampus',
+      ref:      'Campus',
       required: [true, 'Campus is required'],
       index:    true,
     },

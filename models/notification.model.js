@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const notificationSchema = new mongoose.Schema({
-  schoolCampus: {type: mongoose.Schema.ObjectId, ref: 'SchoolCampus'},
+  schoolCampus: {type: mongoose.Schema.ObjectId, ref: 'Campus'},
   title: {type: String, required: true},
   message: {type: String, required:true},
   audience: {type:String, enum:['student', 'teacher', 'parent', 'partner']},

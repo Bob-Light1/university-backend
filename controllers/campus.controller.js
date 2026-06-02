@@ -17,6 +17,7 @@ const Department = require('../models/department.model');
 const StudentAttendance = require('../models/student-models/student.attend.model');
 const Income = require('../models/income.model');
 const Staff  = require('../models/staff.model');
+const Mentor = require('../models/mentor.model');
 
 const campusConfig = require('../configs/campus.config');
 const studentConfig = require('../configs/student.config');
@@ -538,6 +539,9 @@ class CampusController extends GenericEntityController {
         staffTotal,
         staffActive,
         staffWithRole,
+        mentorTotal,
+        mentorActive,
+        mentorStudentsAgg,
       ] = await Promise.all([
         Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
         Teacher.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
@@ -579,9 +583,16 @@ class CampusController extends GenericEntityController {
         Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
         Staff.countDocuments({ schoolCampus: campusId, status: 'active' }),
         Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' }, subRole: { $exists: true, $ne: null } }),
+        Mentor.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
+        Mentor.countDocuments({ schoolCampus: campusId, status: 'active' }),
+        Mentor.aggregate([
+          { $match: { schoolCampus: campusOid, status: { $ne: 'archived' } } },
+          { $group: { _id: null, total: { $sum: { $size: '$students' } } } },
+        ]),
       ]);
 
-      const avgAbsenceRate = attendanceStats[0]?.avgAbsenceRate ?? 0;
+      const avgAbsenceRate      = attendanceStats[0]?.avgAbsenceRate ?? 0;
+      const mentorStudentsAssigned = mentorStudentsAgg[0]?.total ?? 0;
 
       return sendSuccess(res, 200, 'Dashboard statistics fetched successfully', {
         students: {
@@ -601,6 +612,11 @@ class CampusController extends GenericEntityController {
           active:      staffActive,
           withRole:    staffWithRole,
           withoutRole: staffTotal - staffWithRole,
+        },
+        mentors: {
+          total:            mentorTotal,
+          active:           mentorActive,
+          studentsAssigned: mentorStudentsAssigned,
         },
         avgAbsenceRate: Math.round(avgAbsenceRate * 10) / 10,
         paymentAlerts,

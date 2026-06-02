@@ -186,10 +186,14 @@ const createMentor = async (req, res) => {
 const getAllMentors = async (req, res) => {
   try {
     const campusFilter = getCampusFilter(req);
-    const { page = 1, limit = 20, search, status } = req.query;
+    const { page = 1, limit = 20, search, status, includeArchived } = req.query;
 
     const filter = { ...campusFilter };
-    if (status) filter.status = status;
+    if (status) {
+      filter.status = status;
+    } else if (includeArchived !== 'true') {
+      filter.status = { $ne: 'archived' };
+    }
     if (search) {
       const rx = new RegExp(search.trim(), 'i');
       filter.$or = [

@@ -213,10 +213,14 @@ const createStaff = async (req, res) => {
 const getAllStaff = async (req, res) => {
   try {
     const campusFilter = getCampusFilter(req);
-    const { page = 1, limit = 20, search, status, subRole } = req.query;
+    const { page = 1, limit = 20, search, status, subRole, includeArchived } = req.query;
 
     const filter = { ...campusFilter };
-    if (status)  filter.status  = status;
+    if (status) {
+      filter.status = status;
+    } else if (includeArchived !== 'true') {
+      filter.status = { $ne: 'archived' };
+    }
     if (subRole) filter.subRole = subRole;
     if (search) {
       const rx = new RegExp(search.trim(), 'i');
