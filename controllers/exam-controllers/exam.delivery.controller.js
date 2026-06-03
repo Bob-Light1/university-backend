@@ -13,10 +13,11 @@
  *    POST   /submissions/:id/anti-cheat-event    → logAntiCheat    [STUDENT]
  */
 
-const ExamSession    = require('../../models/exam-models/exam.session.model');
-const ExamEnrollment = require('../../models/exam-models/exam.enrollment.model');
-const ExamSubmission = require('../../models/exam-models/exam.submission.model');
-const QuestionBank   = require('../../models/exam-models/question-bank.model');
+const ExamSession       = require('../../models/exam-models/exam.session.model');
+const ExamEnrollment    = require('../../models/exam-models/exam.enrollment.model');
+const ExamSubmission    = require('../../models/exam-models/exam.submission.model');
+const QuestionBank      = require('../../models/exam-models/question-bank.model');
+const UserPreferences   = require('../../models/userPreferences_model');
 const {
   sendSuccess,
   sendError,
@@ -175,8 +176,13 @@ const getQuestions = async (req, res) => {
       ordered = seededShuffle(ordered, seed);
     }
 
-    // Preferred language translation
-    const lang = req.user.preferredLanguage || 'en';
+    // Preferred language translation — JWT never carries preferredLanguage,
+    // so we fetch it from UserPreferences (indexed by userId, single doc).
+    const userPrefs = await UserPreferences
+      .findOne({ userId: studentId })
+      .select('preferredLanguage')
+      .lean();
+    const lang = userPrefs?.preferredLanguage || 'en';
     if (lang !== 'en') {
       ordered = ordered.map((q) => {
         const tr = (q.translations || []).find((t) => t.lang === lang);

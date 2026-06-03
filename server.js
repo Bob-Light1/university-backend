@@ -6,6 +6,7 @@ const mongoose = require('mongoose');
 const cookieParser = require('cookie-parser');
 const path = require('path');
 const { apiLimiter } = require('./middleware/rate-limiter/rate-limiter');
+const localeMiddleware = require('./middleware/locale/locale.middleware');
 const mongoSanitize = require('express-mongo-sanitize');
 const { shutdownPool }         = require('./services/document-services/document.pdf.service');
 const { shutdownAcademicPool } = require('./services/academic-pdf.service');
@@ -73,6 +74,7 @@ app.use(express.json({ limit: '10mb' })); // Limit JSON body size
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(mongoSanitize());
 app.use(cookieParser());
+app.use(localeMiddleware);
 
 // Security headers
 app.use((req, res, next) => {

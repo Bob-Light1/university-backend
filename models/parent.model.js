@@ -188,7 +188,7 @@ const parentSchema = new mongoose.Schema(
 
     preferredLanguage: {
       type:    String,
-      enum:    { values: ['fr', 'en', 'es', 'ar'], message: '{VALUE} is not a valid language' },
+      enum:    { values: ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'], message: '{VALUE} is not a valid language' },
       default: 'fr',
     },
 

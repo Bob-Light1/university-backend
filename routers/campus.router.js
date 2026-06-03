@@ -18,7 +18,8 @@ const {
   getCampusDepartments,
   getCampusMentors,
   getCampusParents,
-  getCampusSubjects
+  getCampusSubjects,
+  updateCampusDefaults,
 } = require('../controllers/campus.controller');
 
 const { authenticate, authorize } = require('../middleware/auth/auth');
@@ -103,13 +104,24 @@ router.put(
 );
 
 /**
+ * @route   PATCH /api/campus/:id/defaults
+ * @desc    Update campus i18n defaults (language, timezone, gradeFormat)
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER (own campus only)
+ */
+router.patch(
+  '/:id/defaults',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  updateCampusDefaults
+);
+
+/**
  * @route   PATCH /api/campus/:id/password
  * @desc    Update campus password
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER (own campus only)
  */
 router.patch(
-  "/:id/password", 
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']), 
+  "/:id/password",
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
   updateCampusPassword
 );
 

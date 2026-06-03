@@ -156,8 +156,8 @@ const runValidation = (body, isCreate) => {
 
   // preferredLanguage (optional)
   if (body.preferredLanguage !== undefined) {
-    if (!['fr', 'en', 'es', 'ar'].includes(body.preferredLanguage)) {
-      errors.push({ field: 'preferredLanguage', message: "preferredLanguage must be 'fr', 'en', 'es', or 'ar'." });
+    if (!['en', 'fr', 'es', 'ar', 'zh-CN', 'de'].includes(body.preferredLanguage)) {
+      errors.push({ field: 'preferredLanguage', message: "preferredLanguage must be one of: en, fr, es, ar, zh-CN, de." });
     }
   }
 
@@ -245,8 +245,8 @@ const validateUpdateProfile = (req, res, next) => {
   }
 
   if (preferredLanguage !== undefined) {
-    if (!['fr', 'en', 'es', 'ar'].includes(preferredLanguage)) {
-      errors.push({ field: 'preferredLanguage', message: "preferredLanguage must be 'fr', 'en', 'es', or 'ar'." });
+    if (!['en', 'fr', 'es', 'ar', 'zh-CN', 'de'].includes(preferredLanguage)) {
+      errors.push({ field: 'preferredLanguage', message: "preferredLanguage must be one of: en, fr, es, ar, zh-CN, de." });
     }
   }
 

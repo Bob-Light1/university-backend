@@ -998,6 +998,62 @@ class CampusController extends GenericEntityController {
 // ========================================
 const campusController = new CampusController(campusConfig);
 
+// ── PATCH /api/campus/:id/defaults ────────────────────────────────────────────
+const SUPPORTED_LANGUAGES_DEF  = ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
+const SUPPORTED_TIMEZONES_DEF  = require('../models/timezone_whitelist');
+const SUPPORTED_GRADE_FMTS_DEF = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
+
+const updateCampusDefaults = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { defaultLanguage, defaultTimezone, defaultGradeFormat } = req.body ?? {};
+
+    // Campus managers can only update their own campus
+    if (req.user.role === 'CAMPUS_MANAGER') {
+      const ownId = req.user.campusId?.toString();
+      if (!ownId || ownId !== id) {
+        return sendError(res, 403, 'You can only update defaults for your own campus.');
+      }
+    }
+
+    if (defaultLanguage  && !SUPPORTED_LANGUAGES_DEF.includes(defaultLanguage)) {
+      return sendError(res, 400, `Unsupported language: ${defaultLanguage}`);
+    }
+    if (defaultTimezone  && !SUPPORTED_TIMEZONES_DEF.includes(defaultTimezone)) {
+      return sendError(res, 400, `Unsupported timezone: ${defaultTimezone}`);
+    }
+    if (defaultGradeFormat && !SUPPORTED_GRADE_FMTS_DEF.includes(defaultGradeFormat)) {
+      return sendError(res, 400, `Unsupported gradeFormat: ${defaultGradeFormat}`);
+    }
+
+    const update = {};
+    if (defaultLanguage   !== undefined) update.defaultLanguage   = defaultLanguage;
+    if (defaultTimezone   !== undefined) update.defaultTimezone   = defaultTimezone;
+    if (defaultGradeFormat !== undefined) update.defaultGradeFormat = defaultGradeFormat;
+
+    if (!Object.keys(update).length) {
+      return sendError(res, 400, 'No valid fields to update.');
+    }
+
+    const campus = await Campus.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { new: true, runValidators: true }
+    ).select('defaultLanguage defaultTimezone defaultGradeFormat campus_name');
+
+    if (!campus) return sendNotFound(res, 'Campus');
+
+    return sendSuccess(res, 200, 'Campus defaults updated.', {
+      defaultLanguage:   campus.defaultLanguage,
+      defaultTimezone:   campus.defaultTimezone,
+      defaultGradeFormat: campus.defaultGradeFormat,
+    });
+  } catch (err) {
+    console.error('❌ updateCampusDefaults error:', err);
+    return sendError(res, 500, 'Failed to update campus defaults.');
+  }
+};
+
 // ========================================
 // EXPORT CONTROLLER METHODS
 // ========================================
@@ -1023,6 +1079,7 @@ module.exports = {
   getCampusDepartments: campusController.getDepartments,
   getCampusClasses: campusController.getClasses,
   getCampusSubjects: campusController.getSubjects,
+  updateCampusDefaults,
 
   // Statistics (using student controller)
   getCampusStudentsStats: studentEntityController.getStats
