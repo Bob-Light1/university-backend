@@ -141,6 +141,22 @@ const campusSchema = new mongoose.Schema(
       },
     },
 
+    // i18n defaults — Directors set these in Campus Settings
+    defaultLanguage: {
+      type: String,
+      enum: ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'],
+      default: 'en',
+    },
+    defaultTimezone: {
+      type: String,
+      default: 'UTC',
+    },
+    defaultGradeFormat: {
+      type: String,
+      enum: ['FRACTION', 'PERCENT', 'LETTER', 'GPA'],
+      default: 'FRACTION',
+    },
+
     // Features configuration (for premium features)
     features: {
       maxStudents: {

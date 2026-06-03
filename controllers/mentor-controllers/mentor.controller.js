@@ -35,6 +35,7 @@ const {
   isValidObjectId,
   buildCampusFilter,
 } = require('../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;
@@ -123,9 +124,11 @@ const loginMentor = async (req, res) => {
 
     Mentor.findByIdAndUpdate(mentor._id, { lastLogin: new Date() }).exec().catch(() => {});
 
+    const prefs = await getLoginPrefs(mentor._id, 'MENTOR', mentor.schoolCampus ?? null);
+
     return sendSuccess(res, 200, 'Login successful.', {
       token,
-      user: buildUserResponse(mentor),
+      user: { ...buildUserResponse(mentor), ...prefs },
     });
 
   } catch (err) {

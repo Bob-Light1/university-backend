@@ -26,6 +26,7 @@ const {
   isValidEmail,
   validatePasswordStrength,
 } = require('../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;
@@ -139,9 +140,11 @@ const loginParent = async (req, res) => {
     // Update lastLogin — fire-and-forget (must not block the response)
     Parent.findByIdAndUpdate(parent._id, { lastLogin: new Date() }).exec().catch(() => {});
 
+    const prefs = await getLoginPrefs(parent._id, 'PARENT', parent.schoolCampus ?? null);
+
     return sendSuccess(res, 200, 'Login successful.', {
       token,
-      user: buildUserResponse(parent),
+      user: { ...buildUserResponse(parent), ...prefs },
     });
 
   } catch (error) {

@@ -38,6 +38,7 @@ const {
   isValidObjectId,
   buildCampusFilter,
 } = require('../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;
@@ -139,9 +140,11 @@ const loginStaff = async (req, res) => {
 
     Staff.findByIdAndUpdate(staff._id, { lastLogin: new Date() }).exec().catch(() => {});
 
+    const prefs = await getLoginPrefs(staff._id, 'STAFF', staff.schoolCampus ?? null);
+
     return sendSuccess(res, 200, 'Login successful.', {
       token,
-      user: buildUserResponse(staff, permissions),
+      user: { ...buildUserResponse(staff, permissions), ...prefs },
     });
 
   } catch (err) {

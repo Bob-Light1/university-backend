@@ -45,6 +45,7 @@ const {
 } = require('../utils/response-helpers');
 
 const { isValidEmail, validatePasswordStrength } = require('../utils/validation-helpers');
+const { getLoginPrefs } = require('../utils/login-prefs.util');
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 
@@ -151,9 +152,11 @@ const loginAdmin = asyncHandler(async (req, res) => {
   Admin.updateOne({ _id: admin._id }, { $set: { lastLogin: new Date() } })
     .catch((err) => console.error('[adminController] lastLogin update failed:', err.message));
 
+  const prefs = await getLoginPrefs(admin._id, admin.role);
+
   return sendSuccess(res, 200, 'Login successful.', {
     token,
-    user: buildUserResponse(admin),
+    user: { ...buildUserResponse(admin), ...prefs },
   });
 });
 

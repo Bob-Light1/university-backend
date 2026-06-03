@@ -249,6 +249,7 @@ const staffRouter             = require('./routers/staff.router');
 const staffRoleRouter         = require('./routers/staffRole.router');
 const announcementRouter      = require('./routers/announcement.router');
 const gaetRouter              = require('./routers/gaet.router');
+const settingsRouter          = require('./routers/settings.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -274,6 +275,7 @@ app.use('/api/staff',          staffRouter);
 app.use('/api/staff-roles',    staffRoleRouter);
 app.use('/api/announcements',  announcementRouter);
 app.use('/api/gaet',          gaetRouter);
+app.use('/api/settings',      settingsRouter);
 
 // ========================================
 // 404 HANDLER

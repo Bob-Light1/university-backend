@@ -17,6 +17,7 @@ const {
   validatePasswordStrength,
 } = require('../../utils/validation-helpers');
 const { deleteFile } = require('../../utils/file-upload');
+const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
 const SALT_ROUNDS    = 10;
 const STUDENT_FOLDER = 'students';
@@ -182,11 +183,13 @@ const loginStudent = async (req, res) => {
     student.lastLogin = new Date();
     await student.save();
 
+    const prefs = await getLoginPrefs(student._id, 'STUDENT', campusId);
+
     return sendSuccess(res, 200, 'Login successful', {
       token,
       user: {
         id:           student._id,
-        campusId,     // exposed to frontend — needed by ResultStudent, useResult, etc.
+        campusId,
         classId:      student.studentClass ?? null,
         name:         `${student.firstName} ${student.lastName}`,
         email:        student.email,
@@ -194,6 +197,7 @@ const loginStudent = async (req, res) => {
         phone:        student.phone,
         profileImage: student.profileImage,
         role:         'STUDENT',
+        ...prefs,
       },
     });
 

@@ -9,6 +9,7 @@ const GenericEntityController = require('./generic-entity.controller');
 const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const Campus = require('../models/campus.model');
+const { getLoginPrefs } = require('../utils/login-prefs.util');
 const Teacher = require('../models/teacher-models/teacher.model');
 const Student = require('../models/student-models/student.model');
 const Class = require('../models/class.model');
@@ -279,6 +280,8 @@ class CampusController extends GenericEntityController {
         { $set: { lastLogin: new Date() } }
       ).catch(err => console.error('Failed to update lastLogin:', err));; 
 
+      const prefs = await getLoginPrefs(campus._id, 'CAMPUS_MANAGER', campus._id);
+
       return sendSuccess(res, 200, 'Login successful', {
         token,
         user: {
@@ -288,7 +291,8 @@ class CampusController extends GenericEntityController {
           campus_name: campus.campus_name,
           email: campus.email,
           image_url: campus.campus_image || campus.profileImage,
-          role: 'CAMPUS_MANAGER'
+          role: 'CAMPUS_MANAGER',
+          ...prefs,
         }
       });
 

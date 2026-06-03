@@ -17,6 +17,7 @@ const {
 } = require('../../utils/validation-helpers');
 const { deleteFile } = require('../../utils/file-upload');
 const teacherConfig = require('../../configs/teacher.config');
+const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
 const SALT_ROUNDS    = 10;
 const TEACHEAR_FOLDER = 'teachers';
@@ -170,6 +171,8 @@ const loginTeacher = async (req, res) => {
       { $set: { lastLogin: new Date() } }
     );
 
+    const prefs = await getLoginPrefs(teacher._id, 'TEACHER', teacher.schoolCampus?._id ?? null);
+
     return sendSuccess(res, 200, 'Login successful', {
       token,
       user: {
@@ -182,6 +185,7 @@ const loginTeacher = async (req, res) => {
         role: 'TEACHER',
         department: teacher.department?.name,
         campus: teacher.schoolCampus?.campus_name,
+        ...prefs,
       }
     });
 

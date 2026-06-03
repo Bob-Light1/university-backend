@@ -36,6 +36,7 @@ const {
   sendNotFound,
 } = require('../../utils/response-helpers');
 const { isValidObjectId, validatePasswordStrength } = require('../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;
@@ -233,7 +234,8 @@ const login = async (req, res) => {
     }).exec().catch(() => {});
 
     const safePartner = buildPartnerResponse(partner);
-    return sendSuccess(res, 200, 'Login successful.', { token, user: safePartner });
+    const prefs = await getLoginPrefs(partner._id, 'PARTNER', partner.schoolCampus ?? null);
+    return sendSuccess(res, 200, 'Login successful.', { token, user: { ...safePartner, ...prefs } });
 
   } catch (error) {
     console.error('❌ login partner error:', error);
