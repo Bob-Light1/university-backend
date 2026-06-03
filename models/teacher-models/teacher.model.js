@@ -223,13 +223,20 @@ const teacherSchema = new mongoose.Schema(
     // **EMERGENCY CONTACT**
     emergencyContact: {
       name: { type: String, trim: true },
-      phone: { 
-        type: String, 
+      phone: {
+        type: String,
         trim: true,
         match: [/^\+?[0-9\s()-]{6,20}$/, 'Invalid emergency contact phone']
       },
       relationship: { type: String, trim: true }
-    }
+    },
+
+    // **LOCATION**
+    neighborhood: {
+      type:    String,
+      trim:    true,
+      default: null,
+    },
   },
 
   {

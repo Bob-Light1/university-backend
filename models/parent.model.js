@@ -197,6 +197,13 @@ const parentSchema = new mongoose.Schema(
       default: () => ({ email: true, sms: false, push: false }),
     },
 
+    // ── LOCATION ──────────────────────────────────────────────────────────
+    neighborhood: {
+      type:    String,
+      trim:    true,
+      default: null,
+    },
+
     // ── METADATA ──────────────────────────────────────────────────────────
     lastLogin: {
       type:    Date,
@@ -238,6 +245,7 @@ const parentSchema = new mongoose.Schema(
 parentSchema.index({ schoolCampus: 1, status: 1 });
 parentSchema.index({ schoolCampus: 1, firstName: 1, lastName: 1 });
 parentSchema.index({ children: 1 });
+parentSchema.index({ schoolCampus: 1, neighborhood: 1 }); // Analytics: parents per neighborhood per campus
 
 // ── VIRTUAL ───────────────────────────────────────────────────────────────────
 parentSchema.virtual('fullName').get(function () {

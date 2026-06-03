@@ -182,13 +182,20 @@ const studentSchema = new mongoose.Schema(
     // **EMERGENCY CONTACT**
     emergencyContact: {
       name: { type: String, trim: true },
-      phone: { 
-        type: String, 
+      phone: {
+        type: String,
         trim: true,
         match: [/^\+?[0-9\s()-]{6,20}$/, 'Invalid emergency contact phone']
       },
       relationship: { type: String, trim: true }
-    }
+    },
+
+    // **LOCATION**
+    neighborhood: {
+      type:    String,
+      trim:    true,
+      default: null,
+    },
   },
 
   {
@@ -208,6 +215,7 @@ studentSchema.index({ createdAt: -1 });                    // Default sort
 // email and matricule already have indexes via `unique: true` on the field definition.
 // Without this, search on phone performs a collection scan.
 studentSchema.index({ phone: 1 });
+studentSchema.index({ schoolCampus: 1, neighborhood: 1 }); // Analytics: students per neighborhood per campus
 
 // **VIRTUAL FIELDS**
 // Virtual for full name

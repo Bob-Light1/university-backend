@@ -15,15 +15,20 @@
 
 const mongoose          = require('mongoose');
 const Student           = require('../../models/student-models/student.model');
-const Result            = require('../../models/result.model');
+const { Result }        = require('../../models/result.model');
 const StudentAttendance = require('../../models/student-models/student.attend.model');
 const Course            = require('../../models/course.model');
+const Teacher           = require('../../models/teacher-models/teacher.model');
+const TeacherSchedule   = require('../../models/teacher-models/teacher.schedule.model');
+const Document          = require('../../models/document-models/document.model');
+const ExamSession       = require('../../models/exam-models/exam.session.model');
 
 const {
   sendSuccess,
   sendError,
   sendPaginated,
 } = require('../../utils/response-helpers');
+const { escapeRegex } = require('../../utils/validation-helpers');
 
 const toOid = (id) => new mongoose.Types.ObjectId(id);
 
@@ -72,8 +77,15 @@ const getDashboard = async (req, res) => {
 
     if (perms.includes('results.read') || perms.includes('results.manage')) {
       queries.push(
-        Result.countDocuments({ schoolCampus: campusId, status: 'PUBLISHED' })
+        Result.countDocuments({ schoolCampus: campusId, status: 'PUBLISHED', isDeleted: false })
           .then((n) => { stats.publishedResults = n; })
+      );
+    }
+
+    if (perms.includes('teachers.read') || perms.includes('teachers.manage')) {
+      queries.push(
+        Teacher.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } })
+          .then((n) => { stats.totalTeachers = n; })
       );
     }
 
@@ -105,7 +117,7 @@ const getMyStudents = async (req, res) => {
     const filter = { schoolCampus: campusId };
     if (status) filter.status = status;
     if (search) {
-      const rx = new RegExp(search.trim(), 'i');
+      const rx = new RegExp(escapeRegex(search.trim()), 'i');
       filter.$or = [{ firstName: rx }, { lastName: rx }, { email: rx }, { matricule: rx }];
     }
 
@@ -173,18 +185,26 @@ const getMyAttendance = async (req, res) => {
 /**
  * @route  GET /api/staff/me/results
  * @access STAFF + results.read
- * @query  studentId, subjectId, academicYear, semester, page, limit
+ * @query  studentId, subjectId, classId, academicYear, semester, evaluationType, examPeriod, page, limit
  */
 const getMyResults = async (req, res) => {
   try {
     const campusId = toOid(req.user.campusId);
-    const { page = 1, limit = 20, studentId, subjectId, academicYear, semester } = req.query;
+    const {
+      page = 1, limit = 20,
+      studentId, subjectId, classId,
+      academicYear, semester,
+      evaluationType, examPeriod,
+    } = req.query;
 
-    const filter = { schoolCampus: campusId, status: 'PUBLISHED' };
-    if (studentId)    filter.student      = toOid(studentId);
-    if (subjectId)    filter.subject      = toOid(subjectId);
-    if (academicYear) filter.academicYear = academicYear;
-    if (semester)     filter.semester     = semester;
+    const filter = { schoolCampus: campusId, status: 'PUBLISHED', isDeleted: false };
+    if (studentId)      filter.student        = toOid(studentId);
+    if (subjectId)      filter.subject        = toOid(subjectId);
+    if (classId)        filter.class          = toOid(classId);
+    if (academicYear)   filter.academicYear   = academicYear;
+    if (semester)       filter.semester       = semester;
+    if (evaluationType) filter.evaluationType = evaluationType;
+    if (examPeriod)     filter.examPeriod     = examPeriod;
 
     const skip = (Number(page) - 1) * Number(limit);
     const [docs, total] = await Promise.all([
@@ -223,7 +243,7 @@ const getMyCourses = async (req, res) => {
       status:          { $ne: 'archived' },
     };
     if (search) {
-      const rx = new RegExp(search.trim(), 'i');
+      const rx = new RegExp(escapeRegex(search.trim()), 'i');
       filter.$or = [{ title: rx }, { courseCode: rx }, { description: rx }];
     }
 
@@ -246,10 +266,169 @@ const getMyCourses = async (req, res) => {
   }
 };
 
+// ── TEACHERS ──────────────────────────────────────────────────────────────────
+
+/**
+ * @route  GET /api/staff/me/teachers
+ * @access STAFF + teachers.read
+ * @query  search, status, page, limit
+ */
+const getMyTeachers = async (req, res) => {
+  try {
+    const campusId = toOid(req.user.campusId);
+    const { page = 1, limit = 20, search, status } = req.query;
+
+    const filter = { schoolCampus: campusId };
+    if (status) {
+      filter.status = status;
+    } else {
+      filter.status = { $ne: 'archived' };
+    }
+    if (search) {
+      const rx = new RegExp(escapeRegex(search.trim()), 'i');
+      filter.$or = [{ firstName: rx }, { lastName: rx }, { email: rx }, { username: rx }];
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const [docs, total] = await Promise.all([
+      Teacher.find(filter)
+        .select('-password -__v -contractSnapshot')
+        .populate('classes',  'className')
+        .populate('subjects', 'subject_name subject_code')
+        .sort({ lastName: 1, firstName: 1 })
+        .skip(skip).limit(Number(limit)).lean({ virtuals: true }),
+      Teacher.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 200, 'Teachers retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
+
+  } catch (err) {
+    console.error('❌ staff getMyTeachers error:', err);
+    return sendError(res, 500, 'Failed to retrieve teachers.');
+  }
+};
+
+// ── SCHEDULE ──────────────────────────────────────────────────────────────────
+
+/**
+ * @route  GET /api/staff/me/schedule
+ * @access STAFF + schedule.read
+ * @query  from, to, status, page, limit
+ */
+const getMySchedule = async (req, res) => {
+  try {
+    const campusId = toOid(req.user.campusId);
+    const { page = 1, limit = 20, from, to, status } = req.query;
+
+    const filter = { schoolCampus: campusId };
+    if (status) {
+      filter.status = status;
+    } else {
+      filter.status = { $in: ['PUBLISHED', 'DRAFT'] };
+    }
+    if (from || to) {
+      filter.startTime = {};
+      if (from) filter.startTime.$gte = new Date(from);
+      if (to)   filter.startTime.$lte = new Date(to);
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const [docs, total] = await Promise.all([
+      TeacherSchedule.find(filter)
+        .select('-__v')
+        .sort({ startTime: 1 })
+        .skip(skip).limit(Number(limit)).lean(),
+      TeacherSchedule.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 200, 'Schedule retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
+
+  } catch (err) {
+    console.error('❌ staff getMySchedule error:', err);
+    return sendError(res, 500, 'Failed to retrieve schedule.');
+  }
+};
+
+// ── DOCUMENTS ─────────────────────────────────────────────────────────────────
+
+/**
+ * @route  GET /api/staff/me/documents
+ * @access STAFF + documents.read
+ * @query  search, type, category, page, limit
+ */
+const getMyDocuments = async (req, res) => {
+  try {
+    const campusId = toOid(req.user.campusId);
+    const { page = 1, limit = 20, search, type, category } = req.query;
+
+    const filter = { campusId, status: 'PUBLISHED' };
+    if (type)     filter.type     = type.toUpperCase();
+    if (category) filter.category = category.toUpperCase();
+    if (search) {
+      const rx = new RegExp(escapeRegex(search.trim()), 'i');
+      filter.$or = [{ title: rx }, { description: rx }];
+    }
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const [docs, total] = await Promise.all([
+      Document.find(filter)
+        .select('-__v -auditLog -versions')
+        .sort({ createdAt: -1 })
+        .skip(skip).limit(Number(limit)).lean(),
+      Document.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 200, 'Documents retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
+
+  } catch (err) {
+    console.error('❌ staff getMyDocuments error:', err);
+    return sendError(res, 500, 'Failed to retrieve documents.');
+  }
+};
+
+// ── EXAMINATIONS ──────────────────────────────────────────────────────────────
+
+/**
+ * @route  GET /api/staff/me/examinations
+ * @access STAFF + examinations.read
+ * @query  academicYear, semester, status, page, limit
+ */
+const getMyExaminations = async (req, res) => {
+  try {
+    const campusId = toOid(req.user.campusId);
+    const { page = 1, limit = 20, academicYear, semester, status } = req.query;
+
+    const filter = { schoolCampus: campusId };
+    if (status)       filter.status       = status;
+    else              filter.status       = { $ne: 'CANCELLED' };
+    if (academicYear) filter.academicYear = academicYear;
+    if (semester)     filter.semester     = semester;
+
+    const skip = (Number(page) - 1) * Number(limit);
+    const [docs, total] = await Promise.all([
+      ExamSession.find(filter)
+        .select('-__v')
+        .sort({ startTime: 1 })
+        .skip(skip).limit(Number(limit)).lean(),
+      ExamSession.countDocuments(filter),
+    ]);
+
+    return sendPaginated(res, 200, 'Examinations retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
+
+  } catch (err) {
+    console.error('❌ staff getMyExaminations error:', err);
+    return sendError(res, 500, 'Failed to retrieve examinations.');
+  }
+};
+
 module.exports = {
   getDashboard,
   getMyStudents,
   getMyAttendance,
   getMyResults,
   getMyCourses,
+  getMyTeachers,
+  getMySchedule,
+  getMyDocuments,
+  getMyExaminations,
 };

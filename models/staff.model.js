@@ -117,6 +117,13 @@ const staffSchema = new mongoose.Schema(
       type:    NotificationPrefsSchema,
       default: () => ({ email: true, sms: false, push: false }),
     },
+
+    // ─── Location ─────────────────────────────────────────────────────────────
+    neighborhood: {
+      type:    String,
+      trim:    true,
+      default: null,
+    },
   },
   {
     timestamps: true,

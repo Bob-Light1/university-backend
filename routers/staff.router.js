@@ -70,11 +70,15 @@ router.get(
 // STAFF READ-ONLY SCOPE (/me/dashboard, /me/students…)
 // ========================================
 
-router.get('/me/dashboard',  authorize(['STAFF']), staffReadonlyController.getDashboard);
-router.get('/me/students',   authorize(['STAFF']), requirePermission('students.read'),   staffReadonlyController.getMyStudents);
-router.get('/me/attendance', authorize(['STAFF']), requirePermission('attendance.read'), staffReadonlyController.getMyAttendance);
-router.get('/me/results',    authorize(['STAFF']), requirePermission('results.read'),    staffReadonlyController.getMyResults);
-router.get('/me/courses',    authorize(['STAFF']), requirePermission('courses.read'),    staffReadonlyController.getMyCourses);
+router.get('/me/dashboard',    authorize(['STAFF']), staffReadonlyController.getDashboard);
+router.get('/me/students',     authorize(['STAFF']), requirePermission('students.read'),     staffReadonlyController.getMyStudents);
+router.get('/me/attendance',   authorize(['STAFF']), requirePermission('attendance.read'),   staffReadonlyController.getMyAttendance);
+router.get('/me/results',      authorize(['STAFF']), requirePermission('results.read'),      staffReadonlyController.getMyResults);
+router.get('/me/courses',      authorize(['STAFF']), requirePermission('courses.read'),      staffReadonlyController.getMyCourses);
+router.get('/me/teachers',     authorize(['STAFF']), requirePermission('teachers.read'),     staffReadonlyController.getMyTeachers);
+router.get('/me/schedule',     authorize(['STAFF']), requirePermission('schedule.read'),     staffReadonlyController.getMySchedule);
+router.get('/me/documents',    authorize(['STAFF']), requirePermission('documents.read'),    staffReadonlyController.getMyDocuments);
+router.get('/me/examinations', authorize(['STAFF']), requirePermission('examinations.read'), staffReadonlyController.getMyExaminations);
 
 // ========================================
 // CM MANAGEMENT (create / list)

@@ -119,6 +119,13 @@ router.get(
 router.put('/:id', authorize(MGMT_ROLES), mentorController.updateMentor);
 
 /**
+ * @route  PATCH /api/mentors/:id/assign-students
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ * @body   { studentIds?: string[], classIds?: string[], mode: 'add'|'remove'|'replace' }
+ */
+router.patch('/:id/assign-students', authorize(MGMT_ROLES), mentorController.assignStudents);
+
+/**
  * @route  PATCH /api/mentors/:id/status
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */

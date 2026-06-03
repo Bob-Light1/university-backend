@@ -37,6 +37,7 @@ const {
   isValidEmail,
   isValidObjectId,
   buildCampusFilter,
+  escapeRegex,
 } = require('../../utils/validation-helpers');
 const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
@@ -227,7 +228,7 @@ const getAllStaff = async (req, res) => {
     }
     if (subRole) filter.subRole = subRole;
     if (search) {
-      const rx = new RegExp(search.trim(), 'i');
+      const rx = new RegExp(escapeRegex(search.trim()), 'i');
       filter.$or = [
         { firstName: rx }, { lastName: rx },
         { email: rx }, { username: rx },

@@ -23,6 +23,7 @@ const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
 const Mentor     = require('../../models/mentor.model');
+const Student    = require('../../models/student-models/student.model');
 const profileSvc = require('../../services/profile.service');
 const {
   sendSuccess,
@@ -34,6 +35,7 @@ const {
   isValidEmail,
   isValidObjectId,
   buildCampusFilter,
+  escapeRegex,
 } = require('../../utils/validation-helpers');
 const { getLoginPrefs } = require('../../utils/login-prefs.util');
 
@@ -199,7 +201,7 @@ const getAllMentors = async (req, res) => {
       filter.status = { $ne: 'archived' };
     }
     if (search) {
-      const rx = new RegExp(search.trim(), 'i');
+      const rx = new RegExp(escapeRegex(search.trim()), 'i');
       filter.$or = [
         { firstName: rx }, { lastName: rx },
         { email: rx }, { username: rx },
@@ -443,6 +445,121 @@ const deleteMentor = async (req, res) => {
   }
 };
 
+// ── ASSIGN STUDENTS ───────────────────────────────────────────────────────────
+
+/**
+ * Attach or detach students from a mentor in bulk.
+ *
+ * Body:
+ *   studentIds  {string[]}  Optional. Individual student IDs.
+ *   classIds    {string[]}  Optional. All active students from these classes are resolved.
+ *   mode        {string}    Required. 'add' | 'remove' | 'replace'
+ *
+ * At least one of studentIds or classIds must be non-empty.
+ * All resolved students must belong to the same campus as the mentor.
+ *
+ * @route  PATCH /api/mentors/:id/assign-students
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+const assignStudents = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { studentIds = [], classIds = [], mode } = req.body;
+
+    if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid mentor ID format.');
+
+    const VALID_MODES = ['add', 'remove', 'replace'];
+    if (!VALID_MODES.includes(mode)) {
+      return sendError(res, 400, `mode must be one of: ${VALID_MODES.join(', ')}.`);
+    }
+
+    if (!Array.isArray(studentIds) || !Array.isArray(classIds)) {
+      return sendError(res, 400, 'studentIds and classIds must be arrays.');
+    }
+    if (studentIds.length === 0 && classIds.length === 0) {
+      return sendError(res, 400, 'Provide at least one studentId or classId.');
+    }
+    if (studentIds.some((sid) => !isValidObjectId(sid))) {
+      return sendError(res, 400, 'One or more studentIds have an invalid format.');
+    }
+    if (classIds.some((cid) => !isValidObjectId(cid))) {
+      return sendError(res, 400, 'One or more classIds have an invalid format.');
+    }
+
+    const campusFilter = getCampusFilter(req);
+    const mentor = await Mentor.findOne({ ...campusFilter, _id: id }).lean();
+    if (!mentor) return sendNotFound(res, 'Mentor');
+
+    const campusOid = new mongoose.Types.ObjectId(mentor.schoolCampus);
+
+    // Validate explicit studentIds belong to this campus
+    let resolvedIds = [];
+
+    if (studentIds.length > 0) {
+      const sidOids = studentIds.map((s) => new mongoose.Types.ObjectId(s));
+      const validCount = await Student.countDocuments({
+        _id:          { $in: sidOids },
+        schoolCampus: campusOid,
+        status:       { $ne: 'archived' },
+      });
+      if (validCount !== studentIds.length) {
+        return sendError(res, 400, 'One or more students do not belong to this campus or are archived.');
+      }
+      resolvedIds = sidOids;
+    }
+
+    // Resolve classIds → student IDs (campus already scoped)
+    if (classIds.length > 0) {
+      const cidOids = classIds.map((c) => new mongoose.Types.ObjectId(c));
+      const fromClasses = await Student.find(
+        { schoolCampus: campusOid, studentClass: { $in: cidOids }, status: { $ne: 'archived' } },
+        '_id'
+      ).lean();
+      fromClasses.forEach((s) => resolvedIds.push(s._id));
+    }
+
+    // Deduplicate
+    const seen = new Set();
+    const uniqueIds = resolvedIds.filter((oid) => {
+      const key = oid.toString();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    if (uniqueIds.length === 0) {
+      return sendError(res, 400, 'No eligible students found for the provided IDs / classes.');
+    }
+
+    // Apply mode
+    let updateOp;
+    if (mode === 'add') {
+      updateOp = { $addToSet: { students: { $each: uniqueIds } } };
+    } else if (mode === 'remove') {
+      updateOp = { $pullAll: { students: uniqueIds } };
+    } else {
+      // replace
+      updateOp = { $set: { students: uniqueIds } };
+    }
+
+    const updated = await Mentor.findByIdAndUpdate(mentor._id, updateOp, { new: true })
+      .select('-password -__v')
+      .populate('students', 'firstName lastName email matricule studentClass status profileImage')
+      .lean({ virtuals: true });
+
+    const verb = mode === 'add' ? 'added to' : mode === 'remove' ? 'removed from' : 'set for';
+    return sendSuccess(res, 200, `Students ${verb} mentor.`, {
+      mentor:  updated,
+      summary: { affected: uniqueIds.length, total: updated.students.length },
+    });
+
+  } catch (err) {
+    if (err.statusCode === 403) return sendError(res, 403, err.message);
+    console.error('❌ assignStudents error:', err);
+    return sendError(res, 500, 'Failed to assign students.');
+  }
+};
+
 // ── CLOUDINARY UPLOAD SIGNATURE (CM) ─────────────────────────────────────────
 
 /**
@@ -463,4 +580,5 @@ module.exports = {
   restoreMentor,
   deleteMentor,
   getUploadSignature,
+  assignStudents,
 };
