@@ -152,7 +152,12 @@ const getMyAttendance = async (req, res) => {
     const { page = 1, limit = 20, status, from, to, classId, studentId } = req.query;
 
     const filter = { schoolCampus: campusId };
-    if (status)    filter.status  = status;
+    if (status) {
+      if      (status === 'present')  { filter.status = true;  filter.isLate = false; }
+      else if (status === 'late')     { filter.isLate = true; }
+      else if (status === 'excused')  { filter.status = false; filter.isJustified = true; }
+      else if (status === 'absent')   { filter.status = false; filter.isJustified = { $ne: true }; }
+    }
     if (classId)   filter.class   = toOid(classId);
     if (studentId) filter.student = toOid(studentId);
     if (from || to) {
@@ -336,6 +341,9 @@ const getMySchedule = async (req, res) => {
     const [docs, total] = await Promise.all([
       TeacherSchedule.find(filter)
         .select('-__v')
+        .populate('subject', 'subject_name subject_code')
+        .populate('classes', 'className')
+        .populate('teacher', 'firstName lastName')
         .sort({ startTime: 1 })
         .skip(skip).limit(Number(limit)).lean(),
       TeacherSchedule.countDocuments(filter),
