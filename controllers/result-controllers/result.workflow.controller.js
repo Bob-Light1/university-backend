@@ -165,8 +165,9 @@ const publishResult = asyncHandler(async (req, res) => {
     try {
       await session.withTransaction(async () => {
         // 1. Publier le RETAKE
-        resultDoc.status           = RESULT_STATUS.PUBLISHED;
-        resultDoc.publishedBy      = req.user.id;
+        resultDoc.status            = RESULT_STATUS.PUBLISHED;
+        resultDoc.publishedAt       = new Date();
+        resultDoc.publishedBy       = req.user.id;
         resultDoc.verificationToken = randomUUID();
         await resultDoc.save({ session });
 
@@ -188,6 +189,7 @@ const publishResult = asyncHandler(async (req, res) => {
   } else {
     // Publication standard sans transaction
     resultDoc.status            = RESULT_STATUS.PUBLISHED;
+    resultDoc.publishedAt       = new Date();
     resultDoc.publishedBy       = req.user.id;
     resultDoc.verificationToken = randomUUID();
     await resultDoc.save();
@@ -245,6 +247,14 @@ const publishBatch = asyncHandler(async (req, res) => {
       return r.save();
     })
   );
+
+  // Dropout risk — fire-and-forget per unique student (mirrors publishResult behaviour)
+  const uniqueStudents = [...new Map(toPublish.map((r) => [r.student.toString(), r])).values()];
+  for (const r of uniqueStudents) {
+    Result.computeDropoutRisk(r.student, r.schoolCampus)
+      .then((risk) => Result.updateOne({ _id: r._id }, { $set: { dropoutRiskScore: risk } }))
+      .catch((err) => console.error('[DropoutRisk] batch computation failed:', err.message));
+  }
 
   return sendSuccess(res, 200, `${toPublish.length} result(s) published.`, {
     published: toPublish.length,
@@ -315,17 +325,7 @@ const lockSemester = asyncHandler(async (req, res) => {
   );
 
   // ── 2. [S2-1] Génération des FinalTranscripts ─────────────────────────────
-  // Récupère les étudiants distincts ayant des résultats publiés ce semestre
-  const studentRecords = await Result.find({
-    academicYear,
-    semester,
-    status:    { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] },
-    isDeleted: false,
-    ...campusFilter,
-  })
-    .distinct('student');  // Array d'ObjectId uniques
-
-  // Récupère aussi classId et campusId pour chaque étudiant
+  // Une seule agrégation : étudiants distincts avec classId et campusId
   const studentDetails = await Result.aggregate([
     {
       $match: {
