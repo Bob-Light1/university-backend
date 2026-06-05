@@ -112,11 +112,16 @@ const updateSettings = asyncHandler(async (req, res) => {
   }
 
   const defaults = await buildDefaultsFromCampus(campusId);
+  // Exclude from $setOnInsert any field already in $set — MongoDB rejects a
+  // path that appears in both operators when the upsert creates a new document.
+  const insertDefaults = Object.fromEntries(
+    Object.entries(defaults).filter(([key]) => !(key in update))
+  );
   const prefs = await UserPreferences.findOneAndUpdate(
     { userId },
     {
       $set: update,
-      $setOnInsert: { userId, userModel, campusId, ...defaults },
+      $setOnInsert: { userId, userModel, campusId, ...insertDefaults },
     },
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
