@@ -41,11 +41,18 @@ const allowedOrigins = process.env.FRONTEND_URL
   ? [...new Set([...defaultOrigins, ...process.env.FRONTEND_URL.split(',').map(url => url.trim())])]
   : defaultOrigins;
 
+// Portail public — domaine séparé autorisé en CORS
+if (process.env.PORTAL_URL) {
+  process.env.PORTAL_URL.split(',').map(u => u.trim()).forEach(u => {
+    if (!allowedOrigins.includes(u)) allowedOrigins.push(u);
+  });
+}
+
 const corsOptions = {
   origin: function (origin, callback) {
     // Allow requests with no origin (like mobile apps, Postman)
     if (!origin) return callback(null, true);
-    
+
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
@@ -54,7 +61,7 @@ const corsOptions = {
   },
   credentials: true, // Allow credentials (cookies, authorization headers)
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Portal-Key'],
   exposedHeaders: ['Authorization'],
   optionsSuccessStatus: 200, // For legacy browsers
   maxAge: 86400 // 24 hours - cache preflight requests
@@ -223,6 +230,12 @@ app.get('/health', (req, res) => {
     res.status(503).json(healthCheck);
   }
 });
+
+// ========================================
+// PUBLIC PORTAL ROUTES (pas de JWT requis — monté avant les routes authentifiées)
+// ========================================
+const publicRouter = require('./routers/public.router');
+app.use('/api/public', publicRouter);
 
 // ========================================
 // API ROUTES

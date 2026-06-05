@@ -9,7 +9,7 @@ const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
   // ipKeyGenerator normalizes IPv6 to prevent bypass (required by express-rate-limit v7+)
-  keyGenerator: (req) => ipKeyGenerator(req),
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -30,7 +30,7 @@ const loginLimiter = rateLimit({
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  keyGenerator: (req) => ipKeyGenerator(req),
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -49,7 +49,7 @@ const apiLimiter = rateLimit({
 const strictLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 3,
-  keyGenerator: (req) => ipKeyGenerator(req),
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -68,7 +68,7 @@ const strictLimiter = rateLimit({
 const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 10,
-  keyGenerator: (req) => ipKeyGenerator(req),
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
   standardHeaders: true,
   legacyHeaders: false,
   handler: (req, res) => {
@@ -91,7 +91,7 @@ const createCustomLimiter = (windowMinutes, maxRequests, customMessage = null) =
   return rateLimit({
     windowMs: windowMinutes * 60 * 1000,
     max: maxRequests,
-    keyGenerator: (req) => ipKeyGenerator(req),
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
     standardHeaders: true,
     legacyHeaders: false,
     handler: (req, res) => {

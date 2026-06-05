@@ -141,6 +141,50 @@ const campusSchema = new mongoose.Schema(
       },
     },
 
+    // Public portal — stable URL slug, e.g. 'douala-principal'
+    campusSlug: {
+      type:      String,
+      trim:      true,
+      lowercase: true,
+      unique:    true,
+      sparse:    true,
+      match:     [/^[a-z0-9-]+$/, 'campusSlug must contain only lowercase letters, numbers, and hyphens'],
+      default:   null,
+    },
+
+    // Formations offered at this campus — used in pre-registration form dropdown
+    programs: {
+      type:    [String],
+      default: [],
+    },
+
+    // Next cohort start date — displayed on portal
+    nextBatchDate: {
+      type:    Date,
+      default: null,
+    },
+
+    // Public credibility counters — displayed on the portal home page (spec §4.6).
+    // Administered from the ERP; null values let the portal hide the counter.
+    portalStats: {
+      studentsTrained: {
+        type:    Number,
+        default: null,
+        min:     [0, 'studentsTrained cannot be negative'],
+      },
+      placementRate: {
+        type:    Number,
+        default: null,
+        min:     [0, 'placementRate cannot be negative'],
+        max:     [100, 'placementRate is a percentage (0-100)'],
+      },
+      partnerCompanies: {
+        type:    Number,
+        default: null,
+        min:     [0, 'partnerCompanies cannot be negative'],
+      },
+    },
+
     // i18n defaults — Directors set these in Campus Settings
     defaultLanguage: {
       type: String,
@@ -190,8 +234,9 @@ const campusSchema = new mongoose.Schema(
 );
 
 // **INDEXES FOR PERFORMANCE**
-campusSchema.index({ status: 1 }); // For filtering active campuses
-campusSchema.index({ createdAt: -1 }); // For sorting by creation date
+campusSchema.index({ status: 1 });
+campusSchema.index({ createdAt: -1 });
+// campusSlug uniqueness is declared on the field (unique + sparse) — no duplicate index here.
 
 // **VIRTUAL FIELDS**
 // Virtual for full location string

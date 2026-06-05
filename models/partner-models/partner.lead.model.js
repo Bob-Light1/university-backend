@@ -48,17 +48,18 @@ const partnerLeadSchema = new mongoose.Schema(
     },
 
     // ── PARTENAIRE RÉFÉRENT ───────────────────────────────────────────────
+    // null pour les visites directes (source === 'direct')
     partner: {
-      type:     mongoose.Schema.Types.ObjectId,
-      ref:      'Partner',
-      required: [true, 'Partner is required'],
+      type:    mongoose.Schema.Types.ObjectId,
+      ref:     'Partner',
+      default: null,
     },
 
     partnerCode: {
-      type:     String,
-      required: [true, 'Partner code snapshot is required'],
-      trim:     true,
+      type:      String,
+      trim:      true,
       uppercase: true,
+      default:   null,
     },
 
     // ── INFORMATIONS PROSPECT ─────────────────────────────────────────────
@@ -88,6 +89,19 @@ const partnerLeadSchema = new mongoose.Schema(
     },
 
     programInterest: {
+      type:    String,
+      trim:    true,
+      default: null,
+    },
+
+    // Localisation déclarée par le prospect (spec §4.1 — Pays / Ville)
+    city: {
+      type:    String,
+      trim:    true,
+      default: null,
+    },
+
+    country: {
       type:    String,
       trim:    true,
       default: null,
@@ -170,6 +184,12 @@ const partnerLeadSchema = new mongoose.Schema(
     lastContactedAt: {
       type:    Date,
       default: null,
+    },
+
+    // Phase 3 — opt-in alerte nouvelle session
+    notifyNextBatch: {
+      type:    Boolean,
+      default: false,
     },
   },
 
