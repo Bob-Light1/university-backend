@@ -87,7 +87,7 @@ const submitQuiz = asyncHandler(async (req, res) => {
   const campus = await Campus.findOne({
     campusSlug: campusSlug.toLowerCase().trim(),
     status:     'active',
-  }).select('_id').lean();
+  }).select('_id programs').lean();
 
   if (!campus) return sendNotFound(res, 'Campus');
 
@@ -157,12 +157,24 @@ const submitQuiz = asyncHandler(async (req, res) => {
 
   await session.save();
 
+  // For placement tests, map score to a campus program recommendation.
+  let recommendedProgram = null;
+  if (category?.toLowerCase().trim() === 'placement' && campus.programs?.length) {
+    const programs = campus.programs;
+    const idx = Math.min(
+      Math.floor((score / 100) * programs.length),
+      programs.length - 1,
+    );
+    recommendedProgram = programs[idx];
+  }
+
   return sendSuccess(res, 201, 'Quiz submitted successfully.', {
-    sessionId:      session._id,
+    sessionId:         session._id,
     score,
     correctAnswers,
     totalQuestions,
     period,
+    recommendedProgram,
   });
 });
 

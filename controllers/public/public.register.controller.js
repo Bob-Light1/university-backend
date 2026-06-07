@@ -46,6 +46,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     programInterest, partnerCode, campusSlug,
     source, utmParams, honeypot,
     country, city,
+    notifyNextBatch,
   } = req.body;
 
   // 1. HONEYPOT — silent discard
@@ -133,6 +134,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
       existingLead.partnerCode = resolvedCode;
       existingLead.source      = detectedSource;
     }
+    if (notifyNextBatch) existingLead.notifyNextBatch = true;
 
     existingLead.statusHistory.push({
       status:    existingLead.status,
@@ -177,6 +179,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     ipAddressHash:   req.ipHash,
     honeypotTripped: false,
     fraudFlags,
+    notifyNextBatch: notifyNextBatch ? true : false,
   });
 
   await lead.save();

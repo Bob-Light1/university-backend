@@ -18,15 +18,18 @@ const express = require('express');
 const publicPortalMiddleware = require('../middleware/public-portal/publicPortal.middleware');
 const { createCustomLimiter } = require('../middleware/rate-limiter/rate-limiter');
 
-const campusCtrl       = require('../controllers/public/public.campus.controller');
-const registerCtrl     = require('../controllers/public/public.register.controller');
-const quizCtrl         = require('../controllers/public/public.quiz.controller');
-const leaderboardCtrl  = require('../controllers/public/public.leaderboard.controller');
-const programsCtrl     = require('../controllers/public/public.programs.controller');
-const testimonialsCtrl = require('../controllers/public/public.testimonials.controller');
-const faqCtrl          = require('../controllers/public/public.faq.controller');
-const competitionCtrl  = require('../controllers/public/public.competition.controller');
-const coursesCtrl      = require('../controllers/public/public.courses.controller');
+const campusCtrl              = require('../controllers/public/public.campus.controller');
+const registerCtrl            = require('../controllers/public/public.register.controller');
+const quizCtrl                = require('../controllers/public/public.quiz.controller');
+const leaderboardCtrl         = require('../controllers/public/public.leaderboard.controller');
+const programsCtrl            = require('../controllers/public/public.programs.controller');
+const testimonialsCtrl        = require('../controllers/public/public.testimonials.controller');
+const faqCtrl                 = require('../controllers/public/public.faq.controller');
+const competitionCtrl         = require('../controllers/public/public.competition.controller');
+const coursesCtrl             = require('../controllers/public/public.courses.controller');
+const contactCtrl             = require('../controllers/public/public.contact.controller');
+const partnerApplicationCtrl  = require('../controllers/public/public.partner.application.controller');
+const alertCtrl               = require('../controllers/public/public.alert.controller');
 
 const router = express.Router();
 
@@ -81,5 +84,27 @@ router.get('/competition/prizes', competitionCtrl.getCompetitionPrizes);
 // ── APERÇUS DE COURS (Phase 2) ────────────────────────────────────────────────
 // GET /api/public/course-previews?campusSlug=...&program=...
 router.get('/course-previews', coursesCtrl.getCoursePreviews);
+
+// ── CONTACT (Phase 3) ─────────────────────────────────────────────────────────
+// POST /api/public/contact
+const contactLimiter = createCustomLimiter(
+  60,
+  5,
+  'Too many contact submissions from this IP. Please try again in 1 hour.'
+);
+router.post('/contact', contactLimiter, contactCtrl.submitContact);
+
+// ── CANDIDATURE PARTENAIRE (Phase 3) ──────────────────────────────────────────
+// POST /api/public/partner-application
+const partnerApplicationLimiter = createCustomLimiter(
+  60,
+  3,
+  'Too many partner applications from this IP. Please try again in 1 hour.'
+);
+router.post('/partner-application', partnerApplicationLimiter, partnerApplicationCtrl.submitPartnerApplication);
+
+// POST /api/public/alert — session alert opt-in (spec §4.13)
+const alertLimiter = createCustomLimiter(60, 5, 'Too many alert registrations from this IP. Please try again later.');
+router.post('/alert', alertLimiter, alertCtrl.submitAlert);
 
 module.exports = router;

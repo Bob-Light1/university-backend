@@ -18,7 +18,8 @@ const router  = express.Router();
 const { authenticate, authorize } = require('../middleware/auth/auth');
 
 const { makeContentController } = require('../controllers/portal-admin/portal-admin.factory');
-const competitionCtrl = require('../controllers/portal-admin/competition.admin.controller');
+const competitionCtrl          = require('../controllers/portal-admin/competition.admin.controller');
+const applicationCtrl          = require('../controllers/portal-admin/partner.application.admin.controller');
 
 const Testimonial   = require('../models/partner-models/testimonial.model');
 const FaqEntry       = require('../models/partner-models/faq.entry.model');
@@ -70,5 +71,11 @@ router.put('/competition/:id', competitionCtrl.update);
 router.patch('/competition/:id/toggle-active', competitionCtrl.toggleActive);
 router.post('/competition/:id/close', competitionCtrl.closeNow);
 router.delete('/competition/:id', competitionCtrl.remove);
+
+// ─── Partner applications (Phase 3) ────────────────────────────────────────────
+router.get('/applications', applicationCtrl.list);
+router.get('/applications/:id', applicationCtrl.getOne);
+router.patch('/applications/:id/review', applicationCtrl.review);
+router.delete('/applications/:id', applicationCtrl.remove);
 
 module.exports = router;
