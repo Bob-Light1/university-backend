@@ -39,9 +39,11 @@ const getLeaderboard = asyncHandler(async (req, res) => {
     completedAt: { $ne: null },
   };
 
-  let campusId = null;
-
-  if (scope === 'campus' || campusSlug?.trim()) {
+  // Campus scope filters by campus; national scope spans ALL campuses (spec §4.3).
+  // The filter must be driven by the scope, not by the mere presence of campusSlug:
+  // the portal sends campusSlug on the national call too, and applying it there
+  // collapsed the "national" board into a 20-row copy of the campus board.
+  if (scope === 'campus') {
     if (!campusSlug?.trim()) {
       return sendError(res, 400, 'campusSlug is required for campus scope.');
     }
@@ -53,8 +55,7 @@ const getLeaderboard = asyncHandler(async (req, res) => {
 
     if (!campus) return sendNotFound(res, 'Campus');
 
-    campusId             = campus._id;
-    filter.schoolCampus  = campusId;
+    filter.schoolCampus = campus._id;
   }
 
   if (category?.trim()) {
