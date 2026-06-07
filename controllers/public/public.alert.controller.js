@@ -9,10 +9,9 @@
  * - No existing lead → creates a minimal PartnerLead with notifyNextBatch = true.
  */
 
-const asyncHandler = require('express-async-handler');
-const PartnerLead  = require('../../models/partner-models/partner.lead.model');
-const Campus       = require('../../models/campus/campus.model');
-const { sendSuccess, sendError } = require('../../utils/response-helpers');
+const { asyncHandler, sendSuccess, sendError } = require('../../utils/response-helpers');
+const PartnerLead = require('../../models/partner-models/partner.lead.model');
+const Campus      = require('../../models/campus.model');
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -41,7 +40,7 @@ const submitAlert = asyncHandler(async (req, res) => {
   const defaultSlug = process.env.DEFAULT_CAMPUS_SLUG ?? '';
   const slug = campusSlug?.trim() || defaultSlug;
 
-  const campus = await Campus.findOne({ slug, isActive: true }).select('_id').lean();
+  const campus = await Campus.findOne({ campusSlug: slug, status: 'active' }).select('_id').lean();
   if (!campus) {
     return sendError(res, 404, 'Campus not found.');
   }
