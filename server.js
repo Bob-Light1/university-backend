@@ -265,6 +265,7 @@ const staffRoleRouter         = require('./routers/staffRole.router');
 const announcementRouter      = require('./routers/announcement.router');
 const gaetRouter              = require('./routers/gaet.router');
 const settingsRouter          = require('./routers/settings.router');
+const portalAdminRouter       = require('./routers/portal-admin.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -291,6 +292,7 @@ app.use('/api/staff-roles',    staffRoleRouter);
 app.use('/api/announcements',  announcementRouter);
 app.use('/api/gaet',          gaetRouter);
 app.use('/api/settings',      settingsRouter);
+app.use('/api/portal-admin',  portalAdminRouter);
 
 // ========================================
 // 404 HANDLER
@@ -316,7 +318,7 @@ app.use((err, req, res, next) => {
   });
 
   // CORS error
-  if (err.message.includes('not allowed by CORS')) {
+  if (typeof err.message === 'string' && err.message.includes('not allowed by CORS')) {
     return res.status(403).json({
       success: false,
       message: 'CORS policy: Origin not allowed'
@@ -349,7 +351,7 @@ app.use((err, req, res, next) => {
   }
 
   if (err.code === 11000) {
-    const field = Object.keys(err.keyPattern)[0];
+    const field = err.keyPattern ? Object.keys(err.keyPattern)[0] : 'A unique field';
     return res.status(409).json({
       success: false,
       message: `${field} already exists`
@@ -422,9 +424,11 @@ try {
   const { runRetentionJob }  = require('./crons/document.retention.cron');
   const { runAntiCheatJob }  = require('./crons/exam-anticheat.cron');
   const { runExpiryJob }     = require('./crons/announcement.expiry.cron');
-  cron.schedule('0 2 * * 0', runRetentionJob);   // Every Sunday at 02:00
-  cron.schedule('0 3 * * *', runAntiCheatJob);   // Nightly at 03:00
-  cron.schedule('0 1 * * *', runExpiryJob);      // Nightly at 01:00
+  const { runCompetitionClosingJob } = require('./crons/competition.closing.cron');
+  cron.schedule('0 2 * * 0', runRetentionJob);          // Every Sunday at 02:00
+  cron.schedule('0 3 * * *', runAntiCheatJob);          // Nightly at 03:00
+  cron.schedule('0 1 * * *', runExpiryJob);             // Nightly at 01:00
+  cron.schedule('5 0 1 * *', runCompetitionClosingJob); // 1st of month at 00:05
 } catch {
   console.warn('⚠️  node-cron not available — cron jobs disabled.');
 }

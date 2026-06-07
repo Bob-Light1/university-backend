@@ -18,11 +18,15 @@ const express = require('express');
 const publicPortalMiddleware = require('../middleware/public-portal/publicPortal.middleware');
 const { createCustomLimiter } = require('../middleware/rate-limiter/rate-limiter');
 
-const campusCtrl      = require('../controllers/public/public.campus.controller');
-const registerCtrl    = require('../controllers/public/public.register.controller');
-const quizCtrl        = require('../controllers/public/public.quiz.controller');
-const leaderboardCtrl = require('../controllers/public/public.leaderboard.controller');
-const programsCtrl    = require('../controllers/public/public.programs.controller');
+const campusCtrl       = require('../controllers/public/public.campus.controller');
+const registerCtrl     = require('../controllers/public/public.register.controller');
+const quizCtrl         = require('../controllers/public/public.quiz.controller');
+const leaderboardCtrl  = require('../controllers/public/public.leaderboard.controller');
+const programsCtrl     = require('../controllers/public/public.programs.controller');
+const testimonialsCtrl = require('../controllers/public/public.testimonials.controller');
+const faqCtrl          = require('../controllers/public/public.faq.controller');
+const competitionCtrl  = require('../controllers/public/public.competition.controller');
+const coursesCtrl      = require('../controllers/public/public.courses.controller');
 
 const router = express.Router();
 
@@ -61,5 +65,21 @@ router.post('/quiz/submit', quizCtrl.submitQuiz);
 // ── CLASSEMENT ────────────────────────────────────────────────────────────────
 // GET /api/public/leaderboard?campusSlug=...&period=YYYY-MM&category=...&scope=campus
 router.get('/leaderboard', leaderboardCtrl.getLeaderboard);
+
+// ── TÉMOIGNAGES (Phase 2) ─────────────────────────────────────────────────────
+// GET /api/public/testimonials?campusSlug=...&limit=6
+router.get('/testimonials', testimonialsCtrl.getTestimonials);
+
+// ── FAQ (Phase 2 — cache 24h côté portail) ────────────────────────────────────
+// GET /api/public/faq?campusSlug=...
+router.get('/faq', faqCtrl.getFaq);
+
+// ── COMPÉTITION (Phase 2) ─────────────────────────────────────────────────────
+// GET /api/public/competition/prizes?campusSlug=...
+router.get('/competition/prizes', competitionCtrl.getCompetitionPrizes);
+
+// ── APERÇUS DE COURS (Phase 2) ────────────────────────────────────────────────
+// GET /api/public/course-previews?campusSlug=...&program=...
+router.get('/course-previews', coursesCtrl.getCoursePreviews);
 
 module.exports = router;

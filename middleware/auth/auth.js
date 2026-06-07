@@ -207,9 +207,20 @@ const optionalAuth = (req, _res, next) => {
       return next(); // Config error, continue without user
     }
 
-    const decoded = jwt.verify(token, jwtSecret);
+    // Pin algorithm + issuer to match authenticate() — prevents algorithm
+    // confusion and rejects tokens issued for a different audience.
+    const decoded = jwt.verify(token, jwtSecret, {
+      algorithms: ['HS256'],
+      issuer: 'school-management-app'
+    });
+
+    // Ignore tokens with an incomplete payload rather than trusting them.
+    if (!decoded.id || !decoded.role) {
+      return next();
+    }
+
     req.user = decoded;
-    
+
     next();
 
   } catch (error) {

@@ -1,6 +1,7 @@
 module.exports = (allowedRoles = []) => {
   return (req, res, next) => {
-    const userRoles = req.user?.roles || [];
+    // JWT payload exposes a single `role`; tolerate a legacy `roles` array too.
+    const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
 
     const hasAccess = allowedRoles.some(role =>
       userRoles.includes(role)
