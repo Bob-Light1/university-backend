@@ -16,18 +16,19 @@
  */
 
 const mongoose          = require('mongoose');
-const Mentor            = require('../../models/mentor.model');
-const Result            = require('../../models/result.model');
-const StudentAttendance = require('../../models/student-models/student.attend.model');
-const Course            = require('../../models/course.model');
-const Student           = require('../../models/student-models/student.model');
+const Mentor            = require('../mentor.model');
+// Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
+const Result            = require('../../../models/result.model');
+const StudentAttendance = require('../../../models/student-models/student.attend.model');
+const Course            = require('../../../models/course.model');
+const Student           = require('../../../models/student-models/student.model');
 
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendPaginated,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

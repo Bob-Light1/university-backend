@@ -3,11 +3,11 @@
 const express = require('express');
 const router  = express.Router();
 
-const mentorController          = require('../controllers/mentor-controllers/mentor.controller');
-const mentorProfileController   = require('../controllers/mentor-controllers/mentor.profile.controller');
-const mentorReadonlyController  = require('../controllers/mentor-controllers/mentor.readonly.controller');
-const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
-const { loginLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const mentorController          = require('./controllers/mentor.controller');
+const mentorProfileController   = require('./controllers/mentor.profile.controller');
+const mentorReadonlyController  = require('./controllers/mentor.readonly.controller');
+const { authenticate, authorize, isOwnerOrRole } = require('../../shared/middleware/auth');
+const { loginLimiter } = require('../../shared/middleware/rate-limiter');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 

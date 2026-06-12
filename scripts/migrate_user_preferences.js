@@ -20,7 +20,7 @@ const MODELS = [
   { name: 'Teacher',        file: '../models/teacher-models/teacher.model',        role: 'TEACHER',        campusField: 'schoolCampus' },
   { name: 'Student',        file: '../models/student-models/student.model',        role: 'STUDENT',        campusField: 'schoolCampus' },
   { name: 'Parent',         file: '../models/parent.model',                        role: 'PARENT',         campusField: 'schoolCampus' },
-  { name: 'Mentor',         file: '../models/mentor.model',                        role: 'MENTOR',         campusField: 'schoolCampus' },
+  { name: 'Mentor',         file: '../modules/mentor/mentor.model',                role: 'MENTOR',         campusField: 'schoolCampus' },
   { name: 'Staff',          file: '../models/staff.model',                         role: 'STAFF',          campusField: 'schoolCampus' },
   { name: 'Campus',         file: '../models/campus.model',                        role: 'CAMPUS_MANAGER', campusField: '_id' },
   { name: 'Partner',        file: '../models/partner-models/partner.model',        role: 'PARTNER',        campusField: 'schoolCampus' },

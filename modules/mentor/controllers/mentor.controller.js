@@ -22,22 +22,23 @@ const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-const Mentor     = require('../../models/mentor.model');
-const Student    = require('../../models/student-models/student.model');
-const profileSvc = require('../../services/profile.service');
+const Mentor     = require('../mentor.model');
+// Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
+const Student    = require('../../../models/student-models/student.model');
+const profileSvc = require('../../../services/profile.service');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendPaginated,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidEmail,
   isValidObjectId,
   buildCampusFilter,
   escapeRegex,
-} = require('../../utils/validation-helpers');
-const { getLoginPrefs } = require('../../utils/login-prefs.util');
+} = require('../../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;

@@ -18,7 +18,7 @@ const Department = require('../models/department.model');
 const StudentAttendance = require('../models/student-models/student.attend.model');
 const Income = require('../models/income.model');
 const Staff  = require('../models/staff.model');
-const Mentor = require('../models/mentor.model');
+const mentorService = require('../modules/mentor').service; // façade module mentor (§3)
 
 const campusConfig = require('../configs/campus.config');
 const studentConfig = require('../configs/student.config');
@@ -543,9 +543,7 @@ class CampusController extends GenericEntityController {
         staffTotal,
         staffActive,
         staffWithRole,
-        mentorTotal,
-        mentorActive,
-        mentorStudentsAgg,
+        mentorStats,
       ] = await Promise.all([
         Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
         Teacher.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
@@ -587,16 +585,10 @@ class CampusController extends GenericEntityController {
         Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
         Staff.countDocuments({ schoolCampus: campusId, status: 'active' }),
         Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' }, subRole: { $exists: true, $ne: null } }),
-        Mentor.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
-        Mentor.countDocuments({ schoolCampus: campusId, status: 'active' }),
-        Mentor.aggregate([
-          { $match: { schoolCampus: campusOid, status: { $ne: 'archived' } } },
-          { $group: { _id: null, total: { $sum: { $size: '$students' } } } },
-        ]),
+        mentorService.getCampusStats(campusId, campusOid),
       ]);
 
       const avgAbsenceRate      = attendanceStats[0]?.avgAbsenceRate ?? 0;
-      const mentorStudentsAssigned = mentorStudentsAgg[0]?.total ?? 0;
 
       return sendSuccess(res, 200, 'Dashboard statistics fetched successfully', {
         students: {
@@ -618,9 +610,9 @@ class CampusController extends GenericEntityController {
           withoutRole: staffTotal - staffWithRole,
         },
         mentors: {
-          total:            mentorTotal,
-          active:           mentorActive,
-          studentsAssigned: mentorStudentsAssigned,
+          total:            mentorStats.total,
+          active:           mentorStats.active,
+          studentsAssigned: mentorStats.studentsAssigned,
         },
         avgAbsenceRate: Math.round(avgAbsenceRate * 10) / 10,
         paymentAlerts,
@@ -830,35 +822,9 @@ class CampusController extends GenericEntityController {
         return sendError(res, 403, 'You can only access mentors from your own campus');
       }
 
-      const Mentor = mongoose.model('Mentor');
-
-      const filter = { schoolCampus: campusId };
-      if (status) filter.status = status;
-      else filter.status = { $ne: 'archived' };
-
-      if (search) {
-        filter.$or = [
-          { firstName:      { $regex: escapeRegex(search), $options: 'i' } },
-          { lastName:       { $regex: escapeRegex(search), $options: 'i' } },
-          { email:          { $regex: escapeRegex(search), $options: 'i' } },
-          { phone:          { $regex: escapeRegex(search), $options: 'i' } },
-          { specialization: { $regex: escapeRegex(search), $options: 'i' } },
-          { matricule:      { $regex: escapeRegex(search), $options: 'i' } },
-        ];
-      }
-
-      const skip = (Number(page) - 1) * Number(limit);
-
-      const [mentors, total] = await Promise.all([
-        Mentor.find(filter)
-          .populate('assignedStudents', 'firstName lastName matricule')
-          .select('-password')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(Number(limit))
-          .lean(),
-        Mentor.countDocuments(filter),
-      ]);
+      const { mentors, total } = await mentorService.listByCampus({
+        campusId, page, limit, search, status, escapeRegex,
+      });
 
       return sendPaginated(res, 200, 'Mentors fetched successfully', mentors, {
         total, page, limit,
