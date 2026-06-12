@@ -5,7 +5,7 @@
  * @description Express router for the global course catalog.
  *
  *  Registration in server.js:
- *    const courseRouter = require('./routers/course.router');
+ *    const courseRouter = require('./modules/course').routes;
  *    app.use('/api/courses', courseRouter);
  *
  *  Subject linking routes are registered on a SEPARATE subject-extended router.
@@ -29,8 +29,8 @@
 const express = require('express');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter }              = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter }              = require('../../shared/middleware/rate-limiter');
 
 // ─── CONTROLLER IMPORTS ───────────────────────────────────────────────────────
 
@@ -43,19 +43,19 @@ const {
   updateCourse,
   softDeleteCourse,
   restoreCourse,
-} = require('../controllers/course-controllers/course.crud.controller');
+} = require('./controllers/course.crud.controller');
 
 const {
   submitForReview,
   approveCourse,
   rejectCourse,
   createNewVersion,
-} = require('../controllers/course-controllers/course.workflow.controller');
+} = require('./controllers/course.workflow.controller');
 
 const {
   addResource,
   removeResource,
-} = require('../controllers/course-controllers/course.resources.controller');
+} = require('./controllers/course.resources.controller');
 
 // ─── ROLE GROUPS ──────────────────────────────────────────────────────────────
 

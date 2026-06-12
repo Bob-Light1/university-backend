@@ -24,8 +24,8 @@
 
 const mongoose = require('mongoose');
 
-const { Course, APPROVAL_STATUS } = require('../../models/course.model');
-const Subject                      = require('../../models/subject.model');
+const { Course, APPROVAL_STATUS } = require('../course.model');
+const Subject                      = require('../../../models/subject.model');
 
 const {
   asyncHandler,
@@ -36,9 +36,9 @@ const {
   sendNotFound,
   sendConflict,
   handleDuplicateKeyError,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 const {
   isGlobalRole,

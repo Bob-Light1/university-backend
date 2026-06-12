@@ -26,7 +26,7 @@
 
 const mongoose = require('mongoose');
 
-const { Course, APPROVAL_STATUS } = require('../../models/course.model');
+const { Course, APPROVAL_STATUS } = require('../course.model');
 
 const {
   asyncHandler,
@@ -34,9 +34,9 @@ const {
   sendError,
   sendNotFound,
   sendConflict,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 const { COURSE_POPULATE }  = require('./course.helper');
 
 // ─── VALID TRANSITION GUARD ───────────────────────────────────────────────────
