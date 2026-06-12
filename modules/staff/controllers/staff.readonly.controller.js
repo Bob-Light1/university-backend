@@ -21,8 +21,8 @@ const StudentAttendance = require('../../../models/student-models/student.attend
 const Course            = require('../../../models/course.model');
 const Teacher           = require('../../../models/teacher-models/teacher.model');
 const TeacherSchedule   = require('../../../models/teacher-models/teacher.schedule.model');
-const Document          = require('../../../models/document-models/document.model');
 const ExamSession       = require('../../../models/exam-models/exam.session.model');
+const documentService   = require('../../document').service;
 
 const {
   sendSuccess,
@@ -370,22 +370,9 @@ const getMyDocuments = async (req, res) => {
     const campusId = toOid(req.user.campusId);
     const { page = 1, limit = 20, search, type, category } = req.query;
 
-    const filter = { campusId, status: 'PUBLISHED' };
-    if (type)     filter.type     = type.toUpperCase();
-    if (category) filter.category = category.toUpperCase();
-    if (search) {
-      const rx = new RegExp(escapeRegex(search.trim()), 'i');
-      filter.$or = [{ title: rx }, { description: rx }];
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Document.find(filter)
-        .select('-__v -auditLog -versions')
-        .sort({ createdAt: -1 })
-        .skip(skip).limit(Number(limit)).lean(),
-      Document.countDocuments(filter),
-    ]);
+    const { docs, total } = await documentService.listPublishedForCampus({
+      campusId, page, limit, search, type, category,
+    });
 
     return sendPaginated(res, 200, 'Documents retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
