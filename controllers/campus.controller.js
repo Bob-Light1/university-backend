@@ -16,7 +16,7 @@ const Class = require('../models/class.model');
 const Subject = require('../models/subject.model');
 const Department = require('../models/department.model');
 const StudentAttendance = require('../models/student-models/student.attend.model');
-const Income = require('../models/income.model');
+const financeService = require('../modules/finance').service; // façade module finance (§3)
 const staffService  = require('../modules/staff').service; // façade module staff (§3)
 const mentorService = require('../modules/mentor').service; // façade module mentor (§3)
 
@@ -579,7 +579,7 @@ class CampusController extends GenericEntityController {
           },
         ]),
         // Pending income records as payment alerts
-        Income.countDocuments({ campus: campusId, status: 'pending' }),
+        financeService.countPendingIncomes(campusId),
         staffService.getCampusStats(campusId),
         mentorService.getCampusStats(campusId, campusOid),
       ]);
