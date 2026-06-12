@@ -14,9 +14,9 @@ const Teacher = require('../../../models/teacher-models/teacher.model');
 const Student = require('../../../models/student-models/student.model');
 const Class = require('../../../models/class.model');
 const Subject = require('../../../models/subject.model');
-const Department = require('../../../models/department.model');
 const StudentAttendance = require('../../../models/student-models/student.attend.model');
 const financeService = require('../../finance').service; // façade module finance (§3)
+const departmentService = require('../../department').service; // façade module department (§3)
 const staffService  = require('../../staff').service; // façade module staff (§3)
 const mentorService = require('../../mentor').service; // façade module mentor (§3)
 
@@ -930,22 +930,12 @@ class CampusController extends GenericEntityController {
         return sendError(res, 403, 'You can only access departments from your own campus');
       }
 
-      const filter = { schoolCampus: campusId };
-      if (status) filter.status = status;
-      else if (includeArchived !== 'true') filter.status = { $ne: 'archived' };
-
-      if (search) {
-        filter.$or = [
-          { name:        { $regex: escapeRegex(search), $options: 'i' } },
-          { code:        { $regex: escapeRegex(search), $options: 'i' } },
-          { description: { $regex: escapeRegex(search), $options: 'i' } },
-        ];
-      }
-
-      const departments = await Department.find(filter)
-        .populate('headOfDepartment', 'firstName lastName email')
-        .sort({ name: 1 })
-        .lean();
+      const departments = await departmentService.listDepartmentsForCampus({
+        campusId,
+        status,
+        includeArchived: includeArchived === 'true',
+        search,
+      });
 
       return sendSuccess(res, 200, 'Departments fetched successfully', departments);
     } catch (error) {

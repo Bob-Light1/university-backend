@@ -28,8 +28,11 @@ class GenericBulkController {
     this.entityName = config.entityName || 'Entity';
     this.entityNameLower = this.entityName.toLowerCase();
     
-    // Related model for bulk operations (e.g., Class for students)
+    // Related model for bulk operations (e.g., Class for students).
+    // findRelatedById(id, session) — alternative façade-friendly : permet aux
+    // modules de ne pas injecter le model d'un autre domaine (chantier 20b).
     this.RelatedModel = config.RelatedModel || null;
+    this.findRelatedById = config.findRelatedById || null;
     this.relatedField = config.relatedField || null; // e.g., 'studentClass'
     
     // Initialize Export Service
@@ -106,8 +109,10 @@ class GenericBulkController {
       }
 
       // Validate related entity exists
-      if (this.RelatedModel) {
-        const relatedEntity = await this.RelatedModel.findById(newRelatedId).session(session);
+      if (this.findRelatedById || this.RelatedModel) {
+        const relatedEntity = this.findRelatedById
+          ? await this.findRelatedById(newRelatedId, session)
+          : await this.RelatedModel.findById(newRelatedId).session(session);
         if (!relatedEntity) {
           await session.abortTransaction();
           return sendNotFound(res, 'Related entity');

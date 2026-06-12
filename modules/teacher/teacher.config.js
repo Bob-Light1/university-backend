@@ -1,7 +1,7 @@
 const Teacher    = require('./models/teacher.model');
-const Department = require('../../models/department.model');
 const Class      = require('../../models/class.model');
 const mongoose   = require('mongoose');
+const { getDepartmentCampusRef } = require('../department').service; // façade module department (§3)
 
 /**
  * TEACHER CONFIGURATION FOR GENERIC ENTITY CONTROLLER
@@ -147,10 +147,7 @@ const teacherConfig = {
           return { valid: false, error: 'Invalid department ID format (ObjectId expected)' };
         }
 
-        const selectedDepartment = await Department.findById(fields.department)
-          .select('schoolCampus name')
-          .session(session)
-          .lean();
+        const selectedDepartment = await getDepartmentCampusRef(fields.department, { session });
 
         if (!selectedDepartment) {
           return { valid: false, error: 'Selected department does not exist' };
@@ -325,7 +322,7 @@ const teacherConfig = {
 
       // Validate department change
       if (updates.department && updates.department !== teacher.department?.toString()) {
-        const newDepartment = await Department.findById(updates.department).select('schoolCampus name');
+        const newDepartment = await getDepartmentCampusRef(updates.department);
 
         if (!newDepartment) {
           return { success: false, error: 'New department does not exist' };
