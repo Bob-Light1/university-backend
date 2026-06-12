@@ -1,23 +1,23 @@
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const GenericEntityController = require('../generic-entity.controller');
-const GenericBulkController = require('../generic-bulk.controller');
-const Teacher = require('../../models/teacher-models/teacher.model');
-const Department = require('../../models/department.model');
+const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
+const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
+const Teacher = require('../models/teacher.model');
+const Department = require('../../../models/department.model');
 
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidEmail,
   isValidObjectId,
   validatePasswordStrength,
-} = require('../../utils/validation-helpers');
-const { deleteFile } = require('../../utils/file-upload');
-const teacherConfig = require('../../configs/teacher.config');
-const { getLoginPrefs } = require('../../utils/login-prefs.util');
+} = require('../../../utils/validation-helpers');
+const { deleteFile } = require('../../../shared/utils/file-upload');
+const teacherConfig = require('../teacher.config');
+const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 const SALT_ROUNDS    = 10;
 const TEACHEAR_FOLDER = 'teachers';

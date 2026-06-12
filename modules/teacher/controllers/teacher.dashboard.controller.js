@@ -19,15 +19,15 @@
 
 const mongoose = require('mongoose');
 
-const Teacher        = require('../../models/teacher-models/teacher.model');
-const TeacherSchedule = require('../../models/teacher-models/teacher.schedule.model');
-const Student        = require('../../models/student-models/student.model');
-const ExamGrading    = require('../../models/exam-models/exam.grading.model');
+const Teacher        = require('../models/teacher.model');
+const TeacherSchedule = require('../models/teacher.schedule.model');
+const Student        = require('../../../models/student-models/student.model');
+const ExamGrading    = require('../../../models/exam-models/exam.grading.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

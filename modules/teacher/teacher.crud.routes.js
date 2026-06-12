@@ -1,16 +1,16 @@
 const express = require('express');
 const router = express.Router();
 
-const teacherController          = require('../controllers/teacher-controllers/teacher.controller');
-const teacherDashboardController = require('../controllers/teacher-controllers/teacher.dashboard.controller');
-const teacherProfileController   = require('../controllers/teacher-controllers/teacher.profile.controller');
-const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
-const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const teacherController          = require('./controllers/teacher.controller');
+const teacherDashboardController = require('./controllers/teacher.dashboard.controller');
+const teacherProfileController   = require('./controllers/teacher.profile.controller');
+const { authenticate, authorize, isOwnerOrRole } = require('../../shared/middleware/auth');
+const { loginLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
 const {
   uploadProfileImage,
   uploadImportFile,
   handleMulterError
-} = require('../middleware/upload/upload');
+} = require('../../shared/middleware/upload');
 
 // Role configurations
 const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];

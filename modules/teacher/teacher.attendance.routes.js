@@ -10,8 +10,8 @@
 const express = require('express');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter }              = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter }              = require('../../shared/middleware/rate-limiter');
 
 const {
   initSessionAttendance,
@@ -28,7 +28,7 @@ const {
   getCampusStats,
   getPayrollReport,
   getCampusOverview,
-} = require('../controllers/teacher-controllers/teacher.attendance.controller');
+} = require('./controllers/teacher.attendance.controller');
 
 // ─────────────────────────────────────────────
 // MIDDLEWARE GLOBAL

@@ -17,7 +17,7 @@ const Campus = require('../models/campus.model');
 // Lazy imports to avoid loading every model at startup
 const MODELS = [
   { name: 'Admin',          file: '../modules/admin/admin.model',                  role: 'ADMIN',          campusField: null },
-  { name: 'Teacher',        file: '../models/teacher-models/teacher.model',        role: 'TEACHER',        campusField: 'schoolCampus' },
+  { name: 'Teacher',        file: '../modules/teacher/models/teacher.model',        role: 'TEACHER',        campusField: 'schoolCampus' },
   { name: 'Student',        file: '../models/student-models/student.model',        role: 'STUDENT',        campusField: 'schoolCampus' },
   { name: 'Parent',         file: '../modules/parent/parent.model',                role: 'PARENT',         campusField: 'schoolCampus' },
   { name: 'Mentor',         file: '../modules/mentor/mentor.model',                role: 'MENTOR',         campusField: 'schoolCampus' },
