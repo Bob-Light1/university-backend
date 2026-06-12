@@ -25,7 +25,7 @@ const mongoose = require('mongoose');
 const Mentor     = require('../mentor.model');
 // Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
 const Student    = require('../../../models/student-models/student.model');
-const profileSvc = require('../../../services/profile.service');
+const profileSvc = require('../../../shared/services/profile.service');
 const {
   sendSuccess,
   sendError,

@@ -16,7 +16,7 @@
 
 const mongoose   = require('mongoose');
 const Mentor     = require('../mentor.model');
-const profileSvc = require('../../../services/profile.service');
+const profileSvc = require('../../../shared/services/profile.service');
 
 const userFilter = (req) => ({
   _id:          new mongoose.Types.ObjectId(req.user.id),

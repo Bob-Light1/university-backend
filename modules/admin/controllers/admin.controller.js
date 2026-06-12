@@ -31,7 +31,7 @@ const bcrypt  = require('bcrypt');
 const jwt     = require('jsonwebtoken');
 
 const Admin      = require('../admin.model');
-const profileSvc = require('../../../services/profile.service');
+const profileSvc = require('../../../shared/services/profile.service');
 
 const {
   sendSuccess,

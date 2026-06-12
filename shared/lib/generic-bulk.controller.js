@@ -5,8 +5,8 @@ const {
   sendNotFound,
 } = require('../utils/response-helpers');
 const { isValidObjectId } = require('../utils/validation-helpers');
-const ExportService = require('../../services/export.service');
-const ImportService = require('../../services/import.service');
+const ExportService = require('../services/export.service');
+const ImportService = require('../services/import.service');
 
 /**
  * GENERIC BULK OPERATIONS CONTROLLER :

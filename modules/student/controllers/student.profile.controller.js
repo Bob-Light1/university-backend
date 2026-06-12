@@ -17,7 +17,7 @@
 
 const mongoose = require('mongoose');
 const Student  = require('../models/student.model');
-const profileSvc = require('../../../services/profile.service');
+const profileSvc = require('../../../shared/services/profile.service');
 
 // campusId-aware filter (prevents a student from accessing another campus's data)
 const userFilter = (req) => ({
