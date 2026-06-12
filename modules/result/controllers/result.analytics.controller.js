@@ -23,10 +23,10 @@
 
 const mongoose = require('mongoose');
 
-const { Result, RESULT_STATUS, SEMESTER }  = require('../../models/result.model');
-const { GradingScale, GRADING_SYSTEM }     = require('../../models/grading-scale.model');
-const { FinalTranscript, TRANSCRIPT_STATUS } = require('../../models/final-transcript.model');
-const Student = require('../../models/student-models/student.model');
+const { Result, RESULT_STATUS, SEMESTER }  = require('../models/result.model');
+const { GradingScale, GRADING_SYSTEM }     = require('../models/grading-scale.model');
+const { FinalTranscript, TRANSCRIPT_STATUS } = require('../models/final-transcript.model');
+const Student = require('../../../models/student-models/student.model');
 
 const {
   asyncHandler,
@@ -35,9 +35,9 @@ const {
   sendCreated,
   sendNotFound,
   sendForbidden,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 const {
   isGlobalRole,

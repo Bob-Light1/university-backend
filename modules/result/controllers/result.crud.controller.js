@@ -18,9 +18,9 @@
 const mongoose = require('mongoose');
 const { parse: csvParse } = require('csv-parse/sync');
 
-const { Result, RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../../models/result.model');
-const Class   = require('../../models/class.model');
-const Student = require('../../models/student-models/student.model');
+const { Result, RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
+const Class   = require('../../../models/class.model');
+const Student = require('../../../models/student-models/student.model');
 
 const {
   asyncHandler,
@@ -31,12 +31,12 @@ const {
   sendNotFound,
   sendForbidden,
   handleDuplicateKeyError,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 const {
   isValidObjectId,
   validateStudentBelongsToCampus,
-} = require('../../utils/validation-helpers');
+} = require('../../../utils/validation-helpers');
 
 const {
   isGlobalRole,

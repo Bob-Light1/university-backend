@@ -17,9 +17,9 @@
  */
 
 const mongoose = require('mongoose');
-const { buildCampusFilter, isValidObjectId } = require('../../utils/validation-helpers');
-const { sendError, sendForbidden } = require('../../utils/response-helpers');
-const { RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../../models/result.model');
+const { buildCampusFilter, isValidObjectId } = require('../../../utils/validation-helpers');
+const { sendError, sendForbidden } = require('../../../shared/utils/response-helpers');
+const { RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
 
 // ─── GUARDS DE RÔLE ───────────────────────────────────────────────────────────
 

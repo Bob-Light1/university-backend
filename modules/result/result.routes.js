@@ -5,7 +5,7 @@
  * @description Router Express pour la gestion des résultats académiques.
  *
  *  Enregistrement dans server.js :
- *    const resultRouter = require('./routers/result.router');
+ *    const resultRouter = require('./modules/result').routes;
  *    app.use('/api/results', resultRouter);
  *
  *  Architecture des controllers :
@@ -30,8 +30,8 @@ const express = require('express');
 const multer  = require('multer');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter, uploadLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter, uploadLimiter } = require('../../shared/middleware/rate-limiter');
 
 // Multer mémoire — CSV parsé sans stockage disque
 const csvUpload = multer({
@@ -53,7 +53,7 @@ const {
   getResultById,
   updateResult,
   deleteResult,
-} = require('../controllers/result-controllers/result.crud.controller');
+} = require('./controllers/result.crud.controller');
 
 const {
   submitResult,
@@ -63,7 +63,7 @@ const {
   archiveResult,
   lockSemester,
   auditCorrection,
-} = require('../controllers/result-controllers/result.workflow.controller');
+} = require('./controllers/result.workflow.controller');
 
 const {
   getTranscript,
@@ -77,7 +77,7 @@ const {
   listGradingScales,
   createGradingScale,
   updateGradingScale,
-} = require('../controllers/result-controllers/result.analytics.controller');
+} = require('./controllers/result.analytics.controller');
 
 // ─── ROUTE PUBLIQUE ───────────────────────────────────────────────────────────
 
