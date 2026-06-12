@@ -6,9 +6,9 @@ const {
   updateLevel,
   deleteLevel,
   restoreLevel,
-} = require("../controllers/level.controller");
+} = require("./controllers/level.controller");
 
-const { authenticate, authorize } = require("../middleware/auth/auth");
+const { authenticate, authorize } = require("../../shared/middleware/auth");
 
 const router = express.Router();
 

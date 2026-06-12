@@ -1,5 +1,5 @@
 const express = require('express');
-const { authenticate, authorize } = require('../middleware/auth/auth');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
 const {
   createSubject,
   getSubjects,
@@ -7,13 +7,13 @@ const {
   updateSubject,
   deleteSubject,
   restoreSubject
-} = require('../controllers/subject.controller');
+} = require('./controllers/subject.controller');
 
 
 const {
   linkSubjectCourse, 
   unlinkSubjectCourse, 
-} = require('../controllers/course-controllers/course.resources.controller');
+} = require('../../controllers/course-controllers/course.resources.controller');
 
 const router = express.Router();
 

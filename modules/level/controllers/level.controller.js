@@ -1,4 +1,4 @@
-const Level = require("../models/level.model");
+const Level = require("../level.model");
 
 /**
  * Create a new level

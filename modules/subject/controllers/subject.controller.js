@@ -1,5 +1,5 @@
-const Subject = require('../models/subject.model');
-const Campus = require('../models/campus.model');
+const Subject = require('../subject.model');
+const Campus = require('../../../models/campus.model');
 const {
   sendSuccess,
   sendError,
@@ -8,12 +8,12 @@ const {
   sendConflict,
   sendPaginated,
   handleDuplicateKeyError
-} = require('../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidObjectId,
   buildCampusFilter,
   escapeRegex,
-} = require('../utils/validation-helpers');
+} = require('../../../utils/validation-helpers');
 
 /**
  * @desc    Create a new subject
