@@ -10,7 +10,7 @@ const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'
 
 const Campus = require('../campus.model');
 const { getLoginPrefs } = require('../../settings').service;
-const Teacher = require('../../../models/teacher-models/teacher.model');
+const teacherService = require('../../teacher').service; // façade module teacher (§3)
 const Student = require('../../../models/student-models/student.model');
 const Class = require('../../../models/class.model');
 // Require paresseux : subject.controller consommera la façade campus en C5 (cycle campus ↔ subject)
@@ -489,7 +489,7 @@ class CampusController extends GenericEntityController {
       const [campus, studentsCount, teachersCount, classesCount] = await Promise.all([
         Campus.findById(campusId).select('-password').lean(),
         Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
-        Teacher.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
+        teacherService.countActiveTeachers(campusId),
         Class.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } })
       ]);
 
@@ -546,7 +546,7 @@ class CampusController extends GenericEntityController {
         mentorStats,
       ] = await Promise.all([
         Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
-        Teacher.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
+        teacherService.countActiveTeachers(campusId),
         Class.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
         Class.countDocuments({ schoolCampus: campusId, status: 'active' }),
         Student.countDocuments({
@@ -554,11 +554,7 @@ class CampusController extends GenericEntityController {
           createdAt: { $gte: firstDayOfMonth },
           status: { $ne: 'archived' }
         }),
-        Teacher.countDocuments({
-          schoolCampus: campusId,
-          createdAt: { $gte: firstDayOfMonth },
-          status: { $ne: 'archived' }
-        }),
+        teacherService.countActiveTeachers(campusId, { createdSince: firstDayOfMonth }),
         // Campus-wide average absence rate from attendance records
         StudentAttendance.aggregate([
           { $match: { schoolCampus: campusOid } },
@@ -700,31 +696,13 @@ class CampusController extends GenericEntityController {
         return sendError(res, 403, 'You can only access teachers from your own campus');
       }
 
-      const filter = { schoolCampus: campusId };
-      if (status) {
-        filter.status = status;
-      } else {
-        filter.status = { $ne: 'archived' };
-      }
-
-      if (search) {
-        filter.$or = [
-          { firstName: { $regex: escapeRegex(search), $options: 'i' } },
-          { lastName: { $regex: escapeRegex(search), $options: 'i' } },
-          { email: { $regex: escapeRegex(search), $options: 'i' } }
-        ];
-      }
-
-      const skip = (Number(page) - 1) * Number(limit);
-
-      const teachers = await Teacher.find(filter)
-        .select('-password -salary')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean();
-
-      const total = await Teacher.countDocuments(filter);
+      const { docs: teachers, total } = await teacherService.listTeachersForCampusDashboard({
+        campusId,
+        status,
+        search: search ? escapeRegex(search) : undefined,
+        page,
+        limit,
+      });
 
       return sendPaginated(
         res,

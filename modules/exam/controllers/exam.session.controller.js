@@ -23,7 +23,9 @@ const ExamEnrollment = require('../models/exam.enrollment.model');
 const QuestionBank   = require('../models/question-bank.model');
 const { getSubjectCampusRef } = require('../../subject').service; // façade module subject (§3)
 const Class          = require('../../../models/class.model');
-const Teacher        = require('../../../models/teacher-models/teacher.model');
+// Require paresseux : teacher.dashboard consomme la façade exam (cycle exam ↔ teacher)
+const getTeacherCampusRef = (...args) =>
+  require('../../teacher').service.getTeacherCampusRef(...args);
 const {
   sendSuccess,
   sendError,
@@ -142,7 +144,7 @@ const createSession = async (req, res) => {
       }
     }
 
-    const teacherDoc = await Teacher.findById(teacher).select('schoolCampus').lean();
+    const teacherDoc = await getTeacherCampusRef(teacher);
     if (!teacherDoc) return sendError(res, 400, 'Teacher not found.');
     if (teacherDoc.schoolCampus.toString() !== campusId.toString()) {
       return sendError(res, 400, 'Teacher does not belong to this campus.');

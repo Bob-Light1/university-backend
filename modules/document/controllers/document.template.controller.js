@@ -30,7 +30,7 @@ const documentService      = require('../services/document.service');
 const { validateContentBlocks, validateTemplateData } = require('../services/document.validation.service');
 
 const Student = require('../../../models/student-models/student.model');
-const Teacher = require('../../../models/teacher-models/teacher.model');
+const { getTeacherForPayslip } = require('../../teacher').service; // façade module teacher (§3)
 const Class   = require('../../../models/class.model');
 const Campus  = require('../../../models/campus.model');
 
@@ -299,7 +299,7 @@ const generateTeacherPayslip = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Generating payslips requires CAMPUS_MANAGER or higher role');
   }
 
-  const teacher = await Teacher.findOne({ _id: req.params.teacherId, schoolCampus: req.campusId }).lean();
+  const teacher = await getTeacherForPayslip(req.params.teacherId, req.campusId);
   if (!teacher) return sendNotFound(res, 'Teacher');
 
   const { month, year, baseSalary, allowances = [], deductions = [], signedBy } = req.body;

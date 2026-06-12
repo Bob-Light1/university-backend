@@ -1,5 +1,4 @@
 const Class = require('../class.model');
-const Teacher = require('../../../models/teacher-models/teacher.model');
 const Campus = require('../../../models/campus.model');
 const {
   sendSuccess,
@@ -56,12 +55,9 @@ exports.createClass = async (req, res) => {
         return sendError(res, 400, 'Invalid class manager ID format');
       }
 
-      const teacher = await Teacher.findOne({
-        _id: classManager,
-        schoolCampus: schoolCampus
-      }).select('_id');
+      const managerBelongs = await validateTeacherBelongsToCampus(classManager, schoolCampus);
 
-      if (!teacher) {
+      if (!managerBelongs) {
         return sendError(res, 400, 'Teacher not found or does not belong to campus');
       }
     }

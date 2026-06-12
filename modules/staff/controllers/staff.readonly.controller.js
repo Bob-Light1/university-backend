@@ -17,8 +17,7 @@ const mongoose          = require('mongoose');
 // Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
 const Student           = require('../../../models/student-models/student.model');
 const StudentAttendance = require('../../../models/student-models/student.attend.model');
-const Teacher           = require('../../../models/teacher-models/teacher.model');
-const TeacherSchedule   = require('../../../models/teacher-models/teacher.schedule.model');
+const teacherService    = require('../../teacher').service;
 const documentService   = require('../../document').service;
 const examService       = require('../../exam').service;
 const courseService     = require('../../course').service;
@@ -85,7 +84,7 @@ const getDashboard = async (req, res) => {
 
     if (perms.includes('teachers.read') || perms.includes('teachers.manage')) {
       queries.push(
-        Teacher.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } })
+        teacherService.countActiveTeachers(campusId)
           .then((n) => { stats.totalTeachers = n; })
       );
     }
@@ -253,27 +252,13 @@ const getMyTeachers = async (req, res) => {
     const campusId = toOid(req.user.campusId);
     const { page = 1, limit = 20, search, status } = req.query;
 
-    const filter = { schoolCampus: campusId };
-    if (status) {
-      filter.status = status;
-    } else {
-      filter.status = { $ne: 'archived' };
-    }
-    if (search) {
-      const rx = new RegExp(escapeRegex(search.trim()), 'i');
-      filter.$or = [{ firstName: rx }, { lastName: rx }, { email: rx }, { username: rx }];
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Teacher.find(filter)
-        .select('-password -__v -contractSnapshot')
-        .populate('classes',  'className')
-        .populate('subjects', 'subject_name subject_code')
-        .sort({ lastName: 1, firstName: 1 })
-        .skip(skip).limit(Number(limit)).lean({ virtuals: true }),
-      Teacher.countDocuments(filter),
-    ]);
+    const { docs, total } = await teacherService.listTeachersForStaff({
+      campusId,
+      status,
+      search: search ? escapeRegex(search.trim()) : undefined,
+      page,
+      limit,
+    });
 
     return sendPaginated(res, 200, 'Teachers retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
@@ -295,29 +280,14 @@ const getMySchedule = async (req, res) => {
     const campusId = toOid(req.user.campusId);
     const { page = 1, limit = 20, from, to, status } = req.query;
 
-    const filter = { schoolCampus: campusId };
-    if (status) {
-      filter.status = status;
-    } else {
-      filter.status = { $in: ['PUBLISHED', 'DRAFT'] };
-    }
-    if (from || to) {
-      filter.startTime = {};
-      if (from) filter.startTime.$gte = new Date(from);
-      if (to)   filter.startTime.$lte = new Date(to);
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      TeacherSchedule.find(filter)
-        .select('-__v')
-        .populate('subject', 'subject_name subject_code')
-        .populate('classes', 'className')
-        .populate('teacher', 'firstName lastName')
-        .sort({ startTime: 1 })
-        .skip(skip).limit(Number(limit)).lean(),
-      TeacherSchedule.countDocuments(filter),
-    ]);
+    const { docs, total } = await teacherService.listTeacherSchedulesForStaff({
+      campusId,
+      status,
+      from,
+      to,
+      page,
+      limit,
+    });
 
     return sendPaginated(res, 200, 'Schedule retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 

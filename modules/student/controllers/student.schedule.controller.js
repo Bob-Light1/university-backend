@@ -34,7 +34,9 @@
 
 const mongoose        = require('mongoose');
 const StudentSchedule = require('../models/student.schedule.model');
-const TeacherSchedule = require('../../../models/teacher-models/teacher.schedule.model');
+// Require paresseux : teacher.dashboard consomme des données student (cycle student ↔ teacher)
+const detectTeacherConflicts = (...args) =>
+  require('../../teacher').service.detectTeacherConflicts(...args);
 const Student         = require('../models/student.model');
 
 const { SCHEDULE_STATUS, SESSION_TYPE, SEMESTER } = require('../../../shared/utils/schedule.base');
@@ -362,7 +364,7 @@ const createSession = asyncHandler(async (req, res) => {
 
   // ── Teacher double-booking detection ────────────────────────────────────────
   const { hasConflict: teacherConflict, conflicts: teacherConflicts } =
-    await TeacherSchedule.detectTeacherConflicts({
+    await detectTeacherConflicts({
       teacherId: teacher.teacherId,
       startTime,
       endTime,
@@ -462,7 +464,7 @@ const updateSession = asyncHandler(async (req, res) => {
   if (hasConflict) return sendError(res, 409, 'Scheduling conflict detected.', conflicts);
 
   const { hasConflict: teacherConflict, conflicts: teacherConflicts } =
-    await TeacherSchedule.detectTeacherConflicts({
+    await detectTeacherConflicts({
       teacherId:  resolvedTeacher.teacherId,
       startTime:  newStart,
       endTime:    newEnd,
