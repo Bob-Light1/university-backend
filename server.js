@@ -31,7 +31,12 @@ if (missingEnvVars.length > 0) {
 // HELMET FOR HTTP PROTECTION
 // ========================================
 const helmet = require('helmet');
-app.use(helmet());
+// API consommée par un frontend sur un domaine séparé (Vercel) → on autorise le
+// chargement cross-origin des ressources servies (QR codes, reçus, etc.), sinon le
+// navigateur bloque avec ERR_BLOCKED_BY_RESPONSE.NotSameOrigin (défaut helmet = same-origin).
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+}));
 
 // ========================================
 // CORS CONFIGURATION

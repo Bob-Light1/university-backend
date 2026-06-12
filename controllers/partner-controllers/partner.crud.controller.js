@@ -345,7 +345,8 @@ const regenerateQR = asyncHandler(async (req, res) => {
 // ── DOWNLOAD KIT (PDF flyer + QR) ────────────────────────────────────────────
 
 const downloadKit = asyncHandler(async (req, res) => {
-  const { id } = req.params;
+  // On the /me/kit route there is no :id param → fall back to the authenticated partner.
+  const id = req.params.id || req.user.id;
   const { type = 'qr' } = req.query; // qr | pdf | message
 
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
