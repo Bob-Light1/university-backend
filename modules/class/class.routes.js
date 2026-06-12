@@ -1,5 +1,5 @@
 const express = require("express");
-const { authenticate, authorize } = require('../middleware/auth/auth');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
 const {
     createClass,
     getAllClass,
@@ -9,7 +9,7 @@ const {
     getClassesByTeacher,
     deleteClass,
     restoreClass
-} = require('../controllers/class.controller');
+} = require('./controllers/class.controller');
 
 const router = express.Router();
 

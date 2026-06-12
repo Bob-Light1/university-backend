@@ -243,7 +243,7 @@ app.use('/api', publicPortalRoutes);
 // API ROUTES
 // ========================================
 const campusRouter = require('./routers/campus.router');
-const classRouter = require('./routers/class.router');
+const classRouter = require('./modules/class').routes;
 const levelRouter = require('./modules/level').routes;
 const subjectRouter = require('./modules/subject').routes;
 const studentRouter = require('./routers/student.router');

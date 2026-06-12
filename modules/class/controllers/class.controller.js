@@ -1,6 +1,6 @@
-const Class = require('../models/class.model');
-const Teacher = require('../models/teacher-models/teacher.model');
-const Campus = require('../models/campus.model');
+const Class = require('../class.model');
+const Teacher = require('../../../models/teacher-models/teacher.model');
+const Campus = require('../../../models/campus.model');
 const {
   sendSuccess,
   sendError,
@@ -9,13 +9,13 @@ const {
   sendConflict,
   sendPaginated,
   handleDuplicateKeyError
-} = require('../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidObjectId,
   validateTeacherBelongsToCampus,
   buildCampusFilter,
   escapeRegex,
-} = require('../utils/validation-helpers');
+} = require('../../../utils/validation-helpers');
 
 /**
  * @desc    Create a new class
