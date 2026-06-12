@@ -142,11 +142,13 @@ function rankLabel(rank) {
  * Sets notifiedAt on each winner entry after a successful notification.
  *
  * @param {import('mongoose').Document} competition  CompetitionPrize document (not lean)
- * @param {import('mongoose').Model}    PartnerLead
  * @param {string} [brandName]
  * @returns {Promise<{ notified: number, skipped: number }>}
  */
-async function notifyWinners(competition, PartnerLead, brandName = 'AcadERP') {
+async function notifyWinners(competition, brandName = 'AcadERP') {
+  // Coordonnées des gagnants via la façade partner (le model PartnerLead
+  // appartient au module partner).
+  const { getLeadContact } = require('../partner').service;
   const period = competition.period;
   let notified = 0;
   let skipped  = 0;
@@ -163,9 +165,7 @@ async function notifyWinners(competition, PartnerLead, brandName = 'AcadERP') {
 
     // Try to find the PartnerLead for contact details
     if (winner.lead) {
-      const lead = await PartnerLead.findById(winner.lead)
-        .select('firstName email phone')
-        .lean();
+      const lead = await getLeadContact(winner.lead);
 
       if (lead) {
         const prizeItem = competition.prizes?.find((p) => p.rank === winner.rank);

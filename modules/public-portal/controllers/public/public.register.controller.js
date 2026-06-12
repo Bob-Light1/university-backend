@@ -25,9 +25,8 @@
  *  honeypot: '' (doit être vide)
  */
 
-const Partner     = require('../../../../models/partner-models/partner.model');
-const PartnerLead = require('../../../../models/partner-models/partner.lead.model');
-const Campus      = require('../../../../models/campus.model');
+const partnerService = require('../../../partner').service; // façade module partner (§3)
+const Campus         = require('../../../../models/campus.model');
 
 const {
   asyncHandler,
@@ -71,12 +70,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
 
   if (partnerCode?.trim()) {
     // ── Flux partenaire ──────────────────────────────────────────────────
-    const normalizedCode = partnerCode.toUpperCase().trim();
-
-    partner = await Partner.findOne({
-      partnerCode: normalizedCode,
-      status:      'active',
-    }).select('_id email schoolCampus partnerCode').lean();
+    partner = await partnerService.findActivePartnerByCode(partnerCode);
 
     if (!partner) {
       return sendError(res, 404, 'Invalid or inactive referral code.');
@@ -110,61 +104,12 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   const normalizedPhone = phone?.trim() || null;
   const detectedSource  = source || (resolvedCode ? 'referral_link' : 'direct');
 
-  // 3. DÉDUPLICATION — même email OU même téléphone sur le même campus.
-  // Spec §4.1/§9.2 : on ne renvoie PAS d'erreur, on met à jour silencieusement
-  // le lead existant. L'attribution partenaire d'origine est conservée (first-touch).
-  const dupOr = [{ email: normalizedEmail }];
-  if (normalizedPhone) dupOr.push({ phone: normalizedPhone });
-
-  const existingLead = await PartnerLead.findOne({
-    schoolCampus:    campusId,
-    honeypotTripped: false,
-    $or:             dupOr,
-  });
-
-  if (existingLead) {
-    if (programInterest?.trim()) existingLead.programInterest = programInterest.trim();
-    if (normalizedPhone && !existingLead.phone) existingLead.phone = normalizedPhone;
-    if (city?.trim())    existingLead.city    = city.trim();
-    if (country?.trim()) existingLead.country = country.trim();
-
-    // First-touch : on ne réattribue jamais un lead déjà rattaché à un partenaire.
-    if (partner?._id && !existingLead.partner) {
-      existingLead.partner     = partner._id;
-      existingLead.partnerCode = resolvedCode;
-      existingLead.source      = detectedSource;
-    }
-    if (notifyNextBatch) existingLead.notifyNextBatch = true;
-
-    existingLead.statusHistory.push({
-      status:    existingLead.status,
-      changedBy: null,
-      changedAt: new Date(),
-      note:      'Portal re-submission — deduplicated update.',
-    });
-
-    await existingLead.save();
-
-    return sendSuccess(res, 200, 'Pre-registration received successfully.', {
-      leadId: existingLead._id,
-      status: existingLead.status,
-    });
-  }
-
-  // 4. IP_BURST — >5 leads depuis même IP hash en moins de 10 minutes (spec §9.2)
-  const fraudFlags  = [];
-  const tenMinAgo   = new Date(Date.now() - 10 * 60 * 1000);
-  const burstCount  = await PartnerLead.countDocuments({
-    ipAddressHash:   req.ipHash,
-    createdAt:       { $gte: tenMinAgo },
-    honeypotTripped: false,
-  });
-  if (burstCount >= 5) fraudFlags.push('IP_BURST');
-
-  const lead = new PartnerLead({
-    schoolCampus:    campusId,
-    partner:         partner?._id || null,
-    partnerCode:     resolvedCode || null,
+  // 3 + 4. DÉDUPLICATION silencieuse (first-touch) puis création avec
+  // détection IP_BURST — logique métier portée par le module partner.
+  const { leadId, status, created } = await partnerService.upsertPreRegistrationLead({
+    campusId,
+    partner,
+    partnerCode:     resolvedCode,
     firstName:       firstName.trim(),
     lastName:        lastName.trim(),
     email:           normalizedEmail,
@@ -173,25 +118,15 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     city:            city?.trim() || null,
     country:         country?.trim() || null,
     source:          detectedSource,
-    status:          'new',
-    statusHistory:   [{ status: 'new', changedBy: null, changedAt: new Date(), note: 'Portal pre-registration.' }],
     utmParams:       utmParams || null,
     ipAddressHash:   req.ipHash,
-    honeypotTripped: false,
-    fraudFlags,
-    notifyNextBatch: notifyNextBatch ? true : false,
+    notifyNextBatch: !!notifyNextBatch,
   });
 
-  await lead.save();
-
-  if (partner?._id) {
-    Partner.findByIdAndUpdate(partner._id, { lastActivityAt: new Date() }).exec().catch(() => {});
+  if (!created) {
+    return sendSuccess(res, 200, 'Pre-registration received successfully.', { leadId, status });
   }
-
-  return sendCreated(res, 'Pre-registration received successfully.', {
-    leadId: lead._id,
-    status: lead.status,
-  });
+  return sendCreated(res, 'Pre-registration received successfully.', { leadId, status });
 });
 
 module.exports = { publicPreRegister };

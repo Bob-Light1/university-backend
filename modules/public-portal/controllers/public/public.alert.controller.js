@@ -10,8 +10,8 @@
  */
 
 const { asyncHandler, sendSuccess, sendError } = require('../../../../shared/utils/response-helpers');
-const PartnerLead = require('../../../../models/partner-models/partner.lead.model');
-const Campus      = require('../../../../models/campus.model');
+const partnerService = require('../../../partner').service; // façade module partner (§3)
+const Campus         = require('../../../../models/campus.model');
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -45,42 +45,16 @@ const submitAlert = asyncHandler(async (req, res) => {
     return sendError(res, 404, 'Campus not found.');
   }
 
-  // Try to find existing lead by email or phone on this campus.
-  let lead = null;
-  if (normalizedEmail) {
-    lead = await PartnerLead.findOne({ email: normalizedEmail, schoolCampus: campus._id });
-  }
-  if (!lead && normalizedPhone) {
-    lead = await PartnerLead.findOne({ phone: normalizedPhone, schoolCampus: campus._id });
-  }
-
-  if (lead) {
-    lead.notifyNextBatch = true;
-    if (programInterest?.trim() && !lead.programInterest) {
-      lead.programInterest = programInterest.trim();
-    }
-    await lead.save();
-    return sendSuccess(res, 200, 'Alert registered.', { leadId: lead._id });
-  }
-
-  // Create a minimal lead for visitors who haven't pre-registered yet.
-  const newLead = new PartnerLead({
-    schoolCampus:    campus._id,
-    firstName:       'Alert',
-    lastName:        'Subscriber',
-    email:           normalizedEmail || `alert-${Date.now()}@noemail.local`,
+  // Lead existant → notifyNextBatch=true ; sinon lead minimal créé (module partner).
+  const { leadId, created } = await partnerService.registerSessionAlert({
+    campusId:        campus._id,
+    email:           normalizedEmail,
     phone:           normalizedPhone,
     programInterest: programInterest?.trim() || null,
-    source:          'direct',
-    status:          'new',
-    statusHistory:   [{ status: 'new', changedBy: null, changedAt: new Date(), note: 'Session alert opt-in.' }],
     ipAddressHash:   req.ipHash,
-    honeypotTripped: false,
-    notifyNextBatch: true,
   });
 
-  await newLead.save();
-  return sendSuccess(res, 201, 'Alert registered.', { leadId: newLead._id });
+  return sendSuccess(res, created ? 201 : 200, 'Alert registered.', { leadId });
 });
 
 module.exports = { submitAlert };

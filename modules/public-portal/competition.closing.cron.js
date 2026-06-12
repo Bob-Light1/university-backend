@@ -23,7 +23,6 @@
 
 const CompetitionPrize = require('./models/competition.prize.model');
 const QuizSession      = require('./models/quiz.session.model');
-const PartnerLead      = require('../../models/partner-models/partner.lead.model');
 const { notifyWinners } = require('./notification.service');
 
 // Nombre de gagnants retenus par compétition (top N — couvre 1er, 2e-3e, top 10 de la spec)
@@ -80,7 +79,7 @@ const closeCompetition = async (competitionId) => {
   await competition.save();
 
   const brandName = process.env.BRAND_NAME || process.env.NEXT_PUBLIC_BRAND_NAME || 'AcadERP';
-  const { notified } = await notifyWinners(competition, PartnerLead, brandName);
+  const { notified } = await notifyWinners(competition, brandName);
 
   console.log(
     `[CompetitionClosing] Closed competition ${competition.period} (campus ${competition.schoolCampus}) — ${competition.winners.length} winner(s), ${notified} notified.`

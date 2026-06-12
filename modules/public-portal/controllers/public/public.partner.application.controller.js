@@ -10,8 +10,8 @@
  * The admin reviews it from /api/portal-admin/applications.
  */
 
-const PartnerApplication = require('../../../../models/partner-models/partner.application.model');
-const Campus             = require('../../../../models/campus.model');
+const partnerService = require('../../../partner').service; // façade module partner (§3)
+const Campus         = require('../../../../models/campus.model');
 
 const {
   asyncHandler,
@@ -61,7 +61,7 @@ const submitPartnerApplication = asyncHandler(async (req, res) => {
   const validTypes    = ['influencer', 'church_leader', 'student_leader', 'teacher', 'parent', 'other'];
   const validChannels = ['online', 'offline', 'hybrid'];
 
-  const doc = await PartnerApplication.create({
+  const { applicationId } = await partnerService.createApplication({
     schoolCampus:    campusId,
     firstName:       firstName.trim(),
     lastName:        lastName.trim(),
@@ -74,7 +74,7 @@ const submitPartnerApplication = asyncHandler(async (req, res) => {
     honeypotTripped: false,
   });
 
-  return sendCreated(res, 'Partner application submitted successfully.', { applicationId: doc._id });
+  return sendCreated(res, 'Partner application submitted successfully.', { applicationId });
 });
 
 module.exports = { submitPartnerApplication };

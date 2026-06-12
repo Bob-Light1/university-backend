@@ -9,7 +9,7 @@
  * after reviewing; this controller just sets status + partnerId reference.
  */
 
-const PartnerApplication = require('../../../../models/partner-models/partner.application.model');
+const partnerService = require('../../../partner').service; // façade module partner (§3)
 const {
   buildCampusFilter,
   GLOBAL_ROLES,
@@ -28,20 +28,16 @@ const list = async (req, res) => {
     const { page = 1, limit = 20, status, campusId } = req.query;
     const safePage  = Math.max(1, Number(page) || 1);
     const safeLimit = Math.min(100, Math.max(1, Number(limit) || 20));
-    const skip = (safePage - 1) * safeLimit;
 
-    const filter = { honeypotTripped: false, ...buildCampusFilter(req.user) };
-    if (GLOBAL_ROLES.includes(req.user.role) && campusId) filter.schoolCampus = campusId;
-    if (['pending', 'approved', 'rejected'].includes(status)) filter.status = status;
+    const campusFilter = { ...buildCampusFilter(req.user) };
+    if (GLOBAL_ROLES.includes(req.user.role) && campusId) campusFilter.schoolCampus = campusId;
 
-    const [data, total] = await Promise.all([
-      PartnerApplication.find(filter)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(safeLimit)
-        .lean(),
-      PartnerApplication.countDocuments(filter),
-    ]);
+    const { data, total } = await partnerService.listApplications({
+      campusFilter,
+      status: ['pending', 'approved', 'rejected'].includes(status) ? status : undefined,
+      page:   safePage,
+      limit:  safeLimit,
+    });
 
     return sendPaginated(res, 200, 'Applications retrieved.', data, {
       total, page: safePage, limit: safeLimit,
@@ -56,10 +52,7 @@ const list = async (req, res) => {
 const getOne = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid application ID format.');
-    const doc = await PartnerApplication.findOne({
-      _id: req.params.id,
-      ...buildCampusFilter(req.user),
-    }).lean();
+    const doc = await partnerService.getApplicationById(req.params.id, buildCampusFilter(req.user));
     if (!doc) return sendNotFound(res, 'Application');
     return sendSuccess(res, 200, 'Application retrieved.', doc);
   } catch (err) {
@@ -78,25 +71,18 @@ const review = async (req, res) => {
       return sendError(res, 400, "status must be 'approved' or 'rejected'.");
     }
 
-    const doc = await PartnerApplication.findOne({
-      _id:              req.params.id,
-      ...buildCampusFilter(req.user),
+    const { result, application } = await partnerService.reviewApplication({
+      id:           req.params.id,
+      campusFilter: buildCampusFilter(req.user),
+      status,
+      reviewNote:   reviewNote?.trim() || null,
+      partnerId:    partnerId && isValidObjectId(partnerId) ? partnerId : null,
+      reviewerId:   req.user._id,
     });
-    if (!doc) return sendNotFound(res, 'Application');
-    if (doc.status !== 'pending') {
-      return sendError(res, 409, 'Application has already been reviewed.');
-    }
 
-    doc.status     = status;
-    doc.reviewedBy = req.user._id;
-    doc.reviewedAt = new Date();
-    if (reviewNote?.trim()) doc.reviewNote = reviewNote.trim();
-    if (status === 'approved' && partnerId && isValidObjectId(partnerId)) {
-      doc.partnerId = partnerId;
-    }
-
-    await doc.save();
-    return sendSuccess(res, 200, `Application ${status}.`, doc);
+    if (result === 'NOT_FOUND') return sendNotFound(res, 'Application');
+    if (result === 'CONFLICT')  return sendError(res, 409, 'Application has already been reviewed.');
+    return sendSuccess(res, 200, `Application ${status}.`, application);
   } catch (err) {
     console.error('review application error:', err);
     return sendError(res, 500, 'Failed to review application.');
@@ -107,11 +93,8 @@ const review = async (req, res) => {
 const remove = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid application ID format.');
-    const doc = await PartnerApplication.findOneAndDelete({
-      _id: req.params.id,
-      ...buildCampusFilter(req.user),
-    });
-    if (!doc) return sendNotFound(res, 'Application');
+    const deleted = await partnerService.deleteApplication(req.params.id, buildCampusFilter(req.user));
+    if (!deleted) return sendNotFound(res, 'Application');
     return sendSuccess(res, 200, 'Application deleted.');
   } catch (err) {
     console.error('delete application error:', err);

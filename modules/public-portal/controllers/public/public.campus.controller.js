@@ -12,8 +12,8 @@
  * Le campusSlug retourné est utilisé dans tous les appels suivants du portail.
  */
 
-const Partner = require('../../../../models/partner-models/partner.model');
-const Campus  = require('../../../../models/campus.model');
+const partnerService = require('../../../partner').service; // façade module partner (§3)
+const Campus         = require('../../../../models/campus.model');
 
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
@@ -32,13 +32,7 @@ const getCampusInfo = asyncHandler(async (req, res) => {
 
   if (ref) {
     // Résolution via partnerCode
-    const normalizedCode = ref.toUpperCase().trim();
-    const partner = await Partner.findOne({
-      partnerCode: normalizedCode,
-      status:      'active',
-    })
-      .select('partnerCode schoolCampus')
-      .lean();
+    const partner = await partnerService.findActivePartnerByCode(ref);
 
     if (!partner) {
       return sendNotFound(res, 'Partner code');

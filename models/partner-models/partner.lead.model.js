@@ -1,4 +1,0 @@
-// SHIM temporaire (Phase 9 monolithe modulaire) — voir docs/architecture/MODULAR_MONOLITH_MIGRATION.md §8
-// Nouveau chemin : modules/partner/models/partner.lead.model.js
-// Consommateurs restants : modules/public-portal (public.register, public.alert, competition.closing.cron)
-module.exports = require('../../modules/partner/models/partner.lead.model');
