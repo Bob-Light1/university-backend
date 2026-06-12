@@ -17,7 +17,7 @@ const ExamSession       = require('../models/exam.session.model');
 const ExamEnrollment    = require('../models/exam.enrollment.model');
 const ExamSubmission    = require('../models/exam.submission.model');
 const QuestionBank      = require('../models/question-bank.model');
-const UserPreferences   = require('../../../models/userPreferences_model');
+const settingsService   = require('../../settings').service; // façade module settings (§3)
 const {
   sendSuccess,
   sendError,
@@ -177,12 +177,8 @@ const getQuestions = async (req, res) => {
     }
 
     // Preferred language translation — JWT never carries preferredLanguage,
-    // so we fetch it from UserPreferences (indexed by userId, single doc).
-    const userPrefs = await UserPreferences
-      .findOne({ userId: studentId })
-      .select('preferredLanguage')
-      .lean();
-    const lang = userPrefs?.preferredLanguage || 'en';
+    // so we fetch it from the settings module (indexed by userId, single doc).
+    const lang = await settingsService.getPreferredLanguage(studentId);
     if (lang !== 'en') {
       ordered = ordered.map((q) => {
         const tr = (q.translations || []).find((t) => t.lang === lang);
