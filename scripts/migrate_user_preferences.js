@@ -23,7 +23,7 @@ const MODELS = [
   { name: 'Mentor',         file: '../modules/mentor/mentor.model',                role: 'MENTOR',         campusField: 'schoolCampus' },
   { name: 'Staff',          file: '../modules/staff/models/staff.model',           role: 'STAFF',          campusField: 'schoolCampus' },
   { name: 'Campus',         file: '../models/campus.model',                        role: 'CAMPUS_MANAGER', campusField: '_id' },
-  { name: 'Partner',        file: '../models/partner-models/partner.model',        role: 'PARTNER',        campusField: 'schoolCampus' },
+  { name: 'Partner',        file: '../modules/partner/models/partner.model',        role: 'PARTNER',        campusField: 'schoolCampus' },
 ];
 
 const MODEL_LABEL = {

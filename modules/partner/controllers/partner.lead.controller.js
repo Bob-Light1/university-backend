@@ -26,10 +26,10 @@
 const crypto   = require('crypto');
 const mongoose = require('mongoose');
 
-const Partner           = require('../../models/partner-models/partner.model');
-const PartnerLead       = require('../../models/partner-models/partner.lead.model');
-const PartnerCommission = require('../../models/partner-models/partner.commission.model');
-const Campus            = require('../../models/campus.model');
+const Partner           = require('../models/partner.model');
+const PartnerLead       = require('../models/partner.lead.model');
+const PartnerCommission = require('../models/partner.commission.model');
+const Campus            = require('../../../models/campus.model');
 
 const {
   asyncHandler,
@@ -39,8 +39,8 @@ const {
   sendPaginated,
   sendNotFound,
   sendForbidden,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 

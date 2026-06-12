@@ -14,13 +14,13 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { ipKeyGenerator } = require('express-rate-limit');
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { loginLimiter, strictLimiter, createCustomLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { loginLimiter, strictLimiter, createCustomLimiter } = require('../../shared/middleware/rate-limiter');
 
-const authCtrl       = require('../controllers/partner-controllers/partner.auth.controller');
-const crudCtrl       = require('../controllers/partner-controllers/partner.crud.controller');
-const leadCtrl       = require('../controllers/partner-controllers/partner.lead.controller');
-const commissionCtrl = require('../controllers/partner-controllers/partner.commission.controller');
+const authCtrl       = require('./controllers/partner.auth.controller');
+const crudCtrl       = require('./controllers/partner.crud.controller');
+const leadCtrl       = require('./controllers/partner.lead.controller');
+const commissionCtrl = require('./controllers/partner.commission.controller');
 
 const router = express.Router();
 

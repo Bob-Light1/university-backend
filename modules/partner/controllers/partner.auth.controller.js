@@ -28,15 +28,15 @@ const path    = require('path');
 const fs      = require('fs').promises;
 const mongoose = require('mongoose');
 
-const Partner    = require('../../models/partner-models/partner.model');
+const Partner    = require('../models/partner.model');
 const {
   sendSuccess,
   sendError,
   sendCreated,
   sendNotFound,
-} = require('../../utils/response-helpers');
-const { isValidObjectId, validatePasswordStrength } = require('../../utils/validation-helpers');
-const { getLoginPrefs } = require('../../utils/login-prefs.util');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId, validatePasswordStrength } = require('../../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;

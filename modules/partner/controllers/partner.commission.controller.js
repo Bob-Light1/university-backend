@@ -23,9 +23,9 @@
 
 const mongoose = require('mongoose');
 
-const PartnerCommission = require('../../models/partner-models/partner.commission.model');
-const PartnerLead       = require('../../models/partner-models/partner.lead.model');
-const Partner           = require('../../models/partner-models/partner.model');
+const PartnerCommission = require('../models/partner.commission.model');
+const PartnerLead       = require('../models/partner.lead.model');
+const Partner           = require('../models/partner.model');
 
 const {
   asyncHandler,
@@ -34,8 +34,8 @@ const {
   sendPaginated,
   sendNotFound,
   sendForbidden,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 

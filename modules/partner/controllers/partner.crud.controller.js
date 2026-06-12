@@ -27,9 +27,9 @@ const path     = require('path');
 const fs       = require('fs').promises;
 const QRCode   = require('qrcode');
 
-const Partner           = require('../../models/partner-models/partner.model');
-const PartnerLead       = require('../../models/partner-models/partner.lead.model');
-const PartnerCommission = require('../../models/partner-models/partner.commission.model');
+const Partner           = require('../models/partner.model');
+const PartnerLead       = require('../models/partner.lead.model');
+const PartnerCommission = require('../models/partner.commission.model');
 
 const {
   asyncHandler,
@@ -39,8 +39,8 @@ const {
   sendPaginated,
   sendNotFound,
   sendForbidden,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const UPLOAD_BASE  = process.env.UPLOAD_DIR
