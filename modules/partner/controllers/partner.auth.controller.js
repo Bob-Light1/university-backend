@@ -36,7 +36,7 @@ const {
   sendNotFound,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId, validatePasswordStrength } = require('../../../shared/utils/validation-helpers');
-const { getLoginPrefs } = require('../../../utils/login-prefs.util');
+const { getLoginPrefs } = require('../../settings').service;
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;

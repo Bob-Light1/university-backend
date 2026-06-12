@@ -9,7 +9,7 @@ const GenericEntityController = require('../../../shared/lib/generic-entity.cont
 const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const Campus = require('../campus.model');
-const { getLoginPrefs } = require('../../../utils/login-prefs.util');
+const { getLoginPrefs } = require('../../settings').service;
 const Teacher = require('../../../models/teacher-models/teacher.model');
 const Student = require('../../../models/student-models/student.model');
 const Class = require('../../../models/class.model');

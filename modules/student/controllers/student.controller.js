@@ -17,7 +17,7 @@ const {
   validatePasswordStrength,
 } = require('../../../shared/utils/validation-helpers');
 const { deleteFile } = require('../../../shared/utils/file-upload');
-const { getLoginPrefs } = require('../../../utils/login-prefs.util');
+const { getLoginPrefs } = require('../../settings').service;
 
 const SALT_ROUNDS    = 10;
 const STUDENT_FOLDER = 'students';

@@ -17,7 +17,7 @@ const {
 } = require('../../../shared/utils/validation-helpers');
 const { deleteFile } = require('../../../shared/utils/file-upload');
 const teacherConfig = require('../teacher.config');
-const { getLoginPrefs } = require('../../../utils/login-prefs.util');
+const { getLoginPrefs } = require('../../settings').service;
 
 const SALT_ROUNDS    = 10;
 const TEACHEAR_FOLDER = 'teachers';
