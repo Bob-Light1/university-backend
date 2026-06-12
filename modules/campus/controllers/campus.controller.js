@@ -13,7 +13,9 @@ const { getLoginPrefs } = require('../../settings').service;
 const Teacher = require('../../../models/teacher-models/teacher.model');
 const Student = require('../../../models/student-models/student.model');
 const Class = require('../../../models/class.model');
-const Subject = require('../../../models/subject.model');
+// Require paresseux : subject.controller consommera la façade campus en C5 (cycle campus ↔ subject)
+const listCampusSubjects = (...args) =>
+  require('../../subject').service.listCampusSubjects(...args);
 const StudentAttendance = require('../../../models/student-models/student.attend.model');
 const financeService = require('../../finance').service; // façade module finance (§3)
 const departmentService = require('../../department').service; // façade module department (§3)
@@ -890,14 +892,7 @@ class CampusController extends GenericEntityController {
         return sendError(res, 403, 'You can only access subjects from your own campus');
       }
 
-      const filter = { schoolCampus: campusId };
-      if (status) filter.status = status;
-
-      const subjects = await Subject.find(filter)
-        .populate('department', 'name') 
-        .populate('teachers',   'firstName lastName')
-        .sort({ name: 1 })
-        .lean();
+      const subjects = await listCampusSubjects({ campusId, status });
 
       return sendSuccess(res, 200, 'Subjects fetched successfully', subjects);
 

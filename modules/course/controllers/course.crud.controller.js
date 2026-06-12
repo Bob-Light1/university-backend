@@ -25,7 +25,8 @@
 const mongoose = require('mongoose');
 
 const { Course, APPROVAL_STATUS } = require('../course.model');
-const Subject                      = require('../../../models/subject.model');
+// Requires paresseux : subject.course-link consomme la façade course (cycle course ↔ subject)
+const subjectService = () => require('../../subject').service;
 
 const {
   asyncHandler,
@@ -137,7 +138,7 @@ const listCourses = asyncHandler(async (req, res) => {
 
   // isLinked filter — ADMIN / DIRECTOR only
   if (req.query.isLinked !== undefined && isGlobalRole(req.user.role)) {
-    const linkedIds = await Subject.distinct('courseRef', { status: 'active', courseRef: { $ne: null } });
+    const linkedIds = await subjectService().getLinkedCourseRefIds();
     if (req.query.isLinked === 'true') {
       filter._id = { $in: linkedIds };
     } else {
@@ -361,18 +362,10 @@ const softDeleteCourse = asyncHandler(async (req, res) => {
   if (!course) return sendNotFound(res, 'Course');
 
   // Guard: check for active Subject references
-  const hasActiveSubjects = await Subject.exists({
-    courseRef: id,
-    status:    'active',
-  });
+  const affected = await subjectService().listActiveSubjectsLinkedToCourse(id);
 
-  if (hasActiveSubjects) {
+  if (affected.length > 0) {
     // Return the list of affected campuses for transparency
-    const affected = await Subject.find({ courseRef: id, status: 'active' })
-      .select('schoolCampus subject_name')
-      .populate('schoolCampus', 'name')
-      .lean();
-
     const campusNames = [
       ...new Set(affected.map((s) => s.schoolCampus?.name).filter(Boolean)),
     ];

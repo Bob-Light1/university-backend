@@ -22,7 +22,6 @@ const mongoose = require('mongoose');
 
 // Lazy-loaded to avoid circular dependency issues at module load time
 const getClass           = () => require('../../models/class.model');
-const getSubject         = () => require('../../models/subject.model');
 const getTeacher         = () => require('../../models/teacher-models/teacher.model');
 const getTeacherSchedule = () => require('../../models/teacher-models/teacher.schedule.model');
 
@@ -88,29 +87,8 @@ const resolveClasses = async (classIds, campusId) => {
  *   department:   ObjectId|null
  * } | null>}  null if not found or campus mismatch
  */
-const resolveSubject = async (subjectId, campusId) => {
-  if (!subjectId) return null;
-
-  const Subject = getSubject();
-
-  const doc = await Subject.findOne({
-    _id:          subjectId,
-    schoolCampus: campusId,   // campus-isolation guard
-    status:       { $ne: 'archived' },
-  })
-    .select('_id subject_name subject_code coefficient department')
-    .lean();
-
-  if (!doc) return null;
-
-  return {
-    subjectId:    doc._id,
-    subject_name: doc.subject_name,
-    subject_code: doc.subject_code,
-    coefficient:  doc.coefficient  ?? null,
-    department:   doc.department   ?? null,
-  };
-};
+const resolveSubject = (subjectId, campusId) =>
+  require('../subject').service.resolveSubjectForSchedule(subjectId, campusId);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEACHER

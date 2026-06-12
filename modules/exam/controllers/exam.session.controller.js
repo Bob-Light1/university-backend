@@ -21,7 +21,7 @@
 const ExamSession    = require('../models/exam.session.model');
 const ExamEnrollment = require('../models/exam.enrollment.model');
 const QuestionBank   = require('../models/question-bank.model');
-const Subject        = require('../../../models/subject.model');
+const { getSubjectCampusRef } = require('../../subject').service; // façade module subject (§3)
 const Class          = require('../../../models/class.model');
 const Teacher        = require('../../../models/teacher-models/teacher.model');
 const {
@@ -126,7 +126,7 @@ const createSession = async (req, res) => {
 
     // Val 2 — cross-campus validation for subject, classes, teacher
     const [subjectDoc, ...classDocs] = await Promise.all([
-      Subject.findById(subject).select('schoolCampus').lean(),
+      getSubjectCampusRef(subject),
       ...classes.map((cId) => Class.findById(cId).select('schoolCampus').lean()),
     ]);
 
