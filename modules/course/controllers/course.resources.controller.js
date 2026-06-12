@@ -27,7 +27,7 @@ const {
   sendConflict,
 } = require('../../../shared/utils/response-helpers');
 
-const { isValidObjectId } = require('../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 const { RESOURCE_WRITABLE_FIELDS, isManagerRole, pickFields } = require('./course.helper');
 
 // ─── ADD RESOURCE ─────────────────────────────────────────────────────────────

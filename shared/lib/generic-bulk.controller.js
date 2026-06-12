@@ -4,7 +4,7 @@ const {
   sendError,
   sendNotFound,
 } = require('../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers'); // ancien chemin: couplé aux models core, migrera avec le core
+const { isValidObjectId } = require('../utils/validation-helpers');
 const ExportService = require('../../services/export.service');
 const ImportService = require('../../services/import.service');
 

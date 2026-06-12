@@ -16,7 +16,7 @@ const {
   sendError,
   sendNotFound,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId } = require('../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 const { getCampusFilter, isManagerRole } = require('./exam.helper');
 
 // In-memory token store is sufficient for MVP — persisted on ExamGrading via certificateToken.

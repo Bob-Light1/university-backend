@@ -20,7 +20,7 @@ const {
   sendSuccess,
   sendError,
 } = require('../../../shared/utils/response-helpers');
-const { buildCampusFilter } = require('../../../utils/validation-helpers');
+const { buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 

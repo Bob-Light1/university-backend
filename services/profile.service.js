@@ -27,7 +27,7 @@ const {
   sendError,
   sendNotFound,
 } = require('../shared/utils/response-helpers');
-const { validatePasswordStrength } = require('../utils/validation-helpers');
+const { validatePasswordStrength } = require('../shared/utils/validation-helpers');
 
 const SALT_ROUNDS = 12;
 

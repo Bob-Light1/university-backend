@@ -26,8 +26,8 @@ const {
 
 const {
   isValidObjectId,
-  validateTeacherBelongsToCampus,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
+const { validateTeacherBelongsToCampus } = require('../teacher.service');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ const {
   sendPaginated,
   sendNotFound,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId } = require('../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
 // Builds the MongoDB filter for announcements visible to the current user.
 const buildVisibleFilter = (campusId, role) => {

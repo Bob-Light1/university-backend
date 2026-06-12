@@ -44,7 +44,7 @@ const {
   handleDuplicateKeyError,
 } = require('../../../shared/utils/response-helpers');
 
-const { isValidEmail, validatePasswordStrength } = require('../../../utils/validation-helpers');
+const { isValidEmail, validatePasswordStrength } = require('../../../shared/utils/validation-helpers');
 const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────

@@ -44,7 +44,7 @@ const {
   sendForbidden,
 } = require('../../../shared/utils/response-helpers');
 
-const { isValidObjectId } = require('../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
 const {
   isGlobalRole,

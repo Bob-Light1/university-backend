@@ -35,7 +35,7 @@ const {
 const {
   isValidObjectId,
   buildCampusFilter,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
 
 const { getFileUrl } = require('../../../shared/middleware/upload');
 

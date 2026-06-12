@@ -29,7 +29,7 @@ const {
   sendError,
   sendPaginated,
 } = require('../../../shared/utils/response-helpers');
-const { escapeRegex } = require('../../../utils/validation-helpers');
+const { escapeRegex } = require('../../../shared/utils/validation-helpers');
 
 const toOid = (id) => new mongoose.Types.ObjectId(id);
 

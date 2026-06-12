@@ -46,7 +46,7 @@ const {
   asyncHandler,
 } = require('../../../shared/utils/response-helpers');
 
-const { isValidObjectId } = require('../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
 // Shared helpers: participant resolution + TeacherSchedule sync
 const {

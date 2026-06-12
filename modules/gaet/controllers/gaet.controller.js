@@ -49,7 +49,7 @@ const {
   syncTeacherSchedule,
 } = require('../../../utils/schedule-helpers');
 
-const { isValidObjectId, buildCampusFilter: _buildCampusFilter } = require('../../../utils/validation-helpers');
+const { isValidObjectId, buildCampusFilter: _buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 
 const {
   sendSuccess,

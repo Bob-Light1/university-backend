@@ -24,7 +24,7 @@ const {
   sendPaginated,
   sendNotFound,
 } = require('../../../../shared/utils/response-helpers');
-const { isValidObjectId } = require('../../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../../shared/utils/validation-helpers');
 
 // Editable fields — winners[] is managed by the cron, never set from the request.
 const EDITABLE = ['period', 'prizes', 'closingDate', 'isActive'];

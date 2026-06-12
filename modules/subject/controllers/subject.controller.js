@@ -13,7 +13,7 @@ const {
   isValidObjectId,
   buildCampusFilter,
   escapeRegex,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
 
 /**
  * @desc    Create a new subject

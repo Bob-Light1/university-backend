@@ -12,10 +12,12 @@ const {
 } = require('../../../shared/utils/response-helpers');
 const {
   isValidObjectId,
-  validateTeacherBelongsToCampus,
   buildCampusFilter,
   escapeRegex,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
+// Require paresseux : teacher.config consommera la façade class en C4 (cycle class ↔ teacher)
+const validateTeacherBelongsToCampus = (...args) =>
+  require('../../teacher').service.validateTeacherBelongsToCampus(...args);
 
 /**
  * @desc    Create a new class

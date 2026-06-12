@@ -17,7 +17,7 @@ const {
   validatePasswordStrength,
   buildCampusFilter,
   escapeRegex,
-} = require('../../utils/validation-helpers'); // ancien chemin: couplé aux models core, migrera avec le core
+} = require('../utils/validation-helpers');
 
 const SALT_ROUNDS = 10;
 

@@ -27,7 +27,7 @@ const {
 const {
   isValidObjectId,
   buildCampusFilter,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
 
 const getCampusFilter = (req) => {
   try { return buildCampusFilter(req.user); }

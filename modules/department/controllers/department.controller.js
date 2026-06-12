@@ -11,7 +11,7 @@ const {
   sendConflict,
   sendPaginated,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId, buildCampusFilter, escapeRegex } = require('../../../utils/validation-helpers');
+const { isValidObjectId, buildCampusFilter, escapeRegex } = require('../../../shared/utils/validation-helpers');
 
 // ── Generic controller (used only for getAll, getOne, getStats) ──
 const genericController = new GenericEntityController(departmentConfig);

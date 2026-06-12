@@ -31,7 +31,7 @@ const {
   sendCreated,
   sendPaginated,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId, escapeRegex } = require('../../../utils/validation-helpers');
+const { isValidObjectId, escapeRegex } = require('../../../shared/utils/validation-helpers');
 const {
   getCampusFilter,
   resolveCampusId,

@@ -35,7 +35,7 @@ const {
   sendCreated,
   sendNotFound,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId, validatePasswordStrength } = require('../../../utils/validation-helpers');
+const { isValidObjectId, validatePasswordStrength } = require('../../../shared/utils/validation-helpers');
 const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;

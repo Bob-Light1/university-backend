@@ -38,7 +38,7 @@ const {
   isValidObjectId,
   isValidEmail,
   validatePasswordStrength
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
 
 // ========================================
 // INITIALIZE GENERIC CONTROLLERS

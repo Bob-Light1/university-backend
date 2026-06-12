@@ -25,7 +25,7 @@ const {
 const {
   isValidEmail,
   validatePasswordStrength,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
 const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;

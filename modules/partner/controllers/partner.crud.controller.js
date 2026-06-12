@@ -40,7 +40,7 @@ const {
   sendNotFound,
   sendForbidden,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId } = require('../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 const UPLOAD_BASE  = process.env.UPLOAD_DIR

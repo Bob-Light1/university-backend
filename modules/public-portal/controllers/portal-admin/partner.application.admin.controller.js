@@ -20,7 +20,7 @@ const {
   sendPaginated,
   sendNotFound,
 } = require('../../../../shared/utils/response-helpers');
-const { isValidObjectId } = require('../../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../../shared/utils/validation-helpers');
 
 // ─── LIST ─────────────────────────────────────────────────────────────────────
 const list = async (req, res) => {

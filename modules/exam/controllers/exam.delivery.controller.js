@@ -24,7 +24,7 @@ const {
   sendNotFound,
   sendCreated,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId } = require('../../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
 // ── Deterministic shuffle (seeded by studentId + sessionId) ──────────────────
 

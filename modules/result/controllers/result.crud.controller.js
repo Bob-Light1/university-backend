@@ -35,8 +35,10 @@ const {
 
 const {
   isValidObjectId,
-  validateStudentBelongsToCampus,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
+// Require paresseux : student.dashboard consomme la façade result (cycle result ↔ student)
+const validateStudentBelongsToCampus = (...args) =>
+  require('../../student').service.validateStudentBelongsToCampus(...args);
 
 const {
   isGlobalRole,

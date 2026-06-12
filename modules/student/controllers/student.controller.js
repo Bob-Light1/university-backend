@@ -15,7 +15,7 @@ const {
   isValidEmail,
   isValidObjectId,
   validatePasswordStrength,
-} = require('../../../utils/validation-helpers');
+} = require('../../../shared/utils/validation-helpers');
 const { deleteFile } = require('../../../shared/utils/file-upload');
 const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
