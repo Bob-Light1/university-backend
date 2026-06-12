@@ -128,6 +128,10 @@ if (process.env.NODE_ENV !== 'production') {
 // ========================================
 // DATABASE CONNECTION
 // ========================================
+// Register transverse schemas not required anywhere else (ref: "User" used by
+// exam/income models via populate) — see MODULAR_MONOLITH_MIGRATION.md §5.
+require('./shared/db/user.model');
+
 mongoose
   .connect(process.env.MONGODB_URI, {
     serverSelectionTimeoutMS: 15000, // Give Atlas up to 15 s to respond (cold start)

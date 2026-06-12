@@ -1,19 +1,3 @@
-module.exports = (allowedRoles = []) => {
-  return (req, res, next) => {
-    // JWT payload exposes a single `role`; tolerate a legacy `roles` array too.
-    const userRoles = req.user?.roles || (req.user?.role ? [req.user.role] : []);
-
-    const hasAccess = allowedRoles.some(role =>
-      userRoles.includes(role)
-    );
-
-    if (!hasAccess) {
-      return res.status(403).json({
-        success: false,
-        message: 'Access denied',
-      });
-    }
-
-    next();
-  };
-};
+// SHIM temporaire (Phase 0 monolithe modulaire) — voir docs/architecture/MODULAR_MONOLITH_MIGRATION.md §8
+// Nouveau chemin : shared/middleware/role.js
+module.exports = require('../../shared/middleware/role');
