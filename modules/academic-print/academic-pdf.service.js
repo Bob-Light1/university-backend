@@ -19,7 +19,7 @@ const chromium  = require('@sparticuz/chromium');
 const path      = require('path');
 const fs        = require('fs').promises;
 
-const { generateQrCodeDataUrl } = require('../../services/document-services/document.qr.service');
+const { generateQrCodeDataUrl } = require('../document').service;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 

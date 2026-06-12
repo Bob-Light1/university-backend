@@ -18,7 +18,11 @@
 
 const Document      = require('./models/document.model');
 const DocumentAudit = require('./models/document.audit.model');
-const { cleanupExpiredPrintFiles } = require('../academic-print').service;
+// require paresseux (au moment du job) : academic-print consomme la façade
+// document (generateQrCodeDataUrl) — un require au chargement créerait un
+// cycle document ↔ academic-print et une façade partiellement initialisée.
+const cleanupExpiredPrintFiles = (...args) =>
+  require('../academic-print').service.cleanupExpiredPrintFiles(...args);
 
 const BATCH_SIZE = 100;
 

@@ -8,12 +8,15 @@
  * de l'application consomment :
  *   - server.js : runRetentionJob (cron hebdomadaire de rétention)
  *   - server.js : shutdownPool (arrêt propre du pool Puppeteer PDF)
+ *   - academic-print : generateQrCodeDataUrl (QR de vérification sur les PDF)
  */
 
-const { runRetentionJob } = require('./document.retention.cron');
-const { shutdownPool }    = require('./services/document.pdf.service');
+const { runRetentionJob }       = require('./document.retention.cron');
+const { shutdownPool }          = require('./services/document.pdf.service');
+const { generateQrCodeDataUrl } = require('./services/document.qr.service');
 
 module.exports = {
   runRetentionJob,
   shutdownPool,
+  generateQrCodeDataUrl,
 };
