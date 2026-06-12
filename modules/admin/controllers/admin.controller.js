@@ -30,8 +30,8 @@ require('dotenv').config();
 const bcrypt  = require('bcrypt');
 const jwt     = require('jsonwebtoken');
 
-const Admin      = require('../models/admin.model');
-const profileSvc = require('../services/profile.service');
+const Admin      = require('../admin.model');
+const profileSvc = require('../../../services/profile.service');
 
 const {
   sendSuccess,
@@ -42,10 +42,10 @@ const {
   sendPaginated,
   asyncHandler,
   handleDuplicateKeyError,
-} = require('../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
-const { isValidEmail, validatePasswordStrength } = require('../utils/validation-helpers');
-const { getLoginPrefs } = require('../utils/login-prefs.util');
+const { isValidEmail, validatePasswordStrength } = require('../../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 

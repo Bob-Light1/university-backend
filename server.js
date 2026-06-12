@@ -248,7 +248,7 @@ const levelRouter = require('./routers/level.router');
 const subjectRouter = require('./routers/subject.router');
 const studentRouter = require('./routers/student.router');
 const teacherRouter = require('./routers/teacher.router');
-const adminRouter = require('./routers/admin.router');
+const adminRouter = require('./modules/admin').routes;
 const resultRouter = require('./routers/result.router');
 const courseRouter = require('./routers/course.router');
 const departmentRouter = require('./routers/department.router');
@@ -265,7 +265,7 @@ const mentorRouter        = require('./modules/mentor').routes;
 const staffRoutes             = require('./modules/staff').routes; // /api/staff + /api/staff-roles
 const announcementRouter      = require('./modules/announcement').routes;
 const gaetRouter              = require('./modules/gaet').routes;
-const settingsRouter          = require('./routers/settings.router');
+const settingsRouter          = require('./modules/settings').routes;
 const portalAdminRouter       = require('./routers/portal-admin.router');
 
 app.use('/api/admin', adminRouter);

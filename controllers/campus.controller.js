@@ -962,7 +962,7 @@ const campusController = new CampusController(campusConfig);
 
 // ── PATCH /api/campus/:id/defaults ────────────────────────────────────────────
 const SUPPORTED_LANGUAGES_DEF  = ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
-const SUPPORTED_TIMEZONES_DEF  = require('../models/timezone_whitelist');
+const SUPPORTED_TIMEZONES_DEF  = require('../modules/settings').service.SUPPORTED_TIMEZONES; // façade settings (§3)
 const SUPPORTED_GRADE_FMTS_DEF = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
 
 const updateCampusDefaults = async (req, res) => {

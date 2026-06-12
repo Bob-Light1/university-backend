@@ -29,14 +29,14 @@ const {
   getUploadSignature,
   listAdmins,
   updateAdminStatus,
-} = require('../controllers/admin.controller');
+} = require('./controllers/admin.controller');
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
 
 const {
   loginLimiter,
   strictLimiter,
-} = require('../middleware/rate-limiter/rate-limiter');
+} = require('../../shared/middleware/rate-limiter');
 
 const router = express.Router();
 

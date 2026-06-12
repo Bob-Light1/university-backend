@@ -11,12 +11,12 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
-const UserPreferences = require('../models/userPreferences_model');
+const UserPreferences = require('../modules/settings/models/userPreferences.model');
 const Campus = require('../models/campus.model');
 
 // Lazy imports to avoid loading every model at startup
 const MODELS = [
-  { name: 'Admin',          file: '../models/admin.model',                         role: 'ADMIN',          campusField: null },
+  { name: 'Admin',          file: '../modules/admin/admin.model',                  role: 'ADMIN',          campusField: null },
   { name: 'Teacher',        file: '../models/teacher-models/teacher.model',        role: 'TEACHER',        campusField: 'schoolCampus' },
   { name: 'Student',        file: '../models/student-models/student.model',        role: 'STUDENT',        campusField: 'schoolCampus' },
   { name: 'Parent',         file: '../modules/parent/parent.model',                role: 'PARENT',         campusField: 'schoolCampus' },

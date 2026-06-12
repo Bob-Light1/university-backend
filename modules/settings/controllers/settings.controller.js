@@ -8,17 +8,17 @@
  *   GET    /api/settings/language → getLanguage   (shortcut)
  */
 
-const UserPreferences = require('../models/userPreferences_model');
-const Campus          = require('../models/campus.model');
+const UserPreferences = require('../models/userPreferences.model');
+const Campus          = require('../../../models/campus.model');
 
 const {
   sendSuccess,
   sendError,
   asyncHandler,
-} = require('../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 const SUPPORTED_LANGUAGES  = UserPreferences.schema.statics.SUPPORTED_LANGUAGES  || ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
-const SUPPORTED_TIMEZONES  = require('../models/timezone_whitelist');
+const SUPPORTED_TIMEZONES  = require('../models/timezone-whitelist');
 const SUPPORTED_GRADE_FMTS = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
 const SUPPORTED_DATE_FMTS  = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
 
