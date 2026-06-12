@@ -14,8 +14,8 @@
 
 const mongoose = require('mongoose');
 
-const { WEEKDAY, SEMESTER, SESSION_TYPE } = require('../utils/schedule.base');
-const { ROOM_TYPE } = require('../models/gaet-constraint.model');
+const { WEEKDAY, SEMESTER, SESSION_TYPE } = require('../../shared/utils/schedule.base');
+const { ROOM_TYPE } = require('./gaet-constraint.model');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 

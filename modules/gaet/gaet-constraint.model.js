@@ -8,7 +8,7 @@ const {
   WEEKDAY,
   SEMESTER,
   SESSION_TYPE,
-} = require('../utils/schedule.base');
+} = require('../../shared/utils/schedule.base');
 
 // ─────────────────────────────────────────────
 // GAET STATUS

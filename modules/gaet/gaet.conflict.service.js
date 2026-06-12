@@ -13,7 +13,7 @@
  *  independent second-pass check before publication and powers the GET /conflicts route.
  */
 
-const { timeRangesOverlap } = require('../utils/schedule.base');
+const { timeRangesOverlap } = require('../../shared/utils/schedule.base');
 
 // ─────────────────────────────────────────────
 // TYPES

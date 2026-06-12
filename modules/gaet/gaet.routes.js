@@ -25,13 +25,13 @@
 const express = require('express');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter, strictLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter, strictLimiter } = require('../../shared/middleware/rate-limiter');
 
 const {
   validateConstraintBody,
   validateGenerateBody,
-} = require('../validations/gaet.constraint.schema');
+} = require('./gaet.validation');
 
 const {
   getConstraints,
@@ -42,7 +42,7 @@ const {
   publishSchedule,
   getConflicts,
   cancelGenerated,
-} = require('../controllers/gaet.controller');
+} = require('./controllers/gaet.controller');
 
 // ─────────────────────────────────────────────
 // GLOBAL MIDDLEWARE

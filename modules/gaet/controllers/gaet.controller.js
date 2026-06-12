@@ -36,36 +36,38 @@ const path            = require('path');
 const { Worker }      = require('worker_threads');
 
 const mongoose        = require('mongoose');
-const GaetConstraint  = require('../models/gaet-constraint.model');
+const GaetConstraint  = require('../gaet-constraint.model');
 const { GAET_STATUS } = GaetConstraint;
 
-const StudentSchedule = require('../models/student-models/student.schedule.model');
-const { SCHEDULE_STATUS, SESSION_TYPE } = require('../utils/schedule.base');
+// Cross-domaine : anciens chemins tant que student/class/subject/teacher ne sont pas
+// des modules (transition — voir MODULAR_MONOLITH_MIGRATION.md §6)
+const StudentSchedule = require('../../../models/student-models/student.schedule.model');
+const { SCHEDULE_STATUS, SESSION_TYPE } = require('../../../shared/utils/schedule.base');
 
 const {
   resolveSessionParticipants,
   syncTeacherSchedule,
-} = require('../utils/schedule-helpers');
+} = require('../../../utils/schedule-helpers');
 
-const { isValidObjectId, buildCampusFilter: _buildCampusFilter } = require('../utils/validation-helpers');
+const { isValidObjectId, buildCampusFilter: _buildCampusFilter } = require('../../../utils/validation-helpers');
 
 const {
   sendSuccess,
   sendError,
   sendForbidden,
   asyncHandler,
-} = require('../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
-const { detectConflicts } = require('../services/gaet.conflict.service');
+const { detectConflicts } = require('../gaet.conflict.service');
 
 // ─────────────────────────────────────────────
 // LOCAL HELPERS
 // ─────────────────────────────────────────────
 
 // Lazy-loaded to avoid circular dependency issues at module load time
-const getClass   = () => require('../models/class.model');
-const getSubject = () => require('../models/subject.model');
-const getTeacher = () => require('../models/teacher-models/teacher.model');
+const getClass   = () => require('../../../models/class.model');
+const getSubject = () => require('../../../models/subject.model');
+const getTeacher = () => require('../../../models/teacher-models/teacher.model');
 
 /**
  * Campus filter for READ operations.
@@ -379,7 +381,7 @@ const generateSchedule = asyncHandler(async (req, res) => {
   const currentVersion = constraint.generationVersion || 0;
 
   const worker = new Worker(
-    path.join(__dirname, '../workers/gaet.engine.worker.js'),
+    path.join(__dirname, '../gaet.engine.worker.js'),
     { workerData: { constraintId: constraint._id.toString() } }
   );
 

@@ -156,16 +156,9 @@ mongoose
     // crashed / restarted is a zombie job.  Recover them to FAILED so the
     // campus manager can re-trigger generation cleanly.
     try {
-      const GaetConstraint  = require('./models/gaet-constraint.model');
-      const { GAET_STATUS } = GaetConstraint;
-      const ZOMBIE_THRESHOLD_MS  = 15 * 60 * 1000; // 15 minutes
-      const zombieThreshold = new Date(Date.now() - ZOMBIE_THRESHOLD_MS);
-      const result = await GaetConstraint.updateMany(
-        { status: GAET_STATUS.GENERATING, generatingStartedAt: { $lt: zombieThreshold } },
-        { $set: { status: GAET_STATUS.FAILED, generatingStartedAt: null } }
-      );
-      if (result.modifiedCount > 0) {
-        console.warn(`⚠️  [GAET] Recovered ${result.modifiedCount} zombie generation job(s) → FAILED.`);
+      const recovered = await require('./modules/gaet').service.recoverZombieJobs();
+      if (recovered > 0) {
+        console.warn(`⚠️  [GAET] Recovered ${recovered} zombie generation job(s) → FAILED.`);
       }
     } catch (gaetErr) {
       console.error('❌ [GAET] Zombie recovery failed:', gaetErr.message);
@@ -272,7 +265,7 @@ const mentorRouter        = require('./routers/mentor.router');
 const staffRouter             = require('./routers/staff.router');
 const staffRoleRouter         = require('./routers/staffRole.router');
 const announcementRouter      = require('./routers/announcement.router');
-const gaetRouter              = require('./routers/gaet.router');
+const gaetRouter              = require('./modules/gaet').routes;
 const settingsRouter          = require('./routers/settings.router');
 const portalAdminRouter       = require('./routers/portal-admin.router');
 

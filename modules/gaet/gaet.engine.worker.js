@@ -21,8 +21,8 @@
 const { workerData, parentPort } = require('worker_threads');
 const mongoose = require('mongoose');
 
-const { timeRangesOverlap } = require('../utils/schedule.base');
-const GaetConstraintModel  = require('../models/gaet-constraint.model');
+const { timeRangesOverlap } = require('../../shared/utils/schedule.base');
+const GaetConstraintModel  = require('./gaet-constraint.model');
 const { ROOM_TYPE }        = GaetConstraintModel;
 
 const MAX_ITERATIONS  = 50_000;
@@ -291,7 +291,7 @@ async function run() {
       maxPoolSize:              1,
     });
 
-    const GaetConstraint = require('../models/gaet-constraint.model');
+    const GaetConstraint = require('./gaet-constraint.model');
     const constraint = await GaetConstraint.findById(workerData.constraintId).lean();
 
     if (!constraint) {
