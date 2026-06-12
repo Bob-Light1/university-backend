@@ -1,14 +1,14 @@
 'use strict';
 
-const Announcement = require('../../models/announcement.model');
+const Announcement = require('../models/announcement.model');
 const {
   sendSuccess,
   sendCreated,
   sendError,
   sendPaginated,
   sendNotFound,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const Announcement = require('../models/announcement.model');
+const Announcement = require('./models/announcement.model');
 
 /**
  * Runs nightly to:

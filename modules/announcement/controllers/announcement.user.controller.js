@@ -1,14 +1,14 @@
 'use strict';
 
-const Announcement     = require('../../models/announcement.model');
-const UserNotification = require('../../models/user-notification.model');
+const Announcement     = require('../models/announcement.model');
+const UserNotification = require('../models/user-notification.model');
 const {
   sendSuccess,
   sendError,
   sendPaginated,
   sendNotFound,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 // Builds the MongoDB filter for announcements visible to the current user.
 const buildVisibleFilter = (campusId, role) => {

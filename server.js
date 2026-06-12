@@ -264,7 +264,7 @@ const partnerRouter       = require('./routers/partner.router');
 const mentorRouter        = require('./modules/mentor').routes;
 const staffRouter             = require('./routers/staff.router');
 const staffRoleRouter         = require('./routers/staffRole.router');
-const announcementRouter      = require('./routers/announcement.router');
+const announcementRouter      = require('./modules/announcement').routes;
 const gaetRouter              = require('./modules/gaet').routes;
 const settingsRouter          = require('./routers/settings.router');
 const portalAdminRouter       = require('./routers/portal-admin.router');
@@ -425,7 +425,7 @@ try {
   const cron = require('node-cron');
   const { runRetentionJob }  = require('./crons/document.retention.cron');
   const { runAntiCheatJob }  = require('./crons/exam-anticheat.cron');
-  const { runExpiryJob }     = require('./crons/announcement.expiry.cron');
+  const { runExpiryJob }     = require('./modules/announcement').service;
   const { runCompetitionClosingJob } = require('./crons/competition.closing.cron');
   cron.schedule('0 2 * * 0', runRetentionJob);          // Every Sunday at 02:00
   cron.schedule('0 3 * * *', runAntiCheatJob);          // Nightly at 03:00

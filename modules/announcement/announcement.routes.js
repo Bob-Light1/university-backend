@@ -3,10 +3,10 @@
 const express = require('express');
 const router  = express.Router();
 
-const adminCtrl = require('../controllers/announcement-controllers/announcement.admin.controller');
-const userCtrl  = require('../controllers/announcement-controllers/announcement.user.controller');
-const { authenticate, authorize, requirePermission } = require('../middleware/auth/auth');
-const { apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const adminCtrl = require('./controllers/announcement.admin.controller');
+const userCtrl  = require('./controllers/announcement.user.controller');
+const { authenticate, authorize, requirePermission } = require('../../shared/middleware/auth');
+const { apiLimiter } = require('../../shared/middleware/rate-limiter');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 const ALL_ROLES  = [
