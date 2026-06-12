@@ -23,21 +23,21 @@ const crypto   = require('crypto');
 const bcrypt   = require('bcrypt');
 const mongoose = require('mongoose');
 
-const Parent  = require('../../models/parent.model');
-const Student = require('../../models/student-models/student.model');
+const Parent  = require('../parent.model');
+const Student = require('../../../models/student-models/student.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendPaginated,
   handleDuplicateKeyError,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidObjectId,
   buildCampusFilter,
-} = require('../../utils/validation-helpers');
+} = require('../../../utils/validation-helpers');
 
-const { getFileUrl } = require('../../middleware/upload/upload');
+const { getFileUrl } = require('../../../shared/middleware/upload');
 
 const SALT_ROUNDS  = 12;
 const MGMT_ROLES   = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];

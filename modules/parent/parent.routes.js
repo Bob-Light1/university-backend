@@ -45,14 +45,14 @@ const express = require('express');
 const router = express.Router();
 
 // ── AUTH & RATE LIMITING ──────────────────────────────────────────────────────
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { loginLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
 
 // ── FILE UPLOAD (multer) ──────────────────────────────────────────────────────
 const {
   uploadProfileImage: multerProfileImage,
   handleMulterError,
-} = require('../middleware/upload/upload');
+} = require('../../shared/middleware/upload');
 
 // ── CONTROLLERS ───────────────────────────────────────────────────────────────
 const {
@@ -61,7 +61,7 @@ const {
   updatePassword,
   updateProfile,
   uploadProfileImage,
-} = require('../controllers/parent-controllers/parent.auth.controller');
+} = require('./controllers/parent.auth.controller');
 
 const {
   createParent,
@@ -73,7 +73,7 @@ const {
   resetParentPassword,
   deleteParent,
   restoreParent,
-} = require('../controllers/parent-controllers/parent.crud.controller');
+} = require('./controllers/parent.crud.controller');
 
 const {
   getChildren,
@@ -85,21 +85,21 @@ const {
   getChildTeachers,
   getChildComments,
   getDashboard,
-} = require('../controllers/parent-controllers/parent.portal.controller');
+} = require('./controllers/parent.portal.controller');
 
 const {
   getParentStats,
   getCampusParentStats,
   getParentsByStudent,
-} = require('../controllers/parent-controllers/parent.analytics.controller');
+} = require('./controllers/parent.analytics.controller');
 
 // ── VALIDATION MIDDLEWARE ─────────────────────────────────────────────────────
 const { validateCreateParent, validateUpdateParent, validateUpdateProfile } =
-  require('../validations/parent.create.schema');
+  require('./validations/parent.create.schema');
 const { validateChangePassword } =
-  require('../validations/parent.password.schema');
+  require('./validations/parent.password.schema');
 const { validateParentChildren } =
-  require('../validations/parent.children.schema');
+  require('./validations/parent.children.schema');
 
 // ── ROLE SHORTHANDS ───────────────────────────────────────────────────────────
 const MANAGERS = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];

@@ -16,17 +16,17 @@
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
 
-const Parent  = require('../../models/parent.model');
+const Parent  = require('../parent.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidEmail,
   validatePasswordStrength,
-} = require('../../utils/validation-helpers');
-const { getLoginPrefs } = require('../../utils/login-prefs.util');
+} = require('../../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;

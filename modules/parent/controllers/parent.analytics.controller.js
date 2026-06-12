@@ -15,12 +15,12 @@
 
 const mongoose = require('mongoose');
 
-const Parent = require('../../models/parent.model');
+const Parent = require('../parent.model');
 const {
   sendSuccess,
   sendError,
-} = require('../../utils/response-helpers');
-const { buildCampusFilter } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { buildCampusFilter } = require('../../../utils/validation-helpers');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
