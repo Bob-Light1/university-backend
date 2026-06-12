@@ -22,7 +22,7 @@ const mongoose = require('mongoose');
 const Teacher        = require('../models/teacher.model');
 const TeacherSchedule = require('../models/teacher.schedule.model');
 const Student        = require('../../../models/student-models/student.model');
-const ExamGrading    = require('../../../models/exam-models/exam.grading.model');
+const examService    = require('../../exam').service; // façade module exam (§3)
 const {
   sendSuccess,
   sendError,
@@ -123,11 +123,7 @@ const getDashboard = async (req, res) => {
       ]),
 
       // Submissions assigned to this teacher not yet graded (status PENDING)
-      ExamGrading.countDocuments({
-        grader:    toObjectId(teacherId),
-        status:    'PENDING',
-        isDeleted: false,
-      }),
+      examService.countPendingGrading(teacherId),
 
       // Active students in teacher's classes
       classIds.length

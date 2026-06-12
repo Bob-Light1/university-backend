@@ -21,8 +21,8 @@ const StudentAttendance = require('../../../models/student-models/student.attend
 const Course            = require('../../../models/course.model');
 const Teacher           = require('../../../models/teacher-models/teacher.model');
 const TeacherSchedule   = require('../../../models/teacher-models/teacher.schedule.model');
-const ExamSession       = require('../../../models/exam-models/exam.session.model');
 const documentService   = require('../../document').service;
+const examService       = require('../../exam').service;
 
 const {
   sendSuccess,
@@ -394,20 +394,9 @@ const getMyExaminations = async (req, res) => {
     const campusId = toOid(req.user.campusId);
     const { page = 1, limit = 20, academicYear, semester, status } = req.query;
 
-    const filter = { schoolCampus: campusId };
-    if (status)       filter.status       = status;
-    else              filter.status       = { $ne: 'CANCELLED' };
-    if (academicYear) filter.academicYear = academicYear;
-    if (semester)     filter.semester     = semester;
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      ExamSession.find(filter)
-        .select('-__v')
-        .sort({ startTime: 1 })
-        .skip(skip).limit(Number(limit)).lean(),
-      ExamSession.countDocuments(filter),
-    ]);
+    const { docs, total } = await examService.listCampusExaminations({
+      campusId, page, limit, academicYear, semester, status,
+    });
 
     return sendPaginated(res, 200, 'Examinations retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 

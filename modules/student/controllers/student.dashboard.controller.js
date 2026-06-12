@@ -22,7 +22,7 @@ const Student          = require('../models/student.model');
 const StudentSchedule  = require('../models/student.schedule.model');
 const StudentAttendance = require('../models/student.attend.model');
 const { Result }       = require('../../../models/result.model');
-const ExamEnrollment   = require('../../../models/exam-models/exam.enrollment.model');
+const examService      = require('../../exam').service; // façade module exam (§3)
 const {
   sendSuccess,
   sendError,
@@ -82,7 +82,7 @@ const getDashboard = async (req, res) => {
       upcomingSessions,
       attendanceStats,
       recentResults,
-      examEnrollments,
+      upcomingExams,
     ] = await Promise.all([
 
       // Today's sessions
@@ -131,21 +131,9 @@ const getDashboard = async (req, res) => {
         .limit(5)
         .lean({ virtuals: true }),
 
-      // Upcoming exam enrollments (eligible + session in the future)
-      // Note: .sort() on a populated field is not supported by Mongoose — sorting
-      // is done in JS after the populate+match filter removes null examSessions.
-      ExamEnrollment.find({
-        student:    studentId,
-        isEligible: true,
-        isDeleted:  false,
-      })
-        .populate({
-          path:     'examSession',
-          match:    { status: { $in: ['SCHEDULED', 'PUBLISHED', 'ONGOING'] }, startTime: { $gte: now }, isDeleted: false },
-          select:   'title startTime endTime status room subject',
-          populate: { path: 'subject', select: 'subject_name' },
-        })
-        .lean(),
+      // Upcoming exams (eligible enrollments + session in the future),
+      // already filtered + sorted + capped at 5 by the exam module.
+      examService.getUpcomingExamsForStudent(studentId),
     ]);
 
     // ── 4. Derived stats ──────────────────────────────────────────────────────
@@ -158,12 +146,6 @@ const getDashboard = async (req, res) => {
       ? parseFloat((recentResults.reduce((s, r) => s + (r.normalizedScore ?? 0), 0) / recentResults.length).toFixed(1))
       : null;
 
-    // populate + match → un-matched docs have examSession=null; filter them out,
-    // then sort chronologically in JS (Mongoose cannot sort on populated fields).
-    const upcomingExams = examEnrollments
-      .filter((e) => e.examSession != null)
-      .sort((a, b) => new Date(a.examSession.startTime) - new Date(b.examSession.startTime))
-      .slice(0, 5);
 
     return sendSuccess(res, 200, 'Dashboard retrieved.', {
       student: {
