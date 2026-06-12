@@ -14,8 +14,8 @@
 const express = require('express');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter }              = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter }              = require('../../shared/middleware/rate-limiter');
 
 const {
   previewPdf,
@@ -23,7 +23,7 @@ const {
   startBatch,
   getBatchJobStatus,
   downloadBatchResult,
-} = require('../controllers/academic-print.controller');
+} = require('./controllers/academic-print.controller');
 
 // ── Global middleware ─────────────────────────────────────────────────────────
 router.use(authenticate);

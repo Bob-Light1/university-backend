@@ -23,12 +23,12 @@
 
 const crypto = require('crypto');
 
-const { asyncHandler, sendSuccess, sendError, sendPaginated } = require('../utils/response-helpers');
-const { generateAcademicPdf, savePrintPdf, readPrintPdf }    = require('../services/academic-pdf.service');
+const { asyncHandler, sendSuccess, sendError, sendPaginated } = require('../../../shared/utils/response-helpers');
+const { generateAcademicPdf, savePrintPdf, readPrintPdf }    = require('../academic-pdf.service');
 
-const Student         = require('../models/student-models/student.model');
-const Class           = require('../models/class.model');
-const { FinalTranscript } = require('../models/final-transcript.model');
+const Student         = require('../../../models/student-models/student.model');
+const Class           = require('../../../models/class.model');
+const { FinalTranscript } = require('../../../models/final-transcript.model');
 
 // ── In-process job store ──────────────────────────────────────────────────────
 // Structure: Map<jobId, JobRecord>
@@ -111,7 +111,7 @@ const loadStudentsByClass = async (classId, campusId) => {
  * No date filter — returns the full instructor roster.
  */
 const loadClassTeachers = async (classId, campusId) => {
-  const StudentSchedule = require('../models/student-models/student.schedule.model');
+  const StudentSchedule = require('../../../models/student-models/student.schedule.model');
   const sessions = await StudentSchedule.find({
     'classes.classId': classId,
     schoolCampus:      campusId,
@@ -144,7 +144,7 @@ const loadClassTeachers = async (classId, campusId) => {
  * Uses a date range if provided; otherwise the current week (Mon–Sun).
  */
 const loadClassSessions = async (classId, campusId, params) => {
-  const StudentSchedule = require('../models/student-models/student.schedule.model');
+  const StudentSchedule = require('../../../models/student-models/student.schedule.model');
 
   let from, to;
   if (params.weekStart) {

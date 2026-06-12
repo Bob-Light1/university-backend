@@ -19,7 +19,7 @@ const chromium  = require('@sparticuz/chromium');
 const path      = require('path');
 const fs        = require('fs').promises;
 
-const { generateQrCodeDataUrl } = require('./document-services/document.qr.service');
+const { generateQrCodeDataUrl } = require('../../services/document-services/document.qr.service');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -54,7 +54,7 @@ const getCampusBranding = async (campusId) => {
   const cached = brandingCache.get(key);
   if (cached && (Date.now() - cached.cachedAt) < CACHE_TTL_MS) return cached;
 
-  const Campus = require('../models/campus.model');
+  const Campus = require('../../models/campus.model');
   const campus = await Campus.findById(campusId)
     .select('campus_name campus_image location')
     .lean();

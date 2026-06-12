@@ -9,7 +9,7 @@ const { apiLimiter } = require('./middleware/rate-limiter/rate-limiter');
 const localeMiddleware = require('./middleware/locale/locale.middleware');
 const mongoSanitize = require('express-mongo-sanitize');
 const { shutdownPool }         = require('./modules/document').service;
-const { shutdownAcademicPool } = require('./services/academic-pdf.service');
+const { shutdownAcademicPool } = require('./modules/academic-print').service;
 
 const app = express();
 
@@ -255,7 +255,7 @@ const departmentRouter = require('./modules/department').routes;
 const documentRouter    = require('./modules/document').routes;
 const parentRouter      = require('./modules/parent').routes;
 const examinationRouter = require('./modules/exam').routes;
-const academicPrintRouter = require('./routers/academic-print.router');
+const academicPrintRouter = require('./modules/academic-print').routes;
 const partnerRouter       = require('./modules/partner').routes;
 const mentorRouter        = require('./modules/mentor').routes;
 const staffRoutes             = require('./modules/staff').routes; // /api/staff + /api/staff-roles

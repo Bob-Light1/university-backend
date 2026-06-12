@@ -18,7 +18,7 @@
 
 const Document      = require('./models/document.model');
 const DocumentAudit = require('./models/document.audit.model');
-const { cleanupExpiredPrintFiles } = require('../../services/academic-pdf.service');
+const { cleanupExpiredPrintFiles } = require('../academic-print').service;
 
 const BATCH_SIZE = 100;
 
