@@ -60,6 +60,9 @@ const buildPartnerResponse = (partner) => {
   const obj = partner.toObject ? partner.toObject({ virtuals: true }) : { ...partner };
   delete obj.password;
   delete obj.__v;
+  // Le champ `role` du modèle vaut null par défaut ; on force 'PARTNER' pour que
+  // le front-end (ProtectedRoute) résolve correctement les autorisations.
+  obj.role = 'PARTNER';
   return obj;
 };
 
@@ -356,6 +359,7 @@ const getMe = async (req, res) => {
 
     if (!partner) return sendNotFound(res, 'Partner');
 
+    partner.role = 'PARTNER';
     return sendSuccess(res, 200, 'Profile retrieved.', partner);
 
   } catch (error) {
