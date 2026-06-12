@@ -20,7 +20,9 @@
 
 const mongoose = require('mongoose');
 const Document = require('../models/document.model');
-const Course   = require('../../../models/course.model');
+// require paresseux de la façade course (évite tout cycle au chargement :
+// document est chargé très tôt via server.js).
+const courseService = () => require('../../course').service;
 const { sendError, sendForbidden, sendNotFound } = require('../../../shared/utils/response-helpers');
 const { RESTRICTED_DOCUMENT_TYPES, DOCUMENT_STATUS } = require('../models/document.model');
 
@@ -143,12 +145,9 @@ const enforceTeacherScope = async (req, res, next) => {
 
   // Verify at least one linked course belongs to this teacher
   const courseIds = courseLinks.map((e) => e.entityId);
-  const ownedCourse = await Course.findOne({
-    _id:     { $in: courseIds },
-    teacher: req.user.id,
-  }).select('_id').lean();
+  const owned = await courseService().isTeacherOfAnyCourse(courseIds, req.user.id);
 
-  if (!ownedCourse) {
+  if (!owned) {
     return sendForbidden(res, 'You are not assigned to the course linked to this document');
   }
 

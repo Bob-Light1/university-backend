@@ -18,11 +18,11 @@ const mongoose          = require('mongoose');
 const Student           = require('../../../models/student-models/student.model');
 const { Result }        = require('../../../models/result.model');
 const StudentAttendance = require('../../../models/student-models/student.attend.model');
-const Course            = require('../../../models/course.model');
 const Teacher           = require('../../../models/teacher-models/teacher.model');
 const TeacherSchedule   = require('../../../models/teacher-models/teacher.schedule.model');
 const documentService   = require('../../document').service;
 const examService       = require('../../exam').service;
+const courseService     = require('../../course').service;
 
 const {
   sendSuccess,
@@ -243,26 +243,7 @@ const getMyCourses = async (req, res) => {
   try {
     const { page = 1, limit = 20, search } = req.query;
 
-    const filter = {
-      approvalStatus:  'APPROVED',
-      isLatestVersion: true,
-      status:          { $ne: 'archived' },
-    };
-    if (search) {
-      const rx = new RegExp(escapeRegex(search.trim()), 'i');
-      filter.$or = [{ title: rx }, { courseCode: rx }, { description: rx }];
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Course.find(filter)
-        .select('-__v')
-        .populate('subject',   'subject_name')
-        .populate('createdBy', 'firstName lastName')
-        .sort({ title: 1 })
-        .skip(skip).limit(Number(limit)).lean(),
-      Course.countDocuments(filter),
-    ]);
+    const { docs, total } = await courseService.listApprovedCourses({ search, page, limit });
 
     return sendPaginated(res, 200, 'Courses retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 

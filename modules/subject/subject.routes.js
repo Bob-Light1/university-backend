@@ -11,9 +11,9 @@ const {
 
 
 const {
-  linkSubjectCourse, 
-  unlinkSubjectCourse, 
-} = require('../../controllers/course-controllers/course.resources.controller');
+  linkSubjectCourse,
+  unlinkSubjectCourse,
+} = require('./controllers/subject.course-link.controller');
 
 const router = express.Router();
 

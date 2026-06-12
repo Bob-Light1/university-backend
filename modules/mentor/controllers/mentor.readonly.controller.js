@@ -20,8 +20,8 @@ const Mentor            = require('../mentor.model');
 // Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
 const Result            = require('../../../models/result.model');
 const StudentAttendance = require('../../../models/student-models/student.attend.model');
-const Course            = require('../../../models/course.model');
 const Student           = require('../../../models/student-models/student.model');
+const courseService     = require('../../course').service; // façade module course (§3)
 
 const {
   sendSuccess,
@@ -324,29 +324,9 @@ const getMyCourses = async (req, res) => {
   try {
     const { page = 1, limit = 20, search } = req.query;
 
-    const filter = {
-      approvalStatus: 'APPROVED',
-      isLatestVersion: true,
-      status: { $ne: 'archived' },
-    };
-
-    if (search) {
-      const rx = new RegExp(search.trim(), 'i');
-      filter.$or = [{ title: rx }, { courseCode: rx }, { description: rx }];
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Course.find(filter)
-        .select('-__v')
-        .populate('subject', 'subject_name')
-        .populate('createdBy', 'firstName lastName')
-        .sort({ title: 1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      Course.countDocuments(filter),
-    ]);
+    // NB : la façade course échappe la regex de recherche (l'ancienne version
+    // mentor ne le faisait pas — correction d'un bug latent d'injection regex).
+    const { docs, total } = await courseService.listApprovedCourses({ search, page, limit });
 
     return sendPaginated(res, 200, 'Courses retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
