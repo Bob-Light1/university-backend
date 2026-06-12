@@ -3,9 +3,16 @@
 /**
  * @file student.service.js — API inter-modules du domaine student.
  *
- * Vide pour l'instant : les nombreux consommateurs (13 pour student.model)
- * passent par les shims de models/student-models/ — à remplacer par des
- * fonctions de service ici lors de la phase nettoyage.
+ * Exposé :
+ *   - entityConfig : config GenericEntityController (consommé par campus,
+ *     qui instancie un controller d'entité student pour son dashboard).
+ *
+ * Reste à résorber : les consommateurs des shims models/student-models/
+ * (~13 pour student.model) — vague C du chantier 20b.
  */
 
-module.exports = {};
+const entityConfig = require('./student.config');
+
+module.exports = {
+  entityConfig,
+};

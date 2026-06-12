@@ -21,7 +21,7 @@ const staffService  = require('../../staff').service; // façade module staff (�
 const mentorService = require('../../mentor').service; // façade module mentor (§3)
 
 const campusConfig = require('../campus.config');
-const studentConfig = require('../../../configs/student.config');
+const studentConfig = require('../../student').service.entityConfig; // façade module student (§3)
 const crypto = require('crypto');
 
 const { uploadImage } = require('../../../shared/utils/file-upload');
