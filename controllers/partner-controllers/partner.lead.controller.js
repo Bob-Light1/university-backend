@@ -191,13 +191,17 @@ const resolveCode = asyncHandler(async (req, res) => {
 const publicPreRegister = asyncHandler(async (req, res) => {
   const {
     firstName, lastName, email, phone,
-    programInterest, referralCode, source,
-    _hp,                     // honeypot field
+    programInterest, source,
     utm_source, utm_medium, utm_campaign,
   } = req.body;
 
+  // Alias de compatibilité — le portail public envoie `partnerCode` / `website`,
+  // l'ancien contrat utilisait `referralCode` / `_hp`. On accepte les deux.
+  const referralCode = req.body.referralCode ?? req.body.partnerCode;
+  const honeypot     = req.body._hp ?? req.body.website;
+
   // 1. HONEYPOT — silent discard, aucune écriture DB
-  if (_hp) {
+  if (honeypot) {
     return sendSuccess(res, 200, 'Pre-registration received.');
   }
 
