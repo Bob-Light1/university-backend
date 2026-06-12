@@ -1,9 +1,26 @@
 /**
  * @file parent.service.js
  * API publique du module parent.
- * Vide pour l'instant : le seul importateur externe est le hook post-delete de
- * student.model (via le shim models/parent.model.js). Quand student sera migré,
- * exposer ici p.ex. removeChildFromAllParents(studentId) et convertir le hook.
+ *
+ * Exposé :
+ *   - removeChildFromAllParents(studentId) : retire un étudiant du tableau
+ *     children[] de tous les parents (consommé par le hook post-delete de
+ *     student.model lors d'un hard-delete).
  */
 
-module.exports = {};
+const Parent = require('./parent.model');
+
+/**
+ * Retire studentId de children[] chez tous les parents concernés.
+ * @param {ObjectId|string} studentId
+ * @returns {Promise<{modifiedCount: number}>}
+ */
+const removeChildFromAllParents = (studentId) =>
+  Parent.updateMany(
+    { children: studentId },
+    { $pull: { children: studentId } }
+  ).exec();
+
+module.exports = {
+  removeChildFromAllParents,
+};

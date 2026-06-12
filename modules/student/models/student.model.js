@@ -332,11 +332,10 @@ studentSchema.statics.countByCampus = function (campusId) {
  */
 studentSchema.post('findOneAndDelete', function (doc) {
   if (!doc) return;
-  const Parent = require('../../../models/parent.model');
-  Parent.updateMany(
-    { children: doc._id },
-    { $pull: { children: doc._id } }
-  ).exec().catch((err) => {
+  // require paresseux : la façade parent au chargement créerait un cycle
+  // (parent.controller importe le model Student via shim — vague C).
+  const { removeChildFromAllParents } = require('../../parent').service;
+  removeChildFromAllParents(doc._id).catch((err) => {
     console.warn('[Student post-delete] Failed to clean up parent children:', err.message);
   });
 });
