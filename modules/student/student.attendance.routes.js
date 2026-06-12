@@ -9,12 +9,12 @@
  *
  *  Alignements avec le backend foruni :
  *  ──────────────────────────────────────
- *  • Middleware : authenticate + authorize() depuis '../middleware/auth/auth'
+ *  • Middleware : authenticate + authorize() depuis '../../shared/middleware/auth'
  *    (PAS protect() ni campusIsolation)
  *  • Rôles : 'ADMIN' | 'DIRECTOR' | 'CAMPUS_MANAGER' | 'TEACHER' | 'STUDENT'
  *  • DIRECTOR traité comme ADMIN dans les autorisations
  *  • Campus isolation gérée dans les controllers via req.user.campusId
- *  • apiLimiter depuis '../middleware/rate-limiter/rate-limiter'
+ *  • apiLimiter depuis '../../shared/middleware/rate-limiter'
  *
  *  Hiérarchie des rôles dans ce fichier :
  *  ────────────────────────────────────────
@@ -27,8 +27,8 @@
 const express = require('express');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter }              = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter }              = require('../../shared/middleware/rate-limiter');
 
 const {
   initSessionAttendance,
@@ -42,7 +42,7 @@ const {
   getStudentStats,
   getClassStats,
   getCampusOverview,
-} = require('../controllers/student-controllers/student.attendance.controller');
+} = require('./controllers/student.attendance.controller');
 
 // ─────────────────────────────────────────────
 // MIDDLEWARE GLOBAL

@@ -18,16 +18,16 @@
 
 const mongoose = require('mongoose');
 
-const Student          = require('../../models/student-models/student.model');
-const StudentSchedule  = require('../../models/student-models/student.schedule.model');
-const StudentAttendance = require('../../models/student-models/student.attend.model');
-const { Result }       = require('../../models/result.model');
-const ExamEnrollment   = require('../../models/exam-models/exam.enrollment.model');
+const Student          = require('../models/student.model');
+const StudentSchedule  = require('../models/student.schedule.model');
+const StudentAttendance = require('../models/student.attend.model');
+const { Result }       = require('../../../models/result.model');
+const ExamEnrollment   = require('../../../models/exam-models/exam.enrollment.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

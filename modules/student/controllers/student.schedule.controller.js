@@ -33,26 +33,26 @@
  */
 
 const mongoose        = require('mongoose');
-const StudentSchedule = require('../../models/student-models/student.schedule.model');
-const TeacherSchedule = require('../../models/teacher-models/teacher.schedule.model');
-const Student         = require('../../models/student-models/student.model');
+const StudentSchedule = require('../models/student.schedule.model');
+const TeacherSchedule = require('../../../models/teacher-models/teacher.schedule.model');
+const Student         = require('../models/student.model');
 
-const { SCHEDULE_STATUS, SESSION_TYPE, SEMESTER } = require('../../utils/schedule.base');
+const { SCHEDULE_STATUS, SESSION_TYPE, SEMESTER } = require('../../../shared/utils/schedule.base');
 
 const {
   sendSuccess,
   sendError,
   sendPaginated,
   asyncHandler,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
-const { isValidObjectId } = require('../../utils/validation-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 // Shared helpers: participant resolution + TeacherSchedule sync
 const {
   resolveSessionParticipants,
   syncTeacherSchedule,
-} = require('../../utils/schedule-helpers');
+} = require('../../../utils/schedule-helpers');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL HELPERS

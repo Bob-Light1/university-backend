@@ -13,8 +13,8 @@
  */
 
 const mongoose          = require('mongoose');
-const StudentAttendance = require('../../models/student-models/student.attend.model');
-const Student           = require('../../models/student-models/student.model');
+const StudentAttendance = require('../models/student.attend.model');
+const Student           = require('../models/student.model');
 
 const {
   asyncHandler,
@@ -24,12 +24,12 @@ const {
   sendPaginated,
   sendNotFound,
   sendForbidden,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 const {
   isValidObjectId,
   validateStudentBelongsToCampus,
-} = require('../../utils/validation-helpers');
+} = require('../../../utils/validation-helpers');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 

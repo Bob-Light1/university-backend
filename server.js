@@ -246,14 +246,12 @@ const campusRouter = require('./routers/campus.router');
 const classRouter = require('./modules/class').routes;
 const levelRouter = require('./modules/level').routes;
 const subjectRouter = require('./modules/subject').routes;
-const studentRouter = require('./routers/student.router');
+const studentRoutes = require('./modules/student').routes; // /api/students + /api/schedules/student + /api/attendance/student
 const teacherRoutes = require('./modules/teacher').routes; // /api/teachers + /api/schedules/teacher + /api/attendance/teacher
 const adminRouter = require('./modules/admin').routes;
 const resultRouter = require('./modules/result').routes;
 const courseRouter = require('./modules/course').routes;
 const departmentRouter = require('./modules/department').routes;
-const studentScheduleRouter = require('./routers/student-schedule.router');
-const studentAttendanceRouter = require('./routers/student-attendance.router');
 const documentRouter    = require('./modules/document').routes;
 const parentRouter      = require('./modules/parent').routes;
 const examinationRouter = require('./modules/exam').routes;
@@ -267,7 +265,7 @@ const settingsRouter          = require('./modules/settings').routes;
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
-app.use('/api/students', studentRouter);
+app.use('/api',          studentRoutes); // → /api/students + /api/schedules/student + /api/attendance/student (URLs inchangées)
 app.use('/api',          teacherRoutes); // → /api/teachers + /api/schedules/teacher + /api/attendance/teacher (URLs inchangées)
 app.use('/api/class', classRouter);
 app.use('/api/level', levelRouter);
@@ -275,8 +273,6 @@ app.use('/api/subject', subjectRouter);
 app.use('/api/results', resultRouter);
 app.use('/api/courses', courseRouter);
 app.use('/api/department', departmentRouter);
-app.use('/api/schedules/student', studentScheduleRouter);
-app.use('/api/attendance/student', studentAttendanceRouter);
 app.use('/api/documents',   documentRouter);
 app.use('/api/parents',     parentRouter);
 app.use('/api/examination', examinationRouter);

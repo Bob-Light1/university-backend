@@ -1,16 +1,16 @@
 const express = require('express');
 const router = express.Router();
 
-const studentController          = require('../controllers/student-controllers/student.controller');
-const studentDashboardController = require('../controllers/student-controllers/student.dashboard.controller');
-const studentProfileController   = require('../controllers/student-controllers/student.profile.controller');
-const { authenticate, authorize, isOwnerOrRole } = require('../middleware/auth/auth');
-const { loginLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const studentController          = require('./controllers/student.controller');
+const studentDashboardController = require('./controllers/student.dashboard.controller');
+const studentProfileController   = require('./controllers/student.profile.controller');
+const { authenticate, authorize, isOwnerOrRole } = require('../../shared/middleware/auth');
+const { loginLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
 const {
   uploadProfileImage,
   uploadImportFile,
   handleMulterError
-} = require('../middleware/upload/upload');
+} = require('../../shared/middleware/upload');
 
 // ========================================
 // PUBLIC ROUTES (No Authentication)
