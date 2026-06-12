@@ -25,9 +25,9 @@
  *  honeypot: '' (doit être vide)
  */
 
-const Partner     = require('../../models/partner-models/partner.model');
-const PartnerLead = require('../../models/partner-models/partner.lead.model');
-const Campus      = require('../../models/campus.model');
+const Partner     = require('../../../../models/partner-models/partner.model');
+const PartnerLead = require('../../../../models/partner-models/partner.lead.model');
+const Campus      = require('../../../../models/campus.model');
 
 const {
   asyncHandler,
@@ -35,7 +35,7 @@ const {
   sendCreated,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
+} = require('../../../../shared/utils/response-helpers');
 
 // Même règle de validation que le modèle Partner — cohérence ERP.
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;

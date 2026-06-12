@@ -16,7 +16,7 @@
  */
 
 const crypto = require('crypto');
-const { sendError } = require('../../utils/response-helpers');
+const { sendError } = require('../../../shared/utils/response-helpers');
 
 const hashIp = (ip) => crypto.createHash('sha256').update(ip || '').digest('hex');
 

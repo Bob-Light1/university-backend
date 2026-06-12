@@ -15,10 +15,10 @@
  */
 
 const mongoose     = require('mongoose');
-const QuizSession  = require('../../models/partner-models/quiz.session.model');
-const Campus       = require('../../models/campus.model');
+const QuizSession  = require('../../models/quiz.session.model');
+const Campus       = require('../../../../models/campus.model');
 
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../utils/response-helpers');
+const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getLeaderboard = asyncHandler(async (req, res) => {
   const {

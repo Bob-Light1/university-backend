@@ -20,8 +20,8 @@ const {
   sendError,
   sendPaginated,
   sendNotFound,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../../utils/validation-helpers');
 
 const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];
 

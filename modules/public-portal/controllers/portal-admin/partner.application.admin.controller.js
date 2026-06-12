@@ -9,7 +9,7 @@
  * after reviewing; this controller just sets status + partnerId reference.
  */
 
-const PartnerApplication = require('../../models/partner-models/partner.application.model');
+const PartnerApplication = require('../../../../models/partner-models/partner.application.model');
 const {
   buildCampusFilter,
   GLOBAL_ROLES,
@@ -19,8 +19,8 @@ const {
   sendError,
   sendPaginated,
   sendNotFound,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../../utils/validation-helpers');
 
 // ─── LIST ─────────────────────────────────────────────────────────────────────
 const list = async (req, res) => {

@@ -9,9 +9,9 @@
  * Citation bilingue ({fr, en}) transmise telle quelle — le portail choisit la langue.
  */
 
-const Campus      = require('../../models/campus.model');
-const Testimonial = require('../../models/partner-models/testimonial.model');
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../utils/response-helpers');
+const Campus      = require('../../../../models/campus.model');
+const Testimonial = require('../../models/testimonial.model');
+const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const DEFAULT_LIMIT = 6;
 const MAX_LIMIT     = 50;

@@ -8,8 +8,8 @@
  * Utilisé dans le formulaire de pré-inscription pour alimenter le dropdown.
  */
 
-const Campus = require('../../models/campus.model');
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../utils/response-helpers');
+const Campus = require('../../../../models/campus.model');
+const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getPrograms = asyncHandler(async (req, res) => {
   const { campusSlug } = req.query;

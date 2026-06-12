@@ -10,8 +10,8 @@
  * Creates a ContactMessage document. Rate-limited to 5 req/h/IP via the caller.
  */
 
-const ContactMessage = require('../../models/partner-models/contact.message.model');
-const Campus         = require('../../models/campus.model');
+const ContactMessage = require('../../models/contact.message.model');
+const Campus         = require('../../../../models/campus.model');
 
 const {
   asyncHandler,
@@ -19,7 +19,7 @@ const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
+} = require('../../../../shared/utils/response-helpers');
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 

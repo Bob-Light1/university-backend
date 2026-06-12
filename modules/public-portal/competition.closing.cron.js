@@ -21,10 +21,10 @@
  *    await closeCompetition(competitionId);
  */
 
-const CompetitionPrize = require('../models/partner-models/competition.prize.model');
-const QuizSession      = require('../models/partner-models/quiz.session.model');
-const PartnerLead      = require('../models/partner-models/partner.lead.model');
-const { notifyWinners } = require('../services/notification.service');
+const CompetitionPrize = require('./models/competition.prize.model');
+const QuizSession      = require('./models/quiz.session.model');
+const PartnerLead      = require('../../models/partner-models/partner.lead.model');
+const { notifyWinners } = require('./notification.service');
 
 // Nombre de gagnants retenus par compétition (top N — couvre 1er, 2e-3e, top 10 de la spec)
 const TOP_N = 10;

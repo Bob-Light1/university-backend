@@ -12,10 +12,10 @@
  * Le campusSlug retourné est utilisé dans tous les appels suivants du portail.
  */
 
-const Partner = require('../../models/partner-models/partner.model');
-const Campus  = require('../../models/campus.model');
+const Partner = require('../../../../models/partner-models/partner.model');
+const Campus  = require('../../../../models/campus.model');
 
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../utils/response-helpers');
+const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 // Champs publics renvoyés — liste blanche explicite
 const CAMPUS_PUBLIC_FIELDS = 'campus_name campusSlug campus_image location.city location.country programs nextBatchDate defaultLanguage portalStats';

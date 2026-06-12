@@ -10,8 +10,8 @@
  * The admin reviews it from /api/portal-admin/applications.
  */
 
-const PartnerApplication = require('../../models/partner-models/partner.application.model');
-const Campus             = require('../../models/campus.model');
+const PartnerApplication = require('../../../../models/partner-models/partner.application.model');
+const Campus             = require('../../../../models/campus.model');
 
 const {
   asyncHandler,
@@ -19,7 +19,7 @@ const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
+} = require('../../../../shared/utils/response-helpers');
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 

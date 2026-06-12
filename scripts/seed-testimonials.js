@@ -17,7 +17,7 @@
 require('dotenv').config();
 const mongoose    = require('mongoose');
 const Campus      = require('../models/campus.model');
-const Testimonial = require('../models/partner-models/testimonial.model');
+const Testimonial = require('../modules/public-portal/models/testimonial.model');
 
 const DRY_RUN  = process.argv.includes('--dry-run');
 const CLEAR    = process.argv.includes('--clear');

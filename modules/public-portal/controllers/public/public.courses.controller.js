@@ -11,9 +11,9 @@
  * NOTE : endpoint Phase 2 non détaillé dans la spec §7 — à valider avec le responsable projet.
  */
 
-const Campus        = require('../../models/campus.model');
-const CoursePreview = require('../../models/partner-models/course.preview.model');
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../utils/response-helpers');
+const Campus        = require('../../../../models/campus.model');
+const CoursePreview = require('../../models/course.preview.model');
+const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getCoursePreviews = asyncHandler(async (req, res) => {
   const { campusSlug, program } = req.query;

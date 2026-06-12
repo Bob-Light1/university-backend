@@ -15,21 +15,21 @@
 
 const express = require('express');
 
-const publicPortalMiddleware = require('../middleware/public-portal/publicPortal.middleware');
-const { createCustomLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const publicPortalMiddleware = require('./middleware/publicPortal.middleware');
+const { createCustomLimiter } = require('../../shared/middleware/rate-limiter');
 
-const campusCtrl              = require('../controllers/public/public.campus.controller');
-const registerCtrl            = require('../controllers/public/public.register.controller');
-const quizCtrl                = require('../controllers/public/public.quiz.controller');
-const leaderboardCtrl         = require('../controllers/public/public.leaderboard.controller');
-const programsCtrl            = require('../controllers/public/public.programs.controller');
-const testimonialsCtrl        = require('../controllers/public/public.testimonials.controller');
-const faqCtrl                 = require('../controllers/public/public.faq.controller');
-const competitionCtrl         = require('../controllers/public/public.competition.controller');
-const coursesCtrl             = require('../controllers/public/public.courses.controller');
-const contactCtrl             = require('../controllers/public/public.contact.controller');
-const partnerApplicationCtrl  = require('../controllers/public/public.partner.application.controller');
-const alertCtrl               = require('../controllers/public/public.alert.controller');
+const campusCtrl              = require('./controllers/public/public.campus.controller');
+const registerCtrl            = require('./controllers/public/public.register.controller');
+const quizCtrl                = require('./controllers/public/public.quiz.controller');
+const leaderboardCtrl         = require('./controllers/public/public.leaderboard.controller');
+const programsCtrl            = require('./controllers/public/public.programs.controller');
+const testimonialsCtrl        = require('./controllers/public/public.testimonials.controller');
+const faqCtrl                 = require('./controllers/public/public.faq.controller');
+const competitionCtrl         = require('./controllers/public/public.competition.controller');
+const coursesCtrl             = require('./controllers/public/public.courses.controller');
+const contactCtrl             = require('./controllers/public/public.contact.controller');
+const partnerApplicationCtrl  = require('./controllers/public/public.partner.application.controller');
+const alertCtrl               = require('./controllers/public/public.alert.controller');
 
 const router = express.Router();
 

@@ -15,15 +15,15 @@
 const express = require('express');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
 
-const { makeContentController } = require('../controllers/portal-admin/portal-admin.factory');
-const competitionCtrl          = require('../controllers/portal-admin/competition.admin.controller');
-const applicationCtrl          = require('../controllers/portal-admin/partner.application.admin.controller');
+const { makeContentController } = require('./controllers/portal-admin/portal-admin.factory');
+const competitionCtrl          = require('./controllers/portal-admin/competition.admin.controller');
+const applicationCtrl          = require('./controllers/portal-admin/partner.application.admin.controller');
 
-const Testimonial   = require('../models/partner-models/testimonial.model');
-const FaqEntry       = require('../models/partner-models/faq.entry.model');
-const CoursePreview  = require('../models/partner-models/course.preview.model');
+const Testimonial   = require('./models/testimonial.model');
+const FaqEntry       = require('./models/faq.entry.model');
+const CoursePreview  = require('./models/course.preview.model');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 

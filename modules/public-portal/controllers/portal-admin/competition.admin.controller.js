@@ -10,8 +10,8 @@
  * closeCompetition), which freezes winners from the period's QuizSessions.
  */
 
-const CompetitionPrize = require('../../models/partner-models/competition.prize.model');
-const { closeCompetition } = require('../../crons/competition.closing.cron');
+const CompetitionPrize = require('../../models/competition.prize.model');
+const { closeCompetition } = require('../../competition.closing.cron');
 const {
   buildCampusFilter,
   resolveCampusId,
@@ -23,8 +23,8 @@ const {
   sendError,
   sendPaginated,
   sendNotFound,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../../utils/validation-helpers');
 
 // Editable fields — winners[] is managed by the cron, never set from the request.
 const EDITABLE = ['period', 'prizes', 'closingDate', 'isActive'];

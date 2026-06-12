@@ -236,8 +236,8 @@ app.get('/health', (req, res) => {
 // ========================================
 // PUBLIC PORTAL ROUTES (pas de JWT requis — monté avant les routes authentifiées)
 // ========================================
-const publicRouter = require('./routers/public.router');
-app.use('/api/public', publicRouter);
+const publicPortalRoutes = require('./modules/public-portal').routes; // /api/public + /api/portal-admin
+app.use('/api', publicPortalRoutes);
 
 // ========================================
 // API ROUTES
@@ -266,7 +266,6 @@ const staffRoutes             = require('./modules/staff').routes; // /api/staff
 const announcementRouter      = require('./modules/announcement').routes;
 const gaetRouter              = require('./modules/gaet').routes;
 const settingsRouter          = require('./modules/settings').routes;
-const portalAdminRouter       = require('./routers/portal-admin.router');
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -292,7 +291,6 @@ app.use('/api',                staffRoutes); // → /api/staff/... + /api/staff-
 app.use('/api/announcements',  announcementRouter);
 app.use('/api/gaet',          gaetRouter);
 app.use('/api/settings',      settingsRouter);
-app.use('/api/portal-admin',  portalAdminRouter);
 
 // ========================================
 // 404 HANDLER
@@ -424,7 +422,7 @@ try {
   const { runRetentionJob }  = require('./crons/document.retention.cron');
   const { runAntiCheatJob }  = require('./crons/exam-anticheat.cron');
   const { runExpiryJob }     = require('./modules/announcement').service;
-  const { runCompetitionClosingJob } = require('./crons/competition.closing.cron');
+  const { runCompetitionClosingJob } = require('./modules/public-portal').service;
   cron.schedule('0 2 * * 0', runRetentionJob);          // Every Sunday at 02:00
   cron.schedule('0 3 * * *', runAntiCheatJob);          // Nightly at 03:00
   cron.schedule('0 1 * * *', runExpiryJob);             // Nightly at 01:00

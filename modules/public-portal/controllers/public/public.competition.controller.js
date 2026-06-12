@@ -11,9 +11,9 @@
  * les références lead/quizSession).
  */
 
-const Campus           = require('../../models/campus.model');
-const CompetitionPrize = require('../../models/partner-models/competition.prize.model');
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../utils/response-helpers');
+const Campus           = require('../../../../models/campus.model');
+const CompetitionPrize = require('../../models/competition.prize.model');
+const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getCompetitionPrizes = asyncHandler(async (req, res) => {
   const { campusSlug } = req.query;

@@ -9,9 +9,9 @@
  * transmis tel quel — le portail choisit la langue et met en cache 24h.
  */
 
-const Campus   = require('../../models/campus.model');
-const FaqEntry = require('../../models/partner-models/faq.entry.model');
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../utils/response-helpers');
+const Campus   = require('../../../../models/campus.model');
+const FaqEntry = require('../../models/faq.entry.model');
+const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getFaq = asyncHandler(async (req, res) => {
   const { campusSlug } = req.query;

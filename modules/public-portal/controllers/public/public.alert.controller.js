@@ -9,9 +9,9 @@
  * - No existing lead → creates a minimal PartnerLead with notifyNextBatch = true.
  */
 
-const { asyncHandler, sendSuccess, sendError } = require('../../utils/response-helpers');
-const PartnerLead = require('../../models/partner-models/partner.lead.model');
-const Campus      = require('../../models/campus.model');
+const { asyncHandler, sendSuccess, sendError } = require('../../../../shared/utils/response-helpers');
+const PartnerLead = require('../../../../models/partner-models/partner.lead.model');
+const Campus      = require('../../../../models/campus.model');
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
