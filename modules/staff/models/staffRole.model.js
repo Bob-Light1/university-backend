@@ -1,7 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
-const { ALL_PERMISSIONS } = require('../constants/staff-permissions');
+const { ALL_PERMISSIONS } = require('../../../shared/constants/staff-permissions');
 
 /**
  * StaffRole Schema

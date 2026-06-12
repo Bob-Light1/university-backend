@@ -3,8 +3,8 @@
 const express = require('express');
 const router  = express.Router();
 
-const staffRoleController = require('../controllers/staffRole.controller');
-const { authenticate, authorize } = require('../middleware/auth/auth');
+const staffRoleController = require('./controllers/staffRole.controller');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 

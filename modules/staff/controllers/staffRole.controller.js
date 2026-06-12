@@ -17,17 +17,17 @@
 const mongoose  = require('mongoose');
 const StaffRole = require('../models/staffRole.model');
 const Staff     = require('../models/staff.model');
-const { ALL_PERMISSIONS } = require('../constants/staff-permissions');
+const { ALL_PERMISSIONS } = require('../../../shared/constants/staff-permissions');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendPaginated,
-} = require('../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidObjectId,
   buildCampusFilter,
-} = require('../utils/validation-helpers');
+} = require('../../../utils/validation-helpers');
 
 const getCampusFilter = (req) => {
   try { return buildCampusFilter(req.user); }

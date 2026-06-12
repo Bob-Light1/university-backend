@@ -14,21 +14,22 @@
  */
 
 const mongoose          = require('mongoose');
-const Student           = require('../../models/student-models/student.model');
-const { Result }        = require('../../models/result.model');
-const StudentAttendance = require('../../models/student-models/student.attend.model');
-const Course            = require('../../models/course.model');
-const Teacher           = require('../../models/teacher-models/teacher.model');
-const TeacherSchedule   = require('../../models/teacher-models/teacher.schedule.model');
-const Document          = require('../../models/document-models/document.model');
-const ExamSession       = require('../../models/exam-models/exam.session.model');
+// Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
+const Student           = require('../../../models/student-models/student.model');
+const { Result }        = require('../../../models/result.model');
+const StudentAttendance = require('../../../models/student-models/student.attend.model');
+const Course            = require('../../../models/course.model');
+const Teacher           = require('../../../models/teacher-models/teacher.model');
+const TeacherSchedule   = require('../../../models/teacher-models/teacher.schedule.model');
+const Document          = require('../../../models/document-models/document.model');
+const ExamSession       = require('../../../models/exam-models/exam.session.model');
 
 const {
   sendSuccess,
   sendError,
   sendPaginated,
-} = require('../../utils/response-helpers');
-const { escapeRegex } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { escapeRegex } = require('../../../utils/validation-helpers');
 
 const toOid = (id) => new mongoose.Types.ObjectId(id);
 

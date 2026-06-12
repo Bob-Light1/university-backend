@@ -24,22 +24,22 @@ const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-const Staff     = require('../../models/staff.model');
-const StaffRole = require('../../models/staffRole.model');
-const profileSvc = require('../../services/profile.service');
+const Staff     = require('../models/staff.model');
+const StaffRole = require('../models/staffRole.model');
+const profileSvc = require('../../../services/profile.service');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendPaginated,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidEmail,
   isValidObjectId,
   buildCampusFilter,
   escapeRegex,
-} = require('../../utils/validation-helpers');
-const { getLoginPrefs } = require('../../utils/login-prefs.util');
+} = require('../../../utils/validation-helpers');
+const { getLoginPrefs } = require('../../../utils/login-prefs.util');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;

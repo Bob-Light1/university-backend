@@ -3,11 +3,11 @@
 const express = require('express');
 const router  = express.Router();
 
-const staffController         = require('../controllers/staff-controllers/staff.controller');
-const staffProfileController  = require('../controllers/staff-controllers/staff.profile.controller');
-const staffReadonlyController = require('../controllers/staff-controllers/staff.readonly.controller');
-const { authenticate, authorize, isOwnerOrRole, requirePermission } = require('../middleware/auth/auth');
-const { loginLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const staffController         = require('./controllers/staff.controller');
+const staffProfileController  = require('./controllers/staff.profile.controller');
+const staffReadonlyController = require('./controllers/staff.readonly.controller');
+const { authenticate, authorize, isOwnerOrRole, requirePermission } = require('../../shared/middleware/auth');
+const { loginLimiter } = require('../../shared/middleware/rate-limiter');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 

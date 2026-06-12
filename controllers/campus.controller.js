@@ -17,7 +17,7 @@ const Subject = require('../models/subject.model');
 const Department = require('../models/department.model');
 const StudentAttendance = require('../models/student-models/student.attend.model');
 const Income = require('../models/income.model');
-const Staff  = require('../models/staff.model');
+const staffService  = require('../modules/staff').service; // façade module staff (§3)
 const mentorService = require('../modules/mentor').service; // façade module mentor (§3)
 
 const campusConfig = require('../configs/campus.config');
@@ -540,9 +540,7 @@ class CampusController extends GenericEntityController {
         recentTeachers,
         attendanceStats,
         paymentAlerts,
-        staffTotal,
-        staffActive,
-        staffWithRole,
+        staffStats,
         mentorStats,
       ] = await Promise.all([
         Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
@@ -582,9 +580,7 @@ class CampusController extends GenericEntityController {
         ]),
         // Pending income records as payment alerts
         Income.countDocuments({ campus: campusId, status: 'pending' }),
-        Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
-        Staff.countDocuments({ schoolCampus: campusId, status: 'active' }),
-        Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' }, subRole: { $exists: true, $ne: null } }),
+        staffService.getCampusStats(campusId),
         mentorService.getCampusStats(campusId, campusOid),
       ]);
 
@@ -604,10 +600,10 @@ class CampusController extends GenericEntityController {
           active: activeClasses
         },
         staff: {
-          total:       staffTotal,
-          active:      staffActive,
-          withRole:    staffWithRole,
-          withoutRole: staffTotal - staffWithRole,
+          total:       staffStats.total,
+          active:      staffStats.active,
+          withRole:    staffStats.withRole,
+          withoutRole: staffStats.total - staffStats.withRole,
         },
         mentors: {
           total:            mentorStats.total,

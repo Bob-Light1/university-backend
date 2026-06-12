@@ -262,8 +262,7 @@ const examinationRouter = require('./routers/examination.router');
 const academicPrintRouter = require('./routers/academic-print.router');
 const partnerRouter       = require('./routers/partner.router');
 const mentorRouter        = require('./modules/mentor').routes;
-const staffRouter             = require('./routers/staff.router');
-const staffRoleRouter         = require('./routers/staffRole.router');
+const staffRoutes             = require('./modules/staff').routes; // /api/staff + /api/staff-roles
 const announcementRouter      = require('./modules/announcement').routes;
 const gaetRouter              = require('./modules/gaet').routes;
 const settingsRouter          = require('./routers/settings.router');
@@ -289,8 +288,7 @@ app.use('/api/examination', examinationRouter);
 app.use('/api/print',      academicPrintRouter);
 app.use('/api/partners',    partnerRouter);
 app.use('/api/mentors',    mentorRouter);
-app.use('/api/staff',          staffRouter);
-app.use('/api/staff-roles',    staffRoleRouter);
+app.use('/api',                staffRoutes); // → /api/staff/... + /api/staff-roles/... (URLs inchangées)
 app.use('/api/announcements',  announcementRouter);
 app.use('/api/gaet',          gaetRouter);
 app.use('/api/settings',      settingsRouter);
