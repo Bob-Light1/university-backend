@@ -20,10 +20,10 @@ const {
   getCampusParents,
   getCampusSubjects,
   updateCampusDefaults,
-} = require('../controllers/campus.controller');
+} = require('./controllers/campus.controller');
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { loginLimiter, strictLimiter, apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { loginLimiter, strictLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
 
 
 const router = express.Router();

@@ -12,7 +12,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 
 const UserPreferences = require('../modules/settings/models/userPreferences.model');
-const Campus = require('../models/campus.model');
+const Campus = require('../modules/campus/campus.model');
 
 // Lazy imports to avoid loading every model at startup
 const MODELS = [
@@ -22,7 +22,7 @@ const MODELS = [
   { name: 'Parent',         file: '../modules/parent/parent.model',                role: 'PARENT',         campusField: 'schoolCampus' },
   { name: 'Mentor',         file: '../modules/mentor/mentor.model',                role: 'MENTOR',         campusField: 'schoolCampus' },
   { name: 'Staff',          file: '../modules/staff/models/staff.model',           role: 'STAFF',          campusField: 'schoolCampus' },
-  { name: 'Campus',         file: '../models/campus.model',                        role: 'CAMPUS_MANAGER', campusField: '_id' },
+  { name: 'Campus',         file: '../modules/campus/campus.model',                        role: 'CAMPUS_MANAGER', campusField: '_id' },
   { name: 'Partner',        file: '../modules/partner/models/partner.model',        role: 'PARTNER',        campusField: 'schoolCampus' },
 ];
 

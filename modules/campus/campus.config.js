@@ -1,4 +1,4 @@
-const Campus = require('../models/campus.model');
+const Campus = require('./campus.model');
 
 /**
  * CAMPUS CONFIGURATION FOR GENERIC ENTITY CONTROLLER

@@ -3,29 +3,29 @@ require('dotenv').config();
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
-const GenericEntityController = require('./generic-entity.controller');
+const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 
 // Escape user input before embedding in MongoDB $regex to prevent ReDoS / injection
 const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const Campus = require('../models/campus.model');
-const { getLoginPrefs } = require('../utils/login-prefs.util');
-const Teacher = require('../models/teacher-models/teacher.model');
-const Student = require('../models/student-models/student.model');
-const Class = require('../models/class.model');
-const Subject = require('../models/subject.model');
-const Department = require('../models/department.model');
-const StudentAttendance = require('../models/student-models/student.attend.model');
-const financeService = require('../modules/finance').service; // façade module finance (§3)
-const staffService  = require('../modules/staff').service; // façade module staff (§3)
-const mentorService = require('../modules/mentor').service; // façade module mentor (§3)
+const Campus = require('../campus.model');
+const { getLoginPrefs } = require('../../../utils/login-prefs.util');
+const Teacher = require('../../../models/teacher-models/teacher.model');
+const Student = require('../../../models/student-models/student.model');
+const Class = require('../../../models/class.model');
+const Subject = require('../../../models/subject.model');
+const Department = require('../../../models/department.model');
+const StudentAttendance = require('../../../models/student-models/student.attend.model');
+const financeService = require('../../finance').service; // façade module finance (§3)
+const staffService  = require('../../staff').service; // façade module staff (§3)
+const mentorService = require('../../mentor').service; // façade module mentor (§3)
 
-const campusConfig = require('../configs/campus.config');
-const studentConfig = require('../configs/student.config');
+const campusConfig = require('../campus.config');
+const studentConfig = require('../../../configs/student.config');
 const crypto = require('crypto');
 
-const { uploadImage } = require('../utils/file-upload');
-const { getFileUrl } = require('../middleware/upload/upload');
+const { uploadImage } = require('../../../shared/utils/file-upload');
+const { getFileUrl } = require('../../../shared/middleware/upload');
 
 const {
   sendSuccess,
@@ -33,12 +33,12 @@ const {
   sendPaginated,
   sendNotFound,
   sendConflict
-} = require('../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 const {
   isValidObjectId,
   isValidEmail,
   validatePasswordStrength
-} = require('../utils/validation-helpers');
+} = require('../../../utils/validation-helpers');
 
 // ========================================
 // INITIALIZE GENERIC CONTROLLERS
@@ -196,13 +196,13 @@ class CampusController extends GenericEntityController {
       const response = savedCampus.toObject();
       delete response.password;
 
-      const { sendCreated } = require('../utils/response-helpers');
+      const { sendCreated } = require('../../../shared/utils/response-helpers');
       return sendCreated(res, 'Campus registered successfully', response);
 
     } catch (error) {
       console.error('❌ Campus creation error:', error);
 
-      const { handleDuplicateKeyError } = require('../utils/response-helpers');
+      const { handleDuplicateKeyError } = require('../../../shared/utils/response-helpers');
       if (error.code === 11000) return handleDuplicateKeyError(res, error);
 
       if (error.name === 'ValidationError') {
@@ -962,7 +962,7 @@ const campusController = new CampusController(campusConfig);
 
 // ── PATCH /api/campus/:id/defaults ────────────────────────────────────────────
 const SUPPORTED_LANGUAGES_DEF  = ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
-const SUPPORTED_TIMEZONES_DEF  = require('../modules/settings').service.SUPPORTED_TIMEZONES; // façade settings (§3)
+const SUPPORTED_TIMEZONES_DEF  = require('../../settings').service.SUPPORTED_TIMEZONES; // façade settings (§3)
 const SUPPORTED_GRADE_FMTS_DEF = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
 
 const updateCampusDefaults = async (req, res) => {
