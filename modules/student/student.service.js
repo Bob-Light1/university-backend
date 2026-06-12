@@ -8,6 +8,8 @@
  *     qui instancie un controller d'entité student pour son dashboard).
  *   - validateStudentBelongsToCampus : garde d'isolation multi-tenant
  *     (consommé par result.crud et student.attendance.controller).
+ *   - resolveSessionParticipants / syncTeacherSchedule : création/maj de
+ *     sessions StudentSchedule + miroir TeacherSchedule (consommé par gaet).
  *
  * Reste à résorber : les consommateurs des shims models/student-models/
  * (~13 pour student.model) — vague C du chantier 20b.
@@ -17,6 +19,10 @@ const mongoose = require('mongoose');
 const Student = require('./models/student.model');
 
 const entityConfig = require('./student.config');
+const {
+  resolveSessionParticipants,
+  syncTeacherSchedule,
+} = require('./student.schedule.helpers');
 
 /**
  * Check if a student belongs to a specific campus
@@ -47,4 +53,6 @@ const validateStudentBelongsToCampus = async (studentId, campusId) => {
 module.exports = {
   entityConfig,
   validateStudentBelongsToCampus,
+  resolveSessionParticipants,
+  syncTeacherSchedule,
 };

@@ -47,7 +47,7 @@ const { SCHEDULE_STATUS, SESSION_TYPE } = require('../../../shared/utils/schedul
 const {
   resolveSessionParticipants,
   syncTeacherSchedule,
-} = require('../../../utils/schedule-helpers');
+} = require('../../student').service;
 
 const { isValidObjectId, buildCampusFilter: _buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 

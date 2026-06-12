@@ -48,11 +48,11 @@ const {
 
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
-// Shared helpers: participant resolution + TeacherSchedule sync
+// Helpers du module : résolution des participants + sync TeacherSchedule
 const {
   resolveSessionParticipants,
   syncTeacherSchedule,
-} = require('../../../utils/schedule-helpers');
+} = require('../student.schedule.helpers');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INTERNAL HELPERS

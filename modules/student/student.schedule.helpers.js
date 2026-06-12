@@ -21,10 +21,10 @@
 const mongoose = require('mongoose');
 
 // Lazy-loaded to avoid circular dependency issues at module load time
-const getClass           = () => require('../models/class.model');
-const getSubject         = () => require('../models/subject.model');
-const getTeacher         = () => require('../models/teacher-models/teacher.model');
-const getTeacherSchedule = () => require('../models/teacher-models/teacher.schedule.model');
+const getClass           = () => require('../../models/class.model');
+const getSubject         = () => require('../../models/subject.model');
+const getTeacher         = () => require('../../models/teacher-models/teacher.model');
+const getTeacherSchedule = () => require('../../models/teacher-models/teacher.schedule.model');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CLASSES
