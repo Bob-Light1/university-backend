@@ -18,10 +18,14 @@
 const mongoose          = require('mongoose');
 const Mentor            = require('../mentor.model');
 // Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
-const Result            = require('../../../models/result.model');
 const StudentAttendance = require('../../../models/student-models/student.attend.model');
 const Student           = require('../../../models/student-models/student.model');
 const courseService     = require('../../course').service; // façade module course (§3)
+// NB : l'ancien import `const Result = require('models/result.model')` ne
+// destructurait pas { Result } — Result.find/countDocuments étaient undefined
+// et toutes les routes résultats mentor répondaient 500 (bug latent corrigé
+// par le passage à la façade result).
+const resultService     = require('../../result').service; // façade module result (§3)
 
 const {
   sendSuccess,
@@ -81,11 +85,7 @@ const getDashboard = async (req, res) => {
 
       // Total results published for their students
       studentIds.length
-        ? Result.countDocuments({
-            student:      { $in: studentIds },
-            schoolCampus: campusId,
-            status:       'PUBLISHED',
-          })
+        ? resultService.countPublishedResults({ campusId, studentIds, withDeleted: true })
         : 0,
 
       // Attendance summary: total & present for their classes
@@ -104,17 +104,7 @@ const getDashboard = async (req, res) => {
 
       // Last 5 published results for their students
       studentIds.length
-        ? Result.find({
-            student:      { $in: studentIds },
-            schoolCampus: campusId,
-            status:       'PUBLISHED',
-          })
-            .select('student subject score maxScore grade evaluationTitle createdAt')
-            .populate('student', 'firstName lastName profileImage')
-            .populate('subject', 'subject_name')
-            .sort({ createdAt: -1 })
-            .limit(5)
-            .lean()
+        ? resultService.getRecentResultsForStudents(studentIds, campusId)
         : Promise.resolve([]),
     ]);
 
@@ -206,32 +196,19 @@ const getMyResults = async (req, res) => {
       studentId, subjectId, academicYear, semester,
     } = req.query;
 
-    const filter = {
-      student:      { $in: studentIds },
-      schoolCampus: toOid(req.user.campusId),
-      status:       'PUBLISHED',
-    };
+    const scopedStudentId = (studentId && studentIds.map(String).includes(studentId))
+      ? toOid(studentId)
+      : undefined;
 
-    if (studentId   && studentIds.map(String).includes(studentId)) {
-      filter.student = toOid(studentId);
-    }
-    if (subjectId)   filter.subject      = toOid(subjectId);
-    if (academicYear) filter.academicYear = academicYear;
-    if (semester)    filter.semester      = semester;
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Result.find(filter)
-        .select('-__v')
-        .populate('student', 'firstName lastName matricule profileImage')
-        .populate('subject', 'subject_name')
-        .populate('class',   'className')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      Result.countDocuments(filter),
-    ]);
+    const { docs, total } = await resultService.listCampusResults({
+      campusId:  toOid(req.user.campusId),
+      studentIds,
+      studentId: scopedStudentId,
+      subjectId: subjectId ? toOid(subjectId) : undefined,
+      academicYear, semester,
+      page, limit,
+      withDeleted: true, // l'ancien filtre mentor n'excluait pas isDeleted
+    });
 
     return sendPaginated(res, 200, 'Results retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 

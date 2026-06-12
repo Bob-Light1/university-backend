@@ -28,7 +28,7 @@ const { generateAcademicPdf, savePrintPdf, readPrintPdf }    = require('../acade
 
 const Student         = require('../../../models/student-models/student.model');
 const Class           = require('../../../models/class.model');
-const { FinalTranscript } = require('../../../models/final-transcript.model');
+const resultService   = require('../../result').service; // façade module result (§3)
 
 // ── In-process job store ──────────────────────────────────────────────────────
 // Structure: Map<jobId, JobRecord>
@@ -193,9 +193,10 @@ const processBatchJob = async (job) => {
 
       } else if (job.type === 'TRANSCRIPT') {
         const student    = await loadStudent(target.id, job.campusId);
-        const transcript = await FinalTranscript
-          .findOne({ student: target.id, schoolCampus: job.campusId, academicYear: job.params.academicYear, semester: job.params.semester })
-          .lean();
+        const transcript = await resultService.getTranscriptForPrint({
+          studentId: target.id, campusId: job.campusId,
+          academicYear: job.params.academicYear, semester: job.params.semester,
+        });
         if (!transcript) {
           job.results.push({ targetId: String(target.id), targetName: target.name, error: 'No transcript found' });
           job.progress.failed++;
@@ -295,9 +296,10 @@ const previewPdf = asyncHandler(async (req, res) => {
     if (!studentId) return sendError(res, 400, 'studentId is required');
     if (!params.academicYear || !params.semester) return sendError(res, 400, 'params.academicYear and params.semester are required');
     const student    = await loadStudent(studentId, campusId);
-    const transcript = await FinalTranscript
-      .findOne({ student: studentId, schoolCampus: campusId, academicYear: params.academicYear, semester: params.semester })
-      .lean();
+    const transcript = await resultService.getTranscriptForPrint({
+      studentId, campusId,
+      academicYear: params.academicYear, semester: params.semester,
+    });
     if (!transcript) return sendError(res, 404, 'No transcript found for this student / academic year / semester');
     buffer = await generateAcademicPdf({ type: 'TRANSCRIPT', data: { student, transcript }, campusId, params });
 

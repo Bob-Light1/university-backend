@@ -16,13 +16,13 @@
 const mongoose          = require('mongoose');
 // Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
 const Student           = require('../../../models/student-models/student.model');
-const { Result }        = require('../../../models/result.model');
 const StudentAttendance = require('../../../models/student-models/student.attend.model');
 const Teacher           = require('../../../models/teacher-models/teacher.model');
 const TeacherSchedule   = require('../../../models/teacher-models/teacher.schedule.model');
 const documentService   = require('../../document').service;
 const examService       = require('../../exam').service;
 const courseService     = require('../../course').service;
+const resultService     = require('../../result').service;
 
 const {
   sendSuccess,
@@ -78,7 +78,7 @@ const getDashboard = async (req, res) => {
 
     if (perms.includes('results.read') || perms.includes('results.manage')) {
       queries.push(
-        Result.countDocuments({ schoolCampus: campusId, status: 'PUBLISHED', isDeleted: false })
+        resultService.countPublishedResults({ campusId })
           .then((n) => { stats.publishedResults = n; })
       );
     }
@@ -203,26 +203,14 @@ const getMyResults = async (req, res) => {
       evaluationType, examPeriod,
     } = req.query;
 
-    const filter = { schoolCampus: campusId, status: 'PUBLISHED', isDeleted: false };
-    if (studentId)      filter.student        = toOid(studentId);
-    if (subjectId)      filter.subject        = toOid(subjectId);
-    if (classId)        filter.class          = toOid(classId);
-    if (academicYear)   filter.academicYear   = academicYear;
-    if (semester)       filter.semester       = semester;
-    if (evaluationType) filter.evaluationType = evaluationType;
-    if (examPeriod)     filter.examPeriod     = examPeriod;
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Result.find(filter)
-        .select('-__v')
-        .populate('student', 'firstName lastName matricule profileImage')
-        .populate('subject', 'subject_name')
-        .populate('class',   'className')
-        .sort({ createdAt: -1 })
-        .skip(skip).limit(Number(limit)).lean(),
-      Result.countDocuments(filter),
-    ]);
+    const { docs, total } = await resultService.listCampusResults({
+      campusId,
+      studentId: studentId ? toOid(studentId) : undefined,
+      subjectId: subjectId ? toOid(subjectId) : undefined,
+      classId:   classId   ? toOid(classId)   : undefined,
+      academicYear, semester, evaluationType, examPeriod,
+      page, limit,
+    });
 
     return sendPaginated(res, 200, 'Results retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 

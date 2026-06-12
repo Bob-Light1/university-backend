@@ -25,8 +25,7 @@ const mongoose = require('mongoose');
 
 const Parent              = require('../parent.model');
 const Student             = require('../../../models/student-models/student.model');
-const { Result }          = require('../../../models/result.model');
-const { FinalTranscript } = require('../../../models/final-transcript.model');
+const resultService       = require('../../result').service; // façade module result (§3)
 const StudentAttendance   = require('../../../models/student-models/student.attend.model');
 const StudentSchedule     = require('../../../models/student-models/student.schedule.model');
 const {
@@ -134,31 +133,16 @@ const getChildResults = async (req, res) => {
 
     const { page, limit, skip } = parsePagination(req.query);
 
-    const filter = {
-      student:      studentId,
-      schoolCampus: parent.schoolCampus,
-      status:       'PUBLISHED',
-      isDeleted:    false,
-    };
-
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
-    if (req.query.semester)     filter.semester     = req.query.semester;
-    if (req.query.subject && mongoose.Types.ObjectId.isValid(req.query.subject)) {
-      filter.subject = req.query.subject;
-    }
-
-    const [results, total] = await Promise.all([
-      Result.find(filter)
-        .select('-auditLog -verificationToken -dropoutRiskScore -__v')
-        .populate('subject',  'subject_name subject_code')
-        .populate('teacher',  'firstName lastName email')
-        .populate('class',    'className level')
-        .sort({ examDate: -1, publishedAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean({ virtuals: true }),
-      Result.countDocuments(filter),
-    ]);
+    const { results, total } = await resultService.listStudentPublishedResults({
+      studentId,
+      campusId:     parent.schoolCampus,
+      academicYear: req.query.academicYear,
+      semester:     req.query.semester,
+      subjectId:    (req.query.subject && mongoose.Types.ObjectId.isValid(req.query.subject))
+        ? req.query.subject
+        : undefined,
+      limit, skip,
+    });
 
     return sendSuccess(res, 200, 'Results retrieved successfully.', {
       total,
@@ -192,21 +176,12 @@ const getChildTranscripts = async (req, res) => {
     const { studentId } = req.params;
     const parent = await verifyChildOwnership(req.user.id, studentId);
 
-    const filter = {
-      student:      studentId,
-      schoolCampus: parent.schoolCampus,
-      status:       { $in: ['VALIDATED', 'SEALED'] },
-    };
-
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
-    if (req.query.semester)     filter.semester     = req.query.semester;
-
-    const transcripts = await FinalTranscript.find(filter)
-      .select('-__v')
-      .populate('class',   'className level')
-      .populate('student', 'firstName lastName profileImage')
-      .sort({ academicYear: -1, semester: 1 })
-      .lean({ virtuals: true });
+    const transcripts = await resultService.listStudentTranscripts({
+      studentId,
+      campusId:     parent.schoolCampus,
+      academicYear: req.query.academicYear,
+      semester:     req.query.semester,
+    });
 
     return sendSuccess(res, 200, 'Transcripts retrieved successfully.', {
       total:       transcripts.length,
@@ -241,23 +216,21 @@ const signTranscript = async (req, res) => {
       return sendError(res, 400, 'Invalid transcript ID.');
     }
 
-    const transcript = await FinalTranscript.findOne({
-      _id:          transcriptId,
-      student:      studentId,
-      schoolCampus: parent.schoolCampus,
+    // signTranscriptByParent propage l'erreur (statusCode) si déjà signé ou
+    // statut invalide ; null si introuvable.
+    const signed = await resultService.signTranscriptByParent({
+      transcriptId,
+      studentId,
+      campusId: parent.schoolCampus,
+      parentId: req.user.id,
+      ip:       req.ip,
     });
 
-    if (!transcript) {
+    if (!signed) {
       return sendNotFound(res, 'Transcript');
     }
 
-    // signByParent throws if already signed or wrong status
-    await transcript.signByParent(req.user.id, req.ip, 'click');
-
-    return sendSuccess(res, 200, 'Transcript signed successfully.', {
-      transcriptId:    transcript._id,
-      parentSignature: transcript.parentSignature,
-    });
+    return sendSuccess(res, 200, 'Transcript signed successfully.', signed);
 
   } catch (error) {
     if (error.statusCode) {
@@ -508,34 +481,13 @@ const getChildComments = async (req, res) => {
 
     const { page, limit, skip } = parsePagination(req.query);
 
-    const filter = {
-      student:      studentId,
-      schoolCampus: parent.schoolCampus,
-      status:       'PUBLISHED',
-      isDeleted:    false,
-      // At least one comment field must exist
-      $or: [
-        { teacherRemarks:       { $exists: true, $ne: null, $ne: '' } },
-        { classManagerRemarks:  { $exists: true, $ne: null, $ne: '' } },
-        { strengths:            { $exists: true, $ne: null, $ne: '' } },
-        { improvements:         { $exists: true, $ne: null, $ne: '' } },
-      ],
-    };
-
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
-    if (req.query.semester)     filter.semester     = req.query.semester;
-
-    const [comments, total] = await Promise.all([
-      Result.find(filter)
-        .select('academicYear semester evaluationTitle evaluationType teacherRemarks classManagerRemarks strengths improvements publishedAt subject teacher')
-        .populate('subject', 'subject_name subject_code')
-        .populate('teacher', 'firstName lastName')
-        .sort({ publishedAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean({ virtuals: true }),
-      Result.countDocuments(filter),
-    ]);
+    const { comments, total } = await resultService.listStudentResultComments({
+      studentId,
+      campusId:     parent.schoolCampus,
+      academicYear: req.query.academicYear,
+      semester:     req.query.semester,
+      limit, skip,
+    });
 
     return sendSuccess(res, 200, 'Comments retrieved successfully.', {
       total,
@@ -594,17 +546,7 @@ const getDashboard = async (req, res) => {
         const [recentResults, attendanceStats, upcomingSessions] = await Promise.all([
 
           // Last 5 published results
-          Result.find({
-            student:      studentId,
-            schoolCampus: campusId,
-            status:       'PUBLISHED',
-            isDeleted:    false,
-          })
-            .select('evaluationTitle evaluationType academicYear semester normalizedScore gradeBand publishedAt subject')
-            .populate('subject', 'subject_name')
-            .sort({ publishedAt: -1 })
-            .limit(5)
-            .lean({ virtuals: true }),
+          resultService.getRecentResultsForChild(studentId, campusId),
 
           // Current-year attendance summary
           StudentAttendance.aggregate([

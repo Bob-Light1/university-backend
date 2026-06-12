@@ -21,8 +21,8 @@ const mongoose = require('mongoose');
 const Student          = require('../models/student.model');
 const StudentSchedule  = require('../models/student.schedule.model');
 const StudentAttendance = require('../models/student.attend.model');
-const { Result }       = require('../../../models/result.model');
 const examService      = require('../../exam').service; // façade module exam (§3)
+const resultService    = require('../../result').service; // façade module result (§3)
 const {
   sendSuccess,
   sendError,
@@ -119,17 +119,7 @@ const getDashboard = async (req, res) => {
         : Promise.resolve([]),
 
       // Last 5 published results
-      Result.find({
-        student:      studentId,
-        schoolCampus: campusOid,
-        status:       'PUBLISHED',
-        isDeleted:    false,
-      })
-        .select('evaluationTitle evaluationType academicYear semester normalizedScore score maxScore gradeBand publishedAt subject')
-        .populate('subject', 'subject_name subject_code')
-        .sort({ publishedAt: -1 })
-        .limit(5)
-        .lean({ virtuals: true }),
+      resultService.getRecentResultsForStudent(studentId, campusOid),
 
       // Upcoming exams (eligible enrollments + session in the future),
       // already filtered + sorted + capped at 5 by the exam module.
