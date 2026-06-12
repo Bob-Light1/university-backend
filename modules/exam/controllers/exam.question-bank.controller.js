@@ -14,7 +14,7 @@
  *    GET    /question-bank/:id/stats → getQuestionStats
  */
 
-const QuestionBank = require('../../models/exam-models/question-bank.model');
+const QuestionBank = require('../models/question-bank.model');
 const {
   sendSuccess,
   sendError,
@@ -22,8 +22,8 @@ const {
   sendPaginated,
   sendCreated,
   handleDuplicateKeyError,
-} = require('../../utils/response-helpers');
-const { isValidObjectId, escapeRegex } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId, escapeRegex } = require('../../../utils/validation-helpers');
 const {
   getCampusFilter,
   resolveCampusId,

@@ -258,7 +258,7 @@ const studentAttendanceRouter = require('./routers/student-attendance.router');
 const teacherAttendanceRouter = require('./routers/teacher-attendance.router');
 const documentRouter    = require('./modules/document').routes;
 const parentRouter      = require('./modules/parent').routes;
-const examinationRouter = require('./routers/examination.router');
+const examinationRouter = require('./modules/exam').routes;
 const academicPrintRouter = require('./routers/academic-print.router');
 const partnerRouter       = require('./modules/partner').routes;
 const mentorRouter        = require('./modules/mentor').routes;
@@ -420,7 +420,7 @@ process.on('unhandledRejection', (reason, promise) => {
 try {
   const cron = require('node-cron');
   const { runRetentionJob }  = require('./modules/document').service;
-  const { runAntiCheatJob }  = require('./crons/exam-anticheat.cron');
+  const { runAntiCheatJob }  = require('./modules/exam').service;
   const { runExpiryJob }     = require('./modules/announcement').service;
   const { runCompetitionClosingJob } = require('./modules/public-portal').service;
   cron.schedule('0 2 * * 0', runRetentionJob);          // Every Sunday at 02:00

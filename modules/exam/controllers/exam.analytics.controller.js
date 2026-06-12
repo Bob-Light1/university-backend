@@ -13,23 +13,23 @@
  */
 
 const mongoose = require('mongoose');
-const ExamSession            = require('../../models/exam-models/exam.session.model');
-const ExamGrading            = require('../../models/exam-models/exam.grading.model');
-const ExamEnrollment         = require('../../models/exam-models/exam.enrollment.model');
-const ExamAnalyticsSnapshot  = require('../../models/exam-models/exam.analytics-snapshot.model');
+const ExamSession            = require('../models/exam.session.model');
+const ExamGrading            = require('../models/exam.grading.model');
+const ExamEnrollment         = require('../models/exam.enrollment.model');
+const ExamAnalyticsSnapshot  = require('../models/exam.analytics-snapshot.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 const {
   getCampusFilter,
   isManagerRole,
   castForAggregation,
   parsePagination,
 } = require('./exam.helper');
-const examConfig = require('../../configs/exam.config');
+const examConfig = require('../exam.config');
 
 // ─── Campus overview ──────────────────────────────────────────────────────────
 

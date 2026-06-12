@@ -11,22 +11,22 @@
  *    PATCH  /appeals/:id/resolve    → resolveAppeal   [MANAGER, TEACHER]
  */
 
-const ExamGrading = require('../../models/exam-models/exam.grading.model');
-const ExamAppeal  = require('../../models/exam-models/exam.appeal.model');
-const ExamSession = require('../../models/exam-models/exam.session.model');
+const ExamGrading = require('../models/exam.grading.model');
+const ExamAppeal  = require('../models/exam.appeal.model');
+const ExamSession = require('../models/exam.session.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendCreated,
   sendPaginated,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 const {
   getCampusFilter,
   parsePagination,
 } = require('./exam.helper');
-const examConfig = require('../../configs/exam.config');
+const examConfig = require('../exam.config');
 
 // ─── Submit appeal ────────────────────────────────────────────────────────────
 

@@ -18,17 +18,17 @@
 
 const { v4: uuidv4 } = require('uuid');
 
-const ExamSession        = require('../../models/exam-models/exam.session.model');
-const ExamEnrollment     = require('../../models/exam-models/exam.enrollment.model');
-const Student            = require('../../models/student-models/student.model');
-const StudentAttendance  = require('../../models/student-models/student.attend.model');
+const ExamSession        = require('../models/exam.session.model');
+const ExamEnrollment     = require('../models/exam.enrollment.model');
+const Student            = require('../../../models/student-models/student.model');
+const StudentAttendance  = require('../../../models/student-models/student.attend.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendPaginated,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 const {
   getCampusFilter,
   isManagerRole,

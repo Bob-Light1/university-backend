@@ -11,18 +11,18 @@
  *
  *  Usage in server.js (node-cron):
  *    const cron = require('node-cron');
- *    const { runAntiCheatJob } = require('./crons/exam-anticheat.cron');
+ *    const { runAntiCheatJob } = require('./modules/exam').service;
  *    cron.schedule('0 3 * * *', runAntiCheatJob); // Nightly at 03:00
  *
  *  Manual trigger (per session):
- *    const { analyzeSession } = require('./crons/exam-anticheat.cron');
+ *    const { analyzeSession } = require('./exam-anticheat.cron');
  *    await analyzeSession(sessionId);
  */
 
 const mongoose   = require('mongoose');
-const ExamSession    = require('../models/exam-models/exam.session.model');
-const ExamSubmission = require('../models/exam-models/exam.submission.model');
-const examConfig     = require('../configs/exam.config');
+const ExamSession    = require('./models/exam.session.model');
+const ExamSubmission = require('./models/exam.submission.model');
+const examConfig     = require('./exam.config');
 
 const SIMILARITY_THRESHOLD = examConfig.antiCheatSimilarityThreshold; // default 0.85
 const BATCH_SIZE = 50; // sessions processed per run

@@ -18,20 +18,20 @@
  *    PATCH  /sessions/:id/reschedule      → rescheduleSession (CAMPUS_MANAGER only, POSTPONED → SCHEDULED)
  */
 
-const ExamSession    = require('../../models/exam-models/exam.session.model');
-const ExamEnrollment = require('../../models/exam-models/exam.enrollment.model');
-const QuestionBank   = require('../../models/exam-models/question-bank.model');
-const Subject        = require('../../models/subject.model');
-const Class          = require('../../models/class.model');
-const Teacher        = require('../../models/teacher-models/teacher.model');
+const ExamSession    = require('../models/exam.session.model');
+const ExamEnrollment = require('../models/exam.enrollment.model');
+const QuestionBank   = require('../models/question-bank.model');
+const Subject        = require('../../../models/subject.model');
+const Class          = require('../../../models/class.model');
+const Teacher        = require('../../../models/teacher-models/teacher.model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendCreated,
   sendPaginated,
-} = require('../../utils/response-helpers');
-const { isValidObjectId, escapeRegex } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId, escapeRegex } = require('../../../utils/validation-helpers');
 const {
   getCampusFilter,
   resolveCampusId,
@@ -364,7 +364,7 @@ const completeSession = async (req, res) => {
     });
     if (!updated) return;
 
-    const { examAnalyticsWorker } = require('../../services/exam-analytics.worker');
+    const { examAnalyticsWorker } = require('../exam-analytics.worker');
     examAnalyticsWorker.emit('examAnalytics:compute', updated._id.toString());
 
     return sendSuccess(res, 200, 'Session completed.', updated);

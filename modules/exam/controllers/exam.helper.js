@@ -7,8 +7,8 @@
  */
 
 const mongoose = require('mongoose');
-const { buildCampusFilter, isValidObjectId } = require('../../utils/validation-helpers');
-const { sendForbidden } = require('../../utils/response-helpers');
+const { buildCampusFilter, isValidObjectId } = require('../../../utils/validation-helpers');
+const { sendForbidden } = require('../../../shared/utils/response-helpers');
 
 // ─── ROLE GUARDS ──────────────────────────────────────────────────────────────
 

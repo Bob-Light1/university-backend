@@ -12,10 +12,10 @@
  *                                        — called on cancel / postpone / reschedule
  */
 
-const ExamSession     = require('../../models/exam-models/exam.session.model');
-const StudentSchedule = require('../../models/student-models/student.schedule.model');
-const TeacherSchedule = require('../../models/teacher-models/teacher.schedule.model');
-const { SCHEDULE_STATUS } = require('../../utils/schedule.base');
+const ExamSession     = require('../models/exam.session.model');
+const StudentSchedule = require('../../../models/student-models/student.schedule.model');
+const TeacherSchedule = require('../../../models/teacher-models/teacher.schedule.model');
+const { SCHEDULE_STATUS } = require('../../../shared/utils/schedule.base');
 
 // ── Status mapping: ExamSession.status → SCHEDULE_STATUS ─────────────────────
 

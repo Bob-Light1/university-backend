@@ -13,18 +13,18 @@
  *    POST   /submissions/:id/anti-cheat-event    → logAntiCheat    [STUDENT]
  */
 
-const ExamSession       = require('../../models/exam-models/exam.session.model');
-const ExamEnrollment    = require('../../models/exam-models/exam.enrollment.model');
-const ExamSubmission    = require('../../models/exam-models/exam.submission.model');
-const QuestionBank      = require('../../models/exam-models/question-bank.model');
-const UserPreferences   = require('../../models/userPreferences_model');
+const ExamSession       = require('../models/exam.session.model');
+const ExamEnrollment    = require('../models/exam.enrollment.model');
+const ExamSubmission    = require('../models/exam.submission.model');
+const QuestionBank      = require('../models/question-bank.model');
+const UserPreferences   = require('../../../models/userPreferences_model');
 const {
   sendSuccess,
   sendError,
   sendNotFound,
   sendCreated,
-} = require('../../utils/response-helpers');
-const { isValidObjectId } = require('../../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../utils/validation-helpers');
 
 // ── Deterministic shuffle (seeded by studentId + sessionId) ──────────────────
 
@@ -338,7 +338,7 @@ const _autoGradeMCQ = async (submission) => {
       }
     }
 
-    const ExamGrading = require('../../models/exam-models/exam.grading.model');
+    const ExamGrading = require('../models/exam.grading.model');
     const existing    = await ExamGrading.findOne({ submission: submission._id });
     if (!existing) {
       await ExamGrading.create({

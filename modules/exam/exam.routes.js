@@ -5,7 +5,7 @@
  * @description Express router for SEMS — Smart Examination Management System.
  *
  *  Registration in server.js:
- *    const examinationRouter = require('./routers/examination.router');
+ *    const examinationRouter = require('./modules/exam').routes;
  *    app.use('/api/examination', examinationRouter);
  *
  *  Resource groups and prefixes:
@@ -29,8 +29,8 @@
 const express = require('express');
 const router  = express.Router();
 
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter }              = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter }              = require('../../shared/middleware/rate-limiter');
 
 // ─── Controller imports ───────────────────────────────────────────────────────
 
@@ -42,7 +42,7 @@ const {
   deleteQuestion,
   importQuestions,
   getQuestionStats,
-} = require('../controllers/exam-controllers/exam.question-bank.controller');
+} = require('./controllers/exam.question-bank.controller');
 
 const {
   listSessions,
@@ -56,7 +56,7 @@ const {
   cancelSession,
   postponeSession,
   rescheduleSession,
-} = require('../controllers/exam-controllers/exam.session.controller');
+} = require('./controllers/exam.session.controller');
 
 const {
   computeEligibility,
@@ -67,7 +67,7 @@ const {
   generateHallTickets,
   getHallTicket,
   checkIn,
-} = require('../controllers/exam-controllers/exam.enrollment.controller');
+} = require('./controllers/exam.enrollment.controller');
 
 const {
   startAttempt,
@@ -76,7 +76,7 @@ const {
   submitExam,
   logAntiCheat,
   getSubmission,
-} = require('../controllers/exam-controllers/exam.delivery.controller');
+} = require('./controllers/exam.delivery.controller');
 
 const {
   listGradings,
@@ -88,14 +88,14 @@ const {
   submitSecondGrade,
   mediate,
   publishGrades,
-} = require('../controllers/exam-controllers/exam.grading.controller');
+} = require('./controllers/exam.grading.controller');
 
 const {
   submitAppeal,
   listAppeals,
   reviewAppeal,
   resolveAppeal,
-} = require('../controllers/exam-controllers/exam.appeal.controller');
+} = require('./controllers/exam.appeal.controller');
 
 const {
   campusOverview,
@@ -103,12 +103,12 @@ const {
   itemAnalysis,
   earlyWarning,
   exportReport,
-} = require('../controllers/exam-controllers/exam.analytics.controller');
+} = require('./controllers/exam.analytics.controller');
 
 const {
   generateCertificate,
   verifyCertificate,
-} = require('../controllers/exam-controllers/exam.certificate.controller');
+} = require('./controllers/exam.certificate.controller');
 
 // ─── Public routes (no auth) ──────────────────────────────────────────────────
 

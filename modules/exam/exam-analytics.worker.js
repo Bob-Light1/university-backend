@@ -9,18 +9,18 @@
  *  Never blocks an HTTP response.
  *
  *  Usage (from controllers):
- *    const { examAnalyticsWorker } = require('../../services/exam-analytics.worker');
+ *    const { examAnalyticsWorker } = require('./exam-analytics.worker');
  *    examAnalyticsWorker.emit('examAnalytics:compute', sessionId);
  */
 
 const EventEmitter = require('events');
 const mongoose     = require('mongoose');
 
-const ExamAnalyticsSnapshot = require('../models/exam-models/exam.analytics-snapshot.model');
-const ExamGrading           = require('../models/exam-models/exam.grading.model');
-const ExamEnrollment        = require('../models/exam-models/exam.enrollment.model');
-const ExamSession           = require('../models/exam-models/exam.session.model');
-const examConfig            = require('../configs/exam.config');
+const ExamAnalyticsSnapshot = require('./models/exam.analytics-snapshot.model');
+const ExamGrading           = require('./models/exam.grading.model');
+const ExamEnrollment        = require('./models/exam.enrollment.model');
+const ExamSession           = require('./models/exam.session.model');
+const examConfig            = require('./exam.config');
 
 const examAnalyticsWorker = new EventEmitter();
 
@@ -71,7 +71,7 @@ const _computeSnapshot = async (sessionId) => {
   });
 
   // Item analysis — MCQ only
-  const ExamSubmission = require('../models/exam-models/exam.submission.model');
+  const ExamSubmission = require('./models/exam.submission.model');
   const submissions    = await ExamSubmission.find({
     examSession: sessionId,
     status:      { $in: ['SUBMITTED', 'GRADED'] },
@@ -79,7 +79,7 @@ const _computeSnapshot = async (sessionId) => {
   }).select('answers student');
 
   const questionRefs   = session.questions || [];
-  const QuestionBank   = require('../models/exam-models/question-bank.model');
+  const QuestionBank   = require('./models/question-bank.model');
   const mcqQuestions   = await QuestionBank.find({
     _id:          { $in: questionRefs.map((q) => q.questionId) },
     questionType: 'MCQ',
