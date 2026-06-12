@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
-const Department = require('../models/department.model');
-const departmentConfig = require('../configs/department.config');
-const GenericEntityController = require('./generic-entity.controller');
+const Department = require('../department.model');
+const departmentConfig = require('../department.config');
+const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 
 const {
   sendSuccess,
@@ -10,8 +10,8 @@ const {
   sendNotFound,
   sendConflict,
   sendPaginated,
-} = require('../utils/response-helpers');
-const { isValidObjectId, buildCampusFilter, escapeRegex } = require('../utils/validation-helpers');
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId, buildCampusFilter, escapeRegex } = require('../../../utils/validation-helpers');
 
 // ── Generic controller (used only for getAll, getOne, getStats) ──
 const genericController = new GenericEntityController(departmentConfig);

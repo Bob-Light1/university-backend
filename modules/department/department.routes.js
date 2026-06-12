@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
 
-const departmentController = require('../controllers/department.controller');
-const { authenticate, authorize } = require('../middleware/auth/auth');
-const { apiLimiter } = require('../middleware/rate-limiter/rate-limiter');
+const departmentController = require('./controllers/department.controller');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter } = require('../../shared/middleware/rate-limiter');
 
 // Role configurations
 const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
