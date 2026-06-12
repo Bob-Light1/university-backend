@@ -23,16 +23,16 @@ const mongoose   = require('mongoose');
 const archiver   = require('archiver');
 const path       = require('path');
 
-const Document       = require('../../models/document-models/document.model');
-const { AUDIT_ACTION }   = require('../../models/document-models/document.audit.model');
-const documentService    = require('../../services/document-services/document.service');
-const pdfService         = require('../../services/document-services/document.pdf.service');
-const storageService     = require('../../services/document-services/document.storage.service');
-const Campus             = require('../../models/campus.model');
+const Document       = require('../models/document.model');
+const { AUDIT_ACTION }   = require('../models/document.audit.model');
+const documentService    = require('../services/document.service');
+const pdfService         = require('../services/document.pdf.service');
+const storageService     = require('../services/document.storage.service');
+const Campus             = require('../../../models/campus.model');
 
 const {
   sendSuccess, sendError, sendNotFound, sendForbidden, asyncHandler,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR
   ? require('path').join(process.env.UPLOAD_DIR, 'documents')

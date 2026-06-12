@@ -32,7 +32,7 @@ const fs        = require('fs').promises;
 const crypto    = require('crypto');
 
 const { saveFile }   = require('./document.storage.service');
-const Document       = require('../../models/document-models/document.model');
+const Document       = require('../models/document.model');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 

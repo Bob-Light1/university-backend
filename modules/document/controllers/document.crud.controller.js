@@ -18,11 +18,11 @@
 const {
   sendSuccess, sendCreated, sendError, sendNotFound,
   sendForbidden, sendPaginated, asyncHandler,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
-const documentService = require('../../services/document-services/document.service');
-const storageService  = require('../../services/document-services/document.storage.service');
-const { invalidateStorageCache } = require('../../middleware/document-middleware/document.campus.middleware');
+const documentService = require('../services/document.service');
+const storageService  = require('../services/document.storage.service');
+const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
 
 // ── Create Document ───────────────────────────────────────────────────────────
 

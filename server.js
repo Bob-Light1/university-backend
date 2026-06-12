@@ -8,7 +8,7 @@ const path = require('path');
 const { apiLimiter } = require('./middleware/rate-limiter/rate-limiter');
 const localeMiddleware = require('./middleware/locale/locale.middleware');
 const mongoSanitize = require('express-mongo-sanitize');
-const { shutdownPool }         = require('./services/document-services/document.pdf.service');
+const { shutdownPool }         = require('./modules/document').service;
 const { shutdownAcademicPool } = require('./services/academic-pdf.service');
 
 const app = express();
@@ -256,7 +256,7 @@ const studentScheduleRouter = require('./routers/student-schedule.router');
 const teacherScheduleRouter = require('./routers/teacher-schedule.router');
 const studentAttendanceRouter = require('./routers/student-attendance.router');
 const teacherAttendanceRouter = require('./routers/teacher-attendance.router');
-const documentRouter    = require('./routers/document.router');
+const documentRouter    = require('./modules/document').routes;
 const parentRouter      = require('./modules/parent').routes;
 const examinationRouter = require('./routers/examination.router');
 const academicPrintRouter = require('./routers/academic-print.router');
@@ -419,7 +419,7 @@ process.on('unhandledRejection', (reason, promise) => {
 // ========================================
 try {
   const cron = require('node-cron');
-  const { runRetentionJob }  = require('./crons/document.retention.cron');
+  const { runRetentionJob }  = require('./modules/document').service;
   const { runAntiCheatJob }  = require('./crons/exam-anticheat.cron');
   const { runExpiryJob }     = require('./modules/announcement').service;
   const { runCompetitionClosingJob } = require('./modules/public-portal').service;

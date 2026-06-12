@@ -19,10 +19,10 @@
  */
 
 const mongoose = require('mongoose');
-const Document = require('../../models/document-models/document.model');
-const Course   = require('../../models/course.model');
-const { sendError, sendForbidden, sendNotFound } = require('../../utils/response-helpers');
-const { RESTRICTED_DOCUMENT_TYPES, DOCUMENT_STATUS } = require('../../models/document-models/document.model');
+const Document = require('../models/document.model');
+const Course   = require('../../../models/course.model');
+const { sendError, sendForbidden, sendNotFound } = require('../../../shared/utils/response-helpers');
+const { RESTRICTED_DOCUMENT_TYPES, DOCUMENT_STATUS } = require('../models/document.model');
 
 /** Roles with global (cross-campus) access */
 const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];

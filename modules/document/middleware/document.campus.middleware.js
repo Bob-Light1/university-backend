@@ -17,10 +17,10 @@
  */
 
 const mongoose = require('mongoose');
-const Campus   = require('../../models/campus.model');
-const Document = require('../../models/document-models/document.model');
+const Campus   = require('../../../models/campus.model');
+const Document = require('../models/document.model');
 
-const { sendError, sendForbidden } = require('../../utils/response-helpers');
+const { sendError, sendForbidden } = require('../../../shared/utils/response-helpers');
 
 /** Roles with cross-campus (global) access */
 const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];

@@ -16,9 +16,9 @@
  *   cron.schedule('0 2 * * 0', runRetentionJob); // Every Sunday at 02:00
  */
 
-const Document      = require('../models/document-models/document.model');
-const DocumentAudit = require('../models/document-models/document.audit.model');
-const { cleanupExpiredPrintFiles } = require('../services/academic-pdf.service');
+const Document      = require('./models/document.model');
+const DocumentAudit = require('./models/document.audit.model');
+const { cleanupExpiredPrintFiles } = require('../../services/academic-pdf.service');
 
 const BATCH_SIZE = 100;
 

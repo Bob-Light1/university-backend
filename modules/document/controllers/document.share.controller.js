@@ -21,16 +21,16 @@
 
 const crypto = require('crypto');
 
-const Document        = require('../../models/document-models/document.model');
-const DocumentShare   = require('../../models/document-models/document.share.model');
-const { AUDIT_ACTION }    = require('../../models/document-models/document.audit.model');
-const documentService     = require('../../services/document-services/document.service');
-const pdfService          = require('../../services/document-services/document.pdf.service');
-const Campus              = require('../../models/campus.model');
+const Document        = require('../models/document.model');
+const DocumentShare   = require('../models/document.share.model');
+const { AUDIT_ACTION }    = require('../models/document.audit.model');
+const documentService     = require('../services/document.service');
+const pdfService          = require('../services/document.pdf.service');
+const Campus              = require('../../../models/campus.model');
 
 const {
   sendSuccess, sendCreated, sendError, sendForbidden, sendNotFound, asyncHandler,
-} = require('../../utils/response-helpers');
+} = require('../../../shared/utils/response-helpers');
 
 // ── Create Share Link ─────────────────────────────────────────────────────────
 

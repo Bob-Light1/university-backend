@@ -32,14 +32,14 @@ const multer    = require('multer');
 const router = express.Router();
 
 // ── Existing platform middleware ──────────────────────────────────────────────
-const { authenticate }    = require('../middleware/auth/auth');
-const { apiLimiter }      = require('../middleware/rate-limiter/rate-limiter');
+const { authenticate }    = require('../../shared/middleware/auth');
+const { apiLimiter }      = require('../../shared/middleware/rate-limiter');
 
 // ── Document-module middleware ────────────────────────────────────────────────
 const {
   enforceCampusAccess,
   enforceCampusStorageQuota,
-} = require('../middleware/document-middleware/document.campus.middleware');
+} = require('./middleware/document.campus.middleware');
 
 const {
   loadAndVerifyDocument,
@@ -49,15 +49,15 @@ const {
   enforceParentScope,
   enforceLockGuard,
   requireDocRole,
-} = require('../middleware/document-middleware/document.access.middleware');
+} = require('./middleware/document.access.middleware');
 
 // ── Controllers ───────────────────────────────────────────────────────────────
-const crudCtrl     = require('../controllers/document-controllers/document.crud.controller');
-const workflowCtrl = require('../controllers/document-controllers/document.workflow.controller');
-const exportCtrl   = require('../controllers/document-controllers/document.export.controller');
-const templateCtrl = require('../controllers/document-controllers/document.template.controller');
-const shareCtrl    = require('../controllers/document-controllers/document.share.controller');
-const auditCtrl    = require('../controllers/document-controllers/document.audit.controller');
+const crudCtrl     = require('./controllers/document.crud.controller');
+const workflowCtrl = require('./controllers/document.workflow.controller');
+const exportCtrl   = require('./controllers/document.export.controller');
+const templateCtrl = require('./controllers/document.template.controller');
+const shareCtrl    = require('./controllers/document.share.controller');
+const auditCtrl    = require('./controllers/document.audit.controller');
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 
@@ -168,9 +168,9 @@ router.get('/share/:token', shareLimiter, shareCtrl.accessSharedDocument);
  */
 router.get('/verify/:ref', verifyLimiter, async (req, res) => {
   try {
-    const Document = require('../models/document.model');
+    const Document = require('./models/document.model');
     const Campus   = require('../../models/campus.model');
-    const { sendSuccess, sendNotFound } = require('../../utils/response-helpers');
+    const { sendSuccess, sendNotFound } = require('../../shared/utils/response-helpers');
 
     const doc = await Document
       .findOne({ ref: req.params.ref.toUpperCase(), deletedAt: null })
@@ -203,8 +203,8 @@ router.get('/verify/:ref', verifyLimiter, async (req, res) => {
  * Full-text search with metadata filters.
  */
 router.get('/search', ...base, async (req, res) => {
-  const documentService = require('../services/document.service');
-  const { sendPaginated } = require('../../utils/response-helpers');
+  const documentService = require('./services/document.service');
+  const { sendPaginated } = require('../../shared/utils/response-helpers');
   const { data, total, page, limit } = await documentService.searchDocuments(req, req.query);
   return sendPaginated(res, 200, 'Search results', data, { total, page, limit });
 });
@@ -228,13 +228,13 @@ router.post('/templates/:id/preview',  ...base, templateCtrl.previewTemplate);
 router.post('/generate/student-card/:studentId',       ...base, templateCtrl.generateStudentCard);
 router.post('/generate/student-transcript/:studentId', ...base, async (req, res) => {
   // Transcript generation delegated to template with student data — Phase 2
-  const { sendError } = require('../../utils/response-helpers');
+  const { sendError } = require('../../shared/utils/response-helpers');
   return sendError(res, 501, 'Student transcript generation will be available in Phase 2');
 });
 router.post('/generate/teacher-payslip/:teacherId',    ...base, templateCtrl.generateTeacherPayslip);
 router.post('/generate/class-list/:classId',           ...base, templateCtrl.generateClassList);
 router.post('/generate/badge/:entityType/:entityId',   ...base, async (req, res) => {
-  const { sendError } = require('../../utils/response-helpers');
+  const { sendError } = require('../../shared/utils/response-helpers');
   return sendError(res, 501, 'Badge generation will be available in Phase 2');
 });
 

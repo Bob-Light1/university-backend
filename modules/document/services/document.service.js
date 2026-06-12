@@ -19,21 +19,21 @@ const mongoose = require('mongoose');
 const slugify  = require('slugify');
 const { nanoid } = require('nanoid');
 
-const Document         = require('../../models/document-models/document.model');
-const DocumentAudit    = require('../../models/document-models/document.audit.model');
-const DocumentVersion  = require('../../models/document-models/document.version.model');
-const Campus           = require('../../models/campus.model');
+const Document         = require('../models/document.model');
+const DocumentAudit    = require('../models/document.audit.model');
+const DocumentVersion  = require('../models/document.version.model');
+const Campus           = require('../../../models/campus.model');
 
-const { invalidateStorageCache } = require('../../middleware/document-middleware/document.campus.middleware');
+const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
 const { validateContentBlocks }  = require('./document.validation.service');
 
 const {
   DOCUMENT_TYPE,
   DOCUMENT_STATUS,
   RETENTION_POLICY,
-} = require('../../models/document-models/document.model');
+} = require('../models/document.model');
 
-const { AUDIT_ACTION } = require('../../models/document-models/document.audit.model');
+const { AUDIT_ACTION } = require('../models/document.audit.model');
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
