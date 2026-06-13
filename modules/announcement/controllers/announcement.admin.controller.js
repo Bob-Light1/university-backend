@@ -1,6 +1,6 @@
 'use strict';
 
-const Announcement = require('../models/announcement.model');
+const announcementRepo = require('../announcement.repository');
 const {
   sendSuccess,
   sendCreated,
@@ -10,13 +10,7 @@ const {
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
-const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-// ADMIN/DIRECTOR → no campus restriction; CAMPUS_MANAGER/STAFF → own campus only.
-const buildCampusFilter = (user) => {
-  if (['ADMIN', 'DIRECTOR'].includes(user.role)) return {};
-  return { schoolCampus: user.campusId };
-};
+const isGlobalRole = (role) => ['ADMIN', 'DIRECTOR'].includes(role);
 
 // ─── CREATE ──────────────────────────────────────────────────────────────────
 
@@ -29,9 +23,7 @@ const createAnnouncement = async (req, res) => {
     }
 
     // ADMIN/DIRECTOR supply campusId in body; others use their own campus from JWT.
-    const campusId = ['ADMIN', 'DIRECTOR'].includes(req.user.role)
-      ? req.body.campusId
-      : req.user.campusId;
+    const campusId = isGlobalRole(req.user.role) ? req.body.campusId : req.user.campusId;
 
     if (!campusId) {
       return sendError(res, 400, 'campusId is required.');
@@ -40,7 +32,7 @@ const createAnnouncement = async (req, res) => {
       return sendError(res, 400, 'Invalid campusId format.');
     }
 
-    const announcement = await Announcement.create({
+    const announcement = await announcementRepo.create({
       schoolCampus: campusId,
       title,
       content,
@@ -76,31 +68,18 @@ const getAllAnnouncements = async (req, res) => {
     const safeLimit = Math.min(100, Math.max(1, Number(limit) || 20));
     const skip = (safePage - 1) * safeLimit;
 
-    const filter = { deletedAt: null, ...buildCampusFilter(req.user) };
-
-    // ADMIN/DIRECTOR can narrow to a specific campus via query param.
-    if (['ADMIN', 'DIRECTOR'].includes(req.user.role) && campusId) {
-      filter.schoolCampus = campusId;
-    }
-
-    if (status)     filter.status     = status;
-    if (type)       filter.type       = type;
-    if (targetRole) filter.targetRoles = targetRole;
-    if (pinned !== undefined) filter.pinned = pinned === 'true';
-
-    if (search) {
-      const rx = new RegExp(escapeRegex(search), 'i');
-      filter.$or = [{ title: rx }, { content: rx }];
-    }
-
-    const [data, total] = await Promise.all([
-      Announcement.find(filter)
-        .sort({ pinned: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(safeLimit)
-        .lean(),
-      Announcement.countDocuments(filter),
-    ]);
+    const { data, total } = await announcementRepo.paginateForAdmin({
+      isGlobalRole:      isGlobalRole(req.user.role),
+      campusId:          req.user.campusId,
+      requestedCampusId: campusId, // narrow (ADMIN/DIRECTOR only — appliqué dans le repo)
+      status,
+      type,
+      targetRole,
+      pinned: pinned !== undefined ? pinned === 'true' : undefined,
+      search,
+      skip,
+      limit: safeLimit,
+    });
 
     return sendPaginated(res, 200, 'Announcements retrieved.', data, {
       total,
@@ -118,8 +97,9 @@ const getAllAnnouncements = async (req, res) => {
 const getOneAnnouncement = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const filter = { _id: req.params.id, deletedAt: null, ...buildCampusFilter(req.user) };
-    const announcement = await Announcement.findOne(filter).lean();
+    const announcement = await announcementRepo.findForAdmin({
+      id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId,
+    });
     if (!announcement) return sendNotFound(res, 'Announcement');
 
     return sendSuccess(res, 200, 'Announcement retrieved.', announcement);
@@ -134,20 +114,23 @@ const getOneAnnouncement = async (req, res) => {
 const updateAnnouncement = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const filter = { _id: req.params.id, deletedAt: null, ...buildCampusFilter(req.user) };
-    const announcement = await Announcement.findOne(filter);
-    if (!announcement) return sendNotFound(res, 'Announcement');
+    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
 
-    if (announcement.status === 'published') {
+    const current = await announcementRepo.findForAdmin(scope);
+    if (!current) return sendNotFound(res, 'Announcement');
+
+    if (current.status === 'published') {
       return sendError(res, 400, 'Published announcements cannot be edited. Archive it first.');
     }
 
     const allowed = ['title', 'content', 'type', 'targetRoles', 'pinned', 'pinnedUntil', 'expiresAt'];
+    const fields = {};
     for (const key of allowed) {
-      if (req.body[key] !== undefined) announcement[key] = req.body[key];
+      if (req.body[key] !== undefined) fields[key] = req.body[key];
     }
 
-    await announcement.save();
+    const announcement = await announcementRepo.applyUpdate(scope, fields);
+    if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement updated.', announcement);
   } catch (err) {
     if (err.name === 'ValidationError') {
@@ -164,23 +147,22 @@ const updateAnnouncement = async (req, res) => {
 const publishAnnouncement = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const filter = { _id: req.params.id, deletedAt: null, ...buildCampusFilter(req.user) };
-    const announcement = await Announcement.findOne(filter);
-    if (!announcement) return sendNotFound(res, 'Announcement');
+    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
 
-    if (announcement.status === 'published') {
+    const current = await announcementRepo.findForAdmin(scope);
+    if (!current) return sendNotFound(res, 'Announcement');
+
+    if (current.status === 'published') {
       return sendError(res, 400, 'Announcement is already published.');
     }
-
-    if (announcement.expiresAt && announcement.expiresAt <= new Date()) {
+    if (current.expiresAt && new Date(current.expiresAt) <= new Date()) {
       return sendError(res, 400, 'Announcement has already expired. Update or clear expiresAt before publishing.');
     }
 
-    announcement.status      = 'published';
-    announcement.publishedAt = new Date();
-    announcement.archivedAt  = null;
-    await announcement.save();
-
+    const announcement = await announcementRepo.applyUpdate(scope, {
+      status: 'published', publishedAt: new Date(), archivedAt: null,
+    });
+    if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement published.', announcement);
   } catch (err) {
     console.error('publishAnnouncement error:', err);
@@ -193,18 +175,19 @@ const publishAnnouncement = async (req, res) => {
 const archiveAnnouncement = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const filter = { _id: req.params.id, deletedAt: null, ...buildCampusFilter(req.user) };
-    const announcement = await Announcement.findOne(filter);
-    if (!announcement) return sendNotFound(res, 'Announcement');
+    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
 
-    if (announcement.status === 'archived') {
+    const current = await announcementRepo.findForAdmin(scope);
+    if (!current) return sendNotFound(res, 'Announcement');
+
+    if (current.status === 'archived') {
       return sendError(res, 400, 'Announcement is already archived.');
     }
 
-    announcement.status     = 'archived';
-    announcement.archivedAt = new Date();
-    await announcement.save();
-
+    const announcement = await announcementRepo.applyUpdate(scope, {
+      status: 'archived', archivedAt: new Date(),
+    });
+    if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement archived.', announcement);
   } catch (err) {
     console.error('archiveAnnouncement error:', err);
@@ -217,19 +200,21 @@ const archiveAnnouncement = async (req, res) => {
 const togglePin = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const filter = { _id: req.params.id, deletedAt: null, ...buildCampusFilter(req.user) };
-    const announcement = await Announcement.findOne(filter);
-    if (!announcement) return sendNotFound(res, 'Announcement');
+    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
 
-    announcement.pinned = !announcement.pinned;
+    const current = await announcementRepo.findForAdmin(scope);
+    if (!current) return sendNotFound(res, 'Announcement');
 
-    if (!announcement.pinned) {
-      announcement.pinnedUntil = null;
+    const nextPinned = !current.pinned;
+    const fields = { pinned: nextPinned };
+    if (!nextPinned) {
+      fields.pinnedUntil = null;
     } else if (req.body.pinnedUntil !== undefined) {
-      announcement.pinnedUntil = req.body.pinnedUntil;
+      fields.pinnedUntil = req.body.pinnedUntil;
     }
 
-    await announcement.save();
+    const announcement = await announcementRepo.applyUpdate(scope, fields);
+    if (!announcement) return sendNotFound(res, 'Announcement');
 
     const action = announcement.pinned ? 'pinned' : 'unpinned';
     return sendSuccess(res, 200, `Announcement ${action}.`, announcement);
@@ -244,12 +229,10 @@ const togglePin = async (req, res) => {
 const deleteAnnouncement = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const filter = { _id: req.params.id, deletedAt: null, ...buildCampusFilter(req.user) };
-    const announcement = await Announcement.findOne(filter);
-    if (!announcement) return sendNotFound(res, 'Announcement');
+    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
 
-    announcement.deletedAt = new Date();
-    await announcement.save();
+    const announcement = await announcementRepo.applyUpdate(scope, { deletedAt: new Date() });
+    if (!announcement) return sendNotFound(res, 'Announcement');
 
     return sendSuccess(res, 200, 'Announcement deleted.');
   } catch (err) {

@@ -1,6 +1,6 @@
 'use strict';
 
-const Announcement = require('./models/announcement.model');
+const announcementRepo = require('./announcement.repository');
 
 /**
  * Runs nightly to:
@@ -11,30 +11,14 @@ const runExpiryJob = async () => {
   try {
     const now = new Date();
 
-    const expireResult = await Announcement.updateMany(
-      {
-        status:    'published',
-        deletedAt: null,
-        expiresAt: { $ne: null, $lte: now },
-      },
-      { $set: { status: 'archived', archivedAt: now } }
-    );
-
-    if (expireResult.modifiedCount > 0) {
-      console.log(`📢 Announcement expiry: archived ${expireResult.modifiedCount} expired announcement(s).`);
+    const expired = await announcementRepo.archiveExpired(now);
+    if (expired > 0) {
+      console.log(`📢 Announcement expiry: archived ${expired} expired announcement(s).`);
     }
 
-    const unpinResult = await Announcement.updateMany(
-      {
-        pinned:      true,
-        deletedAt:   null,
-        pinnedUntil: { $ne: null, $lte: now },
-      },
-      { $set: { pinned: false, pinnedUntil: null } }
-    );
-
-    if (unpinResult.modifiedCount > 0) {
-      console.log(`📢 Announcement expiry: unpinned ${unpinResult.modifiedCount} announcement(s).`);
+    const unpinned = await announcementRepo.unpinExpired(now);
+    if (unpinned > 0) {
+      console.log(`📢 Announcement expiry: unpinned ${unpinned} announcement(s).`);
     }
   } catch (err) {
     console.error('❌ Announcement expiry cron error:', err.message);
