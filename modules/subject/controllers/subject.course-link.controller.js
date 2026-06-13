@@ -27,7 +27,7 @@
  */
 
 const Subject       = require('../subject.model');
-const Class         = require('../../../models/class.model');
+const { getClassForCourseLink } = require('../../class').service; // façade module class (§3)
 const courseService = require('../../course').service; // façade module course (§3)
 
 const {
@@ -95,13 +95,7 @@ const linkSubjectCourse = asyncHandler(async (req, res) => {
   // Triggered only when the caller supplies a classId.
   // Verifies: Class.schoolCampus === Subject.schoolCampus AND Class.level === Course.level.
   if (classId) {
-    const targetClass = await Class.findOne({
-      _id:          classId,
-      schoolCampus: subject.schoolCampus,   // correct field name on Class model
-    })
-      .select('className level schoolCampus')
-      .populate('level', 'name')
-      .lean();
+    const targetClass = await getClassForCourseLink(classId, subject.schoolCampus);
 
     if (!targetClass) {
       return sendError(

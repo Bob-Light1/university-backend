@@ -27,7 +27,7 @@ const { asyncHandler, sendSuccess, sendError, sendPaginated } = require('../../.
 const { generateAcademicPdf, savePrintPdf, readPrintPdf }    = require('../academic-pdf.service');
 
 const studentService  = require('../../student').service; // façade module student (§3)
-const Class           = require('../../../models/class.model');
+const { getClassName, getClassNameInCampus } = require('../../class').service; // façade module class (§3)
 const resultService   = require('../../result').service; // façade module result (§3)
 
 // ── In-process job store ──────────────────────────────────────────────────────
@@ -83,7 +83,7 @@ const loadStudent = async (studentId, campusId) => {
 
   if (!student) throw Object.assign(new Error('Student not found'), { statusCode: 404 });
 
-  const cls = await Class.findById(student.studentClass).select('className').lean();
+  const cls = await getClassName(student.studentClass);
   student._className = cls?.className || '—';
   return student;
 };
@@ -92,7 +92,7 @@ const loadStudent = async (studentId, campusId) => {
  * Load students for a whole class, with class name attached.
  */
 const loadStudentsByClass = async (classId, campusId) => {
-  const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
+  const cls = await getClassNameInCampus(classId, campusId);
   if (!cls) throw Object.assign(new Error('Class not found'), { statusCode: 404 });
 
   const students = await studentService.listClassStudentsForCards(classId, campusId);
@@ -214,7 +214,7 @@ const processBatchJob = async (job) => {
         await savePrintPdf(buffer, job.campusId, fileName);
 
       } else if (job.type === 'TIMETABLE') {
-        const cls      = await Class.findById(target.id).select('className').lean();
+        const cls      = await getClassName(target.id);
         const sessions = await loadClassSessions(target.id, job.campusId, job.params);
         const buffer   = await generateAcademicPdf({
           type: 'TIMETABLE', data: { sessions, cls }, campusId: job.campusId, params: job.params,
@@ -224,7 +224,7 @@ const processBatchJob = async (job) => {
         await savePrintPdf(buffer, job.campusId, fileName);
 
       } else if (job.type === 'STUDENT_LIST') {
-        const cls      = await Class.findById(target.id).select('className').lean();
+        const cls      = await getClassName(target.id);
         const students = await studentService.listClassStudentsForList(target.id, job.campusId);
         const buffer   = await generateAcademicPdf({
           type: 'STUDENT_LIST', data: { students, cls }, campusId: job.campusId, params: job.params,
@@ -234,7 +234,7 @@ const processBatchJob = async (job) => {
         await savePrintPdf(buffer, job.campusId, fileName);
 
       } else if (job.type === 'TEACHER_LIST') {
-        const cls      = await Class.findById(target.id).select('className').lean();
+        const cls      = await getClassName(target.id);
         const teachers = await loadClassTeachers(target.id, job.campusId);
         const buffer   = await generateAcademicPdf({
           type: 'TEACHER_LIST', data: { teachers, cls }, campusId: job.campusId, params: job.params,
@@ -295,21 +295,21 @@ const previewPdf = asyncHandler(async (req, res) => {
 
   } else if (type === 'TIMETABLE') {
     if (!classId) return sendError(res, 400, 'classId is required for TIMETABLE');
-    const cls      = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
+    const cls      = await getClassNameInCampus(classId, campusId);
     if (!cls) return sendError(res, 404, 'Class not found');
     const sessions = await loadClassSessions(classId, campusId, params);
     buffer = await generateAcademicPdf({ type: 'TIMETABLE', data: { sessions, cls }, campusId, params });
 
   } else if (type === 'STUDENT_LIST') {
     if (!classId) return sendError(res, 400, 'classId is required for STUDENT_LIST');
-    const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
+    const cls = await getClassNameInCampus(classId, campusId);
     if (!cls) return sendError(res, 404, 'Class not found');
     const students = await studentService.listClassStudentsForList(classId, campusId);
     buffer = await generateAcademicPdf({ type: 'STUDENT_LIST', data: { students, cls }, campusId, params });
 
   } else if (type === 'TEACHER_LIST') {
     if (!classId) return sendError(res, 400, 'classId is required for TEACHER_LIST');
-    const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
+    const cls = await getClassNameInCampus(classId, campusId);
     if (!cls) return sendError(res, 404, 'Class not found');
     const teachers = await loadClassTeachers(classId, campusId);
     buffer = await generateAcademicPdf({ type: 'TEACHER_LIST', data: { teachers, cls }, campusId, params });
@@ -377,7 +377,7 @@ const startBatch = asyncHandler(async (req, res) => {
   if (CLASS_LEVEL_TYPES.includes(type)) {
     // Class-level batch: one PDF per class (TIMETABLE, STUDENT_LIST, TEACHER_LIST)
     if (!classId) return sendError(res, 400, `classId is required for ${type} batch`);
-    const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
+    const cls = await getClassNameInCampus(classId, campusId);
     if (!cls) return sendError(res, 404, 'Class not found');
     targets = [{ id: String(classId), name: cls.className }];
 

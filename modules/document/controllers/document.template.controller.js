@@ -31,7 +31,7 @@ const { validateContentBlocks, validateTemplateData } = require('../services/doc
 
 const { getStudentForDocument } = require('../../student').service; // façade module student (§3)
 const { getTeacherForPayslip } = require('../../teacher').service; // façade module teacher (§3)
-const Class   = require('../../../models/class.model');
+const { getClassForDocumentList } = require('../../class').service; // façade module class (§3)
 const Campus  = require('../../../models/campus.model');
 
 const {
@@ -333,11 +333,7 @@ const generateClassList = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Generating class lists requires CAMPUS_MANAGER or higher role');
   }
 
-  const classDoc = await Class
-    .findOne({ _id: req.params.classId, campus: req.campusId })
-    .populate('students', 'firstName lastName gender studentId')
-    .populate('mainTeacher', 'firstName lastName')
-    .lean();
+  const classDoc = await getClassForDocumentList(req.params.classId, req.campusId);
 
   if (!classDoc) return sendNotFound(res, 'Class');
 

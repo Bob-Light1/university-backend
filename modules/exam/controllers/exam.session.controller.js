@@ -22,7 +22,7 @@ const ExamSession    = require('../models/exam.session.model');
 const ExamEnrollment = require('../models/exam.enrollment.model');
 const QuestionBank   = require('../models/question-bank.model');
 const { getSubjectCampusRef } = require('../../subject').service; // façade module subject (§3)
-const Class          = require('../../../models/class.model');
+const { getClassCampusRef }   = require('../../class').service; // façade module class (§3)
 // Require paresseux : teacher.dashboard consomme la façade exam (cycle exam ↔ teacher)
 const getTeacherCampusRef = (...args) =>
   require('../../teacher').service.getTeacherCampusRef(...args);
@@ -129,7 +129,7 @@ const createSession = async (req, res) => {
     // Val 2 — cross-campus validation for subject, classes, teacher
     const [subjectDoc, ...classDocs] = await Promise.all([
       getSubjectCampusRef(subject),
-      ...classes.map((cId) => Class.findById(cId).select('schoolCampus').lean()),
+      ...classes.map((cId) => getClassCampusRef(cId)),
     ]);
 
     if (!subjectDoc) return sendError(res, 400, 'Subject not found.');

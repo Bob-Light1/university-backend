@@ -18,11 +18,8 @@
  *   Any mismatch returns null, which the caller must treat as a 400/403 error.
  */
 
-const mongoose = require('mongoose');
-
-// Lazy-loaded to avoid circular dependency issues at module load time
-// (façade teacher : cycle student ↔ teacher via teacher.dashboard → C3)
-const getClass          = () => require('../../models/class.model');
+// Façades propriétaires, en require paresseux (cycles student ↔ teacher via
+// teacher.dashboard ; subject/class résolus par leur module).
 const teacherService    = () => require('../teacher').service;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,31 +39,8 @@ const teacherService    = () => require('../teacher').service;
  *   invalid: string[]          - IDs that were not found or belong to another campus
  * }>}
  */
-const resolveClasses = async (classIds, campusId) => {
-  if (!classIds || classIds.length === 0) return { classes: [], invalid: [] };
-
-  const Class = getClass();
-
-  const docs = await Class.find({
-    _id:          { $in: classIds },
-    schoolCampus: campusId,          // campus-isolation guard
-    status:       { $ne: 'archived' },
-  })
-    .select('_id className level')
-    .lean();
-
-  // Detect IDs that were submitted but not found (or belong to another campus)
-  const foundIds  = new Set(docs.map((d) => d._id.toString()));
-  const invalid   = classIds.filter((id) => !foundIds.has(id));
-
-  const classes = docs.map((d) => ({
-    classId:   d._id,
-    className: d.className,
-    level:     d.level ?? null,
-  }));
-
-  return { classes, invalid };
-};
+const resolveClasses = (classIds, campusId) =>
+  require('../class').service.resolveClassesForSchedule(classIds, campusId);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUBJECT

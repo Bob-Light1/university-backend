@@ -1,5 +1,5 @@
 const Student = require('./models/student.model');
-const Class = require('../../models/class.model');
+const { getClassCampusRefForValidation } = require('../class').service; // façade module class (§3)
 const mongoose = require('mongoose');
 
 /**
@@ -57,10 +57,7 @@ const studentConfig = {
         };
       }
 
-      const selectedClass = await Class.findById(fields.studentClass)
-        .select('schoolCampus className')
-        .session(session)
-        .lean();
+      const selectedClass = await getClassCampusRefForValidation(fields.studentClass, { session });
   
       if (!selectedClass) {
         return { 

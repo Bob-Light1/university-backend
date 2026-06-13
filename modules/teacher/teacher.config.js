@@ -1,5 +1,5 @@
 const Teacher    = require('./models/teacher.model');
-const Class      = require('../../models/class.model');
+const classService = require('../class').service; // façade module class (§3)
 const mongoose   = require('mongoose');
 const { getDepartmentCampusRef } = require('../department').service; // façade module department (§3)
 
@@ -36,29 +36,10 @@ const { getDepartmentCampusRef } = require('../department').service; // façade 
  * @param {string}   campusId     - Campus ObjectId used as an extra safety filter
  */
 const _syncTeacherInClasses = async (teacherId, addedIds, removedIds, campusId) => {
-  const ops = [];
-
-  // Add teacher to newly assigned classes — campus-scoped for safety
-  if (addedIds.length > 0) {
-    ops.push(
-      Class.updateMany(
-        { _id: { $in: addedIds }, schoolCampus: campusId },
-        { $addToSet: { teachers: teacherId } }
-      )
-    );
-  }
-
-  // Remove teacher from unassigned classes — campus-scoped for safety
-  if (removedIds.length > 0) {
-    ops.push(
-      Class.updateMany(
-        { _id: { $in: removedIds }, schoolCampus: campusId },
-        { $pull: { teachers: teacherId } }
-      )
-    );
-  }
-
-  await Promise.all(ops);
+  await Promise.all([
+    classService.addTeacherToClasses({ teacherId, classIds: addedIds, campusId }),
+    classService.removeTeacherFromClasses({ teacherId, classIds: removedIds, campusId }),
+  ]);
 };
 
 /**
@@ -74,18 +55,12 @@ const _syncClassManager = async (teacherId, newManagerOfId, oldManagerOfId, camp
   // a transient state where the same teacher appears as classManager in two documents,
   // which would violate the unique sparse index on Class.classManager).
   if (oldManagerOfId && oldManagerOfId !== newManagerOfId) {
-    await Class.updateOne(
-      { _id: oldManagerOfId, classManager: teacherId, schoolCampus: campusId },
-      { $set: { classManager: null } }
-    );
+    await classService.clearClassManager({ classId: oldManagerOfId, teacherId, campusId });
   }
 
   // Then assign the new class manager
   if (newManagerOfId) {
-    await Class.updateOne(
-      { _id: newManagerOfId, schoolCampus: campusId },
-      { $set: { classManager: teacherId } }
-    );
+    await classService.setClassManager({ classId: newManagerOfId, teacherId, campusId });
   }
 };
 
@@ -203,12 +178,7 @@ const teacherConfig = {
           return { valid: false, error: 'Invalid classManagerOf ID format' };
         }
 
-        const managedClass = await Class.findOne({
-          _id:          fields.classManagerOf,
-          schoolCampus: campusId,
-        })
-          .select('_id')
-          .lean();
+        const managedClass = await classService.classExistsInCampus(fields.classManagerOf, campusId);
 
         if (!managedClass) {
           return {
@@ -398,10 +368,7 @@ const teacherConfig = {
 
       // Detect the previously managed class by querying the DB
       // (previousData may not always carry classManagerOf)
-      const prevManagerClass = await Class.findOne({
-        classManager: teacherId,
-        schoolCampus: campusId,
-      }).select('_id').lean();
+      const prevManagerClass = await classService.findClassManagedBy(teacherId, campusId);
 
       const oldManagerOfId = prevManagerClass?._id?.toString() || null;
       const newManagerOfId = fields.classManagerOf || null;

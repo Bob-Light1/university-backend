@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
 const Student = require('../models/student.model');
-const Class = require('../../../models/class.model');
+const classService = require('../../class').service; // façade module class (§3)
 const studentConfig = require('../student.config');
 
 const {
@@ -96,7 +96,7 @@ const entityController = new GenericEntityController(studentConfig);
 
 const bulkController = new GenericBulkController(Student, {
   entityName: 'Student',
-  RelatedModel: Class,
+  findRelatedById: classService.findClassForBulk,
   relatedField: 'studentClass',
   ...exportConfig,
   importRequiredFields: importConfig.requiredFields,

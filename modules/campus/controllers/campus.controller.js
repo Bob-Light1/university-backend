@@ -12,7 +12,7 @@ const Campus = require('../campus.model');
 const { getLoginPrefs } = require('../../settings').service;
 const teacherService = require('../../teacher').service; // façade module teacher (§3)
 const studentService = require('../../student').service; // façade module student (§3)
-const Class = require('../../../models/class.model');
+const classService = require('../../class').service; // façade module class (§3)
 // Require paresseux : subject.controller consommera la façade campus en C5 (cycle campus ↔ subject)
 const listCampusSubjects = (...args) =>
   require('../../subject').service.listCampusSubjects(...args);
@@ -489,7 +489,7 @@ class CampusController extends GenericEntityController {
         Campus.findById(campusId).select('-password').lean(),
         studentService.countStudents({ campusId, excludeArchived: true }),
         teacherService.countActiveTeachers(campusId),
-        Class.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } })
+        classService.countClasses({ campusId, excludeArchived: true })
       ]);
 
       if (!campus) {
@@ -546,8 +546,8 @@ class CampusController extends GenericEntityController {
       ] = await Promise.all([
         studentService.countStudents({ campusId, excludeArchived: true }),
         teacherService.countActiveTeachers(campusId),
-        Class.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
-        Class.countDocuments({ schoolCampus: campusId, status: 'active' }),
+        classService.countClasses({ campusId, excludeArchived: true }),
+        classService.countClasses({ campusId, status: 'active' }),
         studentService.countStudents({ campusId, excludeArchived: true, createdSince: firstDayOfMonth }),
         teacherService.countActiveTeachers(campusId, { createdSince: firstDayOfMonth }),
         // Campus-wide average absence rate from attendance records
@@ -791,14 +791,7 @@ class CampusController extends GenericEntityController {
         return sendError(res, 403, 'You can only access classes from your own campus');
       }
 
-      const filter = { schoolCampus: campusId };
-      if (status) filter.status = status;
-
-      const classes = await Class.find(filter)
-        .populate('level',        'name')
-        .populate('classManager', 'firstName lastName email profileImage')
-        .sort({ className: 1 })
-        .lean();
+      const classes = await classService.listClassesForCampus({ campusId, status });
 
       return sendSuccess(res, 200, 'Classes fetched successfully', classes);
 

@@ -19,7 +19,7 @@ const mongoose = require('mongoose');
 const { parse: csvParse } = require('csv-parse/sync');
 
 const { Result, RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
-const Class   = require('../../../models/class.model');
+const { getClassCampusRef } = require('../../class').service; // façade module class (§3)
 
 const {
   asyncHandler,
@@ -162,7 +162,7 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
   if (!evaluationTitle?.trim()) return sendError(res, 400, 'evaluationTitle is required.');
 
   // Verify the class belongs to the campus
-  const classDoc = await Class.findById(classId).select('schoolCampus').lean();
+  const classDoc = await getClassCampusRef(classId);
   if (!classDoc) return sendNotFound(res, 'Class');
   if (!isGlobalRole(req.user.role) && classDoc.schoolCampus.toString() !== resolvedCampus.toString())
     return sendForbidden(res, 'Class does not belong to your campus.');

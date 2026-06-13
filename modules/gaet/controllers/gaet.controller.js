@@ -62,12 +62,13 @@ const { detectConflicts } = require('../gaet.conflict.service');
 // LOCAL HELPERS
 // ─────────────────────────────────────────────
 
-// Lazy-loaded to avoid circular dependency issues at module load time
-const getClass   = () => require('../../../models/class.model');
+// Gardes campus en masse, via les façades propriétaires
 const countSubjectsOnCampus = (...args) =>
   require('../../subject').service.countSubjectsOnCampus(...args);
 const countTeachersOnCampus = (...args) =>
   require('../../teacher').service.countTeachersOnCampus(...args);
+const countClassesOnCampus = (...args) =>
+  require('../../class').service.countClassesOnCampus(...args);
 
 /**
  * Campus filter for READ operations.
@@ -269,7 +270,7 @@ const createOrUpdateConstraints = asyncHandler(async (req, res) => {
     const teacherIds = [...new Set(courseRequirements.map(cr => cr.teacherId))];
 
     const [classCount, subjectCount, teacherCount] = await Promise.all([
-      getClass().countDocuments({ _id: { $in: classIds }, schoolCampus: campusId }),
+      countClassesOnCampus(classIds, campusId),
       countSubjectsOnCampus(subjectIds, campusId),
       countTeachersOnCampus(teacherIds, campusId),
     ]);
