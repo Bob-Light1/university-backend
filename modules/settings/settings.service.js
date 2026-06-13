@@ -4,7 +4,7 @@
  */
 
 const SUPPORTED_TIMEZONES = require('./models/timezone-whitelist');
-const UserPreferences     = require('./models/userPreferences.model');
+const settingsRepo        = require('./settings.repository');
 // Require paresseux : campus.controller consomme settings.getLoginPrefs
 // (settings est dans la cloture statique de campus → cycle si require statique).
 const getCampusDefaults = (...args) => require('../campus').service.getCampusDefaults(...args);
@@ -45,11 +45,9 @@ async function getLoginPrefs(userId, role, campusId = null) {
       }
     }
 
-    const prefs = await UserPreferences.findOneAndUpdate(
-      { userId },
-      { $setOnInsert: { userId, userModel, campusId, ...campusDefaults } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    const prefs = await settingsRepo.upsertOnInsert(userId, {
+      userId, userModel, campusId, ...campusDefaults,
+    });
 
     return {
       preferredLanguage: prefs.preferredLanguage || 'en',
@@ -69,10 +67,7 @@ async function getLoginPrefs(userId, role, campusId = null) {
  * @returns {Promise<string>}
  */
 const getPreferredLanguage = async (userId) => {
-  const prefs = await UserPreferences
-    .findOne({ userId })
-    .select('preferredLanguage')
-    .lean();
+  const prefs = await settingsRepo.findLanguageByUserId(userId);
   return prefs?.preferredLanguage || 'en';
 };
 

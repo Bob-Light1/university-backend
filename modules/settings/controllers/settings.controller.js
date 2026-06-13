@@ -8,7 +8,7 @@
  *   GET    /api/settings/language → getLanguage   (shortcut)
  */
 
-const UserPreferences = require('../models/userPreferences.model');
+const settingsRepo = require('../settings.repository');
 // Require paresseux : settings est dans la cloture statique de campus
 const getCampusDefaults = (...args) => require('../../campus').service.getCampusDefaults(...args);
 
@@ -18,7 +18,7 @@ const {
   asyncHandler,
 } = require('../../../shared/utils/response-helpers');
 
-const SUPPORTED_LANGUAGES  = UserPreferences.schema.statics.SUPPORTED_LANGUAGES  || ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
+const SUPPORTED_LANGUAGES  = settingsRepo.getSupportedLanguages();
 const SUPPORTED_TIMEZONES  = require('../models/timezone-whitelist');
 const SUPPORTED_GRADE_FMTS = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
 const SUPPORTED_DATE_FMTS  = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
@@ -64,16 +64,12 @@ function extractIdentity(req) {
 const getSettings = asyncHandler(async (req, res) => {
   const { userId, userModel, campusId } = extractIdentity(req);
 
-  let prefs = await UserPreferences.findOne({ userId });
+  let prefs = await settingsRepo.findByUserId(userId);
 
   if (!prefs) {
     // Lazy upsert: first access creates the doc with campus defaults
     const defaults = await buildDefaultsFromCampus(campusId);
-    prefs = await UserPreferences.findOneAndUpdate(
-      { userId },
-      { $setOnInsert: { userId, userModel, campusId, ...defaults } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    prefs = await settingsRepo.upsertOnInsert(userId, { userId, userModel, campusId, ...defaults });
   }
 
   return sendSuccess(res, 200, 'Settings retrieved.', prefs);
@@ -116,13 +112,10 @@ const updateSettings = asyncHandler(async (req, res) => {
   const insertDefaults = Object.fromEntries(
     Object.entries(defaults).filter(([key]) => !(key in update))
   );
-  const prefs = await UserPreferences.findOneAndUpdate(
-    { userId },
-    {
-      $set: update,
-      $setOnInsert: { userId, userModel, campusId, ...insertDefaults },
-    },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+  const prefs = await settingsRepo.upsertWithSet(
+    userId,
+    update,
+    { userId, userModel, campusId, ...insertDefaults },
   );
 
   return sendSuccess(res, 200, 'Settings updated.', prefs);
@@ -133,11 +126,7 @@ const upsertSettings = asyncHandler(async (req, res) => {
   const { userId, userModel, campusId } = extractIdentity(req);
   const defaults = await buildDefaultsFromCampus(campusId);
 
-  const prefs = await UserPreferences.findOneAndUpdate(
-    { userId },
-    { $setOnInsert: { userId, userModel, campusId, ...defaults } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  const prefs = await settingsRepo.upsertOnInsert(userId, { userId, userModel, campusId, ...defaults });
 
   return sendSuccess(res, 200, 'Settings upserted.', prefs);
 });
@@ -146,15 +135,11 @@ const upsertSettings = asyncHandler(async (req, res) => {
 const getLanguage = asyncHandler(async (req, res) => {
   const { userId, userModel, campusId } = extractIdentity(req);
 
-  let prefs = await UserPreferences.findOne({ userId }).select('preferredLanguage');
+  let prefs = await settingsRepo.findLanguageByUserId(userId);
 
   if (!prefs) {
     const defaults = await buildDefaultsFromCampus(campusId);
-    prefs = await UserPreferences.findOneAndUpdate(
-      { userId },
-      { $setOnInsert: { userId, userModel, campusId, ...defaults } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    prefs = await settingsRepo.upsertOnInsert(userId, { userId, userModel, campusId, ...defaults });
   }
 
   return sendSuccess(res, 200, 'Language retrieved.', {
