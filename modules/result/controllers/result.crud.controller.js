@@ -20,7 +20,6 @@ const { parse: csvParse } = require('csv-parse/sync');
 
 const { Result, RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
 const Class   = require('../../../models/class.model');
-const Student = require('../../../models/student-models/student.model');
 
 const {
   asyncHandler,
@@ -37,8 +36,9 @@ const {
   isValidObjectId,
 } = require('../../../shared/utils/validation-helpers');
 // Require paresseux : student.dashboard consomme la façade result (cycle result ↔ student)
+const studentService = () => require('../../student').service;
 const validateStudentBelongsToCampus = (...args) =>
-  require('../../student').service.validateStudentBelongsToCampus(...args);
+  studentService().validateStudentBelongsToCampus(...args);
 
 const {
   isGlobalRole,
@@ -178,13 +178,10 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
    *
    * Campus isolation is enforced by filtering on schoolCampus as well.
    */
-  const enrolledDocs = await Student.find(
-    {
-      studentClass: new mongoose.Types.ObjectId(classId),
-      schoolCampus: new mongoose.Types.ObjectId(resolvedCampus),
-    },
-    { _id: 1 }
-  ).lean();
+  const enrolledDocs = await studentService().listStudentIds({
+    classIds: [new mongoose.Types.ObjectId(classId)],
+    campusId: new mongoose.Types.ObjectId(resolvedCampus),
+  });
   const enrolledIds = new Set(enrolledDocs.map((s) => s._id.toString()));
   const errors      = [];
   const toInsert    = [];

@@ -11,12 +11,11 @@ const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'
 const Campus = require('../campus.model');
 const { getLoginPrefs } = require('../../settings').service;
 const teacherService = require('../../teacher').service; // façade module teacher (§3)
-const Student = require('../../../models/student-models/student.model');
+const studentService = require('../../student').service; // façade module student (§3)
 const Class = require('../../../models/class.model');
 // Require paresseux : subject.controller consommera la façade campus en C5 (cycle campus ↔ subject)
 const listCampusSubjects = (...args) =>
   require('../../subject').service.listCampusSubjects(...args);
-const StudentAttendance = require('../../../models/student-models/student.attend.model');
 const financeService = require('../../finance').service; // façade module finance (§3)
 const departmentService = require('../../department').service; // façade module department (§3)
 const staffService  = require('../../staff').service; // façade module staff (§3)
@@ -488,7 +487,7 @@ class CampusController extends GenericEntityController {
       // Parallel queries
       const [campus, studentsCount, teachersCount, classesCount] = await Promise.all([
         Campus.findById(campusId).select('-password').lean(),
-        Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
+        studentService.countStudents({ campusId, excludeArchived: true }),
         teacherService.countActiveTeachers(campusId),
         Class.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } })
       ]);
@@ -545,37 +544,14 @@ class CampusController extends GenericEntityController {
         staffStats,
         mentorStats,
       ] = await Promise.all([
-        Student.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
+        studentService.countStudents({ campusId, excludeArchived: true }),
         teacherService.countActiveTeachers(campusId),
         Class.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
         Class.countDocuments({ schoolCampus: campusId, status: 'active' }),
-        Student.countDocuments({
-          schoolCampus: campusId,
-          createdAt: { $gte: firstDayOfMonth },
-          status: { $ne: 'archived' }
-        }),
+        studentService.countStudents({ campusId, excludeArchived: true, createdSince: firstDayOfMonth }),
         teacherService.countActiveTeachers(campusId, { createdSince: firstDayOfMonth }),
         // Campus-wide average absence rate from attendance records
-        StudentAttendance.aggregate([
-          { $match: { schoolCampus: campusOid } },
-          {
-            $group: {
-              _id:           '$student',
-              totalSessions: { $sum: 1 },
-              absentCount:   { $sum: { $cond: [{ $eq: ['$status', false] }, 1, 0] } },
-            },
-          },
-          {
-            $group: {
-              _id:            null,
-              avgAbsenceRate: {
-                $avg: {
-                  $multiply: [{ $divide: ['$absentCount', '$totalSessions'] }, 100],
-                },
-              },
-            },
-          },
-        ]),
+        studentService.getAvgAbsenceRateForCampus(campusOid),
         // Pending income records as payment alerts
         financeService.countPendingIncomes(campusId),
         staffService.getCampusStats(campusId),
@@ -637,31 +613,14 @@ class CampusController extends GenericEntityController {
         return sendError(res, 403, 'You can only access students from your own campus');
       }
 
-      const filter = { schoolCampus: campusId };
-
-      if (classId) filter.studentClass = classId;
-      if (status) filter.status = status;
-
-      if (search) {
-        filter.$or = [
-          { firstName: { $regex: escapeRegex(search), $options: 'i' } },
-          { lastName: { $regex: escapeRegex(search), $options: 'i' } },
-          { matricule: { $regex: escapeRegex(search), $options: 'i' } },
-          { email: { $regex: escapeRegex(search), $options: 'i' } }
-        ];
-      }
-
-      const skip = (Number(page) - 1) * Number(limit);
-
-      const students = await Student.find(filter)
-        .populate('studentClass', 'className')
-        .select('-password')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean();
-
-      const total = await Student.countDocuments(filter);
+      const { docs: students, total } = await studentService.listStudentsForCampusDashboard({
+        campusId,
+        classId,
+        status,
+        search: search ? escapeRegex(search) : undefined,
+        page,
+        limit,
+      });
 
       return sendPaginated(
         res,

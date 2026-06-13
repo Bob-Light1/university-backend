@@ -20,8 +20,8 @@ const { v4: uuidv4 } = require('uuid');
 
 const ExamSession        = require('../models/exam.session.model');
 const ExamEnrollment     = require('../models/exam.enrollment.model');
-const Student            = require('../../../models/student-models/student.model');
-const StudentAttendance  = require('../../../models/student-models/student.attend.model');
+// Require paresseux : student.dashboard consomme la façade exam (cycle exam ↔ student)
+const studentService     = () => require('../../student').service;
 const {
   sendSuccess,
   sendError,
@@ -56,11 +56,10 @@ const computeEligibility = async (req, res) => {
     }
 
     const classIds = session.classes.map((c) => c.toString());
-    const students = await Student.find({
-      currentClass: { $in: classIds },
-      schoolCampus: campusFilter.schoolCampus || { $exists: true },
-      status:       { $ne: 'archived' },
-    }).select('_id currentClass');
+    const students = await studentService().listStudentsForExamEligibility({
+      classIds,
+      campusId: campusFilter.schoolCampus,
+    });
 
     const minAttendance = session.eligibilityRules?.minAttendance ?? 0;
     const created = [];
@@ -71,9 +70,9 @@ const computeEligibility = async (req, res) => {
       let eligibilityNotes = '';
 
       if (minAttendance > 0) {
-        const stats = StudentAttendance.getStudentStats
-          ? await StudentAttendance.getStudentStats(student._id, session.academicYear, session.semester, 'year')
-          : { attendanceRate: 100 };
+        const stats = await studentService().getStudentAttendanceStats(
+          student._id, session.academicYear, session.semester, 'year'
+        );
 
         const rate = stats?.attendanceRate ?? 100;
         if (rate < minAttendance) {

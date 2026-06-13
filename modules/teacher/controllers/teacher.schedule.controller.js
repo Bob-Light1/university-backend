@@ -22,7 +22,7 @@
 
 const mongoose        = require('mongoose');
 const TeacherSchedule = require('../models/teacher.schedule.model');
-const StudentSchedule = require('../../../models/student-models/student.schedule.model');
+const studentService  = require('../../student').service; // façade module student (§3)
 const { SCHEDULE_STATUS, SEMESTER } = require('../../../shared/utils/schedule.base');
 
 const {
@@ -243,7 +243,7 @@ const submitRollCall = asyncHandler(async (req, res) => {
   // Synchronisation du résumé dans StudentSchedule (fire-and-forget)
   if (session.studentScheduleRef) {
     const total = Number(present) + Number(absent) + Number(late);
-    StudentSchedule.findByIdAndUpdate(session.studentScheduleRef, {
+    studentService.updateAttendanceSummary(session.studentScheduleRef, {
       'attendance.present':  Number(present),
       'attendance.absent':   Number(absent),
       'attendance.late':     Number(late),
@@ -252,7 +252,7 @@ const submitRollCall = asyncHandler(async (req, res) => {
       'attendance.rate':     total > 0
         ? Math.round((Number(present) / total) * 100)
         : null,
-    }).exec().catch((err) =>
+    }).catch((err) =>
       console.error('[RollCall] failed to sync StudentSchedule attendance:', err.message)
     );
   }
@@ -591,10 +591,7 @@ const getStudentRoster = asyncHandler(async (req, res) => {
     return sendError(res, 404, 'No linked student schedule found for this session.');
   }
 
-  const studentSession = await StudentSchedule.findById(session.studentScheduleRef)
-    .select('classes expectedAttendees')
-    .populate('classes.classId', 'className students')
-    .lean();
+  const studentSession = await studentService.getSessionRoster(session.studentScheduleRef);
 
   if (!studentSession) return sendError(res, 404, 'Linked student schedule not found.');
 

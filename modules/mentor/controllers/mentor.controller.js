@@ -23,8 +23,7 @@ const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
 const Mentor     = require('../mentor.model');
-// Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
-const Student    = require('../../../models/student-models/student.model');
+const studentService = require('../../student').service; // façade module student (§3)
 const profileSvc = require('../../../shared/services/profile.service');
 const {
   sendSuccess,
@@ -498,10 +497,10 @@ const assignStudents = async (req, res) => {
 
     if (studentIds.length > 0) {
       const sidOids = studentIds.map((s) => new mongoose.Types.ObjectId(s));
-      const validCount = await Student.countDocuments({
-        _id:          { $in: sidOids },
-        schoolCampus: campusOid,
-        status:       { $ne: 'archived' },
+      const validCount = await studentService.countStudents({
+        studentIds:      sidOids,
+        campusId:        campusOid,
+        excludeArchived: true,
       });
       if (validCount !== studentIds.length) {
         return sendError(res, 400, 'One or more students do not belong to this campus or are archived.');
@@ -512,10 +511,11 @@ const assignStudents = async (req, res) => {
     // Resolve classIds → student IDs (campus already scoped)
     if (classIds.length > 0) {
       const cidOids = classIds.map((c) => new mongoose.Types.ObjectId(c));
-      const fromClasses = await Student.find(
-        { schoolCampus: campusOid, studentClass: { $in: cidOids }, status: { $ne: 'archived' } },
-        '_id'
-      ).lean();
+      const fromClasses = await studentService.listStudentIds({
+        classIds:        cidOids,
+        campusId:        campusOid,
+        excludeArchived: true,
+      });
       fromClasses.forEach((s) => resolvedIds.push(s._id));
     }
 

@@ -26,7 +26,9 @@ const mongoose = require('mongoose');
 const { Result, RESULT_STATUS, SEMESTER }  = require('../models/result.model');
 const { GradingScale, GRADING_SYSTEM }     = require('../models/grading-scale.model');
 const { FinalTranscript, TRANSCRIPT_STATUS } = require('../models/final-transcript.model');
-const Student = require('../../../models/student-models/student.model');
+// Require paresseux : student.dashboard consomme la façade result (cycle result ↔ student)
+const getStudentProfileRef = (...args) =>
+  require('../../student').service.getStudentProfileRef(...args);
 
 const {
   asyncHandler,
@@ -65,9 +67,7 @@ const getTranscript = asyncHandler(async (req, res) => {
   if (req.user.role === 'STUDENT' && studentId !== req.user.id)
     return sendForbidden(res, 'Access denied.');
 
-  const student = await Student.findById(studentId)
-    .select('firstName lastName matricule email schoolCampus studentClass')
-    .lean();
+  const student = await getStudentProfileRef(studentId);
   if (!student) return sendNotFound(res, 'Student');
 
   if (!isGlobalRole(req.user.role) &&

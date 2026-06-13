@@ -26,7 +26,7 @@ const crypto = require('crypto');
 const { asyncHandler, sendSuccess, sendError, sendPaginated } = require('../../../shared/utils/response-helpers');
 const { generateAcademicPdf, savePrintPdf, readPrintPdf }    = require('../academic-pdf.service');
 
-const Student         = require('../../../models/student-models/student.model');
+const studentService  = require('../../student').service; // façade module student (§3)
 const Class           = require('../../../models/class.model');
 const resultService   = require('../../result').service; // façade module result (§3)
 
@@ -79,10 +79,7 @@ const buildCampusFilter = (req) => {
  * Attaches `_className` virtual for HTML templates.
  */
 const loadStudent = async (studentId, campusId) => {
-  const student = await Student
-    .findOne({ _id: studentId, schoolCampus: campusId })
-    .select('firstName lastName matricule profileImage dateOfBirth gender studentClass cardNumber cardValidUntil')
-    .lean();
+  const student = await studentService.getStudentForPrint(studentId, campusId);
 
   if (!student) throw Object.assign(new Error('Student not found'), { statusCode: 404 });
 
@@ -98,10 +95,7 @@ const loadStudentsByClass = async (classId, campusId) => {
   const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
   if (!cls) throw Object.assign(new Error('Class not found'), { statusCode: 404 });
 
-  const students = await Student
-    .find({ studentClass: classId, schoolCampus: campusId, status: { $ne: 'archived' } })
-    .select('firstName lastName matricule profileImage dateOfBirth gender cardNumber cardValidUntil')
-    .lean();
+  const students = await studentService.listClassStudentsForCards(classId, campusId);
 
   return students.map((s) => ({ ...s, _className: cls.className }));
 };
@@ -111,13 +105,14 @@ const loadStudentsByClass = async (classId, campusId) => {
  * No date filter — returns the full instructor roster.
  */
 const loadClassTeachers = async (classId, campusId) => {
-  const StudentSchedule = require('../../../models/student-models/student.schedule.model');
-  const sessions = await StudentSchedule.find({
-    'classes.classId': classId,
-    schoolCampus:      campusId,
-    status:            { $in: ['PUBLISHED', 'DRAFT'] },
-    isDeleted:         { $ne: true },
-  }).select('subject teacher').lean();
+  const sessions = await studentService.listSessionsForClass({
+    classId,
+    campusId,
+    statuses:        ['PUBLISHED', 'DRAFT'],
+    isDeletedFilter: { $ne: true },
+    select:          'subject teacher',
+    sort:            null,
+  });
 
   const teacherMap = new Map();
   for (const s of sessions) {
@@ -144,8 +139,6 @@ const loadClassTeachers = async (classId, campusId) => {
  * Uses a date range if provided; otherwise the current week (Mon–Sun).
  */
 const loadClassSessions = async (classId, campusId, params) => {
-  const StudentSchedule = require('../../../models/student-models/student.schedule.model');
-
   let from, to;
   if (params.weekStart) {
     from = new Date(params.weekStart);
@@ -158,15 +151,16 @@ const loadClassSessions = async (classId, campusId, params) => {
     to = new Date(from); to.setDate(to.getDate() + 7);
   }
 
-  return StudentSchedule.find({
-    'classes.classId': classId,
-    schoolCampus:      campusId,
-    startTime:         { $gte: from, $lt: to },
-    status:            { $in: ['PUBLISHED', 'DRAFT'] },
-    isDeleted:         { $ne: true },
-  })
-    .select('subject teacher room startTime endTime')
-    .lean();
+  return studentService.listSessionsForClass({
+    classId,
+    campusId,
+    from,
+    toExclusive:     to,
+    statuses:        ['PUBLISHED', 'DRAFT'],
+    isDeletedFilter: { $ne: true },
+    select:          'subject teacher room startTime endTime',
+    sort:            null,
+  });
 };
 
 // ── Async batch processor ─────────────────────────────────────────────────────
@@ -231,11 +225,7 @@ const processBatchJob = async (job) => {
 
       } else if (job.type === 'STUDENT_LIST') {
         const cls      = await Class.findById(target.id).select('className').lean();
-        const students = await Student
-          .find({ studentClass: target.id, schoolCampus: job.campusId, status: { $ne: 'archived' } })
-          .select('firstName lastName matricule dateOfBirth gender status')
-          .sort({ lastName: 1, firstName: 1 })
-          .lean();
+        const students = await studentService.listClassStudentsForList(target.id, job.campusId);
         const buffer   = await generateAcademicPdf({
           type: 'STUDENT_LIST', data: { students, cls }, campusId: job.campusId, params: job.params,
         });
@@ -314,11 +304,7 @@ const previewPdf = asyncHandler(async (req, res) => {
     if (!classId) return sendError(res, 400, 'classId is required for STUDENT_LIST');
     const cls = await Class.findOne({ _id: classId, schoolCampus: campusId }).select('className').lean();
     if (!cls) return sendError(res, 404, 'Class not found');
-    const students = await Student
-      .find({ studentClass: classId, schoolCampus: campusId, status: { $ne: 'archived' } })
-      .select('firstName lastName matricule dateOfBirth gender status')
-      .sort({ lastName: 1, firstName: 1 })
-      .lean();
+    const students = await studentService.listClassStudentsForList(classId, campusId);
     buffer = await generateAcademicPdf({ type: 'STUDENT_LIST', data: { students, cls }, campusId, params });
 
   } else if (type === 'TEACHER_LIST') {
@@ -398,10 +384,7 @@ const startBatch = asyncHandler(async (req, res) => {
   } else {
     // Student-type batches
     if (studentIds && Array.isArray(studentIds) && studentIds.length > 0) {
-      const students = await Student
-        .find({ _id: { $in: studentIds }, schoolCampus: campusId })
-        .select('firstName lastName matricule')
-        .lean();
+      const students = await studentService.getStudentNamesByIds(studentIds, campusId);
       targets = students.map((s) => ({ id: String(s._id), name: `${s.firstName} ${s.lastName}` }));
     } else if (classId) {
       const students = await loadStudentsByClass(classId, campusId);

@@ -24,10 +24,8 @@
 const mongoose = require('mongoose');
 
 const Parent              = require('../parent.model');
-const Student             = require('../../../models/student-models/student.model');
+const studentService      = require('../../student').service; // façade module student (§3)
 const resultService       = require('../../result').service; // façade module result (§3)
-const StudentAttendance   = require('../../../models/student-models/student.attend.model');
-const StudentSchedule     = require('../../../models/student-models/student.schedule.model');
 const {
   sendSuccess,
   sendError,
@@ -262,10 +260,7 @@ const getChildSchedule = async (req, res) => {
     const parent = await verifyChildOwnership(req.user.id, studentId);
 
     // Resolve the student's current class
-    const student = await Student.findOne({
-      _id:          studentId,
-      schoolCampus: parent.schoolCampus,
-    }).select('studentClass').lean();
+    const student = await studentService.getStudentClassRef(studentId, parent.schoolCampus);
 
     if (!student) {
       return sendNotFound(res, 'Student');
@@ -275,16 +270,14 @@ const getChildSchedule = async (req, res) => {
     const now     = new Date();
     const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-    const schedule = await StudentSchedule.find({
-      'classes.classId': student.studentClass,
-      schoolCampus:      parent.schoolCampus,
-      status:            'PUBLISHED',
-      isDeleted:         false,
-      startTime:         { $gte: now, $lte: endDate },
-    })
-      .select('-attendance -postponementRequests -__v')
-      .sort({ startTime: 1 })
-      .lean({ virtuals: true });
+    const schedule = await studentService.listSessionsForClass({
+      classId:      student.studentClass,
+      campusId:     parent.schoolCampus,
+      from:         now,
+      to:           endDate,
+      select:       '-attendance -postponementRequests -__v',
+      leanVirtuals: true,
+    });
 
     return sendSuccess(res, 200, 'Schedule retrieved successfully.', {
       total:    schedule.length,
@@ -318,40 +311,22 @@ const getChildAttendance = async (req, res) => {
 
     const { page, limit, skip } = parsePagination(req.query);
 
-    const filter = {
-      student:      studentId,
-      schoolCampus: parent.schoolCampus,
-    };
+    const academicYear = req.query.academicYear || undefined;
+    const semester     = req.query.semester     || undefined;
+    const status       = req.query.status !== undefined
+      ? req.query.status === 'true'
+      : undefined;
 
-    if (req.query.academicYear) filter.academicYear = req.query.academicYear;
-    if (req.query.semester)     filter.semester     = req.query.semester;
-    if (req.query.status !== undefined) {
-      filter.status = req.query.status === 'true';
-    }
-
-    const [records, total, stats] = await Promise.all([
-      StudentAttendance.find(filter)
-        .select('-__v')
-        .populate('subject',   'subject_name')
-        .populate('recordedBy','firstName lastName')
-        .sort({ attendanceDate: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean({ virtuals: true }),
-      StudentAttendance.countDocuments(filter),
+    const [{ records, total }, stats] = await Promise.all([
+      studentService.listStudentAttendanceForParent({
+        studentId, campusId: parent.schoolCampus,
+        academicYear, semester, status, skip, limit,
+      }),
       // Aggregate summary (all records, not just current page)
-      StudentAttendance.aggregate([
-        { $match: { ...filter, student: new mongoose.Types.ObjectId(studentId) } },
-        {
-          $group: {
-            _id:              null,
-            totalSessions:    { $sum: 1 },
-            presentCount:     { $sum: { $cond: [{ $eq: ['$status', true]  }, 1, 0] } },
-            absentCount:      { $sum: { $cond: [{ $eq: ['$status', false] }, 1, 0] } },
-            justifiedAbsences:{ $sum: { $cond: ['$isJustified', 1, 0] } },
-          },
-        },
-      ]),
+      studentService.summarizeStudentAttendance({
+        studentId, campusId: parent.schoolCampus,
+        academicYear, semester, status, includeJustified: true,
+      }),
     ]);
 
     const summary = stats[0] ?? {
@@ -397,24 +372,19 @@ const getChildTeachers = async (req, res) => {
     const { studentId } = req.params;
     const parent = await verifyChildOwnership(req.user.id, studentId);
 
-    const student = await Student.findOne({
-      _id:          studentId,
-      schoolCampus: parent.schoolCampus,
-    }).select('studentClass').lean();
+    const student = await studentService.getStudentClassRef(studentId, parent.schoolCampus);
 
     if (!student) {
       return sendNotFound(res, 'Student');
     }
 
     // Distinct teachers from published sessions for this class
-    const sessions = await StudentSchedule.find({
-      'classes.classId': student.studentClass,
-      schoolCampus:      parent.schoolCampus,
-      status:            'PUBLISHED',
-      isDeleted:         false,
-    })
-      .select('teacher subject')
-      .lean();
+    const sessions = await studentService.listSessionsForClass({
+      classId:  student.studentClass,
+      campusId: parent.schoolCampus,
+      select:   'teacher subject',
+      sort:     null,
+    });
 
     // De-duplicate by teacherId
     const teacherMap = new Map();
@@ -549,37 +519,20 @@ const getDashboard = async (req, res) => {
           resultService.getRecentResultsForChild(studentId, campusId),
 
           // Current-year attendance summary
-          StudentAttendance.aggregate([
-            {
-              $match: {
-                student:      new mongoose.Types.ObjectId(studentId),
-                schoolCampus: new mongoose.Types.ObjectId(campusId),
-                academicYear: currentAcademicYear,
-              },
-            },
-            {
-              $group: {
-                _id:          null,
-                totalSessions:{ $sum: 1 },
-                presentCount: { $sum: { $cond: [{ $eq: ['$status', true] }, 1, 0] } },
-                absentCount:  { $sum: { $cond: [{ $eq: ['$status', false] }, 1, 0] } },
-              },
-            },
-          ]),
+          studentService.summarizeStudentAttendance({
+            studentId, campusId, academicYear: currentAcademicYear,
+          }),
 
           // Next 3 sessions
           classId
-            ? StudentSchedule.find({
-                'classes.classId': classId,
-                schoolCampus:      campusId,
-                status:            'PUBLISHED',
-                isDeleted:         false,
-                startTime:         { $gte: now, $lte: sevenDaysFromNow },
+            ? studentService.listSessionsForClass({
+                classId,
+                campusId,
+                from:   now,
+                to:     sevenDaysFromNow,
+                select: 'subject teacher startTime endTime sessionType room isVirtual',
+                limit:  3,
               })
-                .select('subject teacher startTime endTime sessionType room isVirtual')
-                .sort({ startTime: 1 })
-                .limit(3)
-                .lean()
             : Promise.resolve([]),
         ]);
 

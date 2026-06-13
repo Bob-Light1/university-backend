@@ -17,9 +17,7 @@
 
 const mongoose          = require('mongoose');
 const Mentor            = require('../mentor.model');
-// Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
-const StudentAttendance = require('../../../models/student-models/student.attend.model');
-const Student           = require('../../../models/student-models/student.model');
+const studentService    = require('../../student').service; // façade module student (§3)
 const courseService     = require('../../course').service; // façade module course (§3)
 // NB : l'ancien import `const Result = require('models/result.model')` ne
 // destructurait pas { Result } — Result.find/countDocuments étaient undefined
@@ -33,6 +31,7 @@ const {
   sendNotFound,
   sendPaginated,
 } = require('../../../shared/utils/response-helpers');
+const { escapeRegex } = require('../../../shared/utils/validation-helpers');
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -78,10 +77,10 @@ const getDashboard = async (req, res) => {
       recentResults,
     ] = await Promise.all([
       // Total assigned students
-      Student.countDocuments({ _id: { $in: studentIds } }),
+      studentService.countStudents({ studentIds }),
 
       // Active students
-      Student.countDocuments({ _id: { $in: studentIds }, status: 'active' }),
+      studentService.countStudents({ studentIds, status: 'active' }),
 
       // Total results published for their students
       studentIds.length
@@ -90,16 +89,7 @@ const getDashboard = async (req, res) => {
 
       // Attendance summary: total & present for their classes
       classIds.length
-        ? StudentAttendance.aggregate([
-            { $match: { class: { $in: classIds }, schoolCampus: campusId } },
-            {
-              $group: {
-                _id:     null,
-                total:   { $sum: 1 },
-                present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } },
-              },
-            },
-          ])
+        ? studentService.summarizeAttendanceTotals({ campusId, classIds })
         : Promise.resolve([]),
 
       // Last 5 published results for their students
@@ -147,26 +137,16 @@ const getMyStudents = async (req, res) => {
 
     const { page = 1, limit = 20, search, status, classId } = req.query;
 
-    const filter = { _id: { $in: studentIds } };
-    if (status)  filter.status = status;
-    if (classId) filter.studentClass = classId;
-    if (search) {
-      const rx = new RegExp(search.trim(), 'i');
-      filter.$or = [{ firstName: rx }, { lastName: rx }, { email: rx }, { matricule: rx }];
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Student.find(filter)
-        .select('-password -__v')
-        .populate('studentClass', 'className')
-        .populate('schoolCampus', 'campus_name')
-        .sort({ lastName: 1, firstName: 1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean({ virtuals: true }),
-      Student.countDocuments(filter),
-    ]);
+    // NB : la recherche n'échappait pas la regex (injection possible) — alignée
+    // sur la version échappée, comme le bug #6 (recherche de cours mentor).
+    const { docs, total } = await studentService.listStudentsForMentor({
+      studentIds,
+      status,
+      classId,
+      search: search ? escapeRegex(search.trim()) : undefined,
+      page,
+      limit,
+    });
 
     return sendPaginated(res, 200, 'Students retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
@@ -242,45 +222,26 @@ const getMyAttendance = async (req, res) => {
       classId, studentId, status, from, to,
     } = req.query;
 
-    const filter = { schoolCampus: toOid(req.user.campusId) };
-
     // Scope: either a specific class (must belong to mentor) or all their classes
-    if (classId) {
-      if (!classIds.map(String).includes(classId)) {
-        return sendError(res, 403, 'This class is not assigned to you.');
-      }
-      filter.class = toOid(classId);
-    } else if (classIds.length) {
-      filter.class = { $in: classIds };
+    if (classId && !classIds.map(String).includes(classId)) {
+      return sendError(res, 403, 'This class is not assigned to you.');
     }
-
     // Optionally further filter to a specific student
-    if (studentId) {
-      if (!studentIds.map(String).includes(studentId)) {
-        return sendError(res, 403, 'This student is not assigned to you.');
-      }
-      filter.student = toOid(studentId);
+    if (studentId && !studentIds.map(String).includes(studentId)) {
+      return sendError(res, 403, 'This student is not assigned to you.');
     }
 
-    if (status) filter.status = status;
-    if (from || to) {
-      filter.attendanceDate = {};
-      if (from) filter.attendanceDate.$gte = new Date(from);
-      if (to)   filter.attendanceDate.$lte = new Date(to);
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      StudentAttendance.find(filter)
-        .select('-__v')
-        .populate('student', 'firstName lastName matricule profileImage')
-        .populate('class',   'className')
-        .sort({ attendanceDate: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      StudentAttendance.countDocuments(filter),
-    ]);
+    const { docs, total } = await studentService.listAttendanceForMentor({
+      campusId:  toOid(req.user.campusId),
+      classId:   classId   ? toOid(classId)   : undefined,
+      classIds:  classId ? undefined : classIds,
+      studentId: studentId ? toOid(studentId) : undefined,
+      status,
+      from,
+      to,
+      page,
+      limit,
+    });
 
     return sendPaginated(res, 200, 'Attendance retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 

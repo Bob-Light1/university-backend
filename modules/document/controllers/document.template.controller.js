@@ -29,7 +29,7 @@ const { AUDIT_ACTION }     = require('../models/document.audit.model');
 const documentService      = require('../services/document.service');
 const { validateContentBlocks, validateTemplateData } = require('../services/document.validation.service');
 
-const Student = require('../../../models/student-models/student.model');
+const { getStudentForDocument } = require('../../student').service; // façade module student (§3)
 const { getTeacherForPayslip } = require('../../teacher').service; // façade module teacher (§3)
 const Class   = require('../../../models/class.model');
 const Campus  = require('../../../models/campus.model');
@@ -268,7 +268,7 @@ const generateStudentCard = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Generating typed documents requires CAMPUS_MANAGER or higher role');
   }
 
-  const student = await Student.findOne({ _id: req.params.studentId, schoolCampus: req.campusId }).lean();
+  const student = await getStudentForDocument(req.params.studentId, req.campusId);
   if (!student) return sendNotFound(res, 'Student');
 
   const campus = await Campus.findById(req.campusId).select('campus_name').lean();

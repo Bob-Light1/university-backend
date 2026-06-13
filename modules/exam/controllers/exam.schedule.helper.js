@@ -13,8 +13,9 @@
  */
 
 const ExamSession     = require('../models/exam.session.model');
-const StudentSchedule = require('../../../models/student-models/student.schedule.model');
-// Requires paresseux : teacher.dashboard consomme la façade exam (cycle exam ↔ teacher)
+// Requires paresseux : student.dashboard et teacher.dashboard consomment la
+// façade exam (cycles exam ↔ student et exam ↔ teacher)
+const studentService  = () => require('../../student').service;
 const teacherService  = () => require('../../teacher').service;
 const { SCHEDULE_STATUS } = require('../../../shared/utils/schedule.base');
 
@@ -103,11 +104,7 @@ const injectExamIntoSchedule = async (sessionId) => {
   };
 
   await Promise.all([
-    StudentSchedule.findOneAndUpdate(
-      { reference: ssRef },
-      { $set: studentFields },
-      { upsert: true, new: true }
-    ),
+    studentService().upsertStudentScheduleByReference(ssRef, studentFields),
     teacherService().upsertTeacherScheduleByReference(tsRef, teacherFields),
   ]);
 };
@@ -134,7 +131,7 @@ const syncExamScheduleStatus = async (sessionId, examStatus, timeUpdate = {}) =>
   const tsRef = `EXAM-TS-${sessionId}`;
 
   await Promise.all([
-    StudentSchedule.findOneAndUpdate({ reference: ssRef }, { $set: update }),
+    studentService().updateStudentScheduleByReference(ssRef, update),
     teacherService().updateTeacherScheduleByReference(tsRef, update),
   ]);
 };

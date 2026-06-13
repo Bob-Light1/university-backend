@@ -24,7 +24,7 @@ const bcrypt   = require('bcrypt');
 const mongoose = require('mongoose');
 
 const Parent  = require('../parent.model');
-const Student = require('../../../models/student-models/student.model');
+const studentService = require('../../student').service; // façade module student (§3)
 const {
   sendSuccess,
   sendError,
@@ -389,9 +389,7 @@ const updateParentChildren = async (req, res) => {
     // Validate each studentId: exists + same campus
     const invalidIds = [];
     if (children.length > 0) {
-      const students = await Student.find({ _id: { $in: children } })
-        .select('_id schoolCampus')
-        .lean();
+      const students = await studentService.getStudentsCampusRefs(children);
 
       const foundMap = new Map(students.map((s) => [s._id.toString(), s]));
 

@@ -14,9 +14,7 @@
  */
 
 const mongoose          = require('mongoose');
-// Cross-domaine : anciens chemins tant que ces domaines ne sont pas des modules (§6)
-const Student           = require('../../../models/student-models/student.model');
-const StudentAttendance = require('../../../models/student-models/student.attend.model');
+const studentService    = require('../../student').service;
 const teacherService    = require('../../teacher').service;
 const documentService   = require('../../document').service;
 const examService       = require('../../exam').service;
@@ -48,25 +46,16 @@ const getDashboard = async (req, res) => {
 
     if (perms.includes('students.read') || perms.includes('students.manage')) {
       queries.push(
-        Student.countDocuments({ schoolCampus: campusId })
+        studentService.countStudents({ campusId })
           .then((n) => { stats.totalStudents = n; }),
-        Student.countDocuments({ schoolCampus: campusId, status: 'active' })
+        studentService.countStudents({ campusId, status: 'active' })
           .then((n) => { stats.activeStudents = n; })
       );
     }
 
     if (perms.includes('attendance.read') || perms.includes('attendance.manage')) {
       queries.push(
-        StudentAttendance.aggregate([
-          { $match: { schoolCampus: campusId } },
-          {
-            $group: {
-              _id:     null,
-              total:   { $sum: 1 },
-              present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } },
-            },
-          },
-        ]).then(([r]) => {
+        studentService.summarizeAttendanceTotals({ campusId }).then(([r]) => {
           stats.attendanceTotal = r?.total ?? 0;
           stats.attendanceRate  = r?.total > 0
             ? Math.round((r.present / r.total) * 100)
@@ -114,22 +103,13 @@ const getMyStudents = async (req, res) => {
     const campusId = toOid(req.user.campusId);
     const { page = 1, limit = 20, search, status } = req.query;
 
-    const filter = { schoolCampus: campusId };
-    if (status) filter.status = status;
-    if (search) {
-      const rx = new RegExp(escapeRegex(search.trim()), 'i');
-      filter.$or = [{ firstName: rx }, { lastName: rx }, { email: rx }, { matricule: rx }];
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Student.find(filter)
-        .select('-password -__v')
-        .populate('studentClass', 'className')
-        .sort({ lastName: 1, firstName: 1 })
-        .skip(skip).limit(Number(limit)).lean({ virtuals: true }),
-      Student.countDocuments(filter),
-    ]);
+    const { docs, total } = await studentService.listStudentsForStaff({
+      campusId,
+      status,
+      search: search ? escapeRegex(search.trim()) : undefined,
+      page,
+      limit,
+    });
 
     return sendPaginated(res, 200, 'Students retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
@@ -151,31 +131,16 @@ const getMyAttendance = async (req, res) => {
     const campusId = toOid(req.user.campusId);
     const { page = 1, limit = 20, status, from, to, classId, studentId } = req.query;
 
-    const filter = { schoolCampus: campusId };
-    if (status) {
-      if      (status === 'present')  { filter.status = true;  filter.isLate = false; }
-      else if (status === 'late')     { filter.isLate = true; }
-      else if (status === 'excused')  { filter.status = false; filter.isJustified = true; }
-      else if (status === 'absent')   { filter.status = false; filter.isJustified = { $ne: true }; }
-    }
-    if (classId)   filter.class   = toOid(classId);
-    if (studentId) filter.student = toOid(studentId);
-    if (from || to) {
-      filter.attendanceDate = {};
-      if (from) filter.attendanceDate.$gte = new Date(from);
-      if (to)   filter.attendanceDate.$lte = new Date(to);
-    }
-
-    const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      StudentAttendance.find(filter)
-        .select('-__v')
-        .populate('student', 'firstName lastName matricule profileImage')
-        .populate('class', 'className')
-        .sort({ attendanceDate: -1 })
-        .skip(skip).limit(Number(limit)).lean(),
-      StudentAttendance.countDocuments(filter),
-    ]);
+    const { docs, total } = await studentService.listAttendanceForStaff({
+      campusId,
+      status,
+      classId:   classId   ? toOid(classId)   : undefined,
+      studentId: studentId ? toOid(studentId) : undefined,
+      from,
+      to,
+      page,
+      limit,
+    });
 
     return sendPaginated(res, 200, 'Attendance retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 

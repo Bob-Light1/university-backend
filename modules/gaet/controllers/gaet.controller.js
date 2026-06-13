@@ -39,14 +39,12 @@ const mongoose        = require('mongoose');
 const GaetConstraint  = require('../gaet-constraint.model');
 const { GAET_STATUS } = GaetConstraint;
 
-// Cross-domaine : anciens chemins tant que student/class/subject/teacher ne sont pas
-// des modules (transition — voir MODULAR_MONOLITH_MIGRATION.md §6)
-const StudentSchedule = require('../../../models/student-models/student.schedule.model');
 const { SCHEDULE_STATUS, SESSION_TYPE } = require('../../../shared/utils/schedule.base');
 
 const {
   resolveSessionParticipants,
   syncTeacherSchedule,
+  createScheduleSession,
 } = require('../../student').service;
 
 const { isValidObjectId, buildCampusFilter: _buildCampusFilter } = require('../../../shared/utils/validation-helpers');
@@ -493,7 +491,7 @@ const publishSchedule = asyncHandler(async (req, res) => {
       const startTime = nextWeekdayDate(day, startHour);
       const endTime   = nextWeekdayDate(day, endHour);
 
-      const ss = await StudentSchedule.create({
+      const ss = await createScheduleSession({
         schoolCampus:      campusId,
         academicYear,
         semester,

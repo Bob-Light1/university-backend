@@ -21,7 +21,7 @@ const mongoose = require('mongoose');
 
 const Teacher        = require('../models/teacher.model');
 const TeacherSchedule = require('../models/teacher.schedule.model');
-const Student        = require('../../../models/student-models/student.model');
+const studentService = require('../../student').service; // façade module student (§3)
 const examService    = require('../../exam').service; // façade module exam (§3)
 const {
   sendSuccess,
@@ -127,10 +127,7 @@ const getDashboard = async (req, res) => {
 
       // Active students in teacher's classes
       classIds.length
-        ? Student.countDocuments({
-            studentClass: { $in: classIds },
-            status:       'active',
-          })
+        ? studentService.countStudents({ studentClassIds: classIds, status: 'active' })
         : Promise.resolve(0),
     ]);
 
