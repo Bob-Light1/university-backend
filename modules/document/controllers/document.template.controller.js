@@ -29,7 +29,7 @@ const { AUDIT_ACTION }     = require('../models/document.audit.model');
 const documentService      = require('../services/document.service');
 const { validateContentBlocks, validateTemplateData } = require('../services/document.validation.service');
 
-const { getStudentForDocument } = require('../../student').service; // façade module student (§3)
+const { getStudentForDocument, listClassStudentsForList } = require('../../student').service; // façade module student (§3)
 const { getTeacherForPayslip } = require('../../teacher').service; // façade module teacher (§3)
 const { getClassForDocumentList } = require('../../class').service; // façade module class (§3)
 // Require paresseux : document est dans la cloture statique de campus (via staff)
@@ -338,6 +338,9 @@ const generateClassList = asyncHandler(async (req, res) => {
 
   if (!classDoc) return sendNotFound(res, 'Class');
 
+  // Roster depuis la source de vérité (Student.studentClass), pas Class.students[].
+  const students = await listClassStudentsForList(classDoc._id, req.campusId);
+
   const campus = await getCampusName(req.campusId);
 
   const dto = {
@@ -350,7 +353,7 @@ const generateClassList = asyncHandler(async (req, res) => {
       classId:      classDoc._id,
       academicYear: req.body.academicYear,
     },
-    body: buildClassListBlocks(classDoc, campus?.campus_name, req.body),
+    body: buildClassListBlocks(classDoc, campus?.campus_name, req.body, students),
   };
 
   const document = await documentService.createDocument(req, dto);
@@ -423,9 +426,9 @@ const buildPayslipBlocks = ({ teacher, campus, month, year, baseSalary, allowanc
   ];
 };
 
-const buildClassListBlocks = (classDoc, campusName, extra) => {
-  const students = (classDoc.students || []).map((s) => [
-    s.studentId || s._id.toString(),
+const buildClassListBlocks = (classDoc, campusName, extra, roster = []) => {
+  const students = roster.map((s) => [
+    s.matricule || s._id.toString(),
     `${s.firstName} ${s.lastName}`,
     s.gender || '',
   ]);

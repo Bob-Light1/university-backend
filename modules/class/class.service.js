@@ -112,22 +112,21 @@ const getClassForCourseLink = (classId, campusId) =>
     .lean();
 
 /**
- * Classe pour la génération d'une liste de classe imprimée.
+ * Métadonnées d'une classe d'un campus pour la génération d'une liste de classe
+ * imprimée (nom + campus). Le ROSTER n'est PAS résolu ici : `Class.students[]`
+ * n'est jamais alimenté (la source de vérité de l'inscription est
+ * `Student.studentClass`), donc l'appelant récupère les élèves via student.service.
  *
- * ⚠️ BUG LATENT n°8 (préservé) : la requête filtre sur `campus` et peuple
- * `mainTeacher`, deux champs ABSENTS du schéma Class (les vrais noms sont
- * `schoolCampus` et `classManager`). La requête ne matche donc jamais → le
- * endpoint POST .../class-list répond 404 « Class » en permanence. Comportement
- * conservé tel quel par la migration ; à corriger séparément.
+ * Correction bug #8 : interrogeait jadis `campus` (champ inexistant → 404
+ * permanent) et peuplait `students`/`mainTeacher` (jamais alimentés / inexistant).
  *
  * @param {string} classId
  * @param {string|ObjectId} campusId
- * @returns {Promise<Object|null>}
+ * @returns {Promise<{_id, className, schoolCampus}|null>}
  */
 const getClassForDocumentList = (classId, campusId) =>
-  Class.findOne({ _id: classId, campus: campusId })
-    .populate('students', 'firstName lastName gender studentId')
-    .populate('mainTeacher', 'firstName lastName')
+  Class.findOne({ _id: classId, schoolCampus: campusId })
+    .select('className schoolCampus')
     .lean();
 
 /**
