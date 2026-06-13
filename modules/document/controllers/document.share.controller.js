@@ -26,7 +26,8 @@ const DocumentShare   = require('../models/document.share.model');
 const { AUDIT_ACTION }    = require('../models/document.audit.model');
 const documentService     = require('../services/document.service');
 const pdfService          = require('../services/document.pdf.service');
-const Campus              = require('../../../models/campus.model');
+// Require paresseux : document est dans la cloture statique de campus (via staff)
+const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const {
   sendSuccess, sendCreated, sendError, sendForbidden, sendNotFound, asyncHandler,
@@ -179,7 +180,7 @@ const accessSharedDocument = asyncHandler(async (req, res) => {
   }
 
   // Generate or serve cached PDF
-  const campus     = await Campus.findById(doc.campusId).select('campus_name').lean();
+  const campus     = await getCampusName(doc.campusId);
   const campusName = campus?.campus_name || '';
 
   const { buffer } = await pdfService.getOrGeneratePdf(doc._id.toString(), campusName);

@@ -29,7 +29,8 @@ const mongoose = require('mongoose');
 const Partner           = require('../models/partner.model');
 const PartnerLead       = require('../models/partner.lead.model');
 const PartnerCommission = require('../models/partner.commission.model');
-const Campus            = require('../../../models/campus.model');
+// Require paresseux vers la façade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const getCampusCommissionConfig = (...args) => require('../../campus').service.getCampusCommissionConfig(...args);
 
 const {
   asyncHandler,
@@ -88,7 +89,7 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
     : null;
 
   if (!config) {
-    const campus = await Campus.findById(lead.schoolCampus).select('commissionConfig').lean();
+    const campus = await getCampusCommissionConfig(lead.schoolCampus);
     if (campus?.commissionConfig?.ruleType) {
       config = campus.commissionConfig;
     }

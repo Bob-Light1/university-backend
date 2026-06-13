@@ -169,7 +169,7 @@ router.get('/share/:token', shareLimiter, shareCtrl.accessSharedDocument);
 router.get('/verify/:ref', verifyLimiter, async (req, res) => {
   try {
     const Document = require('./models/document.model');
-    const Campus   = require('../../models/campus.model');
+    const { getCampusName } = require('../campus').service; // façade module campus (§3)
     const { sendSuccess, sendNotFound } = require('../../shared/utils/response-helpers');
 
     const doc = await Document
@@ -179,7 +179,7 @@ router.get('/verify/:ref', verifyLimiter, async (req, res) => {
 
     if (!doc) return sendNotFound(res, 'Document');
 
-    const campus = await Campus.findById(doc.campusId).select('campus_name').lean();
+    const campus = await getCampusName(doc.campusId);
 
     return sendSuccess(res, 200, 'Document verified', {
       valid:      true,

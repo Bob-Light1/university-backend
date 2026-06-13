@@ -11,7 +11,8 @@
  */
 
 const ContactMessage = require('../../models/contact.message.model');
-const Campus         = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 
 const {
   asyncHandler,
@@ -50,10 +51,7 @@ const submitContact = asyncHandler(async (req, res) => {
   // Resolve campus (optional — allows anonymous messages without a ref)
   let campusId = null;
   if (campusSlug?.trim()) {
-    const campus = await Campus.findOne({
-      campusSlug: campusSlug.toLowerCase().trim(),
-      status:     'active',
-    }).select('_id').lean();
+    const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
 
     if (!campus) return sendNotFound(res, 'Campus');
     campusId = campus._id;

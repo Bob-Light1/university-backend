@@ -5,8 +5,9 @@
 
 const SUPPORTED_TIMEZONES = require('./models/timezone-whitelist');
 const UserPreferences     = require('./models/userPreferences.model');
-// Shim racine — résorption en C5 (chantier 20b)
-const Campus              = require('../../models/campus.model');
+// Require paresseux : campus.controller consomme settings.getLoginPrefs
+// (settings est dans la cloture statique de campus → cycle si require statique).
+const getCampusDefaults = (...args) => require('../campus').service.getCampusDefaults(...args);
 
 const MODEL_MAP = {
   ADMIN:          'Admin',
@@ -34,9 +35,7 @@ async function getLoginPrefs(userId, role, campusId = null) {
     // Campus-level defaults (best-effort)
     let campusDefaults = {};
     if (campusId) {
-      const campus = await Campus.findById(campusId).select(
-        'defaultLanguage defaultTimezone defaultGradeFormat'
-      );
+      const campus = await getCampusDefaults(campusId);
       if (campus) {
         campusDefaults = {
           preferredLanguage: campus.defaultLanguage  || 'en',

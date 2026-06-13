@@ -9,7 +9,8 @@
  */
 
 const UserPreferences = require('../models/userPreferences.model');
-const Campus          = require('../../../models/campus.model');
+// Require paresseux : settings est dans la cloture statique de campus
+const getCampusDefaults = (...args) => require('../../campus').service.getCampusDefaults(...args);
 
 const {
   sendSuccess,
@@ -26,9 +27,7 @@ const SUPPORTED_DATE_FMTS  = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
 async function buildDefaultsFromCampus(campusId) {
   try {
     if (!campusId) return {};
-    const campus = await Campus.findById(campusId).select(
-      'defaultLanguage defaultTimezone defaultGradeFormat'
-    );
+    const campus = await getCampusDefaults(campusId);
     if (!campus) return {};
     return {
       preferredLanguage: campus.defaultLanguage || 'en',

@@ -11,7 +11,8 @@
 
 const { asyncHandler, sendSuccess, sendError } = require('../../../../shared/utils/response-helpers');
 const partnerService = require('../../../partner').service; // façade module partner (§3)
-const Campus         = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -40,7 +41,7 @@ const submitAlert = asyncHandler(async (req, res) => {
   const defaultSlug = process.env.DEFAULT_CAMPUS_SLUG ?? '';
   const slug = campusSlug?.trim() || defaultSlug;
 
-  const campus = await Campus.findOne({ campusSlug: slug, status: 'active' }).select('_id').lean();
+  const campus = await campusSvc().getActiveCampusBySlug(slug, '_id');
   if (!campus) {
     return sendError(res, 404, 'Campus not found.');
   }

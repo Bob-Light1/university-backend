@@ -22,7 +22,8 @@ const { nanoid } = require('nanoid');
 const Document         = require('../models/document.model');
 const DocumentAudit    = require('../models/document.audit.model');
 const DocumentVersion  = require('../models/document.version.model');
-const Campus           = require('../../../models/campus.model');
+// Require paresseux : document est dans la cloture statique de campus (via staff)
+const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
 const { validateContentBlocks }  = require('./document.validation.service');
@@ -220,10 +221,7 @@ const createDocument = async (req, dto) => {
     }
 
     // Fetch campus for ref generation and code extraction
-    const campus = await Campus
-      .findById(req.campusId || dto.campusId)
-      .select('campus_name')
-      .lean();
+    const campus = await getCampusName(req.campusId || dto.campusId);
 
     const campusCode = campus?.campus_name
       ? campus.campus_name.slice(0, 4).toUpperCase().replace(/\s/g, '')

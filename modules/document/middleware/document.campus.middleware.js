@@ -17,7 +17,8 @@
  */
 
 const mongoose = require('mongoose');
-const Campus   = require('../../../models/campus.model');
+// Require paresseux : document est dans la cloture statique de campus (via staff)
+const getCampusStorageInfo = (...args) => require('../../campus').service.getCampusStorageInfo(...args);
 const Document = require('../models/document.model');
 
 const { sendError, sendForbidden } = require('../../../shared/utils/response-helpers');
@@ -131,10 +132,7 @@ const enforceCampusStorageQuota = async (req, res, next) => {
     if (req.method !== 'POST') return next();
     if (req.isGlobalRole)      return next();
 
-    const campus = await Campus
-      .findById(req.campusId)
-      .select('features campus_name')
-      .lean();
+    const campus = await getCampusStorageInfo(req.campusId);
 
     if (!campus) {
       return sendError(res, 404, 'Campus not found');

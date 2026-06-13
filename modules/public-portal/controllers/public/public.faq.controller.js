@@ -9,7 +9,8 @@
  * transmis tel quel — le portail choisit la langue et met en cache 24h.
  */
 
-const Campus   = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 const FaqEntry = require('../../models/faq.entry.model');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
@@ -18,10 +19,7 @@ const getFaq = asyncHandler(async (req, res) => {
 
   if (!campusSlug?.trim()) return sendError(res, 400, 'campusSlug is required.');
 
-  const campus = await Campus.findOne({
-    campusSlug: campusSlug.toLowerCase().trim(),
-    status:     'active',
-  }).select('_id').lean();
+  const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
 
   if (!campus) return sendNotFound(res, 'Campus');
 

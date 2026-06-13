@@ -26,7 +26,8 @@
  */
 
 const partnerService = require('../../../partner').service; // façade module partner (§3)
-const Campus         = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 
 const {
   asyncHandler,
@@ -89,10 +90,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
       return sendError(res, 400, 'campusSlug is required for direct registrations.');
     }
 
-    const campus = await Campus.findOne({
-      campusSlug: campusSlug.toLowerCase().trim(),
-      status:     'active',
-    }).select('_id').lean();
+    const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
 
     if (!campus) {
       return sendNotFound(res, 'Campus');

@@ -11,7 +11,8 @@
  */
 
 const partnerService = require('../../../partner').service; // façade module partner (§3)
-const Campus         = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 
 const {
   asyncHandler,
@@ -49,10 +50,7 @@ const submitPartnerApplication = asyncHandler(async (req, res) => {
   // Resolve campus (optional, but encouraged to associate the application)
   let campusId = null;
   if (campusSlug?.trim()) {
-    const campus = await Campus.findOne({
-      campusSlug: campusSlug.toLowerCase().trim(),
-      status:     'active',
-    }).select('_id').lean();
+    const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
 
     if (!campus) return sendNotFound(res, 'Campus');
     campusId = campus._id;

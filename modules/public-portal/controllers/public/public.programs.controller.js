@@ -8,7 +8,8 @@
  * Utilisé dans le formulaire de pré-inscription pour alimenter le dropdown.
  */
 
-const Campus = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getPrograms = asyncHandler(async (req, res) => {
@@ -16,10 +17,7 @@ const getPrograms = asyncHandler(async (req, res) => {
 
   if (!campusSlug?.trim()) return sendError(res, 400, 'campusSlug is required.');
 
-  const campus = await Campus.findOne({
-    campusSlug: campusSlug.toLowerCase().trim(),
-    status:     'active',
-  }).select('programs campus_name').lean();
+  const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), 'programs campus_name');
 
   if (!campus) return sendNotFound(res, 'Campus');
 

@@ -20,7 +20,8 @@
 const mongoose    = require('mongoose');
 const QuizQuestion = require('../../models/quiz.question.model');
 const QuizSession  = require('../../models/quiz.session.model');
-const Campus       = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
@@ -31,10 +32,7 @@ const getQuizQuestions = asyncHandler(async (req, res) => {
 
   if (!campusSlug?.trim()) return sendError(res, 400, 'campusSlug is required.');
 
-  const campus = await Campus.findOne({
-    campusSlug: campusSlug.toLowerCase().trim(),
-    status:     'active',
-  }).select('_id').lean();
+  const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
 
   if (!campus) return sendNotFound(res, 'Campus');
 
@@ -84,10 +82,7 @@ const submitQuiz = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'answers must be a non-empty array.');
   }
 
-  const campus = await Campus.findOne({
-    campusSlug: campusSlug.toLowerCase().trim(),
-    status:     'active',
-  }).select('_id programs').lean();
+  const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id programs');
 
   if (!campus) return sendNotFound(res, 'Campus');
 

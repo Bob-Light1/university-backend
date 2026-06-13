@@ -32,7 +32,8 @@ const { validateContentBlocks, validateTemplateData } = require('../services/doc
 const { getStudentForDocument } = require('../../student').service; // façade module student (§3)
 const { getTeacherForPayslip } = require('../../teacher').service; // façade module teacher (§3)
 const { getClassForDocumentList } = require('../../class').service; // façade module class (§3)
-const Campus  = require('../../../models/campus.model');
+// Require paresseux : document est dans la cloture statique de campus (via staff)
+const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const {
   sendSuccess, sendCreated, sendError, sendForbidden, sendNotFound, asyncHandler,
@@ -250,7 +251,7 @@ const previewTemplate = asyncHandler(async (req, res) => {
   const resolvedBody          = resolveTemplateVariables(template.layout, templateData);
 
   const { buildHtmlTemplate } = require('../services/document.pdf.service');
-  const campus     = req.campusId ? await Campus.findById(req.campusId).select('campus_name').lean() : null;
+  const campus     = req.campusId ? await getCampusName(req.campusId) : null;
   const mockDoc    = { title: template.name, body: resolvedBody, branding: template.branding, ref: 'PREVIEW' };
   const html       = buildHtmlTemplate(mockDoc, campus?.campus_name || '');
 
@@ -271,7 +272,7 @@ const generateStudentCard = asyncHandler(async (req, res) => {
   const student = await getStudentForDocument(req.params.studentId, req.campusId);
   if (!student) return sendNotFound(res, 'Student');
 
-  const campus = await Campus.findById(req.campusId).select('campus_name').lean();
+  const campus = await getCampusName(req.campusId);
 
   const dto = {
     title:    `Student ID Card — ${student.firstName} ${student.lastName}`,
@@ -308,7 +309,7 @@ const generateTeacherPayslip = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'month, year, and baseSalary are required for payslip generation');
   }
 
-  const campus = await Campus.findById(req.campusId).select('campus_name').lean();
+  const campus = await getCampusName(req.campusId);
 
   const dto = {
     title:    `Payslip — ${teacher.firstName} ${teacher.lastName} — ${month}/${year}`,
@@ -337,7 +338,7 @@ const generateClassList = asyncHandler(async (req, res) => {
 
   if (!classDoc) return sendNotFound(res, 'Class');
 
-  const campus = await Campus.findById(req.campusId).select('campus_name').lean();
+  const campus = await getCampusName(req.campusId);
 
   const dto = {
     title:    `Class List — ${classDoc.name || classDoc.className} — ${req.body.academicYear || ''}`,

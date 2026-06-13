@@ -16,7 +16,7 @@
 
 require('dotenv').config();
 const mongoose         = require('mongoose');
-const Campus           = require('../models/campus.model');
+const Campus           = require('../modules/campus/campus.model');
 const CompetitionPrize = require('../modules/public-portal/models/competition.prize.model');
 
 const DRY_RUN  = process.argv.includes('--dry-run');

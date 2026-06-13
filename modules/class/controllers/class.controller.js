@@ -1,5 +1,6 @@
 const Class = require('../class.model');
-const Campus = require('../../../models/campus.model');
+// Require paresseux : class est dans la cloture statique de campus
+const getCampusDocById = (...args) => require('../../campus').service.getCampusDocById(...args);
 const {
   sendSuccess,
   sendError,
@@ -72,7 +73,7 @@ exports.createClass = async (req, res) => {
       return sendConflict(res, 'A class with this name already exists for this level and campus');
     }
 
-    const campus = await Campus.findById(schoolCampus);
+    const campus = await getCampusDocById(schoolCampus);
     if (campus) {
       const canAdd = await campus.canAddClass();
       if (!canAdd) {

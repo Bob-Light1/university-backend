@@ -13,7 +13,8 @@
  */
 
 const partnerService = require('../../../partner').service; // façade module partner (§3)
-const Campus         = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
@@ -41,17 +42,10 @@ const getCampusInfo = asyncHandler(async (req, res) => {
     partnerCode = partner.partnerCode;
     // Filtre status:active — cohérent avec la résolution par slug ; un campus
     // archivé ne doit jamais fuiter via un code partenaire encore actif.
-    campus = await Campus.findOne({ _id: partner.schoolCampus, status: 'active' })
-      .select(CAMPUS_PUBLIC_FIELDS)
-      .lean();
+    campus = await campusSvc().getActiveCampusById(partner.schoolCampus, CAMPUS_PUBLIC_FIELDS);
   } else {
     // Résolution via campusSlug
-    campus = await Campus.findOne({
-      campusSlug: slug.toLowerCase().trim(),
-      status:     'active',
-    })
-      .select(CAMPUS_PUBLIC_FIELDS)
-      .lean();
+    campus = await campusSvc().getActiveCampusBySlug(slug.toLowerCase().trim(), CAMPUS_PUBLIC_FIELDS);
   }
 
   if (!campus) {
@@ -84,13 +78,9 @@ const getCampusInfo = asyncHandler(async (req, res) => {
  * l'établissement compte plusieurs campus (spec §3.4).
  */
 const listCampuses = asyncHandler(async (req, res) => {
-  const campuses = await Campus.find({
-    status:     'active',
-    campusSlug: { $ne: null },
-  })
-    .select('campus_name campusSlug campus_image location.city location.country')
-    .sort({ campus_name: 1 })
-    .lean();
+  const campuses = await campusSvc().listActivePublicCampuses(
+    'campus_name campusSlug campus_image location.city location.country'
+  );
 
   const data = campuses.map((campus) => ({
     campusSlug: campus.campusSlug,

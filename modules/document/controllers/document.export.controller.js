@@ -28,7 +28,8 @@ const { AUDIT_ACTION }   = require('../models/document.audit.model');
 const documentService    = require('../services/document.service');
 const pdfService         = require('../services/document.pdf.service');
 const storageService     = require('../services/document.storage.service');
-const Campus             = require('../../../models/campus.model');
+// Require paresseux : document est dans la cloture statique de campus (via staff)
+const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const {
   sendSuccess, sendError, sendNotFound, sendForbidden, asyncHandler,
@@ -66,7 +67,7 @@ const exportPdf = asyncHandler(async (req, res) => {
 
   if (!doc) return sendNotFound(res, 'Document');
 
-  const campus     = await Campus.findById(doc.campusId).select('campus_name').lean();
+  const campus     = await getCampusName(doc.campusId);
   const campusName = campus?.campus_name || '';
 
   const { fileName, buffer } = await pdfService.getOrGeneratePdf(doc._id.toString(), campusName);
@@ -173,7 +174,7 @@ const bulkExport = asyncHandler(async (req, res) => {
   }
 
   const campus     = req.campusId
-    ? await Campus.findById(req.campusId).select('campus_name').lean()
+    ? await getCampusName(req.campusId)
     : null;
   const campusName = campus?.campus_name || '';
 
@@ -286,7 +287,7 @@ const processPrintJob = async (jobId, campusId, documentIds) => {
     const deadline = Date.now() + timeout;
 
     const campus     = campusId
-      ? await Campus.findById(campusId).select('campus_name').lean()
+      ? await getCampusName(campusId)
       : null;
     const campusName = campus?.campus_name || '';
 

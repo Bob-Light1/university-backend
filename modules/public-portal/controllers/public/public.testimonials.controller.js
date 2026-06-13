@@ -9,7 +9,8 @@
  * Citation bilingue ({fr, en}) transmise telle quelle — le portail choisit la langue.
  */
 
-const Campus      = require('../../../../models/campus.model');
+// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const campusSvc = () => require('../../../campus').service;
 const Testimonial = require('../../models/testimonial.model');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
@@ -21,10 +22,7 @@ const getTestimonials = asyncHandler(async (req, res) => {
 
   if (!campusSlug?.trim()) return sendError(res, 400, 'campusSlug is required.');
 
-  const campus = await Campus.findOne({
-    campusSlug: campusSlug.toLowerCase().trim(),
-    status:     'active',
-  }).select('_id').lean();
+  const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
 
   if (!campus) return sendNotFound(res, 'Campus');
 

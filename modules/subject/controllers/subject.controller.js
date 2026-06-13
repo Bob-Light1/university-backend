@@ -1,5 +1,4 @@
 const Subject = require('../subject.model');
-const Campus = require('../../../models/campus.model');
 const {
   sendSuccess,
   sendError,
