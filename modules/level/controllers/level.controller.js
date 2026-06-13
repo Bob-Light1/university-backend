@@ -1,4 +1,4 @@
-const Level = require("../level.model");
+const levelRepo = require("../level.repository");
 
 /**
  * Create a new level
@@ -18,7 +18,7 @@ exports.createLevel = async (req, res) => {
     }
 
     // Check for existing level with same code & type
-    const exists = await Level.findOne({ code, type });
+    const exists = await levelRepo.findByCodeAndType(code, type);
     if (exists) {
       return res.status(409).json({
         success: false,
@@ -26,7 +26,7 @@ exports.createLevel = async (req, res) => {
       });
     }
 
-    const level = await Level.create({
+    const level = await levelRepo.create({
       name,
       code,
       type,
@@ -57,10 +57,7 @@ exports.getLevels = async (req, res) => {
   try {
     const { type } = req.query;
 
-    const filter = { status: "active" };
-    if (type) filter.type = type;
-
-    const levels = await Level.find(filter).sort({ order: 1 });
+    const levels = await levelRepo.listActive({ type });
 
     res.status(200).json({
       success: true,
@@ -83,7 +80,7 @@ exports.getLevels = async (req, res) => {
  */
 exports.getLevelById = async (req, res) => {
   try {
-    const level = await Level.findById(req.params.id);
+    const level = await levelRepo.findById(req.params.id);
 
     if (!level) {
       return res.status(404).json({
@@ -114,23 +111,22 @@ exports.updateLevel = async (req, res) => {
   try {
     const { name, code, type, order, description, status } = req.body;
 
-    const level = await Level.findById(req.params.id);
+    // Build the set of fields actually provided (sémantique "update partiel").
+    const fields = {};
+    if (name !== undefined) fields.name = name;
+    if (code !== undefined) fields.code = code;
+    if (type !== undefined) fields.type = type;
+    if (order !== undefined) fields.order = order;
+    if (description !== undefined) fields.description = description;
+    if (status !== undefined) fields.status = status;
+
+    const level = await levelRepo.updateById(req.params.id, fields);
     if (!level) {
       return res.status(404).json({
         success: false,
         message: "Level not found",
       });
     }
-
-    // Update fields only if provided
-    if (name !== undefined) level.name = name;
-    if (code !== undefined) level.code = code;
-    if (type !== undefined) level.type = type;
-    if (order !== undefined) level.order = order;
-    if (description !== undefined) level.description = description;
-    if (status !== undefined) level.status = status;
-
-    await level.save();
 
     res.status(200).json({
       success: true,
@@ -161,7 +157,7 @@ exports.updateLevel = async (req, res) => {
  */
 exports.deleteLevel = async (req, res) => {
   try {
-    const level = await Level.findById(req.params.id);
+    const level = await levelRepo.setStatus(req.params.id, "archived");
 
     if (!level) {
       return res.status(404).json({
@@ -169,9 +165,6 @@ exports.deleteLevel = async (req, res) => {
         message: "Level not found",
       });
     }
-
-    level.status = "archived";
-    await level.save();
 
     res.status(200).json({
       success: true,
@@ -188,7 +181,7 @@ exports.deleteLevel = async (req, res) => {
 
 exports.restoreLevel = async (req, res) => {
   try {
-    const level = await Level.findById(req.params.id);
+    const level = await levelRepo.findById(req.params.id);
 
     if (!level) {
       return res.status(404).json({ success: false, message: "Level not found" });
@@ -198,8 +191,7 @@ exports.restoreLevel = async (req, res) => {
       return res.status(400).json({ success: false, message: "Level is not archived" });
     }
 
-    level.status = 'active';
-    await level.save();
+    await levelRepo.setStatus(req.params.id, 'active');
 
     res.status(200).json({ success: true, message: "Level restored successfully" });
   } catch (error) {
