@@ -19,14 +19,13 @@
  *
  *  Versioning (createNewVersion):
  *  ─────────────────────────────────────────────────────────────────
- *  Clone APPROVED → new DRAFT (version + 1).
- *  The two writes (mark old isLatestVersion: false, insert new) are
- *  wrapped in a MongoDB session for atomicity.
+ *  Clone APPROVED → new DRAFT (version + 1). Les deux écritures (retrait de
+ *  l'ancienne latest + insertion) sont enveloppées dans une transaction Mongo,
+ *  possédée par course.repository.cloneAsNewVersion.
  */
 
-const mongoose = require('mongoose');
-
-const { Course, APPROVAL_STATUS } = require('../course.model');
+const { APPROVAL_STATUS } = require('../course.model');
+const courseRepo = require('../course.repository');
 
 const {
   asyncHandler,
@@ -37,7 +36,6 @@ const {
 } = require('../../../shared/utils/response-helpers');
 
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
-const { COURSE_POPULATE }  = require('./course.helper');
 
 // ─── VALID TRANSITION GUARD ───────────────────────────────────────────────────
 
@@ -61,27 +59,27 @@ const submitForReview = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
-  if (!course) return sendNotFound(res, 'Course');
+  const current = await courseRepo.findActiveByIdLean(id);
+  if (!current) return sendNotFound(res, 'Course');
 
-  if (!isValidTransition(course.approvalStatus, APPROVAL_STATUS.PENDING_REVIEW)) {
+  if (!isValidTransition(current.approvalStatus, APPROVAL_STATUS.PENDING_REVIEW)) {
     return sendError(
       res,
       400,
-      `Cannot submit a course with status '${course.approvalStatus}'. Must be DRAFT or REJECTED.`,
+      `Cannot submit a course with status '${current.approvalStatus}'. Must be DRAFT or REJECTED.`,
     );
   }
 
-  course.approvalStatus = APPROVAL_STATUS.PENDING_REVIEW;
-  course.approvalHistory.push({
-    status:  APPROVAL_STATUS.PENDING_REVIEW,
-    note:    req.body.note?.trim() || 'Submitted for review',
-    actor:   req.user.id,
-    actedAt: new Date(),
+  const course = await courseRepo.applyStatusTransition(id, {
+    newStatus: APPROVAL_STATUS.PENDING_REVIEW,
+    historyEntry: {
+      status:  APPROVAL_STATUS.PENDING_REVIEW,
+      note:    req.body.note?.trim() || 'Submitted for review',
+      actor:   req.user.id,
+      actedAt: new Date(),
+    },
   });
-
-  await course.save();
-  await course.populate(COURSE_POPULATE.DETAIL);
+  if (!course) return sendNotFound(res, 'Course');
 
   return sendSuccess(res, 200, 'Course submitted for review.', course);
 });
@@ -96,27 +94,27 @@ const approveCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
-  if (!course) return sendNotFound(res, 'Course');
+  const current = await courseRepo.findActiveByIdLean(id);
+  if (!current) return sendNotFound(res, 'Course');
 
-  if (!isValidTransition(course.approvalStatus, APPROVAL_STATUS.APPROVED)) {
+  if (!isValidTransition(current.approvalStatus, APPROVAL_STATUS.APPROVED)) {
     return sendError(
       res,
       400,
-      `Cannot approve a course with status '${course.approvalStatus}'. Must be PENDING_REVIEW.`,
+      `Cannot approve a course with status '${current.approvalStatus}'. Must be PENDING_REVIEW.`,
     );
   }
 
-  course.approvalStatus = APPROVAL_STATUS.APPROVED;
-  course.approvalHistory.push({
-    status:  APPROVAL_STATUS.APPROVED,
-    note:    req.body.note?.trim() || 'Approved',
-    actor:   req.user.id,
-    actedAt: new Date(),
+  const course = await courseRepo.applyStatusTransition(id, {
+    newStatus: APPROVAL_STATUS.APPROVED,
+    historyEntry: {
+      status:  APPROVAL_STATUS.APPROVED,
+      note:    req.body.note?.trim() || 'Approved',
+      actor:   req.user.id,
+      actedAt: new Date(),
+    },
   });
-
-  await course.save();
-  await course.populate(COURSE_POPULATE.DETAIL);
+  if (!course) return sendNotFound(res, 'Course');
 
   return sendSuccess(res, 200, 'Course approved successfully.', course);
 });
@@ -142,27 +140,27 @@ const rejectCourse = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Rejection note must not exceed 500 characters.');
   }
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
-  if (!course) return sendNotFound(res, 'Course');
+  const current = await courseRepo.findActiveByIdLean(id);
+  if (!current) return sendNotFound(res, 'Course');
 
-  if (!isValidTransition(course.approvalStatus, APPROVAL_STATUS.REJECTED)) {
+  if (!isValidTransition(current.approvalStatus, APPROVAL_STATUS.REJECTED)) {
     return sendError(
       res,
       400,
-      `Cannot reject a course with status '${course.approvalStatus}'. Must be PENDING_REVIEW.`,
+      `Cannot reject a course with status '${current.approvalStatus}'. Must be PENDING_REVIEW.`,
     );
   }
 
-  course.approvalStatus = APPROVAL_STATUS.REJECTED;
-  course.approvalHistory.push({
-    status:  APPROVAL_STATUS.REJECTED,
-    note,
-    actor:   req.user.id,
-    actedAt: new Date(),
+  const course = await courseRepo.applyStatusTransition(id, {
+    newStatus: APPROVAL_STATUS.REJECTED,
+    historyEntry: {
+      status:  APPROVAL_STATUS.REJECTED,
+      note,
+      actor:   req.user.id,
+      actedAt: new Date(),
+    },
   });
-
-  await course.save();
-  await course.populate(COURSE_POPULATE.DETAIL);
+  if (!course) return sendNotFound(res, 'Course');
 
   return sendSuccess(res, 200, 'Course rejected.', course);
 });
@@ -175,14 +173,9 @@ const rejectCourse = asyncHandler(async (req, res) => {
  *
  * @body {boolean} [copyResources=true]
  *   When false, the new draft is created without the parent's resources array.
- *   Useful when the resource set is large or entirely version-specific.
- *   Defaults to true for backward compatibility.
  *
- * Atomicity guarantee:
- *  Step 1 — mark old document isLatestVersion: false
- *  Step 2 — create new document (version + 1, DRAFT)
- * Both steps run inside a MongoDB session (withTransaction).
- * A crash between the two steps will automatically roll back.
+ * Atomicité : la transaction (retrait de l'ancienne latest + insertion) est
+ * gérée par course.repository.cloneAsNewVersion.
  */
 const createNewVersion = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -191,13 +184,7 @@ const createNewVersion = asyncHandler(async (req, res) => {
   // copyResources defaults to true — explicit false opt-out only
   const copyResources = req.body.copyResources !== false;
 
-  // Load outside session for a quick 404 check
-  const original = await Course.findOne({
-    _id:             id,
-    status:          { $ne: 'archived' },
-    isLatestVersion: true,
-  }).lean();
-
+  const original = await courseRepo.findLatestActiveLean(id);
   if (!original) return sendNotFound(res, 'Course (latest version)');
 
   if (original.approvalStatus !== APPROVAL_STATUS.APPROVED) {
@@ -207,85 +194,13 @@ const createNewVersion = asyncHandler(async (req, res) => {
     );
   }
 
-  // ── Atomic transaction ──────────────────────────────────────────────────────
-  const dbSession = await mongoose.startSession();
   let newCourse;
-
   try {
-    await dbSession.withTransaction(async () => {
-      // Re-verify inside the transaction — guards against a concurrent approve/reject
-      // that would have changed the status between the outer check and this write.
-      const locked = await Course.findOne(
-        { _id: original._id, approvalStatus: APPROVAL_STATUS.APPROVED, isLatestVersion: true },
-        null,
-        { session: dbSession },
-      ).lean();
-
-      if (!locked) {
-        throw Object.assign(
-          new Error('Course status changed concurrently. Please refresh and retry.'),
-          { statusCode: 409 },
-        );
-      }
-
-      // Step 1 — retire the current latest version
-      await Course.findByIdAndUpdate(
-        original._id,
-        { isLatestVersion: false },
-        { session: dbSession },
-      );
-
-      // Step 2 — build the new draft (omit Mongoose-managed fields)
-      const {
-        _id, __v, createdAt, updatedAt,
-        slug,                // will be regenerated by pre('validate')
-        approvalStatus,      // reset to DRAFT
-        approvalHistory,     // fresh history for new version
-        isLatestVersion,     // set to true
-        version,
-        resources,           // conditionally copied — see copyResources flag
-        ...cloneData
-      } = original;
-
-      // Build the initial approval history entry, noting resource copy decision
-      const initNote = copyResources
-        ? `New version v${version + 1} created from v${version} (resources copied)`
-        : `New version v${version + 1} created from v${version} (resources not copied)`;
-
-      const [created] = await Course.create(
-        [
-          {
-            ...cloneData,
-            // Conditionally carry forward parent resources
-            resources:       copyResources ? (resources || []) : [],
-            version:         version + 1,
-            parentCourseId:  original._id,
-            isLatestVersion: true,
-            approvalStatus:  APPROVAL_STATUS.DRAFT,
-            approvalHistory: [
-              {
-                status:  APPROVAL_STATUS.DRAFT,
-                note:    initNote,
-                actor:   req.user.id,
-                actedAt: new Date(),
-              },
-            ],
-            createdBy: req.user.id,
-          },
-        ],
-        { session: dbSession },
-      );
-
-      newCourse = created;
-    });
+    newCourse = await courseRepo.cloneAsNewVersion({ original, actorId: req.user.id, copyResources });
   } catch (err) {
     if (err.statusCode === 409) return sendConflict(res, err.message);
     throw err;
-  } finally {
-    await dbSession.endSession();
   }
-
-  await newCourse.populate(COURSE_POPULATE.DETAIL);
 
   return sendSuccess(
     res,

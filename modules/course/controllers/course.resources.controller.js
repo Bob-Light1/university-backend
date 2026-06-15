@@ -17,7 +17,7 @@
  *    req.user.id, and only whitelisted resource fields are accepted.
  */
 
-const { Course } = require('../course.model');
+const courseRepo = require('../course.repository');
 
 const {
   asyncHandler,
@@ -28,7 +28,7 @@ const {
 } = require('../../../shared/utils/response-helpers');
 
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
-const { RESOURCE_WRITABLE_FIELDS, isManagerRole, pickFields } = require('./course.helper');
+const { RESOURCE_WRITABLE_FIELDS, pickFields } = require('./course.helper');
 
 // ─── ADD RESOURCE ─────────────────────────────────────────────────────────────
 
@@ -37,14 +37,13 @@ const { RESOURCE_WRITABLE_FIELDS, isManagerRole, pickFields } = require('./cours
  * Add a learning resource to a course.
  *
  * Roles: ADMIN, DIRECTOR, CAMPUS_MANAGER.
- * CAMPUS_MANAGER can add resources but cannot modify course fields.
  * `addedBy` is always forced to req.user.id (never trusted from body).
  */
 const addResource = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
+  const course = await courseRepo.findActiveByIdLean(id);
   if (!course) return sendNotFound(res, 'Course');
 
   // Whitelist — prevents CAMPUS_MANAGER from injecting other course fields
@@ -70,21 +69,18 @@ const addResource = asyncHandler(async (req, res) => {
   }
 
   // Force server-side fields — never trust the client for these
-  course.resources.push({
-    ...resourceData,
-    addedBy: req.user.id,
-    addedAt: new Date(),
-  });
-
   try {
-    await course.save();
+    const addedResource = await courseRepo.pushResource(id, {
+      ...resourceData,
+      addedBy: req.user.id,
+      addedAt: new Date(),
+    });
+    if (!addedResource) return sendNotFound(res, 'Course');
+    return sendSuccess(res, 201, 'Resource added successfully.', addedResource);
   } catch (err) {
     if (err.message.includes('MIME type')) return sendError(res, 400, err.message);
     throw err;
   }
-
-  const addedResource = course.resources[course.resources.length - 1];
-  return sendSuccess(res, 201, 'Resource added successfully.', addedResource);
 });
 
 // ─── REMOVE RESOURCE ──────────────────────────────────────────────────────────
@@ -100,20 +96,17 @@ const removeResource = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id))         return sendError(res, 400, 'Invalid course ID.');
   if (!isValidObjectId(resourceId)) return sendError(res, 400, 'Invalid resource ID.');
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
+  const course = await courseRepo.findActiveByIdLean(id);
   if (!course) return sendNotFound(res, 'Course');
 
-  const resourceExists = course.resources.some(
+  const resourceExists = (course.resources || []).some(
     (r) => r._id.toString() === resourceId,
   );
 
   if (!resourceExists) return sendNotFound(res, 'Resource');
 
-  course.resources = course.resources.filter(
-    (r) => r._id.toString() !== resourceId,
-  );
-
-  await course.save();
+  const removed = await courseRepo.pullResource(id, resourceId);
+  if (!removed) return sendNotFound(res, 'Course');
 
   return sendSuccess(res, 200, 'Resource removed successfully.');
 });

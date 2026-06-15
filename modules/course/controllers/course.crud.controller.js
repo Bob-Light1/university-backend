@@ -22,9 +22,8 @@
  *  • softDeleteCourse is blocked while active Subject references exist.
  */
 
-const mongoose = require('mongoose');
-
-const { Course, APPROVAL_STATUS } = require('../course.model');
+const { APPROVAL_STATUS } = require('../course.model');
+const courseRepo = require('../course.repository');
 // Requires paresseux : subject.course-link consomme la façade course (cycle course ↔ subject)
 const subjectService = () => require('../../subject').service;
 
@@ -47,7 +46,6 @@ const {
   COURSE_APPROVED_MUTABLE_FIELDS,
   SORT_MAP,
   DEFAULT_SORT,
-  COURSE_POPULATE,
   parsePositiveInt,
   pickFields,
   hasPedagogicalFields,
@@ -85,29 +83,20 @@ const createCourse = asyncHandler(async (req, res) => {
 
     // Verify all referenced prerequisite courses actually exist in the catalog
     const prereqIds = payload.prerequisites.map((p) => p.course);
-    const foundCount = await Course.countDocuments({
-      _id:       { $in: prereqIds },
-      status: { $ne: 'archived' },
-    });
+    const foundCount = await courseRepo.countExistingActive(prereqIds);
     if (foundCount !== prereqIds.length) {
       return sendError(res, 400, 'One or more prerequisite courses do not exist.');
     }
   }
 
   try {
-    const course = await Course.create({
+    const course = await courseRepo.create({
       ...payload,
       version:         1,
       isLatestVersion: true,
       approvalStatus:  APPROVAL_STATUS.DRAFT,
       createdBy:       req.user.id,
     });
-
-    // Populate level for the response
-    await course.populate([
-      { path: 'level',     select: 'name description' },
-      { path: 'createdBy', select: 'firstName lastName' },
-    ]);
 
     return sendCreated(res, 'Course created successfully.', course);
   } catch (err) {
@@ -149,15 +138,7 @@ const listCourses = asyncHandler(async (req, res) => {
   // Sort
   const sort = SORT_MAP[req.query.sort] || DEFAULT_SORT;
 
-  const [courses, total] = await Promise.all([
-    Course.find(filter)
-      .sort(sort)
-      .skip(skip)
-      .limit(limit)
-      .populate(COURSE_POPULATE.LIST)
-      .lean({ virtuals: true }),
-    Course.countDocuments(filter),
-  ]);
+  const { data: courses, total } = await courseRepo.paginateList({ filter, sort, skip, limit });
 
   // Filter private resources for STUDENT role
   const isStudent = req.user.role === 'STUDENT';
@@ -186,9 +167,7 @@ const getCourseById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } })
-    .populate(COURSE_POPULATE.DETAIL)
-    .lean({ virtuals: true });
+  const course = await courseRepo.findActiveByIdDetailed(id);
 
   if (!course) return sendNotFound(res, 'Course');
 
@@ -214,13 +193,7 @@ const getCourseById = asyncHandler(async (req, res) => {
 const getCourseByCode = asyncHandler(async (req, res) => {
   const { courseCode } = req.params;
 
-  const course = await Course.findOne({
-    courseCode: courseCode.toUpperCase().trim(),
-    isLatestVersion: true,
-    status: { $ne: 'archived' },
-  })
-    .populate(COURSE_POPULATE.DETAIL)
-    .lean({ virtuals: true });
+  const course = await courseRepo.findLatestActiveByCode(courseCode.toUpperCase().trim());
 
   if (!course) return sendNotFound(res, 'Course');
 
@@ -252,25 +225,14 @@ const getCourseVersions = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
   // Find the reference course to get the courseCode
-  const ref = await Course.findOne({ _id: id, status: { $ne: 'archived' } }).select('courseCode').lean();
+  const ref = await courseRepo.findCodeById(id);
   if (!ref) return sendNotFound(res, 'Course');
 
   const page  = parsePositiveInt(req.query.page, 1);
   const limit = Math.min(parsePositiveInt(req.query.limit, 10), 50);
   const skip  = (page - 1) * limit;
 
-  const [versions, total] = await Promise.all([
-    Course.find({ courseCode: ref.courseCode, status: { $ne: 'archived' } })
-      .sort({ version: -1 })
-      .skip(skip)
-      .limit(limit)
-      .populate([
-        { path: 'createdBy',             select: 'firstName lastName' },
-        { path: 'approvalHistory.actor', select: 'firstName lastName' },
-      ])
-      .lean({ virtuals: true }),
-    Course.countDocuments({ courseCode: ref.courseCode, status: { $ne: 'archived' } }),
-  ]);
+  const { data: versions, total } = await courseRepo.paginateVersions(ref.courseCode, { skip, limit });
 
   return sendPaginated(res, 200, 'Version history retrieved successfully.', versions, {
     total,
@@ -294,10 +256,10 @@ const updateCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
-  if (!course) return sendNotFound(res, 'Course');
+  const current = await courseRepo.findActiveByIdLean(id);
+  if (!current) return sendNotFound(res, 'Course');
 
-  const isApproved = course.approvalStatus === APPROVAL_STATUS.APPROVED;
+  const isApproved = current.approvalStatus === APPROVAL_STATUS.APPROVED;
 
   // Guard: pedagogical fields on APPROVED course
   if (isApproved && hasPedagogicalFields(req.body)) {
@@ -331,12 +293,9 @@ const updateCourse = asyncHandler(async (req, res) => {
     }
   }
 
-  // Apply updates
-  Object.assign(course, updates);
-
   try {
-    await course.save();
-    await course.populate(COURSE_POPULATE.DETAIL);
+    const course = await courseRepo.applyUpdate(id, updates);
+    if (!course) return sendNotFound(res, 'Course');
     return sendSuccess(res, 200, 'Course updated successfully.', course);
   } catch (err) {
     if (err.code === 11000) return handleDuplicateKeyError(res, err);
@@ -358,8 +317,8 @@ const softDeleteCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, status: { $ne: 'archived' } });
-  if (!course) return sendNotFound(res, 'Course');
+  const current = await courseRepo.findActiveByIdLean(id);
+  if (!current) return sendNotFound(res, 'Course');
 
   // Guard: check for active Subject references
   const affected = await subjectService().listActiveSubjectsLinkedToCourse(id);
@@ -376,18 +335,11 @@ const softDeleteCourse = asyncHandler(async (req, res) => {
     );
   }
 
-  course.status    = 'archived';
-  course.deletedAt = new Date();
-  course.deletedBy = req.user.id;
-  await course.save();
+  const deleted = await courseRepo.archiveById(id, { deletedBy: req.user.id });
+  if (!deleted) return sendNotFound(res, 'Course');
 
   // Warn if other courses reference this one as a prerequisite (non-blocking)
-  const dependentCourses = await Course.find({
-    'prerequisites.course': id,
-    status:                 { $ne: 'archived' },
-  })
-    .select('courseCode title version approvalStatus')
-    .lean();
+  const dependentCourses = await courseRepo.listDependents(id);
 
   const responseData = dependentCourses.length
     ? {
@@ -415,13 +367,8 @@ const restoreCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid course ID.');
 
-  const course = await Course.findOne({ _id: id, status: 'archived' });
+  const course = await courseRepo.restoreById(id);
   if (!course) return sendNotFound(res, 'Deleted course');
-
-  course.status    = 'active';
-  course.deletedAt = undefined;
-  course.deletedBy = undefined;
-  await course.save();
 
   return sendSuccess(res, 200, 'Course restored successfully.', { id: course._id });
 });
