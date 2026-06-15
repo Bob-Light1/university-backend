@@ -22,7 +22,7 @@ const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-const Mentor     = require('../mentor.model');
+const mentorRepo = require('../mentor.repository');
 const studentService = require('../../student').service; // façade module student (§3)
 const profileSvc = require('../../../shared/services/profile.service');
 const {
@@ -102,9 +102,7 @@ const loginMentor = async (req, res) => {
       return sendError(res, 400, 'Invalid email format.');
     }
 
-    const mentor = await Mentor.findOne(query)
-      .select('+password')
-      .lean({ virtuals: true });
+    const mentor = await mentorRepo.findByCredential(query);
 
     if (!mentor) return sendError(res, 401, 'Invalid credentials.');
 
@@ -124,7 +122,7 @@ const loginMentor = async (req, res) => {
       issuer:    'school-management-app',
     });
 
-    Mentor.findByIdAndUpdate(mentor._id, { lastLogin: new Date() }).exec().catch(() => {});
+    mentorRepo.touchLastLogin(mentor._id).catch(() => {});
 
     const prefs = await getLoginPrefs(mentor._id, 'MENTOR', mentor.schoolCampus ?? null);
 
@@ -161,7 +159,7 @@ const createMentor = async (req, res) => {
     // Default password if not provided
     if (!body.password) body.password = 'Mentor@123';
 
-    const mentor = await Mentor.create(body);
+    const mentor = await mentorRepo.create(body);
 
     const doc = mentor.toObject({ virtuals: true });
     delete doc.password;
@@ -194,31 +192,15 @@ const getAllMentors = async (req, res) => {
     const campusFilter = getCampusFilter(req);
     const { page = 1, limit = 20, search, status, includeArchived } = req.query;
 
-    const filter = { ...campusFilter };
-    if (status) {
-      filter.status = status;
-    } else if (includeArchived !== 'true') {
-      filter.status = { $ne: 'archived' };
-    }
-    if (search) {
-      const rx = new RegExp(escapeRegex(search.trim()), 'i');
-      filter.$or = [
-        { firstName: rx }, { lastName: rx },
-        { email: rx }, { username: rx },
-      ];
-    }
-
     const skip  = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Mentor.find(filter)
-        .select('-password -__v')
-        .populate('schoolCampus', 'campus_name')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean({ virtuals: true }),
-      Mentor.countDocuments(filter),
-    ]);
+    const { data: docs, total } = await mentorRepo.paginate({
+      campusFilter,
+      status,
+      includeArchived: includeArchived === 'true',
+      search,
+      skip,
+      limit: Number(limit),
+    });
 
     return sendPaginated(res, 200, 'Mentors retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
@@ -244,10 +226,7 @@ const getOneMentor = async (req, res) => {
       ? { _id: id, schoolCampus: new mongoose.Types.ObjectId(req.user.campusId) }
       : { ...getCampusFilter(req), _id: id };
 
-    const mentor = await Mentor.findOne(campusFilter)
-      .select('-password -__v')
-      .populate('schoolCampus', 'campus_name')
-      .lean({ virtuals: true });
+    const mentor = await mentorRepo.findOneScoped(campusFilter);
 
     if (!mentor) return sendNotFound(res, 'Mentor');
     return sendSuccess(res, 200, 'Mentor retrieved.', mentor);
@@ -279,11 +258,7 @@ const updateMentor = async (req, res) => {
 
     const campusFilter = { ...getCampusFilter(req), _id: id };
 
-    const mentor = await Mentor.findOneAndUpdate(
-      campusFilter,
-      { $set: body },
-      { new: true, runValidators: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const mentor = await mentorRepo.updateScoped(campusFilter, body);
 
     if (!mentor) return sendNotFound(res, 'Mentor');
     return sendSuccess(res, 200, 'Mentor updated.', mentor);
@@ -322,11 +297,7 @@ const updateMentorStatus = async (req, res) => {
     }
 
     const campusFilter = { ...getCampusFilter(req), _id: id };
-    const mentor = await Mentor.findOneAndUpdate(
-      campusFilter,
-      { $set: { status } },
-      { new: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const mentor = await mentorRepo.setStatusScoped(campusFilter, status);
 
     if (!mentor) return sendNotFound(res, 'Mentor');
     return sendSuccess(res, 200, 'Mentor status updated.', mentor);
@@ -352,11 +323,11 @@ const resetMentorPassword = async (req, res) => {
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid mentor ID format.');
 
     const campusFilter = { ...getCampusFilter(req), _id: id };
-    const mentor = await Mentor.findOne(campusFilter);
+    const mentor = await mentorRepo.findOneScopedLean(campusFilter);
     if (!mentor) return sendNotFound(res, 'Mentor');
 
     const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await Mentor.findByIdAndUpdate(mentor._id, { password: hashed });
+    await mentorRepo.updatePassword(mentor._id, hashed);
 
     return sendSuccess(res, 200, 'Mentor password reset successfully.');
 
@@ -379,11 +350,7 @@ const archiveMentor = async (req, res) => {
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid mentor ID format.');
 
     const campusFilter = { ...getCampusFilter(req), _id: id };
-    const mentor = await Mentor.findOneAndUpdate(
-      campusFilter,
-      { $set: { status: 'archived' } },
-      { new: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const mentor = await mentorRepo.setStatusScoped(campusFilter, 'archived');
 
     if (!mentor) return sendNotFound(res, 'Mentor');
     return sendSuccess(res, 200, 'Mentor archived.', mentor);
@@ -407,11 +374,7 @@ const restoreMentor = async (req, res) => {
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid mentor ID format.');
 
     const campusFilter = { ...getCampusFilter(req), _id: id };
-    const mentor = await Mentor.findOneAndUpdate(
-      campusFilter,
-      { $set: { status: 'active' } },
-      { new: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const mentor = await mentorRepo.setStatusScoped(campusFilter, 'active');
 
     if (!mentor) return sendNotFound(res, 'Mentor');
     return sendSuccess(res, 200, 'Mentor restored.', mentor);
@@ -434,7 +397,7 @@ const deleteMentor = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid mentor ID format.');
 
-    const mentor = await Mentor.findByIdAndDelete(id);
+    const mentor = await mentorRepo.deleteById(id);
     if (!mentor) return sendNotFound(res, 'Mentor');
 
     return sendSuccess(res, 200, 'Mentor permanently deleted.');
@@ -487,7 +450,7 @@ const assignStudents = async (req, res) => {
     }
 
     const campusFilter = getCampusFilter(req);
-    const mentor = await Mentor.findOne({ ...campusFilter, _id: id }).lean();
+    const mentor = await mentorRepo.findOneScopedLean({ ...campusFilter, _id: id });
     if (!mentor) return sendNotFound(res, 'Mentor');
 
     const campusOid = new mongoose.Types.ObjectId(mentor.schoolCampus);
@@ -543,10 +506,7 @@ const assignStudents = async (req, res) => {
       updateOp = { $set: { students: uniqueIds } };
     }
 
-    const updated = await Mentor.findByIdAndUpdate(mentor._id, updateOp, { new: true })
-      .select('-password -__v')
-      .populate('students', 'firstName lastName email matricule studentClass status profileImage')
-      .lean({ virtuals: true });
+    const updated = await mentorRepo.applyStudentAssignment(mentor._id, updateOp);
 
     const verb = mode === 'add' ? 'added to' : mode === 'remove' ? 'removed from' : 'set for';
     return sendSuccess(res, 200, `Students ${verb} mentor.`, {

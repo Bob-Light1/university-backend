@@ -16,7 +16,7 @@
  */
 
 const mongoose          = require('mongoose');
-const Mentor            = require('../mentor.model');
+const mentorRepo        = require('../mentor.repository');
 const studentService    = require('../../student').service; // façade module student (§3)
 const courseService     = require('../../course').service; // façade module course (§3)
 // NB : l'ancien import `const Result = require('models/result.model')` ne
@@ -42,10 +42,7 @@ const toOid  = (id) => new mongoose.Types.ObjectId(id);
  * Returns null and sends 404 if not found.
  */
 const loadMentor = async (req, res) => {
-  const mentor = await Mentor.findOne({
-    _id:          toOid(req.user.id),
-    schoolCampus: toOid(req.user.campusId),
-  }).select('students classes schoolCampus').lean();
+  const mentor = await mentorRepo.findAssignmentsFor(toOid(req.user.id), toOid(req.user.campusId));
 
   if (!mentor) {
     sendNotFound(res, 'Mentor');
