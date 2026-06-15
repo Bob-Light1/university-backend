@@ -8,18 +8,14 @@
  *     student.model lors d'un hard-delete).
  */
 
-const Parent = require('./parent.model');
+const parentRepo = require('./parent.repository');
 
 /**
  * Retire studentId de children[] chez tous les parents concernés.
  * @param {ObjectId|string} studentId
  * @returns {Promise<{modifiedCount: number}>}
  */
-const removeChildFromAllParents = (studentId) =>
-  Parent.updateMany(
-    { children: studentId },
-    { $pull: { children: studentId } }
-  ).exec();
+const removeChildFromAllParents = (studentId) => parentRepo.removeChildFromAll(studentId);
 
 module.exports = {
   removeChildFromAllParents,

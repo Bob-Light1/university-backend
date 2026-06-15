@@ -23,7 +23,7 @@ const crypto   = require('crypto');
 const bcrypt   = require('bcrypt');
 const mongoose = require('mongoose');
 
-const Parent  = require('../parent.model');
+const parentRepo = require('../parent.repository');
 const studentService = require('../../student').service; // façade module student (§3)
 const {
   sendSuccess,
@@ -124,15 +124,11 @@ const createParent = async (req, res) => {
       body.children = toArray(body.children) ?? [];
     }
 
-    const parent = await Parent.create(body);
+    const parent = await parentRepo.create(body);
 
     auditLog(req, 'CREATE_PARENT', parent._id);
 
-    const populated = await Parent.findById(parent._id)
-      .select('-password -__v')
-      .populate('schoolCampus', 'campus_name')
-      .populate('children',     'firstName lastName')
-      .lean({ virtuals: true });
+    const populated = await parentRepo.findByIdForResponse(parent._id);
 
     return sendSuccess(res, 201, 'Parent account created successfully.', populated);
 
@@ -169,53 +165,33 @@ const getAllParents = async (req, res) => {
 
     // includeArchived toggle — mirrors the behaviour of GenericEntityController
     const includeArchived = req.query.includeArchived === 'true';
-    const filter = { ...campusFilter, ...(includeArchived ? {} : { status: { $ne: 'archived' } }) };
 
-    // Optional campusId override for ADMIN/DIRECTOR
-    if (GLOBAL_ROLES.includes(req.user.role) && req.query.campusId) {
-      if (isValidObjectId(req.query.campusId)) {
-        filter.schoolCampus = new mongoose.Types.ObjectId(req.query.campusId);
-      }
+    // Optional campusId override for ADMIN/DIRECTOR (validated here)
+    let campusIdOverride;
+    if (GLOBAL_ROLES.includes(req.user.role) && req.query.campusId && isValidObjectId(req.query.campusId)) {
+      campusIdOverride = new mongoose.Types.ObjectId(req.query.campusId);
     }
 
-    // Status filter — 'archived' is only meaningful when includeArchived=true,
-    // otherwise it would silently overwrite the { $ne: 'archived' } base filter.
+    // Status filter — 'archived' is only meaningful when includeArchived=true.
     const allowedStatuses = includeArchived
       ? ['active', 'inactive', 'suspended', 'archived']
       : ['active', 'inactive', 'suspended'];
+    const status = req.query.status && allowedStatuses.includes(req.query.status) ? req.query.status : undefined;
 
-    if (req.query.status && allowedStatuses.includes(req.query.status)) {
-      filter.status = req.query.status;
-    }
-
-    // Relationship filter
     const VALID_RELATIONSHIPS = ['father', 'mother', 'guardian', 'other'];
-    if (req.query.relationship && VALID_RELATIONSHIPS.includes(req.query.relationship)) {
-      filter.relationship = req.query.relationship;
-    }
+    const relationship = req.query.relationship && VALID_RELATIONSHIPS.includes(req.query.relationship)
+      ? req.query.relationship : undefined;
 
-    // Search by name, email or reference
-    if (req.query.search) {
-      const rx = new RegExp(req.query.search.trim(), 'i');
-      filter.$or = [
-        { firstName: rx },
-        { lastName:  rx },
-        { email:     rx },
-        { parentRef: rx },
-      ];
-    }
-
-    const [data, total] = await Promise.all([
-      Parent.find(filter)
-        .select('-password -__v -notes')
-        .populate('schoolCampus', 'campus_name')
-        .populate('children',     'firstName lastName profileImage')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean({ virtuals: true }),
-      Parent.countDocuments(filter),
-    ]);
+    const { data, total } = await parentRepo.paginate({
+      campusFilter,
+      includeArchived,
+      campusIdOverride,
+      status,
+      relationship,
+      search: req.query.search,
+      skip,
+      limit,
+    });
 
     return sendPaginated(res, 200, 'Parents retrieved successfully.', data, { total, page, limit });
 
@@ -241,11 +217,7 @@ const getParentById = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
-    const parent = await Parent.findOne({ _id: id, ...campusFilter })
-      .select('-password -__v')
-      .populate('schoolCampus', 'campus_name location')
-      .populate('children',     'firstName lastName profileImage studentClass status')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.findScopedDetailed(id, campusFilter);
 
     if (!parent) return sendNotFound(res, 'Parent');
 
@@ -287,15 +259,7 @@ const updateParent = async (req, res) => {
       updates.children = toArray(updates.children) ?? [];
     }
 
-    const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, status: { $ne: 'archived' } },
-      { $set: updates },
-      { new: true, runValidators: true }
-    )
-      .select('-password -__v')
-      .populate('schoolCampus', 'campus_name')
-      .populate('children',     'firstName lastName')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.updateScoped(id, campusFilter, updates);
 
     if (!parent) return sendNotFound(res, 'Parent');
 
@@ -336,13 +300,7 @@ const updateParentStatus = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
-    const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, status: { $ne: 'archived' } },
-      { $set: { status } },
-      { new: true }
-    )
-      .select('-password -__v -notes')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.setStatusScoped(id, campusFilter, status);
 
     if (!parent) return sendNotFound(res, 'Parent');
 
@@ -380,8 +338,7 @@ const updateParentChildren = async (req, res) => {
     const campusFilter = getCampusFilter(req);
 
     // Fetch parent to get schoolCampus
-    const parent = await Parent.findOne({ _id: id, ...campusFilter, status: { $ne: 'archived' } })
-      .select('schoolCampus');
+    const parent = await parentRepo.findActiveScoped(id, campusFilter);
     if (!parent) return sendNotFound(res, 'Parent');
 
     const campusStr = parent.schoolCampus.toString();
@@ -407,14 +364,7 @@ const updateParentChildren = async (req, res) => {
       return sendError(res, 400, 'Some student IDs are invalid.', invalidIds);
     }
 
-    const updated = await Parent.findByIdAndUpdate(
-      id,
-      { $set: { children } },
-      { new: true, runValidators: true }
-    )
-      .select('-password -__v -notes')
-      .populate('children', 'firstName lastName profileImage')
-      .lean({ virtuals: true });
+    const updated = await parentRepo.setChildren(id, children);
 
     auditLog(req, 'UPDATE_PARENT_CHILDREN', id);
 
@@ -445,8 +395,7 @@ const resetParentPassword = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
-    const parent = await Parent.findOne({ _id: id, ...campusFilter, status: { $ne: 'archived' } })
-      .select('+password');
+    const parent = await parentRepo.findActiveScoped(id, campusFilter);
     if (!parent) return sendNotFound(res, 'Parent');
 
     // Generate a secure random temporary password
@@ -454,7 +403,7 @@ const resetParentPassword = async (req, res) => {
     const salt         = await bcrypt.genSalt(SALT_ROUNDS);
     const hashed       = await bcrypt.hash(tempPassword, salt);
 
-    await Parent.findByIdAndUpdate(id, { password: hashed });
+    await parentRepo.updatePassword(id, hashed);
 
     auditLog(req, 'RESET_PARENT_PASSWORD', id);
 
@@ -491,7 +440,7 @@ const deleteParent = async (req, res) => {
     const campusFilter = getCampusFilter(req);
 
     if (hardDelete) {
-      const parent = await Parent.findOneAndDelete({ _id: id, ...campusFilter });
+      const parent = await parentRepo.hardDeleteScoped(id, campusFilter);
       if (!parent) return sendNotFound(res, 'Parent');
 
       auditLog(req, 'HARD_DELETE_PARENT', id);
@@ -499,11 +448,7 @@ const deleteParent = async (req, res) => {
     }
 
     // Soft-delete
-    const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, status: { $ne: 'archived' } },
-      { $set: { status: 'archived' } },
-      { new: true }
-    );
+    const parent = await parentRepo.archiveScoped(id, campusFilter);
     if (!parent) return sendNotFound(res, 'Parent');
 
     auditLog(req, 'SOFT_DELETE_PARENT', id);
@@ -531,11 +476,7 @@ const restoreParent = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
-    const parent = await Parent.findOneAndUpdate(
-      { _id: id, ...campusFilter, status: 'archived' },
-      { $set: { status: 'active' } },
-      { new: true }
-    );
+    const parent = await parentRepo.restoreScoped(id, campusFilter);
 
     if (!parent) return sendNotFound(res, 'Archived parent');
 

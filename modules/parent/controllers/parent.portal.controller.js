@@ -23,7 +23,7 @@
 
 const mongoose = require('mongoose');
 
-const Parent              = require('../parent.model');
+const parentRepo          = require('../parent.repository');
 const studentService      = require('../../student').service; // façade module student (§3)
 const resultService       = require('../../result').service; // façade module result (§3)
 const {
@@ -66,7 +66,7 @@ const verifyChildOwnership = async (parentId, studentId) => {
     throw err;
   }
 
-  const parent = await Parent.findById(parentId).select('schoolCampus children').lean();
+  const parent = await parentRepo.findOwnership(parentId);
   if (!parent) {
     const err = new Error('Parent account not found.');
     err.statusCode = 403;
@@ -94,10 +94,7 @@ const verifyChildOwnership = async (parentId, studentId) => {
  */
 const getChildren = async (req, res) => {
   try {
-    const parent = await Parent.findById(req.user.id)
-      .select('children schoolCampus')
-      .populate('children', 'firstName lastName profileImage studentClass status schoolCampus')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.findChildren(req.user.id);
 
     if (!parent) {
       return sendNotFound(res, 'Parent');
@@ -489,10 +486,7 @@ const getChildComments = async (req, res) => {
  */
 const getDashboard = async (req, res) => {
   try {
-    const parent = await Parent.findById(req.user.id)
-      .select('children schoolCampus firstName lastName')
-      .populate('children', 'firstName lastName profileImage studentClass status')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.findForDashboard(req.user.id);
 
     if (!parent) {
       return sendNotFound(res, 'Parent');

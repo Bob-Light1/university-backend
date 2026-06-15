@@ -16,7 +16,7 @@
 const bcrypt = require('bcrypt');
 const jwt    = require('jsonwebtoken');
 
-const Parent  = require('../parent.model');
+const parentRepo = require('../parent.repository');
 const {
   sendSuccess,
   sendError,
@@ -105,9 +105,7 @@ const loginParent = async (req, res) => {
       return sendError(res, 400, 'Invalid email format.');
     }
 
-    const parent = await Parent.findOne(query)
-      .select('+password')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.findByCredential(query);
 
     // Generic error — never reveal whether the account exists
     if (!parent) {
@@ -138,7 +136,7 @@ const loginParent = async (req, res) => {
     );
 
     // Update lastLogin — fire-and-forget (must not block the response)
-    Parent.findByIdAndUpdate(parent._id, { lastLogin: new Date() }).exec().catch(() => {});
+    parentRepo.touchLastLogin(parent._id).catch(() => {});
 
     const prefs = await getLoginPrefs(parent._id, 'PARENT', parent.schoolCampus ?? null);
 
@@ -163,11 +161,7 @@ const loginParent = async (req, res) => {
  */
 const getMe = async (req, res) => {
   try {
-    const parent = await Parent.findById(req.user.id)
-      .select('-password -__v -notes') // notes are admin-only
-      .populate('schoolCampus', 'campus_name location')
-      .populate('children', 'firstName lastName profileImage studentClass status')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.findByIdForProfile(req.user.id);
 
     if (!parent) {
       return sendNotFound(res, 'Parent');
@@ -206,7 +200,7 @@ const updatePassword = async (req, res) => {
     }
 
     // Fetch parent with password field
-    const parent = await Parent.findById(req.user.id).select('+password');
+    const parent = await parentRepo.findByIdWithPassword(req.user.id);
     if (!parent) {
       return sendNotFound(res, 'Parent');
     }
@@ -221,12 +215,10 @@ const updatePassword = async (req, res) => {
       return sendError(res, 400, 'New password must differ from the current password.');
     }
 
-    // Hash + save (pre-save hook will re-hash; bypass by setting directly)
-    const salt    = await bcrypt.genSalt(SALT_ROUNDS);
-    parent.password = await bcrypt.hash(newPassword, salt);
-    // Mark as not modified so pre-save doesn't double-hash
-    parent.$ignore('password');
-    await Parent.findByIdAndUpdate(parent._id, { password: parent.password });
+    // Hash le nouveau mot de passe et l'écrit directement (bypass du pre-save).
+    const salt   = await bcrypt.genSalt(SALT_ROUNDS);
+    const hashed = await bcrypt.hash(newPassword, salt);
+    await parentRepo.updatePassword(parent._id, hashed);
 
     return sendSuccess(res, 200, 'Password updated successfully.');
 
@@ -261,14 +253,7 @@ const updateProfile = async (req, res) => {
       return sendError(res, 400, 'No updatable fields provided. Allowed: phone, address, preferredLanguage, notificationPrefs.');
     }
 
-    const parent = await Parent.findByIdAndUpdate(
-      req.user.id,
-      { $set: updates },
-      { new: true, runValidators: true }
-    )
-      .select('-password -__v -notes')
-      .populate('schoolCampus', 'campus_name')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.updateOwnProfile(req.user.id, updates);
 
     if (!parent) {
       return sendNotFound(res, 'Parent');
@@ -312,13 +297,7 @@ const uploadProfileImage = async (req, res) => {
       return sendError(res, 400, 'profileImageUrl is required.');
     }
 
-    const parent = await Parent.findByIdAndUpdate(
-      req.user.id,
-      { $set: { profileImage: profileImageUrl.trim() } },
-      { new: true }
-    )
-      .select('_id firstName lastName profileImage')
-      .lean({ virtuals: true });
+    const parent = await parentRepo.updateProfileImage(req.user.id, profileImageUrl.trim());
 
     if (!parent) {
       return sendNotFound(res, 'Parent');

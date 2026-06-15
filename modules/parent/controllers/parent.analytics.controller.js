@@ -15,17 +15,21 @@
 
 const mongoose = require('mongoose');
 
-const Parent = require('../parent.model');
+const parentRepo = require('../parent.repository');
 const {
   sendSuccess,
   sendError,
 } = require('../../../shared/utils/response-helpers');
 const { buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
 /**
  * Wraps buildCampusFilter and surfaces 403 for scope violations.
+ * (Le cast schoolCampus → ObjectId pour les pipelines d'agrégation est fait
+ *  dans parent.repository.)
  */
 const getCampusFilter = (user, requestedCampusId) => {
   try {
@@ -36,30 +40,9 @@ const getCampusFilter = (user, requestedCampusId) => {
   }
 };
 
-/**
- * Cast the `schoolCampus` field to ObjectId for aggregation $match stages.
- *
- * Mongoose auto-casts string IDs in find() / countDocuments() queries, but
- * MongoDB aggregation pipelines do NOT — they perform a strict type comparison.
- * Without this cast every $match on schoolCampus returns 0 documents for any
- * campus-scoped user whose JWT carries campusId as a plain string.
- */
-const castForAggregation = (filter) => {
-  if (!filter.schoolCampus) return filter;
-  return {
-    ...filter,
-    schoolCampus: new mongoose.Types.ObjectId(String(filter.schoolCampus)),
-  };
-};
-
 // ── PLATFORM-WIDE PARENT STATS ────────────────────────────────────────────────
 
 /**
- * Return aggregated parent counts and status breakdown.
- * ADMIN / DIRECTOR see all campuses; CAMPUS_MANAGER sees their own campus only.
- *
- * Query params: ?campusId (optional override for ADMIN/DIRECTOR)
- *
  * @route  GET /api/parents/stats
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
@@ -69,28 +52,10 @@ const getParentStats = async (req, res) => {
 
     const [statusBreakdown, relationshipBreakdown, recentCount, archivedCount] =
       await Promise.all([
-
-        // Status breakdown
-        Parent.aggregate([
-          { $match: { ...castForAggregation(campusFilter), status: { $ne: 'archived' } } },
-          { $group: { _id: '$status', count: { $sum: 1 } } },
-        ]),
-
-        // Relationship breakdown
-        Parent.aggregate([
-          { $match: { ...castForAggregation(campusFilter), status: { $ne: 'archived' } } },
-          { $group: { _id: '$relationship', count: { $sum: 1 } } },
-        ]),
-
-        // Parents created in the last 30 days
-        Parent.countDocuments({
-          ...campusFilter,
-          status:    { $ne: 'archived' },
-          createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-        }),
-
-        // Archived parents
-        Parent.countDocuments({ ...campusFilter, status: 'archived' }),
+        parentRepo.aggregateStatusBreakdown(campusFilter),
+        parentRepo.aggregateRelationshipBreakdown(campusFilter),
+        parentRepo.countRecent(campusFilter, new Date(Date.now() - 30 * DAY_MS)),
+        parentRepo.countArchived(campusFilter),
       ]);
 
     const total  = statusBreakdown.reduce((sum, s) => sum + s.count, 0);
@@ -119,9 +84,6 @@ const getParentStats = async (req, res) => {
 // ── PER-CAMPUS PARENT STATS ───────────────────────────────────────────────────
 
 /**
- * Return detailed parent statistics for a single campus.
- * CAMPUS_MANAGER can only query their own campus.
- *
  * @route  GET /api/parents/stats/campus/:campusId
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
@@ -136,8 +98,6 @@ const getCampusParentStats = async (req, res) => {
     // Enforce isolation: CAMPUS_MANAGER may only query their own campus
     const campusFilter = getCampusFilter(req.user, campusId);
 
-    const aggFilter = castForAggregation(campusFilter);
-
     const [
       statusBreakdown,
       relationshipBreakdown,
@@ -146,63 +106,12 @@ const getCampusParentStats = async (req, res) => {
       monthlyRegistrations,
       recentCount,
     ] = await Promise.all([
-
-      // Status breakdown
-      Parent.aggregate([
-        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
-        { $group: { _id: '$status', count: { $sum: 1 } } },
-      ]),
-
-      // Relationship breakdown
-      Parent.aggregate([
-        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
-        { $group: { _id: '$relationship', count: { $sum: 1 } } },
-      ]),
-
-      // Gender breakdown
-      Parent.aggregate([
-        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
-        { $group: { _id: '$gender', count: { $sum: 1 } } },
-      ]),
-
-      // Distribution of children count per parent
-      Parent.aggregate([
-        { $match: { ...aggFilter, status: { $ne: 'archived' } } },
-        {
-          $group: {
-            _id:   { $size: '$children' },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { _id: 1 } },
-      ]),
-
-      // Monthly registrations — last 12 months
-      Parent.aggregate([
-        {
-          $match: {
-            ...aggFilter,
-            createdAt: { $gte: new Date(Date.now() - 365 * 24 * 60 * 60 * 1000) },
-          },
-        },
-        {
-          $group: {
-            _id: {
-              year:  { $year:  '$createdAt' },
-              month: { $month: '$createdAt' },
-            },
-            count: { $sum: 1 },
-          },
-        },
-        { $sort: { '_id.year': 1, '_id.month': 1 } },
-      ]),
-
-      // Parents created in the last 30 days (countDocuments auto-casts, no need for aggFilter)
-      Parent.countDocuments({
-        ...campusFilter,
-        status:    { $ne: 'archived' },
-        createdAt: { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) },
-      }),
+      parentRepo.aggregateStatusBreakdown(campusFilter),
+      parentRepo.aggregateRelationshipBreakdown(campusFilter),
+      parentRepo.aggregateGenderBreakdown(campusFilter),
+      parentRepo.aggregateChildrenDistribution(campusFilter),
+      parentRepo.aggregateMonthlyRegistrations(campusFilter, new Date(Date.now() - 365 * DAY_MS)),
+      parentRepo.countRecent(campusFilter, new Date(Date.now() - 30 * DAY_MS)),
     ]);
 
     const total  = statusBreakdown.reduce((sum, s) => sum + s.count, 0);
@@ -237,10 +146,6 @@ const getCampusParentStats = async (req, res) => {
 // ── GET PARENTS BY STUDENT ────────────────────────────────────────────────────
 
 /**
- * Return all parents linked to a specific student.
- * Useful for admin / teacher contact lookups.
- * CAMPUS_MANAGER is isolated to their own campus.
- *
  * @route  GET /api/parents/by-student/:studentId
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
@@ -254,14 +159,7 @@ const getParentsByStudent = async (req, res) => {
 
     const campusFilter = getCampusFilter(req.user, req.query.campusId);
 
-    const parents = await Parent.find({
-      ...campusFilter,
-      children: studentId,
-      status:   { $ne: 'archived' },
-    })
-      .select('-password -__v -notes')
-      .populate('schoolCampus', 'campus_name location')
-      .lean({ virtuals: true });
+    const parents = await parentRepo.findByStudent(campusFilter, studentId);
 
     if (parents.length === 0) {
       return sendSuccess(res, 200, 'No parents found for this student.', {
