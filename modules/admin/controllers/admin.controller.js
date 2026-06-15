@@ -30,7 +30,8 @@ require('dotenv').config();
 const bcrypt  = require('bcrypt');
 const jwt     = require('jsonwebtoken');
 
-const Admin      = require('../admin.model');
+const Admin      = require('../admin.model'); // passé au profileSvc partagé (hors repo)
+const adminRepo  = require('../admin.repository');
 const profileSvc = require('../../../shared/services/profile.service');
 
 const {
@@ -118,8 +119,7 @@ const loginAdmin = asyncHandler(async (req, res) => {
   }
 
   // ── Find admin (include password for comparison) ────────────────────────────
-  const admin = await Admin.findOne({ email: email.toLowerCase().trim() })
-    .select('+password');
+  const admin = await adminRepo.findByEmailWithPassword(email.toLowerCase().trim());
 
   // Generic message — prevents user-enumeration attack
   if (!admin) {
@@ -149,7 +149,7 @@ const loginAdmin = asyncHandler(async (req, res) => {
   );
 
   // ── Update lastLogin (fire-and-forget — does not block the response) ────────
-  Admin.updateOne({ _id: admin._id }, { $set: { lastLogin: new Date() } })
+  adminRepo.touchLastLogin(admin._id)
     .catch((err) => console.error('[adminController] lastLogin update failed:', err.message));
 
   const prefs = await getLoginPrefs(admin._id, admin.role);
@@ -177,7 +177,7 @@ const createAdmin = asyncHandler(async (req, res) => {
 
   // ── Bootstrap / auth guard ──────────────────────────────────────────────────
   // If at least one admin already exists, the caller must be an authenticated ADMIN.
-  const adminCount = await Admin.countDocuments();
+  const adminCount = await adminRepo.count();
   const isBootstrap = adminCount === 0;
   let callerId = null;
 
@@ -222,7 +222,7 @@ const createAdmin = asyncHandler(async (req, res) => {
   }
 
   // ── Uniqueness check ────────────────────────────────────────────────────────
-  const existing = await Admin.findOne({ email: email.toLowerCase().trim() });
+  const existing = await adminRepo.findByEmail(email.toLowerCase().trim());
   if (existing) {
     return sendConflict(res, 'An account with this email already exists.');
   }
@@ -231,7 +231,7 @@ const createAdmin = asyncHandler(async (req, res) => {
   const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
   try {
-    const newAdmin = await Admin.create({
+    const newAdmin = await adminRepo.create({
       admin_name:    admin_name.trim(),
       email:         email.toLowerCase().trim(),
       password:      hashedPassword,
@@ -264,7 +264,7 @@ const createAdmin = asyncHandler(async (req, res) => {
  * req.user is set by the authenticate middleware.
  */
 const getMe = asyncHandler(async (req, res) => {
-  const admin = await Admin.findById(req.user.id);
+  const admin = await adminRepo.findByIdLean(req.user.id);
   if (!admin) return sendNotFound(res, 'Admin account');
 
   return sendSuccess(res, 200, 'Profile retrieved successfully.', buildUserResponse(admin));
@@ -290,7 +290,7 @@ const updatePassword = asyncHandler(async (req, res) => {
   }
 
   // Load with password for comparison
-  const admin = await Admin.findById(req.user.id).select('+password');
+  const admin = await adminRepo.findByIdWithPassword(req.user.id);
   if (!admin) return sendNotFound(res, 'Admin account');
 
   const isValid = await bcrypt.compare(currentPassword, admin.password);
@@ -303,7 +303,7 @@ const updatePassword = asyncHandler(async (req, res) => {
   }
 
   const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
-  await Admin.findByIdAndUpdate(admin._id, { password: hashed });
+  await adminRepo.updatePassword(admin._id, hashed);
 
   return sendSuccess(res, 200, 'Password updated successfully.');
 });
@@ -350,27 +350,16 @@ const getUploadSignature = (_req, res) =>
 const listAdmins = asyncHandler(async (req, res) => {
   const { role, status, search, page = 1, limit = 20 } = req.query;
 
-  const filter = {};
-  if (role   && ['ADMIN', 'DIRECTOR'].includes(role))             filter.role   = role;
-  if (status && ['active', 'inactive', 'suspended'].includes(status)) filter.status = status;
-  if (search) {
-    const re = { $regex: search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' };
-    filter.$or = [{ admin_name: re }, { email: re }];
-  }
-
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
   const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
 
-  const [admins, total] = await Promise.all([
-    Admin.find(filter)
-      .select('-password')
-      .populate('createdBy', 'admin_name email')
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    Admin.countDocuments(filter),
-  ]);
+  const { data: admins, total } = await adminRepo.paginate({
+    role:   ['ADMIN', 'DIRECTOR'].includes(role) ? role : undefined,
+    status: ['active', 'inactive', 'suspended'].includes(status) ? status : undefined,
+    search,
+    skip:   (pageNum - 1) * limitNum,
+    limit:  limitNum,
+  });
 
   return sendPaginated(res, 200, 'Admins retrieved.', admins, { total, page: pageNum, limit: limitNum });
 });
@@ -396,22 +385,16 @@ const updateAdminStatus = asyncHandler(async (req, res) => {
     return sendError(res, 403, 'You cannot change your own account status.');
   }
 
-  const admin = await Admin.findById(id).select('-password');
-  if (!admin) return sendNotFound(res, 'Admin account');
+  const current = await adminRepo.findByIdLean(id);
+  if (!current) return sendNotFound(res, 'Admin account');
 
   // Bootstrap account is permanently protected
-  if (admin.isBootstrap) {
+  if (current.isBootstrap) {
     return sendError(res, 403, 'The bootstrap account status cannot be changed.');
   }
 
-  admin.status = status;
-  admin.statusHistory.push({
-    status,
-    changedBy: req.user.id,
-    changedAt: new Date(),
-    note:      note?.trim() || null,
-  });
-  await admin.save();
+  const admin = await adminRepo.applyStatusChange(id, { status, changedBy: req.user.id, note });
+  if (!admin) return sendNotFound(res, 'Admin account');
 
   return sendSuccess(res, 200, `Account status updated to '${status}'.`, buildUserResponse(admin.toObject()));
 });
