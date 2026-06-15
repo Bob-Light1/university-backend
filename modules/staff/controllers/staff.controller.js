@@ -24,8 +24,8 @@ const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
-const Staff     = require('../models/staff.model');
-const StaffRole = require('../models/staffRole.model');
+const staffRepo     = require('../staff.repository');
+const staffRoleRepo = require('../staffRole.repository');
 const profileSvc = require('../../../shared/services/profile.service');
 const {
   sendSuccess,
@@ -37,7 +37,6 @@ const {
   isValidEmail,
   isValidObjectId,
   buildCampusFilter,
-  escapeRegex,
 } = require('../../../shared/utils/validation-helpers');
 const { getLoginPrefs } = require('../../settings').service;
 
@@ -113,10 +112,7 @@ const loginStaff = async (req, res) => {
     }
 
     // Populate subRole to embed permissions in the token
-    const staff = await Staff.findOne(query)
-      .select('+password')
-      .populate('subRole', 'name permissions isActive')
-      .lean({ virtuals: true });
+    const staff = await staffRepo.findByCredential(query);
 
     if (!staff) return sendError(res, 401, 'Invalid credentials.');
 
@@ -139,7 +135,7 @@ const loginStaff = async (req, res) => {
       issuer:    'school-management-app',
     });
 
-    Staff.findByIdAndUpdate(staff._id, { lastLogin: new Date() }).exec().catch(() => {});
+    staffRepo.touchLastLogin(staff._id).catch(() => {});
 
     const prefs = await getLoginPrefs(staff._id, 'STAFF', staff.schoolCampus ?? null);
 
@@ -178,17 +174,13 @@ const createStaff = async (req, res) => {
       if (!isValidObjectId(body.subRole)) {
         return sendError(res, 400, 'Invalid subRole ID format.');
       }
-      const roleDoc = await StaffRole.findOne({
-        _id:    body.subRole,
-        campus: body.schoolCampus,
-        isActive: true,
-      }).lean();
+      const roleDoc = await staffRoleRepo.findActiveInCampus(body.subRole, body.schoolCampus);
       if (!roleDoc) return sendError(res, 404, 'StaffRole not found on this campus.');
     }
 
     if (!body.password) body.password = 'Staff@123';
 
-    const staff = await Staff.create(body);
+    const staff = await staffRepo.create(body);
     const doc = staff.toObject({ virtuals: true });
     delete doc.password;
 
@@ -220,33 +212,16 @@ const getAllStaff = async (req, res) => {
     const campusFilter = getCampusFilter(req);
     const { page = 1, limit = 20, search, status, subRole, includeArchived } = req.query;
 
-    const filter = { ...campusFilter };
-    if (status) {
-      filter.status = status;
-    } else if (includeArchived !== 'true') {
-      filter.status = { $ne: 'archived' };
-    }
-    if (subRole) filter.subRole = subRole;
-    if (search) {
-      const rx = new RegExp(escapeRegex(search.trim()), 'i');
-      filter.$or = [
-        { firstName: rx }, { lastName: rx },
-        { email: rx }, { username: rx },
-      ];
-    }
-
     const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      Staff.find(filter)
-        .select('-password -__v')
-        .populate('schoolCampus', 'campus_name')
-        .populate('subRole', 'name permissions isActive')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean({ virtuals: true }),
-      Staff.countDocuments(filter),
-    ]);
+    const { data: docs, total } = await staffRepo.paginate({
+      campusFilter,
+      status,
+      includeArchived: includeArchived === 'true',
+      subRole,
+      search,
+      skip,
+      limit: Number(limit),
+    });
 
     return sendPaginated(res, 200, 'Staff retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
@@ -272,11 +247,7 @@ const getOneStaff = async (req, res) => {
       ? { _id: id, schoolCampus: new mongoose.Types.ObjectId(req.user.campusId) }
       : { ...getCampusFilter(req), _id: id };
 
-    const staff = await Staff.findOne(campusFilter)
-      .select('-password -__v')
-      .populate('schoolCampus', 'campus_name')
-      .populate('subRole', 'name permissions isActive')
-      .lean({ virtuals: true });
+    const staff = await staffRepo.findOneScoped(campusFilter);
 
     if (!staff) return sendNotFound(res, 'Staff');
     return sendSuccess(res, 200, 'Staff member retrieved.', staff);
@@ -308,13 +279,7 @@ const updateStaff = async (req, res) => {
 
     const campusFilter = { ...getCampusFilter(req), _id: id };
 
-    const staff = await Staff.findOneAndUpdate(
-      campusFilter,
-      { $set: body },
-      { new: true, runValidators: true }
-    ).select('-password -__v')
-      .populate('subRole', 'name permissions isActive')
-      .lean({ virtuals: true });
+    const staff = await staffRepo.updateScoped(campusFilter, body);
 
     if (!staff) return sendNotFound(res, 'Staff');
     return sendSuccess(res, 200, 'Staff member updated.', staff);
@@ -351,27 +316,18 @@ const assignRole = async (req, res) => {
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid staff ID format.');
 
     const campusFilter = getCampusFilter(req);
-    const staff = await Staff.findOne({ ...campusFilter, _id: id });
+    const staff = await staffRepo.findOneScopedLean({ ...campusFilter, _id: id });
     if (!staff) return sendNotFound(res, 'Staff');
 
     if (subRoleId !== null && subRoleId !== undefined) {
       if (!isValidObjectId(subRoleId)) return sendError(res, 400, 'Invalid subRoleId format.');
-      const role = await StaffRole.findOne({
-        _id:      subRoleId,
-        campus:   staff.schoolCampus,
-        isActive: true,
-      }).lean();
+      const role = await staffRoleRepo.findActiveInCampus(subRoleId, staff.schoolCampus);
       if (!role) return sendError(res, 404, 'StaffRole not found on this campus.');
     }
 
-    await Staff.findByIdAndUpdate(staff._id, {
-      $set: { subRole: subRoleId ?? null },
-    });
+    await staffRepo.setSubRole(staff._id, subRoleId ?? null);
 
-    const updated = await Staff.findById(staff._id)
-      .select('-password -__v')
-      .populate('subRole', 'name permissions isActive')
-      .lean({ virtuals: true });
+    const updated = await staffRepo.findByIdWithRole(staff._id);
 
     return sendSuccess(res, 200, 'Sub-role assigned.', updated);
 
@@ -399,11 +355,7 @@ const updateStaffStatus = async (req, res) => {
       return sendError(res, 400, `status must be one of: ${allowed.join(', ')}.`);
     }
 
-    const staff = await Staff.findOneAndUpdate(
-      { ...getCampusFilter(req), _id: id },
-      { $set: { status } },
-      { new: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const staff = await staffRepo.setStatusScoped({ ...getCampusFilter(req), _id: id }, status);
 
     if (!staff) return sendNotFound(res, 'Staff');
     return sendSuccess(res, 200, 'Staff status updated.', staff);
@@ -428,11 +380,11 @@ const resetStaffPassword = async (req, res) => {
 
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid staff ID format.');
 
-    const staff = await Staff.findOne({ ...getCampusFilter(req), _id: id });
+    const staff = await staffRepo.findOneScopedLean({ ...getCampusFilter(req), _id: id });
     if (!staff) return sendNotFound(res, 'Staff');
 
     const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await Staff.findByIdAndUpdate(staff._id, { password: hashed });
+    await staffRepo.updatePassword(staff._id, hashed);
 
     return sendSuccess(res, 200, 'Staff password reset successfully.');
 
@@ -454,11 +406,7 @@ const archiveStaff = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid staff ID format.');
 
-    const staff = await Staff.findOneAndUpdate(
-      { ...getCampusFilter(req), _id: id },
-      { $set: { status: 'archived' } },
-      { new: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const staff = await staffRepo.setStatusScoped({ ...getCampusFilter(req), _id: id }, 'archived');
 
     if (!staff) return sendNotFound(res, 'Staff');
     return sendSuccess(res, 200, 'Staff member archived.', staff);
@@ -481,11 +429,7 @@ const restoreStaff = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid staff ID format.');
 
-    const staff = await Staff.findOneAndUpdate(
-      { ...getCampusFilter(req), _id: id },
-      { $set: { status: 'active' } },
-      { new: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const staff = await staffRepo.setStatusScoped({ ...getCampusFilter(req), _id: id }, 'active');
 
     if (!staff) return sendNotFound(res, 'Staff');
     return sendSuccess(res, 200, 'Staff member restored.', staff);
@@ -508,7 +452,7 @@ const deleteStaff = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid staff ID format.');
 
-    const staff = await Staff.findByIdAndDelete(id);
+    const staff = await staffRepo.deleteById(id);
     if (!staff) return sendNotFound(res, 'Staff');
 
     return sendSuccess(res, 200, 'Staff member permanently deleted.');

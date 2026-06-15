@@ -14,9 +14,8 @@
  * Campus isolation enforced throughout.
  */
 
-const mongoose  = require('mongoose');
-const StaffRole = require('../models/staffRole.model');
-const Staff     = require('../models/staff.model');
+const staffRoleRepo = require('../staffRole.repository');
+const staffRepo     = require('../staff.repository');
 const { ALL_PERMISSIONS } = require('../../../shared/constants/staff-permissions');
 const {
   sendSuccess,
@@ -60,7 +59,7 @@ const createStaffRole = async (req, res) => {
       if (!isValidObjectId(campus)) return sendError(res, 400, 'Invalid campus ID format.');
     }
 
-    const role = await StaffRole.create({
+    const role = await staffRoleRepo.create({
       campus,
       name:        name.trim(),
       description: description?.trim() ?? undefined,
@@ -93,30 +92,17 @@ const createStaffRole = async (req, res) => {
 const getAllStaffRoles = async (req, res) => {
   try {
     const campusFilter = getCampusFilter(req);
-
-    // buildCampusFilter uses `schoolCampus` key — StaffRole uses `campus`
-    const filter = {};
-    if (campusFilter.schoolCampus) filter.campus = campusFilter.schoolCampus;
-
     const { page = 1, limit = 50, search, isActive } = req.query;
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
-    if (search) {
-      filter.$or = [
-        { name:        new RegExp(search.trim(), 'i') },
-        { description: new RegExp(search.trim(), 'i') },
-      ];
-    }
 
     const skip = (Number(page) - 1) * Number(limit);
-    const [docs, total] = await Promise.all([
-      StaffRole.find(filter)
-        .populate('campus', 'campus_name')
-        .sort({ name: 1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      StaffRole.countDocuments(filter),
-    ]);
+    const { data: docs, total } = await staffRoleRepo.paginate({
+      // buildCampusFilter utilise `schoolCampus` — StaffRole utilise `campus`
+      campusScope: campusFilter.schoolCampus,
+      isActive:    isActive !== undefined ? isActive === 'true' : undefined,
+      search,
+      skip,
+      limit: Number(limit),
+    });
 
     return sendPaginated(res, 200, 'StaffRoles retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
 
@@ -139,12 +125,7 @@ const getOneStaffRole = async (req, res) => {
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid StaffRole ID format.');
 
     const campusFilter = getCampusFilter(req);
-    const filter = { _id: id };
-    if (campusFilter.schoolCampus) filter.campus = campusFilter.schoolCampus;
-
-    const role = await StaffRole.findOne(filter)
-      .populate('campus', 'campus_name')
-      .lean();
+    const role = await staffRoleRepo.findOneScoped(id, campusFilter.schoolCampus);
 
     if (!role) return sendNotFound(res, 'StaffRole');
     return sendSuccess(res, 200, 'StaffRole retrieved.', role);
@@ -186,14 +167,7 @@ const updateStaffRole = async (req, res) => {
     }
 
     const campusFilter = getCampusFilter(req);
-    const filter = { _id: id };
-    if (campusFilter.schoolCampus) filter.campus = campusFilter.schoolCampus;
-
-    const role = await StaffRole.findOneAndUpdate(
-      filter,
-      { $set: updates },
-      { new: true, runValidators: true }
-    ).populate('campus', 'campus_name').lean();
+    const role = await staffRoleRepo.updateScoped(id, campusFilter.schoolCampus, updates);
 
     if (!role) return sendNotFound(res, 'StaffRole');
     return sendSuccess(res, 200, 'StaffRole updated.', role);
@@ -220,16 +194,12 @@ const toggleStaffRole = async (req, res) => {
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid StaffRole ID format.');
 
     const campusFilter = getCampusFilter(req);
-    const filter = { _id: id };
-    if (campusFilter.schoolCampus) filter.campus = campusFilter.schoolCampus;
+    const current = await staffRoleRepo.findScopedRaw(id, campusFilter.schoolCampus);
+    if (!current) return sendNotFound(res, 'StaffRole');
 
-    const role = await StaffRole.findOne(filter);
-    if (!role) return sendNotFound(res, 'StaffRole');
+    const role = await staffRoleRepo.setActive(id, !current.isActive);
 
-    role.isActive = !role.isActive;
-    await role.save();
-
-    return sendSuccess(res, 200, `StaffRole ${role.isActive ? 'activated' : 'deactivated'}.`, role.toObject());
+    return sendSuccess(res, 200, `StaffRole ${role.isActive ? 'activated' : 'deactivated'}.`, role);
 
   } catch (err) {
     if (err.statusCode === 403) return sendError(res, 403, err.message);
@@ -252,14 +222,11 @@ const deleteStaffRole = async (req, res) => {
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid StaffRole ID format.');
 
     const campusFilter = getCampusFilter(req);
-    const filter = { _id: id };
-    if (campusFilter.schoolCampus) filter.campus = campusFilter.schoolCampus;
-
-    const role = await StaffRole.findOne(filter);
+    const role = await staffRoleRepo.findScopedRaw(id, campusFilter.schoolCampus);
     if (!role) return sendNotFound(res, 'StaffRole');
 
     // Safety check: block deletion if the role is in use
-    const inUse = await Staff.exists({ subRole: role._id });
+    const inUse = await staffRepo.isRoleInUse(role._id);
     if (inUse) {
       return sendError(
         res, 409,
@@ -267,7 +234,7 @@ const deleteStaffRole = async (req, res) => {
       );
     }
 
-    await StaffRole.findByIdAndDelete(role._id);
+    await staffRoleRepo.deleteById(role._id);
     return sendSuccess(res, 200, 'StaffRole deleted.');
 
   } catch (err) {

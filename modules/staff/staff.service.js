@@ -2,9 +2,10 @@
  * @file staff.service.js
  * API publique du module staff pour les autres modules / controllers.
  * (Les autres domaines ne touchent JAMAIS directement staff.model — §3 du guide.)
+ * Toute la persistance passe par staff.repository (étape 0 pré-Postgres).
  */
 
-const Staff = require('./models/staff.model');
+const staffRepo = require('./staff.repository');
 
 /**
  * Statistiques staff d'un campus pour le dashboard campus.
@@ -16,9 +17,9 @@ const Staff = require('./models/staff.model');
  */
 async function getCampusStats(campusId) {
   const [total, active, withRole] = await Promise.all([
-    Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' } }),
-    Staff.countDocuments({ schoolCampus: campusId, status: 'active' }),
-    Staff.countDocuments({ schoolCampus: campusId, status: { $ne: 'archived' }, subRole: { $exists: true, $ne: null } }),
+    staffRepo.countByCampus(campusId, { status: { $ne: 'archived' } }),
+    staffRepo.countByCampus(campusId, { status: 'active' }),
+    staffRepo.countByCampus(campusId, { status: { $ne: 'archived' }, subRole: { $exists: true, $ne: null } }),
   ]);
   return { total, active, withRole };
 }
