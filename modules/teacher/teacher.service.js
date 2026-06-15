@@ -76,6 +76,15 @@ const countActiveTeachers = (campusId, { createdSince } = {}) =>
   });
 
 /**
+ * Compte les teachers non archivés rattachés à un département (garde
+ * d'archivage côté department.controller).
+ * @param {string|ObjectId} departmentId
+ * @returns {Promise<number>}
+ */
+const countActiveInDepartment = (departmentId) =>
+  Teacher.countDocuments({ department: departmentId, status: { $ne: 'archived' } });
+
+/**
  * Listing paginé des teachers pour le portail staff (classes + subjects
  * peuplés, tri alphabétique). `search` doit déjà être échappé par l'appelant.
  * @returns {Promise<{docs: Array, total: number}>}
@@ -315,6 +324,7 @@ module.exports = {
   validateTeacherBelongsToCampus,
   countTeachersOnCampus,
   countActiveTeachers,
+  countActiveInDepartment,
   listTeachersForStaff,
   listTeachersForCampusDashboard,
   getTeacherForPayslip,

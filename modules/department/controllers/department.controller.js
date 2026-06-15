@@ -1,7 +1,9 @@
-const mongoose = require('mongoose');
-const Department = require('../department.model');
+const departmentRepo = require('../department.repository');
 const departmentConfig = require('../department.config');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
+// Require paresseux : teacher.config consomme la façade department (cycle department ↔ teacher).
+const countTeachersInDepartment = (...args) =>
+  require('../../teacher').service.countActiveInDepartment(...args);
 
 const {
   sendSuccess,
@@ -11,7 +13,7 @@ const {
   sendConflict,
   sendPaginated,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId, buildCampusFilter, escapeRegex } = require('../../../shared/utils/validation-helpers');
+const { isValidObjectId, buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 
 // ── Generic controller (used only for getAll, getOne, getStats) ──
 const genericController = new GenericEntityController(departmentConfig);
@@ -54,8 +56,8 @@ const createDepartment = async (req, res) => {
 
     // Uniqueness checks within campus
     const [nameExists, codeExists] = await Promise.all([
-      Department.findOne({ schoolCampus: campusId, name: name.trim() }).lean(),
-      Department.findOne({ schoolCampus: campusId, code: code.toUpperCase().trim() }).lean(),
+      departmentRepo.findByNameInCampus(campusId, name.trim()),
+      departmentRepo.findByCodeInCampus(campusId, code.toUpperCase().trim()),
     ]);
 
     if (nameExists) return sendConflict(res, `Department "${name}" already exists in this campus`);
@@ -65,7 +67,7 @@ const createDepartment = async (req, res) => {
       return sendError(res, 400, 'Invalid head of department ID');
     }
 
-    const department = new Department({
+    const saved = await departmentRepo.create({
       name: name.trim(),
       code: code.toUpperCase().trim(),
       description: description?.trim(),
@@ -74,12 +76,7 @@ const createDepartment = async (req, res) => {
       status: 'active',
     });
 
-    const saved = await department.save();
-
-    const populated = await Department.findById(saved._id)
-      .populate('schoolCampus', 'campus_name')
-      .populate('headOfDepartment', 'firstName lastName email')
-      .lean();
+    const populated = await departmentRepo.findByIdForResponse(saved._id);
 
     return sendCreated(res, 'Department created successfully', populated);
   } catch (err) {
@@ -96,33 +93,17 @@ const getAllDepartments = async (req, res) => {
   try {
     const { search, status, includeArchived, page = 1, limit = 100 } = req.query;
 
-    const filter = buildCampusFilter(req.user, req.query.campusId);
-
-    if (includeArchived !== 'true') {
-      filter.status = { $ne: 'archived' };
-    }
-    if (status) filter.status = status;
-
-    if (search) {
-      filter.$or = [
-        { name:        { $regex: escapeRegex(search), $options: 'i' } },
-        { code:        { $regex: escapeRegex(search), $options: 'i' } },
-        { description: { $regex: escapeRegex(search), $options: 'i' } },
-      ];
-    }
-
+    const baseFilter = buildCampusFilter(req.user, req.query.campusId);
     const skip = (Number(page) - 1) * Number(limit);
 
-    const [departments, total] = await Promise.all([
-      Department.find(filter)
-        .populate('schoolCampus', 'campus_name')
-        .populate('headOfDepartment', 'firstName lastName email')
-        .sort({ name: 1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean(),
-      Department.countDocuments(filter),
-    ]);
+    const { data: departments, total } = await departmentRepo.paginate({
+      baseFilter,
+      includeArchived: includeArchived === 'true',
+      status,
+      search,
+      skip,
+      limit: Number(limit),
+    });
 
     return sendPaginated(res, 200, 'Departments retrieved successfully', departments, {
       total, page, limit,
@@ -141,10 +122,7 @@ const getOneDepartment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid department ID');
 
-    const department = await Department.findById(id)
-      .populate('schoolCampus', 'campus_name location')
-      .populate('headOfDepartment', 'firstName lastName email matricule')
-      .lean();
+    const department = await departmentRepo.findByIdDetailed(id);
 
     if (!department) return sendNotFound(res, 'Department');
 
@@ -170,7 +148,7 @@ const updateDepartment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid department ID');
 
-    const department = await Department.findById(id);
+    const department = await departmentRepo.findByIdLean(id);
     if (!department) return sendNotFound(res, 'Department');
 
     // Campus isolation
@@ -185,22 +163,14 @@ const updateDepartment = async (req, res) => {
 
     // Name uniqueness
     if (name && name.trim() !== department.name) {
-      const exists = await Department.findOne({
-        schoolCampus: department.schoolCampus,
-        name: name.trim(),
-        _id: { $ne: id },
-      }).lean();
+      const exists = await departmentRepo.findByNameInCampusExcept(department.schoolCampus, name.trim(), id);
       if (exists) return sendConflict(res, `Department "${name}" already exists`);
       updates.name = name.trim();
     }
 
     // Code uniqueness
     if (code && code.toUpperCase().trim() !== department.code) {
-      const exists = await Department.findOne({
-        schoolCampus: department.schoolCampus,
-        code: code.toUpperCase().trim(),
-        _id: { $ne: id },
-      }).lean();
+      const exists = await departmentRepo.findByCodeInCampusExcept(department.schoolCampus, code.toUpperCase().trim(), id);
       if (exists) return sendConflict(res, `Code "${code.toUpperCase()}" is already used`);
       updates.code = code.toUpperCase().trim();
     }
@@ -214,12 +184,7 @@ const updateDepartment = async (req, res) => {
     }
     if (status) updates.status = status;
 
-    const updated = await Department.findByIdAndUpdate(id, updates, {
-      new: true, runValidators: true,
-    })
-      .populate('schoolCampus', 'campus_name')
-      .populate('headOfDepartment', 'firstName lastName email')
-      .lean();
+    const updated = await departmentRepo.updateById(id, updates);
 
     return sendSuccess(res, 200, 'Department updated successfully', updated);
   } catch (err) {
@@ -237,7 +202,7 @@ const archiveDepartment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid department ID');
 
-    const department = await Department.findById(id);
+    const department = await departmentRepo.findByIdLean(id);
     if (!department) return sendNotFound(res, 'Department');
 
     if (req.user.role === 'CAMPUS_MANAGER') {
@@ -246,9 +211,8 @@ const archiveDepartment = async (req, res) => {
       }
     }
 
-    // Warn if teachers are still assigned
-    const Teacher = mongoose.model('Teacher');
-    const teacherCount = await Teacher.countDocuments({ department: id, status: { $ne: 'archived' } });
+    // Warn if teachers are still assigned (via la façade teacher).
+    const teacherCount = await countTeachersInDepartment(id);
     if (teacherCount > 0) {
       return sendError(
         res, 409,
@@ -256,8 +220,7 @@ const archiveDepartment = async (req, res) => {
       );
     }
 
-    department.status = 'archived';
-    await department.save();
+    await departmentRepo.setStatus(id, 'archived');
 
     return sendSuccess(res, 200, 'Department archived successfully');
   } catch (err) {
