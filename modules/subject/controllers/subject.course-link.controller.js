@@ -26,7 +26,7 @@
  *  Body: { courseId: string, classId?: string }
  */
 
-const Subject       = require('../subject.model');
+const subjectRepo   = require('../subject.repository');
 const { getClassForCourseLink } = require('../../class').service; // façade module class (§3)
 const courseService = require('../../course').service; // façade module course (§3)
 
@@ -67,7 +67,7 @@ const linkSubjectCourse = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Invalid class ID format.');
   }
 
-  const subject = await Subject.findById(id);
+  const subject = await subjectRepo.findByIdLean(id);
   if (!subject) return sendNotFound(res, 'Subject');
 
   // Campus isolation — CAMPUS_MANAGER can only link in their own campus
@@ -118,8 +118,7 @@ const linkSubjectCourse = asyncHandler(async (req, res) => {
     }
   }
 
-  subject.courseRef = courseId;
-  await subject.save();
+  await subjectRepo.setCourseRef(id, courseId);
 
   return sendSuccess(res, 200, 'Course linked to subject successfully.', {
     subjectId:   subject._id,
@@ -140,7 +139,7 @@ const unlinkSubjectCourse = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid subject ID.');
 
-  const subject = await Subject.findById(id);
+  const subject = await subjectRepo.findByIdLean(id);
   if (!subject) return sendNotFound(res, 'Subject');
 
   // Campus isolation for CAMPUS_MANAGER
@@ -157,8 +156,7 @@ const unlinkSubjectCourse = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'This subject has no linked course.');
   }
 
-  subject.courseRef = null;
-  await subject.save();
+  await subjectRepo.setCourseRef(id, null);
 
   return sendSuccess(res, 200, 'Course unlinked from subject successfully.');
 });

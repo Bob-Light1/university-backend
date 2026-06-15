@@ -1,4 +1,4 @@
-const Subject = require('../subject.model');
+const subjectRepo = require('../subject.repository');
 const {
   sendSuccess,
   sendError,
@@ -11,7 +11,6 @@ const {
 const {
   isValidObjectId,
   buildCampusFilter,
-  escapeRegex,
 } = require('../../../shared/utils/validation-helpers');
 
 /**
@@ -49,17 +48,17 @@ exports.createSubject = async (req, res) => {
     }
 
     // Check for duplicate subject code in the same campus
-    const existingSubject = await Subject.findOne({
+    const existingSubject = await subjectRepo.findDuplicateCode(
       schoolCampus,
-      subject_code: subject_code.toUpperCase().trim()
-    });
+      subject_code.toUpperCase().trim(),
+    );
 
     if (existingSubject) {
       return sendConflict(res, 'A subject with this code already exists in this campus');
     }
 
     // Create the subject
-    const newSubject = await Subject.create({
+    const newSubject = await subjectRepo.create({
       schoolCampus,
       subject_name: subject_name.trim(),
       subject_code: subject_code.toUpperCase().trim(),
@@ -70,9 +69,7 @@ exports.createSubject = async (req, res) => {
     });
 
     // Populate for response
-    const populatedSubject = await Subject.findById(newSubject._id)
-      .populate('schoolCampus', 'campus_name')
-      .lean();
+    const populatedSubject = await subjectRepo.findByIdForResponse(newSubject._id);
 
     return sendCreated(res, 'Subject created successfully', populatedSubject);
 
@@ -112,43 +109,21 @@ exports.getSubjects = async (req, res) => {
     } = req.query;
 
     // Build campus filter based on user role
-    const filter = buildCampusFilter(req.user, campusId);
-
-    if (includeArchived !== 'true') {
-      // Defensive filter: excludes archived docs even if status field is missing.
-      // Never allows status=archived to pass when toggle is off.
-      filter.status = { $ne: 'archived' };
-    } else if (status && ['active', 'archived'].includes(status)) {
-      filter.status = status;
-    }
-    
-
-    // Category filter
-    if (category) {
-      filter.category = category;
-    }
-
-    // Search by name or code
-    if (search) {
-      filter.$or = [
-        { subject_name: { $regex: escapeRegex(search), $options: 'i' } },
-        { subject_code: { $regex: escapeRegex(search), $options: 'i' } }
-      ];
-    }
+    const baseFilter = buildCampusFilter(req.user, campusId);
 
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = Math.min(parseInt(limit, 10) || 50, 100); // Max 100
     const skip = (pageNum - 1) * limitNum;
 
-    // Fetch subjects
-    const subjects = await Subject.find(filter)
-      .sort({ subject_name: 1 })
-      .skip(skip)
-      .limit(limitNum)
-      .populate('schoolCampus', 'campus_name')
-      .lean();
-
-    const total = await Subject.countDocuments(filter);
+    const { data: subjects, total } = await subjectRepo.paginate({
+      baseFilter,
+      includeArchived: includeArchived === 'true',
+      status,
+      category,
+      search,
+      skip,
+      limit: limitNum,
+    });
 
     return sendPaginated(
       res,
@@ -167,7 +142,7 @@ exports.getSubjects = async (req, res) => {
 /**
  * @desc    Get subject by ID
  * @route   GET /api/subject/:id
- * @access  ADMIN, DIRECTOR,          
+ * @access  ADMIN, DIRECTOR,
  */
 exports.getSubjectById = async (req, res) => {
   try {
@@ -179,9 +154,7 @@ exports.getSubjectById = async (req, res) => {
     }
 
     // Find subject
-    const subject = await Subject.findById(subjectId)
-      .populate('schoolCampus', 'campus_name location')
-      .lean();
+    const subject = await subjectRepo.findByIdDetailed(subjectId);
 
     if (!subject) {
       return sendNotFound(res, 'Subject');
@@ -217,7 +190,7 @@ exports.updateSubject = async (req, res) => {
     }
 
     // Find existing subject
-    const existingSubject = await Subject.findById(subjectId);
+    const existingSubject = await subjectRepo.findByIdLean(subjectId);
 
     if (!existingSubject) {
       return sendNotFound(res, 'Subject');
@@ -241,32 +214,32 @@ exports.updateSubject = async (req, res) => {
 
     // Check for duplicate subject code (if being changed)
     if (subject_code && subject_code.toUpperCase() !== existingSubject.subject_code) {
-      const duplicateSubject = await Subject.findOne({
-        _id: { $ne: subjectId },
-        schoolCampus: existingSubject.schoolCampus,
-        subject_code: subject_code.toUpperCase().trim()
-      });
+      const duplicateSubject = await subjectRepo.findDuplicateCodeExcept(
+        existingSubject.schoolCampus,
+        subject_code.toUpperCase().trim(),
+        subjectId,
+      );
 
       if (duplicateSubject) {
         return sendConflict(res, 'Another subject with this code already exists in this campus');
       }
     }
 
-    // Update fields
-    if (subject_name) existingSubject.subject_name = subject_name.trim();
-    if (subject_code) existingSubject.subject_code = subject_code.toUpperCase().trim();
-    if (description !== undefined) existingSubject.description = description;
-    if (coefficient !== undefined) existingSubject.coefficient = coefficient;
-    if (color) existingSubject.color = color;
-    if (category) existingSubject.category = category;
+    // Build the set of fields actually provided (sémantique "update partiel").
+    const fields = {};
+    if (subject_name) fields.subject_name = subject_name.trim();
+    if (subject_code) fields.subject_code = subject_code.toUpperCase().trim();
+    if (description !== undefined) fields.description = description;
+    if (coefficient !== undefined) fields.coefficient = coefficient;
+    if (color) fields.color = color;
+    if (category) fields.category = category;
 
     // Save
-    const updatedSubject = await existingSubject.save();
+    const updatedSubject = await subjectRepo.updateById(subjectId, fields);
+    if (!updatedSubject) return sendNotFound(res, 'Subject');
 
     // Populate for response
-    const populatedSubject = await Subject.findById(updatedSubject._id)
-      .populate('schoolCampus', 'campus_name')
-      .lean();
+    const populatedSubject = await subjectRepo.findByIdForResponse(updatedSubject._id);
 
     return sendSuccess(res, 200, 'Subject updated successfully', populatedSubject);
 
@@ -301,7 +274,7 @@ exports.deleteSubject = async (req, res) => {
     }
 
     // Find subject
-    const subject = await Subject.findById(subjectId);
+    const subject = await subjectRepo.findByIdLean(subjectId);
 
     if (!subject) {
       return sendNotFound(res, 'Subject');
@@ -320,8 +293,7 @@ exports.deleteSubject = async (req, res) => {
     }
 
     // Archive
-    subject.status = 'archived';
-    await subject.save();
+    await subjectRepo.setStatus(subjectId, 'archived');
 
     return sendSuccess(res, 200, 'Subject archived successfully');
 
@@ -346,7 +318,7 @@ exports.restoreSubject = async (req, res) => {
     }
 
     // Find subject
-    const subject = await Subject.findById(subjectId);
+    const subject = await subjectRepo.findByIdLean(subjectId);
 
     if (!subject) {
       return sendNotFound(res, 'Subject');
@@ -365,13 +337,10 @@ exports.restoreSubject = async (req, res) => {
     }
 
     // Restore
-    subject.status = 'active';
-    await subject.save();
+    await subjectRepo.setStatus(subjectId, 'active');
 
     // Populate for response
-    const populatedSubject = await Subject.findById(subject._id)
-      .populate('schoolCampus', 'campus_name')
-      .lean();
+    const populatedSubject = await subjectRepo.findByIdForResponse(subjectId);
 
     return sendSuccess(res, 200, 'Subject restored successfully', populatedSubject);
 
