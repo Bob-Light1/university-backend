@@ -3,10 +3,11 @@
  * API publique du module GAET pour le reste de l'application.
  * (Règle d'architecture : les autres modules / server.js ne touchent JAMAIS
  *  directement aux models de ce module — voir MODULAR_MONOLITH_MIGRATION.md §3.)
+ *
+ * Toute la persistance passe par gaet.repository (étape 0 pré-Postgres).
  */
 
-const GaetConstraint  = require('./gaet-constraint.model');
-const { GAET_STATUS } = GaetConstraint;
+const gaetRepo = require('./gaet.repository');
 
 const ZOMBIE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -18,13 +19,8 @@ const ZOMBIE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
  *
  * @returns {Promise<number>} nombre de jobs récupérés
  */
-async function recoverZombieJobs() {
-  const zombieThreshold = new Date(Date.now() - ZOMBIE_THRESHOLD_MS);
-  const result = await GaetConstraint.updateMany(
-    { status: GAET_STATUS.GENERATING, generatingStartedAt: { $lt: zombieThreshold } },
-    { $set: { status: GAET_STATUS.FAILED, generatingStartedAt: null } }
-  );
-  return result.modifiedCount;
+function recoverZombieJobs() {
+  return gaetRepo.recoverZombies(ZOMBIE_THRESHOLD_MS);
 }
 
 module.exports = {

@@ -35,9 +35,8 @@
 const path            = require('path');
 const { Worker }      = require('worker_threads');
 
-const mongoose        = require('mongoose');
-const GaetConstraint  = require('../gaet-constraint.model');
-const { GAET_STATUS } = GaetConstraint;
+const { GAET_STATUS } = require('../gaet-constraint.model'); // constante (enum)
+const gaetRepo        = require('../gaet.repository');
 
 const { SCHEDULE_STATUS, SESSION_TYPE } = require('../../../shared/utils/schedule.base');
 
@@ -136,9 +135,7 @@ const getConstraints = asyncHandler(async (req, res) => {
   if (academicYear) query.academicYear = academicYear;
   if (semester)     query.semester     = semester;
 
-  const constraints = await GaetConstraint.find(query)
-    .select('-generatedSessions')
-    .lean();
+  const constraints = await gaetRepo.listForCampus(query);
 
   return sendSuccess(res, 200, 'Constraints fetched.', constraints, { count: constraints.length });
 });
@@ -155,9 +152,7 @@ const getStatus = asyncHandler(async (req, res) => {
   const campusFilter = getCampusFilter(req, res);
   if (!campusFilter) return;
 
-  const constraint = await GaetConstraint.findOne({ _id: constraintId, ...campusFilter })
-    .select('status qualityReport generatedAt generatingStartedAt generationVersion academicYear semester schoolCampus')
-    .lean();
+  const constraint = await gaetRepo.findStatusView(constraintId, campusFilter);
 
   if (!constraint) return sendError(res, 404, 'Constraint not found.');
 
@@ -176,9 +171,7 @@ const getPreview = asyncHandler(async (req, res) => {
   const campusFilter = getCampusFilter(req, res);
   if (!campusFilter) return;
 
-  const constraint = await GaetConstraint.findOne({ _id: constraintId, ...campusFilter })
-    .select('status generatedSessions qualityReport academicYear semester schoolCampus')
-    .lean();
+  const constraint = await gaetRepo.findPreviewView(constraintId, campusFilter);
 
   if (!constraint) return sendError(res, 404, 'Constraint not found.');
 
@@ -208,9 +201,7 @@ const getConflicts = asyncHandler(async (req, res) => {
   const campusFilter = getCampusFilter(req, res);
   if (!campusFilter) return;
 
-  const constraint = await GaetConstraint.findOne({ _id: constraintId, ...campusFilter })
-    .select('status generatedSessions courseRequirements qualityReport')
-    .lean();
+  const constraint = await gaetRepo.findConflictsView(constraintId, campusFilter);
 
   if (!constraint) return sendError(res, 404, 'Constraint not found.');
 
@@ -251,7 +242,7 @@ const createOrUpdateConstraints = asyncHandler(async (req, res) => {
   if (!campusFilter) return;
   const { academicYear, semester, timeSlots, courseRequirements, roomRegistry, teacherPreferences } = req.body;
 
-  const existing = await GaetConstraint.findOne({ ...campusFilter, academicYear, semester });
+  const existing = await gaetRepo.findByYearSemester(campusFilter, academicYear, semester);
 
   if (existing) {
     if (existing.status === GAET_STATUS.GENERATING) {
@@ -298,11 +289,7 @@ const createOrUpdateConstraints = asyncHandler(async (req, res) => {
     $set.generatingStartedAt = null;
   }
 
-  const constraint = await GaetConstraint.findOneAndUpdate(
-    { ...campusFilter, academicYear, semester },
-    { $set },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
-  );
+  const constraint = await gaetRepo.upsert(campusFilter, academicYear, semester, $set);
 
   const msg = wasGenerated
     ? 'Constraints updated. Previous generated timetable cleared — re-run generation.'
@@ -327,19 +314,10 @@ const generateSchedule = asyncHandler(async (req, res) => {
   // Atomically set GENERATING — fails if already GENERATING or PUBLISHED.
   // Use { new: false } to get the document BEFORE the update so we can restore
   // the original status if pre-flight checks fail (instead of always resetting to DRAFT).
-  const constraint = await GaetConstraint.findOneAndUpdate(
-    {
-      ...campusFilter,
-      academicYear,
-      semester,
-      status: { $nin: [GAET_STATUS.GENERATING, GAET_STATUS.PUBLISHED] },
-    },
-    { $set: { status: GAET_STATUS.GENERATING, generatingStartedAt: new Date() } },
-    { new: false }
-  );
+  const constraint = await gaetRepo.claimForGeneration(campusFilter, academicYear, semester);
 
   if (!constraint) {
-    const existing = await GaetConstraint.findOne({ ...campusFilter, academicYear, semester });
+    const existing = await gaetRepo.findByYearSemester(campusFilter, academicYear, semester);
     if (!existing) {
       return sendError(res, 404, 'No constraint document found for this campus / year / semester. Create constraints first.');
     }
@@ -357,23 +335,17 @@ const generateSchedule = asyncHandler(async (req, res) => {
 
   // Pre-flight: reject early if mandatory constraints are missing (avoids a worker thread for a trivially invalid config)
   if (!constraint.courseRequirements?.length) {
-    await GaetConstraint.findByIdAndUpdate(constraint._id, {
-      $set: { status: originalStatus, generatingStartedAt: null },
-    });
+    await gaetRepo.restoreStatus(constraint._id, originalStatus);
     return sendError(res, 422, 'Cannot generate: no course requirements defined. Add courseRequirements first.');
   }
 
   if (!constraint.timeSlots?.length) {
-    await GaetConstraint.findByIdAndUpdate(constraint._id, {
-      $set: { status: originalStatus, generatingStartedAt: null },
-    });
+    await gaetRepo.restoreStatus(constraint._id, originalStatus);
     return sendError(res, 422, 'Cannot generate: no time slots defined. Add timeSlots first.');
   }
 
   if (!constraint.roomRegistry?.length) {
-    await GaetConstraint.findByIdAndUpdate(constraint._id, {
-      $set: { status: originalStatus, generatingStartedAt: null },
-    });
+    await gaetRepo.restoreStatus(constraint._id, originalStatus);
     return sendError(res, 422, 'Cannot generate: no rooms defined. Add roomRegistry first.');
   }
 
@@ -388,16 +360,12 @@ const generateSchedule = asyncHandler(async (req, res) => {
 
   worker.on('message', async (result) => {
     try {
-      await GaetConstraint.findByIdAndUpdate(constraint._id, {
-        $set: {
-          status:              result.status,
-          generatedSessions:   result.sessions  || [],
-          qualityReport:       result.report    || null,
-          generatedAt:         new Date(),
-          generatedBy:         actorId,
-          generatingStartedAt: null,
-          generationVersion:   currentVersion + 1,
-        },
+      await gaetRepo.applyWorkerResult(constraint._id, {
+        status:            result.status,
+        sessions:          result.sessions,
+        report:            result.report,
+        generatedBy:       actorId,
+        generationVersion: currentVersion + 1,
       });
     } catch (err) {
       console.error('[GAET] Failed to persist worker result:', err.message);
@@ -407,9 +375,7 @@ const generateSchedule = asyncHandler(async (req, res) => {
   worker.on('error', async (err) => {
     console.error('[GAET] Worker runtime error:', err.message);
     try {
-      await GaetConstraint.findByIdAndUpdate(constraint._id, {
-        $set: { status: GAET_STATUS.FAILED, generatingStartedAt: null },
-      });
+      await gaetRepo.markFailed(constraint._id);
     } catch (_) {}
   });
 
@@ -442,7 +408,7 @@ const publishSchedule = asyncHandler(async (req, res) => {
   const campusFilter = getWriteCampusFilter(req, res);
   if (!campusFilter) return;
 
-  const constraint = await GaetConstraint.findOne({ _id: constraintId, ...campusFilter });
+  const constraint = await gaetRepo.findForPublish(constraintId, campusFilter);
   if (!constraint) return sendError(res, 404, 'Constraint not found.');
 
   if (!constraint.isPublishable) {
@@ -531,10 +497,7 @@ const publishSchedule = asyncHandler(async (req, res) => {
     );
   }
 
-  constraint.status      = GAET_STATUS.PUBLISHED;
-  constraint.publishedAt = new Date();
-  constraint.publishedBy = req.user.id;
-  await constraint.save();
+  await gaetRepo.markPublished(constraintId, req.user.id);
 
   return sendSuccess(res, 200, `Published ${created.length} session(s) successfully.`, {
     published: created.length,
@@ -558,27 +521,10 @@ const cancelGenerated = asyncHandler(async (req, res) => {
   const campusFilter = getWriteCampusFilter(req, res);
   if (!campusFilter) return;
 
-  const constraint = await GaetConstraint.findOneAndUpdate(
-    {
-      _id: constraintId,
-      ...campusFilter,
-      status: { $in: [GAET_STATUS.GENERATED, GAET_STATUS.PARTIALLY_GENERATED, GAET_STATUS.FAILED] },
-    },
-    {
-      $set: {
-        status:              GAET_STATUS.CANCELLED,
-        generatedSessions:   [],
-        qualityReport:       null,
-        generatedAt:         null,
-        generatedBy:         null,
-        generatingStartedAt: null,
-      },
-    },
-    { new: true }
-  );
+  const constraint = await gaetRepo.cancel(constraintId, campusFilter);
 
   if (!constraint) {
-    const existing = await GaetConstraint.findOne({ _id: constraintId, ...campusFilter });
+    const existing = await gaetRepo.findInCampus(constraintId, campusFilter);
     if (!existing) return sendError(res, 404, 'Constraint not found.');
     if (existing.status === GAET_STATUS.PUBLISHED) {
       return sendError(res, 409, 'Cannot cancel a published timetable. Use the schedule cancellation flow instead.');

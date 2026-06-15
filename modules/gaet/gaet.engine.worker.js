@@ -291,8 +291,8 @@ async function run() {
       maxPoolSize:              1,
     });
 
-    const GaetConstraint = require('./gaet-constraint.model');
-    const constraint = await GaetConstraint.findById(workerData.constraintId).lean();
+    const gaetRepo = require('./gaet.repository');
+    const constraint = await gaetRepo.findByIdLean(workerData.constraintId);
 
     if (!constraint) {
       parentPort.postMessage({ status: 'FAILED', error: `GaetConstraint ${workerData.constraintId} not found`, sessions: [], report: null });
