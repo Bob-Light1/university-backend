@@ -1,4 +1,4 @@
-const Class = require('../class.model');
+const classRepo = require('../class.repository');
 // Require paresseux : class est dans la cloture statique de campus
 const getCampusDocById = (...args) => require('../../campus').service.getCampusDocById(...args);
 const {
@@ -13,7 +13,6 @@ const {
 const {
   isValidObjectId,
   buildCampusFilter,
-  escapeRegex,
 } = require('../../../shared/utils/validation-helpers');
 // Require paresseux : teacher.config consommera la façade class en C4 (cycle class ↔ teacher)
 const validateTeacherBelongsToCampus = (...args) =>
@@ -63,11 +62,7 @@ exports.createClass = async (req, res) => {
       }
     }
 
-    const existingClass = await Class.findOne({
-      schoolCampus,
-      level,
-      className: className.trim()
-    });
+    const existingClass = await classRepo.findDuplicate({ schoolCampus, level, className: className.trim() });
 
     if (existingClass) {
       return sendConflict(res, 'A class with this name already exists for this level and campus');
@@ -81,7 +76,7 @@ exports.createClass = async (req, res) => {
       }
     }
 
-    const newClass = await Class.create({
+    const newClass = await classRepo.create({
       schoolCampus,
       level,
       className: className.trim(),
@@ -91,11 +86,7 @@ exports.createClass = async (req, res) => {
       room
     });
 
-    const populatedClass = await Class.findById(newClass._id)
-      .populate('schoolCampus', 'campus_name')
-      .populate('level', 'name description')
-      .populate('classManager', 'firstName lastName email')
-      .lean();
+    const populatedClass = await classRepo.findByIdPopulated(newClass._id);
 
     return sendCreated(res, 'Class created successfully', populatedClass);
 
@@ -132,36 +123,21 @@ exports.getAllClass = async (req, res) => {
       includeArchived,
     } = req.query;
 
-    const filter = buildCampusFilter(req.user, campusId);
-
-    if (includeArchived !== 'true') {
-      filter.status = { $ne: 'archived' };
-    } else if (status) {
-      filter.status = status;
-    }
-
-    if (level && isValidObjectId(level)) {
-      filter.level = level;
-    }
-
-    if (search) {
-      filter.className = { $regex: escapeRegex(search), $options: 'i' };
-    }
+    const baseFilter = buildCampusFilter(req.user, campusId);
 
     const pageNumber = parseInt(page, 10);
     const pageSize   = parseInt(limit, 10);
     const skip       = (pageNumber - 1) * pageSize;
 
-    const classes = await Class.find(filter)
-      .populate('schoolCampus', 'campus_name')
-      .populate('level', 'name description')
-      .populate('classManager', 'firstName lastName email')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(pageSize)
-      .lean();
-
-    const total = await Class.countDocuments(filter);
+    const { data: classes, total } = await classRepo.paginate({
+      baseFilter,
+      includeArchived: includeArchived === 'true',
+      status,
+      level: level && isValidObjectId(level) ? level : undefined,
+      search,
+      skip,
+      limit: pageSize,
+    });
 
     return sendPaginated(
       res,
@@ -190,12 +166,7 @@ exports.getClassById = async (req, res) => {
       return sendError(res, 400, 'Invalid class ID format');
     }
 
-    const classData = await Class.findById(classId)
-      .populate('schoolCampus', 'campus_name campus_number location')
-      .populate('level', 'name description')
-      .populate('classManager', 'firstName lastName email phone')
-      .populate('students', 'firstName lastName email')
-      .lean();
+    const classData = await classRepo.findByIdDetailed(classId);
 
     if (!classData) {
       return sendNotFound(res, 'Class');
@@ -235,27 +206,13 @@ exports.getClassesByCampus = async (req, res) => {
       }
     }
 
-    const filter = { schoolCampus: campusId };
-    if (includeArchived !== 'true') {
-      filter.status = 'active';
-    } else if (status) {
-      filter.status = status;
-    }
-
-    if (search) {
-      filter.className = { $regex: escapeRegex(search), $options: 'i' };
-    }
-
-    if (level && isValidObjectId(level)) {
-      filter.level = level;
-    }
-
-    const classes = await Class.find(filter)
-      .populate('schoolCampus', 'campus_name email')
-      .populate('level', 'name description')
-      .populate('classManager', 'firstName lastName email')
-      .sort({ level: 1, className: 1 })
-      .lean();
+    const classes = await classRepo.listByCampus({
+      campusId,
+      status,
+      includeArchived: includeArchived === 'true',
+      search,
+      level: level && isValidObjectId(level) ? level : undefined,
+    });
 
     return sendSuccess(res, 200, 'Classes retrieved successfully', classes);
 
@@ -308,21 +265,7 @@ exports.getClassesByTeacher = async (req, res) => {
     // ADMIN / DIRECTOR: no campus restriction
 
     // Include classes where the teacher is classManager OR listed in teachers[]
-    const filter = {
-      ...campusFilter,
-      status: { $ne: 'archived' },
-      $or: [
-        { classManager: teacherId },
-        { teachers:     teacherId },
-      ],
-    };
-
-    const classes = await Class.find(filter)
-      .populate('schoolCampus', 'campus_name')
-      .populate('level', 'name description')
-      .populate('classManager', 'firstName lastName email')
-      .sort({ className: 1 })
-      .lean();
+    const classes = await classRepo.listByTeacher({ campusFilter, teacherId });
 
     return sendSuccess(res, 200, 'Teacher classes retrieved successfully', classes);
 
@@ -345,7 +288,7 @@ exports.updateClass = async (req, res) => {
       return sendError(res, 400, 'Invalid class ID format');
     }
 
-    const existingClass = await Class.findById(classId);
+    const existingClass = await classRepo.findByIdLean(classId);
 
     if (!existingClass) {
       return sendNotFound(res, 'Class');
@@ -382,11 +325,11 @@ exports.updateClass = async (req, res) => {
     }
 
     if (schoolCampus || level || className) {
-      const duplicateClass = await Class.findOne({
-        _id: { $ne: classId },
+      const duplicateClass = await classRepo.findDuplicate({
         schoolCampus: schoolCampus || existingClass.schoolCampus,
         level:        level        || existingClass.level,
-        className:    className    ? className.trim() : existingClass.className
+        className:    className    ? className.trim() : existingClass.className,
+        exceptId:     classId,
       });
 
       if (duplicateClass) {
@@ -394,22 +337,19 @@ exports.updateClass = async (req, res) => {
       }
     }
 
-    if (schoolCampus)              existingClass.schoolCampus = schoolCampus;
-    if (level)                     existingClass.level        = level;
-    if (className)                 existingClass.className    = className.trim();
-    if (classManager !== undefined) existingClass.classManager = classManager;
-    if (status)                    existingClass.status       = status;
-    if (maxStudents)               existingClass.maxStudents  = maxStudents;
-    if (academicYear !== undefined) existingClass.academicYear = academicYear;
-    if (room !== undefined)         existingClass.room         = room;
+    const fields = {};
+    if (schoolCampus)               fields.schoolCampus = schoolCampus;
+    if (level)                      fields.level        = level;
+    if (className)                  fields.className    = className.trim();
+    if (classManager !== undefined) fields.classManager = classManager;
+    if (status)                     fields.status       = status;
+    if (maxStudents)                fields.maxStudents  = maxStudents;
+    if (academicYear !== undefined) fields.academicYear = academicYear;
+    if (room !== undefined)         fields.room         = room;
 
-    const updatedClass = await existingClass.save();
+    await classRepo.applyUpdate(classId, fields);
 
-    const populatedClass = await Class.findById(updatedClass._id)
-      .populate('schoolCampus', 'campus_name')
-      .populate('level', 'name description')
-      .populate('classManager', 'firstName lastName email')
-      .lean();
+    const populatedClass = await classRepo.findByIdPopulated(classId);
 
     return sendSuccess(res, 200, 'Class updated successfully', populatedClass);
 
@@ -442,7 +382,7 @@ exports.deleteClass = async (req, res) => {
       return sendError(res, 400, 'Invalid class ID format');
     }
 
-    const existingClass = await Class.findById(classId);
+    const existingClass = await classRepo.findByIdLean(classId);
 
     if (!existingClass) {
       return sendNotFound(res, 'Class');
@@ -458,8 +398,7 @@ exports.deleteClass = async (req, res) => {
       return sendError(res, 400, 'Class is already archived');
     }
 
-    existingClass.status = 'archived';
-    await existingClass.save();
+    await classRepo.setStatus(classId, 'archived');
 
     return sendSuccess(res, 200, 'Class archived successfully');
 
@@ -482,7 +421,7 @@ exports.restoreClass = async (req, res) => {
       return sendError(res, 400, 'Invalid class ID format');
     }
 
-    const existingClass = await Class.findById(classId);
+    const existingClass = await classRepo.findByIdLean(classId);
 
     if (!existingClass) {
       return sendNotFound(res, 'Class');
@@ -498,13 +437,9 @@ exports.restoreClass = async (req, res) => {
       return sendError(res, 400, 'Class is not archived');
     }
 
-    existingClass.status = 'active';
-    await existingClass.save();
+    await classRepo.setStatus(classId, 'active');
 
-    const populatedClass = await Class.findById(existingClass._id)
-      .populate('schoolCampus', 'campus_name')
-      .populate('level', 'name description')
-      .lean();
+    const populatedClass = await classRepo.findByIdForRestore(classId);
 
     return sendSuccess(res, 200, 'Class restored successfully', populatedClass);
 
