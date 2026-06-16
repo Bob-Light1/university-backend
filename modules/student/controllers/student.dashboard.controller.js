@@ -18,9 +18,7 @@
 
 const mongoose = require('mongoose');
 
-const Student          = require('../models/student.model');
-const StudentSchedule  = require('../models/student.schedule.model');
-const StudentAttendance = require('../models/student.attend.model');
+const studentRepo      = require('../student.repository');
 const examService      = require('../../exam').service; // façade module exam (§3)
 const resultService    = require('../../result').service; // façade module result (§3)
 const {
@@ -48,11 +46,7 @@ const getDashboard = async (req, res) => {
     const studentId = req.user.id;
 
     // ── 1. Student profile ────────────────────────────────────────────────────
-    const student = await Student.findById(studentId)
-      .populate('studentClass', 'className level')
-      .populate('schoolCampus', 'campus_name')
-      .populate('mentor',       'firstName lastName email')
-      .lean({ virtuals: true });
+    const student = await studentRepo.findStudentDashboardProfile(studentId);
 
     if (!student) return sendNotFound(res, 'Student');
 
@@ -69,14 +63,6 @@ const getDashboard = async (req, res) => {
     );
 
     // ── 3. Parallel queries ───────────────────────────────────────────────────
-    const scheduleFilter = (extraTime) => ({
-      'classes.classId': classId,
-      schoolCampus:      campusOid,
-      status:            'PUBLISHED',
-      isDeleted:         false,
-      ...extraTime,
-    });
-
     const [
       todaySessions,
       upcomingSessions,
@@ -87,35 +73,23 @@ const getDashboard = async (req, res) => {
 
       // Today's sessions
       classId
-        ? StudentSchedule.find(scheduleFilter({ startTime: { $gte: todayStart, $lte: todayEnd } }))
-            .sort({ startTime: 1 }).lean()
+        ? studentRepo.listClassPublishedSessionsByStart({
+            classId, campusId: campusOid, gte: todayStart, lte: todayEnd,
+          })
         : Promise.resolve([]),
 
       // Next 7 days (beyond today)
       classId
-        ? StudentSchedule.find(scheduleFilter({ startTime: { $gt: todayEnd, $lte: weekEnd } }))
-            .sort({ startTime: 1 }).limit(8).lean()
+        ? studentRepo.listClassPublishedSessionsByStart({
+            classId, campusId: campusOid, gt: todayEnd, lte: weekEnd, limit: 8,
+          })
         : Promise.resolve([]),
 
       // Current-year attendance summary
       campusOid
-        ? StudentAttendance.aggregate([
-            {
-              $match: {
-                student:      toObjectId(studentId),
-                schoolCampus: campusOid,
-                academicYear: acYear,
-              },
-            },
-            {
-              $group: {
-                _id:           null,
-                totalSessions: { $sum: 1 },
-                presentCount:  { $sum: { $cond: [{ $eq: ['$status', true]  }, 1, 0] } },
-                absentCount:   { $sum: { $cond: [{ $eq: ['$status', false] }, 1, 0] } },
-              },
-            },
-          ])
+        ? studentRepo.aggregateStudentYearAttendance({
+            studentOid: toObjectId(studentId), campusOid, academicYear: acYear,
+          })
         : Promise.resolve([]),
 
       // Last 5 published results

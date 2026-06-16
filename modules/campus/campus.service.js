@@ -7,6 +7,7 @@
  *   - getCampusName             : nom du campus (en-têtes de documents).
  *   - getCampusForPdf           : nom + logo + localisation (rendu PDF académique).
  *   - getCampusDefaults         : langue/timezone/format de note par défaut (settings).
+ *   - getCampusNumber           : numéro/préfixe (génération de matricule student, en session).
  *   - getCampusDocById          : document Mongoose complet (méthodes d'instance — class.canAddClass).
  *   - getCampusCommissionConfig : config de commission (partner.lead).
  *   - getCampusCommissionConfigWithName : config + nom du campus (partner.commission).
@@ -28,6 +29,7 @@ const getCampusName             = (campusId) => campusRepo.getCampusName(campusI
 const getCampusForPdf           = (campusId) => campusRepo.getCampusForPdf(campusId);
 const getCampusStorageInfo      = (campusId) => campusRepo.getCampusStorageInfo(campusId);
 const getCampusDefaults         = (campusId) => campusRepo.getCampusDefaults(campusId);
+const getCampusNumber           = (campusId, opts) => campusRepo.getCampusNumber(campusId, opts);
 const getCampusDocById          = (campusId) => campusRepo.getCampusDocById(campusId);
 const getCampusCommissionConfig = (campusId) => campusRepo.getCampusCommissionConfig(campusId);
 const getCampusCommissionConfigWithName = (campusId) => campusRepo.getCampusCommissionConfigWithName(campusId);
@@ -41,6 +43,7 @@ module.exports = {
   getCampusForPdf,
   getCampusStorageInfo,
   getCampusDefaults,
+  getCampusNumber,
   getCampusDocById,
   getCampusCommissionConfig,
   getCampusCommissionConfigWithName,

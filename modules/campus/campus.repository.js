@@ -81,6 +81,13 @@ const getCampusStorageInfo = (campusId) =>
 const getCampusDefaults = (campusId) =>
   Campus.findById(campusId).select('defaultLanguage defaultTimezone defaultGradeFormat').lean();
 
+/**
+ * Numéro/préfixe du campus (génération de matricule student, en session de
+ * transaction). `opts.session` propagé pour participer à la transaction appelante.
+ */
+const getCampusNumber = (campusId, { session } = {}) =>
+  Campus.findById(campusId).select('campus_number').session(session ?? null).lean();
+
 /** Document Mongoose complet (méthodes d'instance — ex. campus.canAddClass()). */
 const getCampusDocById = (campusId) => Campus.findById(campusId);
 
@@ -135,6 +142,7 @@ module.exports = {
   getCampusForPdf,
   getCampusStorageInfo,
   getCampusDefaults,
+  getCampusNumber,
   getCampusDocById,
   getCampusCommissionConfig,
   getCampusCommissionConfigWithName,

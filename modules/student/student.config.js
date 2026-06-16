@@ -1,5 +1,8 @@
-const Student = require('./models/student.model');
+const Student = require('./models/student.model'); // exception assumée : Model du GenericEntityController
+const studentRepo = require('./student.repository');
 const { getClassCampusRefForValidation } = require('../class').service; // façade module class (§3)
+// campus.service en require PARESSEUX (campus est un hub qui requiert student → cycle)
+const campusService = () => require('../campus').service;
 const mongoose = require('mongoose');
 
 /**
@@ -75,13 +78,9 @@ const studentConfig = {
 
        // Validate matricule uniqueness within campus
        if (fields.matricule) {
-        const existingStudent = await Student.findOne({
-          matricule: fields.matricule,
-          schoolCampus: campusId
-        })
-        .select('_id')
-        .session(session)
-        .lean();
+        const existingStudent = await studentRepo.findStudentByMatriculeInCampus(
+          fields.matricule, campusId, { session }
+        );
 
         if (existingStudent) {
           return {
@@ -140,12 +139,9 @@ const studentConfig = {
       try {
         // Auto-generate matricule if not provided
         if (!fields.matricule) {
-          const studentCount = await Student.countDocuments({
-            schoolCampus: campusId
-          }).session(session);
-  
-          const Campus= mongoose.model('Campus');
-          const campus = await Campus.findById(campusId).select('campus_number').session(session);
+          const studentCount = await studentRepo.countStudentsInCampus(campusId, { session });
+
+          const campus = await campusService().getCampusNumber(campusId, { session });
           const campusPrefix = campus?.campus_number || 'CAM';
           
           fields.matricule = `${campusPrefix}-STD-${String(studentCount + 1).padStart(4, '0')}`;
@@ -183,11 +179,9 @@ const studentConfig = {
 
       // Validate matricule uniqueness if being changed
       if (updates.matricule && updates.matricule !== student.matricule) {
-        const existingStudent = await Student.findOne({
-          matricule: updates.matricule,
-          schoolCampus: student.schoolCampus,
-          _id: { $ne: student._id }
-        }).select('_id').lean();
+        const existingStudent = await studentRepo.findStudentByMatriculeExcluding(
+          updates.matricule, student.schoolCampus, student._id
+        );
 
         if (existingStudent) {
           return {

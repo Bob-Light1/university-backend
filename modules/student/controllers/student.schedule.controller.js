@@ -33,11 +33,10 @@
  */
 
 const mongoose        = require('mongoose');
-const StudentSchedule = require('../models/student.schedule.model');
+const studentRepo     = require('../student.repository');
 // Require paresseux : teacher.dashboard consomme des données student (cycle student ↔ teacher)
 const detectTeacherConflicts = (...args) =>
   require('../../teacher').service.detectTeacherConflicts(...args);
-const Student         = require('../models/student.model');
 
 const { SCHEDULE_STATUS, SESSION_TYPE, SEMESTER } = require('../../../shared/utils/schedule.base');
 
@@ -106,17 +105,8 @@ const dispatchNotification = async (eventType, session) => {
  * @param   {string} campusId - req.user.campusId (campus lock from JWT)
  * @returns {string|null}     - studentClass ObjectId as string, or null
  */
-const resolveStudentClass = async (userId, campusId) => {
-  const student = await Student.findOne({
-    _id:          userId,
-    schoolCampus: campusId,  // campus-isolation guard
-    status:       { $ne: 'archived' },
-  })
-    .select('studentClass')
-    .lean();
-
-  return student?.studentClass?.toString() ?? null;
-};
+const resolveStudentClass = (userId, campusId) =>
+  studentRepo.resolveStudentClass(userId, campusId);
 
 /**
  * Generates a single VEVENT block (RFC 5545) for ICS export.
@@ -172,23 +162,12 @@ const getMyCalendar = asyncHandler(async (req, res) => {
   if (isNaN(start) || isNaN(end)) return sendError(res, 400, 'Invalid date range. Use ISO 8601.');
   if (end <= start)               return sendError(res, 400, "'to' must be after 'from'.");
 
-  const filter = {
-    'classes.classId': classId,
-    schoolCampus:      campusId,
-    startTime:         { $gte: start },
-    endTime:           { $lte: end },
-    status:            SCHEDULE_STATUS.PUBLISHED,
-    isDeleted:         false,
-  };
+  const validSessionType =
+    sessionType && Object.values(SESSION_TYPE).includes(sessionType) ? sessionType : undefined;
 
-  if (sessionType && Object.values(SESSION_TYPE).includes(sessionType)) {
-    filter.sessionType = sessionType;
-  }
-
-  const sessions = await StudentSchedule.find(filter)
-    .sort({ startTime: 1 })
-    .select('-__v')
-    .lean();
+  const sessions = await studentRepo.listPublishedSessionsInWindow({
+    classId, campusId, start, end, sessionType: validSessionType, select: '-__v',
+  });
 
   return sendSuccess(res, 200, 'Calendar fetched successfully.', sessions, {
     count: sessions.length,
@@ -205,13 +184,7 @@ const getSessionById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await StudentSchedule.findOne({
-    _id:       id,
-    isDeleted: false,
-    status:    SCHEDULE_STATUS.PUBLISHED,
-  })
-    .select('-__v')
-    .lean();
+  const session = await studentRepo.findPublishedSessionById(id);
 
   if (!session) return sendError(res, 404, 'Session not found or not yet published.');
   return sendSuccess(res, 200, 'Session fetched.', session);
@@ -235,16 +208,9 @@ const exportCalendarICS = asyncHandler(async (req, res) => {
   const start = from ? new Date(from) : new Date();
   const end   = to   ? new Date(to)   : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
 
-  const sessions = await StudentSchedule.find({
-    'classes.classId': classId,
-    schoolCampus:      campusId,
-    startTime:         { $gte: start },
-    endTime:           { $lte: end },
-    status:            SCHEDULE_STATUS.PUBLISHED,
-    isDeleted:         false,
-  })
-    .sort({ startTime: 1 })
-    .lean();
+  const sessions = await studentRepo.listPublishedSessionsInWindow({
+    classId, campusId, start, end,
+  });
 
   const icsContent = [
     'BEGIN:VCALENDAR',
@@ -269,9 +235,7 @@ const getAttendanceForSession = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await StudentSchedule.findOne({ _id: id, isDeleted: false })
-    .select('reference subject startTime endTime attendance')
-    .lean();
+  const session = await studentRepo.findSessionAttendanceInfo(id);
 
   if (!session) return sendError(res, 404, 'Session not found.');
 
@@ -353,7 +317,7 @@ const createSession = asyncHandler(async (req, res) => {
   if (errors.length > 0) return sendError(res, 400, errors.join(' | '));
 
   // ── Class double-booking detection ──────────────────────────────────────────
-  const { hasConflict, conflicts } = await StudentSchedule.detectConflicts({
+  const { hasConflict, conflicts } = await studentRepo.detectScheduleConflicts({
     startTime,
     endTime,
     schoolCampus: resolvedCampus,
@@ -374,7 +338,7 @@ const createSession = asyncHandler(async (req, res) => {
   }
 
   // ── Persist ─────────────────────────────────────────────────────────────────
-  const session = await StudentSchedule.create({
+  const session = await studentRepo.createScheduleSession({
     schoolCampus:   resolvedCampus,
     academicYear,
     semester,
@@ -409,7 +373,7 @@ const updateSession = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const session = await StudentSchedule.findOne({ _id: id, isDeleted: false, ...campusFilter });
+  const session = await studentRepo.findScheduleSessionForWrite(id, campusFilter);
   if (!session) return sendError(res, 404, 'Session not found.');
 
   const {
@@ -453,7 +417,7 @@ const updateSession = asyncHandler(async (req, res) => {
   }
 
   // Conflict detection (exclude current session)
-  const { hasConflict, conflicts } = await StudentSchedule.detectConflicts({
+  const { hasConflict, conflicts } = await studentRepo.detectScheduleConflicts({
     startTime:    newStart,
     endTime:      newEnd,
     schoolCampus: session.schoolCampus,
@@ -500,7 +464,7 @@ const updateSession = asyncHandler(async (req, res) => {
   }
 
   session.lastModifiedBy = req.user.id;
-  await session.save();
+  await studentRepo.saveScheduleDoc(session);
 
   // Keep TeacherSchedule in sync with every mutation (timing, teacher, classes, status…)
   await syncTeacherSchedule(session.toObject(), req.user.id);
@@ -518,9 +482,7 @@ const publishSession = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await StudentSchedule.findOne({
-    _id: id, isDeleted: false, ...buildCampusFilter(req),
-  });
+  const session = await studentRepo.findScheduleSessionForWrite(id, buildCampusFilter(req));
   if (!session)                                        return sendError(res, 404, 'Session not found.');
   if (session.status === SCHEDULE_STATUS.PUBLISHED)    return sendError(res, 400, 'Session is already published.');
   if (session.status === SCHEDULE_STATUS.CANCELLED)    return sendError(res, 400, 'Cannot publish a cancelled session.');
@@ -529,7 +491,7 @@ const publishSession = asyncHandler(async (req, res) => {
   session.publishedAt    = new Date();
   session.publishedBy    = req.user.id;
   session.lastModifiedBy = req.user.id;
-  await session.save();
+  await studentRepo.saveScheduleDoc(session);
 
   // Mirror published status to the TeacherSchedule so the teacher sees the session
   await syncTeacherSchedule(session.toObject(), req.user.id);
@@ -549,16 +511,14 @@ const cancelSession = asyncHandler(async (req, res) => {
   const { reason = '' } = req.body;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await StudentSchedule.findOne({
-    _id: id, isDeleted: false, ...buildCampusFilter(req),
-  });
+  const session = await studentRepo.findScheduleSessionForWrite(id, buildCampusFilter(req));
   if (!session)                                     return sendError(res, 404, 'Session not found.');
   if (session.status === SCHEDULE_STATUS.CANCELLED) return sendError(res, 400, 'Session is already cancelled.');
 
   session.status         = SCHEDULE_STATUS.CANCELLED;
   session.lastModifiedBy = req.user.id;
   if (reason) session.description = `[CANCELLED] ${reason}`;
-  await session.save();
+  await studentRepo.saveScheduleDoc(session);
 
   // Propagate cancellation to TeacherSchedule so the teacher's view is consistent
   await syncTeacherSchedule(session.toObject(), req.user.id);
@@ -576,11 +536,7 @@ const softDeleteSession = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await StudentSchedule.findOneAndUpdate(
-    { _id: id, isDeleted: false, ...buildCampusFilter(req) },
-    { isDeleted: true, deletedAt: new Date(), deletedBy: req.user.id, lastModifiedBy: req.user.id },
-    { new: true }
-  );
+  const session = await studentRepo.softDeleteScheduleSession(id, buildCampusFilter(req), req.user.id);
   if (!session) return sendError(res, 404, 'Session not found.');
 
   return sendSuccess(res, 200, 'Session deleted.', { _id: session._id });
@@ -624,15 +580,10 @@ const getCampusOverview = asyncHandler(async (req, res) => {
   const pageNum  = parsePositiveInt(page, 1);
   const limitNum = parsePositiveInt(limit, 50);
 
-  const [sessions, total] = await Promise.all([
-    StudentSchedule.find(filter)
-      .sort({ startTime: 1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .select('-__v')
-      .lean(),
-    StudentSchedule.countDocuments(filter),
-  ]);
+  const { docs: sessions, total } = await studentRepo.paginateScheduleSessions(filter, {
+    skip: (pageNum - 1) * limitNum,
+    limit: limitNum,
+  });
 
   return sendPaginated(res, 200, 'Overview fetched.', sessions, { total, page: pageNum, limit: limitNum });
 });
@@ -657,37 +608,7 @@ const getRoomOccupancyReport = asyncHandler(async (req, res) => {
     ...buildCampusFilter(req),
   };
 
-  const report = await StudentSchedule.aggregate([
-    { $match: matchStage },
-    {
-      $group: {
-        _id:               '$room.code',
-        capacity:          { $first: '$room.capacity' },
-        totalSessions:     { $sum: 1 },
-        confirmedSessions: { $sum: { $cond: [{ $eq: ['$status', SCHEDULE_STATUS.PUBLISHED] }, 1, 0] } },
-        cancelledSessions: { $sum: { $cond: [{ $eq: ['$status', SCHEDULE_STATUS.CANCELLED] }, 1, 0] } },
-        totalMinutes:      { $sum: '$durationMinutes' },
-      },
-    },
-    {
-      $project: {
-        roomCode:          '$_id',
-        capacity:          1,
-        totalSessions:     1,
-        confirmedSessions: 1,
-        cancelledSessions: 1,
-        totalHours:        { $round: [{ $divide: ['$totalMinutes', 60] }, 1] },
-        cancellationRate: {
-          $cond: [
-            { $gt: ['$totalSessions', 0] },
-            { $round: [{ $multiply: [{ $divide: ['$cancelledSessions', '$totalSessions'] }, 100] }, 1] },
-            0,
-          ],
-        },
-      },
-    },
-    { $sort: { totalSessions: -1 } },
-  ]);
+  const report = await studentRepo.aggregateRoomOccupancy(matchStage);
 
   return sendSuccess(res, 200, 'Room occupancy report fetched.', report, {
     from, to, totalRooms: report.length,

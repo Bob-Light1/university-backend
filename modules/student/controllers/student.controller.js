@@ -2,7 +2,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
-const Student = require('../models/student.model');
+const Student = require('../models/student.model'); // exception assumée : Model du GenericBulkController
+const studentRepo = require('../student.repository');
 const classService = require('../../class').service; // façade module class (§3)
 const studentConfig = require('../student.config');
 
@@ -139,9 +140,7 @@ const loginStudent = async (req, res) => {
       return sendError(res, 400, 'Invalid email format.');
     }
 
-    const student = await Student.findOne(query)
-      .select('+password')
-      .populate('schoolCampus', 'campus_name');
+    const student = await studentRepo.findStudentForLogin(query);
 
     // Generic error for security
     if (!student) {
@@ -179,9 +178,8 @@ const loginStudent = async (req, res) => {
       { expiresIn: '7d', issuer: 'school-management-app' }
     );
 
-    // Update last login
-    student.lastLogin = new Date();
-    await student.save();
+    // Update last login (atomique : n'exécute pas les hooks de save)
+    await studentRepo.touchLastLogin(student._id);
 
     const prefs = await getLoginPrefs(student._id, 'STUDENT', campusId);
 
@@ -243,7 +241,7 @@ const loginStudent = async (req, res) => {
     }
 
     // Fetch student with password
-    const student = await Student.findById(id).select('+password');
+    const student = await studentRepo.findStudentByIdWithPassword(id);
     if (!student) {
       return sendNotFound(res, 'Student');
     }
@@ -264,7 +262,7 @@ const loginStudent = async (req, res) => {
     const salt = await bcrypt.genSalt(SALT_ROUNDS);
     student.password = await bcrypt.hash(newPassword, salt);
 
-    await student.save();
+    await studentRepo.saveStudentDoc(student);
 
     return sendSuccess(res, 200, 'Password updated successfully');
 
@@ -288,7 +286,7 @@ const deleteStudentPermanently = async (req, res) => {
       return sendError(res, 400, 'Invalid student ID format');
     }
 
-    const student = await Student.findById(id);
+    const student = await studentRepo.findStudentDocById(id);
     if (!student) {
       return sendNotFound(res, 'Student');
     }
@@ -298,8 +296,9 @@ const deleteStudentPermanently = async (req, res) => {
       await deleteFile(STUDENT_FOLDER, student.profileImage);
     }
 
-    // Delete student from database
-    await Student.findByIdAndDelete(id);
+    // Delete student from database (déclenche le hook post-findOneAndDelete :
+    // cascade de retrait des enfants côté parent)
+    await studentRepo.deleteStudentById(id);
 
     return sendSuccess(res, 200, 'Student deleted permanently');
 
