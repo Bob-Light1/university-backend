@@ -14,7 +14,7 @@
  *    GET    /question-bank/:id/stats → getQuestionStats
  */
 
-const QuestionBank = require('../models/question-bank.model');
+const repo = require('../exam.repository');
 const {
   sendSuccess,
   sendError,
@@ -49,17 +49,7 @@ const listQuestions = async (req, res) => {
     if (isActive !== undefined) match.isActive = isActive === 'true';
     if (search) match.questionText = { $regex: escapeRegex(search), $options: 'i' };
 
-    const [questions, total] = await Promise.all([
-      QuestionBank.find(match)
-        .select('-__v')
-        .populate('subject', 'subject_name subject_code')
-        .populate('createdBy', 'firstName lastName')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      QuestionBank.countDocuments(match),
-    ]);
+    const { docs: questions, total } = await repo.paginateQuestions(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Questions retrieved successfully.', questions, {
       total, page, limit,
@@ -86,7 +76,7 @@ const createQuestion = async (req, res) => {
       return sendError(res, 400, 'subject, questionText, questionType and difficulty are required.');
     }
 
-    const question = await QuestionBank.create({
+    const question = await repo.createQuestion({
       schoolCampus: campusId,
       subject, course, questionText, questionType, difficulty, bloomLevel,
       options, correctAnswer, points, tags, language, translations, instructions,
@@ -111,10 +101,7 @@ const getQuestion = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const question = await QuestionBank.findOne({ _id: id, ...campusFilter, isDeleted: false })
-      .populate('subject', 'subject_name subject_code')
-      .populate('course', 'name')
-      .populate('createdBy', 'firstName lastName');
+    const question = await repo.findQuestionDetailed({ _id: id, ...campusFilter, isDeleted: false });
 
     if (!question) return sendNotFound(res, 'Question');
     return sendSuccess(res, 200, 'Question retrieved.', question);
@@ -134,18 +121,14 @@ const updateQuestion = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const existing = await QuestionBank.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const existing = await repo.findQuestionByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!existing) return sendNotFound(res, 'Question');
 
     const IMMUTABLE = ['_id', 'schoolCampus', 'createdBy', 'createdAt', 'usageCount'];
     const updates = { ...req.body, updatedBy: req.user.id };
     IMMUTABLE.forEach((f) => delete updates[f]);
 
-    const updated = await QuestionBank.findByIdAndUpdate(
-      id,
-      { $set: updates },
-      { new: true, runValidators: true }
-    );
+    const updated = await repo.updateQuestionById(id, updates);
 
     return sendSuccess(res, 200, 'Question updated.', updated);
   } catch (err) {
@@ -164,10 +147,10 @@ const deleteQuestion = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const question = await QuestionBank.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const question = await repo.findQuestionByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!question) return sendNotFound(res, 'Question');
 
-    await QuestionBank.findByIdAndUpdate(id, { isDeleted: true, updatedBy: req.user.id });
+    await repo.softDeleteQuestion(id, req.user.id);
     return sendSuccess(res, 200, 'Question deleted.');
   } catch (err) {
     console.error('❌ deleteQuestion:', err);
@@ -196,7 +179,7 @@ const importQuestions = async (req, res) => {
       createdBy: req.user.id,
     }));
 
-    const inserted = await QuestionBank.insertMany(docs, { ordered: false });
+    const inserted = await repo.insertManyQuestions(docs);
     return sendCreated(res, `${inserted.length} question(s) imported.`, {
       imported: inserted.length,
     });
@@ -216,10 +199,7 @@ const getQuestionStats = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const question = await QuestionBank.findOne(
-      { _id: id, ...campusFilter, isDeleted: false },
-      'questionText usageCount lastUsedAt difficultyIndex discriminationIdx bloomLevel difficulty'
-    );
+    const question = await repo.findQuestionStats({ _id: id, ...campusFilter, isDeleted: false });
     if (!question) return sendNotFound(res, 'Question');
 
     return sendSuccess(res, 200, 'Question stats retrieved.', {

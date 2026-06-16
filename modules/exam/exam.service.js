@@ -10,12 +10,8 @@
  *   - teacher : countPendingGrading (dashboard enseignant)
  */
 
-const mongoose = require('mongoose');
-
 const { runAntiCheatJob } = require('./exam-anticheat.cron');
-const ExamSession         = require('./models/exam.session.model');
-const ExamEnrollment      = require('./models/exam.enrollment.model');
-const ExamGrading         = require('./models/exam.grading.model');
+const repo                = require('./exam.repository');
 
 /**
  * Liste paginée des sessions d'examen d'un campus (lecture seule).
@@ -36,14 +32,7 @@ const listCampusExaminations = async ({ campusId, page = 1, limit = 20, academic
   if (semester)     filter.semester     = semester;
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [docs, total] = await Promise.all([
-    ExamSession.find(filter)
-      .select('-__v')
-      .sort({ startTime: 1 })
-      .skip(skip).limit(Number(limit)).lean(),
-    ExamSession.countDocuments(filter),
-  ]);
-  return { docs, total };
+  return repo.paginateCampusExaminations(filter, { skip, limit: Number(limit) });
 };
 
 /**
@@ -57,18 +46,7 @@ const listCampusExaminations = async ({ campusId, page = 1, limit = 20, academic
  * @returns {Promise<Object[]>}
  */
 const getUpcomingExamsForStudent = async (studentId, { limit = 5 } = {}) => {
-  const enrollments = await ExamEnrollment.find({
-    student:    studentId,
-    isEligible: true,
-    isDeleted:  false,
-  })
-    .populate({
-      path:     'examSession',
-      match:    { status: { $in: ['SCHEDULED', 'PUBLISHED', 'ONGOING'] }, startTime: { $gte: new Date() }, isDeleted: false },
-      select:   'title startTime endTime status room subject',
-      populate: { path: 'subject', select: 'subject_name' },
-    })
-    .lean();
+  const enrollments = await repo.findUpcomingEnrollmentsForStudent(studentId);
 
   return enrollments
     .filter((e) => e.examSession != null)
@@ -81,12 +59,7 @@ const getUpcomingExamsForStudent = async (studentId, { limit = 5 } = {}) => {
  * @param {ObjectId|string} graderId
  * @returns {Promise<number>}
  */
-const countPendingGrading = (graderId) =>
-  ExamGrading.countDocuments({
-    grader:    new mongoose.Types.ObjectId(graderId),
-    status:    'PENDING',
-    isDeleted: false,
-  });
+const countPendingGrading = (graderId) => repo.countPendingGradingForGrader(graderId);
 
 module.exports = {
   runAntiCheatJob,

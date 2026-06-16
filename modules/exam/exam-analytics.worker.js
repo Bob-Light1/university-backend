@@ -16,11 +16,8 @@
 const EventEmitter = require('events');
 const mongoose     = require('mongoose');
 
-const ExamAnalyticsSnapshot = require('./models/exam.analytics-snapshot.model');
-const ExamGrading           = require('./models/exam.grading.model');
-const ExamEnrollment        = require('./models/exam.enrollment.model');
-const ExamSession           = require('./models/exam.session.model');
-const examConfig            = require('./exam.config');
+const repo       = require('./exam.repository');
+const examConfig = require('./exam.config');
 
 const examAnalyticsWorker = new EventEmitter();
 
@@ -29,14 +26,10 @@ const examAnalyticsWorker = new EventEmitter();
 const _computeSnapshot = async (sessionId) => {
   if (!mongoose.Types.ObjectId.isValid(sessionId)) return;
 
-  const session = await ExamSession.findById(sessionId);
+  const session = await repo.findSessionById(sessionId);
   if (!session) return;
 
-  const publishedGradings = await ExamGrading.find({
-    examSession: sessionId,
-    status:      'PUBLISHED',
-    isDeleted:   false,
-  }).select('normalizedScore student examSession schoolCampus');
+  const publishedGradings = await repo.findPublishedGradingsForSnapshot(sessionId);
 
   if (!publishedGradings.length) return;
 
@@ -71,19 +64,13 @@ const _computeSnapshot = async (sessionId) => {
   });
 
   // Item analysis — MCQ only
-  const ExamSubmission = require('./models/exam.submission.model');
-  const submissions    = await ExamSubmission.find({
-    examSession: sessionId,
-    status:      { $in: ['SUBMITTED', 'GRADED'] },
-    isDeleted:   false,
-  }).select('answers student');
+  const submissions    = await repo.findSubmissionsForSnapshot(sessionId);
 
   const questionRefs   = session.questions || [];
-  const QuestionBank   = require('./models/question-bank.model');
-  const mcqQuestions   = await QuestionBank.find({
-    _id:          { $in: questionRefs.map((q) => q.questionId) },
-    questionType: 'MCQ',
-  }).select('options bloomLevel difficulty');
+  const mcqQuestions   = await repo.findMcqQuestionsByIds(
+    questionRefs.map((q) => q.questionId),
+    'options bloomLevel difficulty'
+  );
 
   const itemAnalysis = [];
   for (const q of mcqQuestions) {
@@ -124,8 +111,9 @@ const _computeSnapshot = async (sessionId) => {
     });
 
     // Update psychometric fields on the question itself
-    await QuestionBank.findByIdAndUpdate(q._id, {
-      $set: { difficultyIndex, discriminationIdx: discriminationIndex },
+    await repo.setQuestionPsychometrics(q._id, {
+      difficultyIndex,
+      discriminationIdx: discriminationIndex,
     });
   }
 
@@ -135,35 +123,25 @@ const _computeSnapshot = async (sessionId) => {
   const dropoutRiskScore = Math.min(100, Math.round((failRate * 60 + (10 - Math.min(mean, 10)) * 4) * 10) / 10);
 
   // Absent count
-  const absentCount = await ExamEnrollment.countDocuments({
-    examSession: sessionId,
-    attendance:  'ABSENT',
-    isDeleted:   false,
-  });
+  const absentCount = await repo.countAbsentEnrollments(sessionId);
 
-  await ExamAnalyticsSnapshot.findOneAndUpdate(
-    { examSession: sessionId },
-    {
-      $set: {
-        schoolCampus:     session.schoolCampus,
-        examSession:      sessionId,
-        count,
-        mean:             Math.round(mean   * 100) / 100,
-        median:           Math.round(median * 100) / 100,
-        stdDev:           Math.round(stdDev * 100) / 100,
-        min,
-        max,
-        passingRate,
-        distribution,
-        itemAnalysis,
-        dropoutRiskScore,
-        atRiskCount:      atRisk,
-        absentCount,
-        computedAt:       new Date(),
-      },
-    },
-    { upsert: true, new: true }
-  );
+  await repo.upsertAnalyticsSnapshot(sessionId, {
+    schoolCampus:     session.schoolCampus,
+    examSession:      sessionId,
+    count,
+    mean:             Math.round(mean   * 100) / 100,
+    median:           Math.round(median * 100) / 100,
+    stdDev:           Math.round(stdDev * 100) / 100,
+    min,
+    max,
+    passingRate,
+    distribution,
+    itemAnalysis,
+    dropoutRiskScore,
+    atRiskCount:      atRisk,
+    absentCount,
+    computedAt:       new Date(),
+  });
 
   console.log(`✅ [SEMS Analytics] Snapshot computed for session ${sessionId}.`);
 };

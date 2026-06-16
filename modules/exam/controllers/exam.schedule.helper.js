@@ -12,7 +12,7 @@
  *                                        — called on cancel / postpone / reschedule
  */
 
-const ExamSession     = require('../models/exam.session.model');
+const repo            = require('../exam.repository');
 // Requires paresseux : student.dashboard et teacher.dashboard consomment la
 // façade exam (cycles exam ↔ student et exam ↔ teacher)
 const studentService  = () => require('../../student').service;
@@ -36,11 +36,7 @@ const EXAM_TO_SCHEDULE_STATUS = {
  * @param {string|ObjectId} sessionId
  */
 const injectExamIntoSchedule = async (sessionId) => {
-  const session = await ExamSession.findById(sessionId)
-    .populate('subject',  'subject_name subject_code coefficient')
-    .populate('teacher',  'firstName lastName email')
-    .populate('classes',  'className name level')
-    .lean();
+  const session = await repo.findSessionForScheduleInjection(sessionId);
 
   if (!session) return;
 

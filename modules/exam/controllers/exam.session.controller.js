@@ -18,9 +18,7 @@
  *    PATCH  /sessions/:id/reschedule      → rescheduleSession (CAMPUS_MANAGER only, POSTPONED → SCHEDULED)
  */
 
-const ExamSession    = require('../models/exam.session.model');
-const ExamEnrollment = require('../models/exam.enrollment.model');
-const QuestionBank   = require('../models/question-bank.model');
+const repo = require('../exam.repository');
 const { getSubjectCampusRef } = require('../../subject').service; // façade module subject (§3)
 const { getClassCampusRef }   = require('../../class').service; // façade module class (§3)
 // Require paresseux : teacher.dashboard consomme la façade exam (cycle exam ↔ teacher)
@@ -76,18 +74,7 @@ const listSessions = async (req, res) => {
     if (semester)     match.semester     = semester;
     if (search)       match.title        = { $regex: escapeRegex(search), $options: 'i' };
 
-    const [sessions, total] = await Promise.all([
-      ExamSession.find(match)
-        .select('-__v')
-        .populate('subject',    'subject_name subject_code')
-        .populate('classes',    'className level')
-        .populate('teacher',    'firstName lastName')
-        .sort({ startTime: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      ExamSession.countDocuments(match),
-    ]);
+    const { docs: sessions, total } = await repo.paginateSessions(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Sessions retrieved.', sessions, { total, page, limit });
   } catch (err) {
@@ -150,7 +137,7 @@ const createSession = async (req, res) => {
       return sendError(res, 400, 'Teacher does not belong to this campus.');
     }
 
-    const session = await ExamSession.create({
+    const session = await repo.createSession({
       schoolCampus: campusId,
       title, subject, classes, teacher, invigilators,
       academicYear, semester, examPeriod, mode,
@@ -165,10 +152,7 @@ const createSession = async (req, res) => {
 
     if (questions?.length) {
       const ids = questions.map((q) => q.questionId).filter(Boolean);
-      await QuestionBank.updateMany(
-        { _id: { $in: ids } },
-        { $inc: { usageCount: 1 }, $set: { lastUsedAt: new Date() } }
-      );
+      await repo.incrementQuestionUsage(ids);
     }
 
     return sendCreated(res, 'Exam session created.', session);
@@ -188,17 +172,11 @@ const getSession = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false })
-      .populate('subject',      'subject_name subject_code')
-      .populate('classes',      'className level')
-      .populate('teacher',      'firstName lastName email')
-      .populate('invigilators', 'firstName lastName email')
-      .populate('gradingScale', 'name passMark')
-      .populate({ path: 'questions.questionId', select: 'questionText questionType difficulty points' });
+    const session = await repo.findSessionDetailed({ _id: id, ...campusFilter, isDeleted: false });
 
     if (!session) return sendNotFound(res, 'Exam session');
 
-    const enrolledCount = await ExamEnrollment.countDocuments({ examSession: id, isDeleted: false });
+    const enrolledCount = await repo.countEnrollmentsForSession(id);
 
     return sendSuccess(res, 200, 'Exam session retrieved.', { ...session.toObject(), enrolledCount });
   } catch (err) {
@@ -219,7 +197,7 @@ const updateSession = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
     if (session.status !== 'DRAFT') {
       return sendError(res, 400, 'Only DRAFT sessions can be updated.');
@@ -236,14 +214,9 @@ const updateSession = async (req, res) => {
     const updates   = { ...req.body, updatedBy: req.user.id };
     IMMUTABLE.forEach((f) => delete updates[f]);
 
-    await ExamSession.findByIdAndUpdate(id, { $set: updates }, { runValidators: true });
+    await repo.updateSessionById(id, updates);
 
-    const updated = await ExamSession.findById(id)
-      .populate('subject',      'subject_name subject_code')
-      .populate('classes',      'className level')
-      .populate('teacher',      'firstName lastName email')
-      .populate('invigilators', 'firstName lastName email')
-      .lean();
+    const updated = await repo.findSessionByIdPopulatedLean(id);
 
     return sendSuccess(res, 200, 'Exam session updated.', updated);
   } catch (err) {
@@ -264,13 +237,13 @@ const deleteSession = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
     if (session.status !== 'DRAFT') {
       return sendError(res, 400, 'Only DRAFT sessions can be deleted.');
     }
 
-    await ExamSession.findByIdAndUpdate(id, { isDeleted: true, updatedBy: req.user.id });
+    await repo.softDeleteSession(id, req.user.id);
     return sendSuccess(res, 200, 'Exam session deleted.');
   } catch (err) {
     console.error('❌ deleteSession:', err);
@@ -287,7 +260,7 @@ const _transition = async (req, res, { fromStatuses, toStatus, extraUpdates = {}
   const campusFilter = getCampusFilter(req, res);
   if (!campusFilter) return;
 
-  const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false });
+  const session = await repo.findSessionByFilter({ _id: id, ...campusFilter, isDeleted: false });
   if (!session) return sendNotFound(res, 'Exam session');
 
   if (!fromStatuses.includes(session.status)) {
@@ -301,10 +274,9 @@ const _transition = async (req, res, { fromStatuses, toStatus, extraUpdates = {}
     if (!req.body[field]) return sendError(res, 400, `${field} is required.`);
   }
 
-  const updated = await ExamSession.findByIdAndUpdate(
+  const updated = await repo.applySessionTransition(
     id,
-    { $set: { status: toStatus, updatedBy: req.user.id, ...extraUpdates } },
-    { new: true }
+    { status: toStatus, updatedBy: req.user.id, ...extraUpdates }
   );
 
   return updated;

@@ -11,9 +11,7 @@
  *    PATCH  /appeals/:id/resolve    → resolveAppeal   [MANAGER, TEACHER]
  */
 
-const ExamGrading = require('../models/exam.grading.model');
-const ExamAppeal  = require('../models/exam.appeal.model');
-const ExamSession = require('../models/exam.session.model');
+const repo = require('../exam.repository');
 const {
   sendSuccess,
   sendError,
@@ -39,7 +37,7 @@ const submitAppeal = async (req, res) => {
       return sendError(res, 400, 'reason must be at least 20 characters.');
     }
 
-    const grading = await ExamGrading.findOne({ _id: gradingId, isDeleted: false });
+    const grading = await repo.findGradingById(gradingId);
     if (!grading) return sendNotFound(res, 'Grading');
     if (grading.status !== 'PUBLISHED') {
       return sendError(res, 400, 'Appeals can only be filed on PUBLISHED grades.');
@@ -58,14 +56,14 @@ const submitAppeal = async (req, res) => {
       return sendError(res, 400, `The appeal window has closed (deadline was ${deadlineAt.toISOString()}).`);
     }
 
-    const existing = await ExamAppeal.findOne({ grading: gradingId, student: req.user.id, isDeleted: false });
+    const existing = await repo.findAppealByGradingAndStudent(gradingId, req.user.id);
     if (existing) {
       return sendError(res, 409, 'You have already submitted an appeal for this grade.');
     }
 
-    const session = await ExamSession.findById(grading.examSession);
+    const session = await repo.findSessionById(grading.examSession);
 
-    const appeal = await ExamAppeal.create({
+    const appeal = await repo.createAppeal({
       schoolCampus: session?.schoolCampus,
       grading:      gradingId,
       student:      req.user.id,
@@ -94,17 +92,7 @@ const listAppeals = async (req, res) => {
     const match = { ...campusFilter, isDeleted: false };
     if (req.query.status) match.status = req.query.status;
 
-    const [appeals, total] = await Promise.all([
-      ExamAppeal.find(match)
-        .populate('student', 'firstName lastName matricule')
-        .populate({ path: 'grading', select: 'normalizedScore finalScore status examSession' })
-        .populate('reviewedBy', 'firstName lastName role')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      ExamAppeal.countDocuments(match),
-    ]);
+    const { docs: appeals, total } = await repo.paginateAppeals(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Appeals retrieved.', appeals, { total, page, limit });
   } catch (err) {
@@ -123,7 +111,7 @@ const reviewAppeal = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const appeal = await ExamAppeal.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const appeal = await repo.findAppealByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!appeal) return sendNotFound(res, 'Appeal');
     if (appeal.status !== 'PENDING') {
       return sendError(res, 400, 'Only PENDING appeals can be taken under review.');
@@ -134,14 +122,13 @@ const reviewAppeal = async (req, res) => {
       appeal.status     = 'REJECTED';
       appeal.resolution = 'Automatically rejected: deadline exceeded.';
       appeal.resolvedAt = new Date();
-      await appeal.save();
+      await repo.saveAppealDoc(appeal);
       return sendError(res, 400, 'Appeal deadline has passed. Automatically rejected.');
     }
 
-    const updated = await ExamAppeal.findByIdAndUpdate(
+    const updated = await repo.updateAppealById(
       id,
-      { $set: { status: 'UNDER_REVIEW', reviewedBy: req.user.id, updatedBy: req.user.id } },
-      { new: true }
+      { status: 'UNDER_REVIEW', reviewedBy: req.user.id, updatedBy: req.user.id }
     );
 
     return sendSuccess(res, 200, 'Appeal is now under review.', updated);
@@ -170,7 +157,7 @@ const resolveAppeal = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const appeal = await ExamAppeal.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const appeal = await repo.findAppealByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!appeal) return sendNotFound(res, 'Appeal');
     if (appeal.status !== 'UNDER_REVIEW') {
       return sendError(res, 400, 'Only UNDER_REVIEW appeals can be resolved.');
@@ -185,17 +172,10 @@ const resolveAppeal = async (req, res) => {
     if (decision === 'RESOLVED' && newScore != null) {
       updates.newScore = newScore;
       // Propagate score change to ExamGrading
-      await ExamGrading.findByIdAndUpdate(appeal.grading, {
-        $set: {
-          finalScore:  newScore,
-          updatedBy:   req.user.id,
-        },
-      });
+      await repo.updateGradingById(appeal.grading, { finalScore: newScore, updatedBy: req.user.id });
     }
 
-    const updated = await ExamAppeal.findByIdAndUpdate(id, { $set: updates }, { new: true })
-      .populate('student', 'firstName lastName')
-      .populate('grading', 'normalizedScore finalScore');
+    const updated = await repo.updateAppealByIdPopulated(id, updates);
 
     return sendSuccess(res, 200, `Appeal ${decision.toLowerCase()}.`, updated);
   } catch (err) {

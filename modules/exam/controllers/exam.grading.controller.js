@@ -16,9 +16,7 @@
  *    PATCH /grading/:id/mediate            → mediate               [MANAGER]
  */
 
-const ExamSession    = require('../models/exam.session.model');
-const ExamSubmission = require('../models/exam.submission.model');
-const ExamGrading    = require('../models/exam.grading.model');
+const repo = require('../exam.repository');
 const {
   sendSuccess,
   sendError,
@@ -53,18 +51,7 @@ const listGradings = async (req, res) => {
       match.$or = [{ grader: req.user.id }, { secondGrader: req.user.id }];
     }
 
-    const [gradings, total] = await Promise.all([
-      ExamGrading.find(match)
-        .populate('student',     'firstName lastName matricule')
-        .populate('grader',      'firstName lastName')
-        .populate('secondGrader','firstName lastName')
-        .populate('examSession', 'title subject startTime')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      ExamGrading.countDocuments(match),
-    ]);
+    const { docs: gradings, total } = await repo.paginateGradings(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Gradings retrieved.', gradings, { total, page, limit });
   } catch (err) {
@@ -83,12 +70,7 @@ const getGrading = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const grading = await ExamGrading.findOne({ _id: id, ...campusFilter, isDeleted: false })
-      .populate('student',      'firstName lastName matricule')
-      .populate('grader',       'firstName lastName')
-      .populate('secondGrader', 'firstName lastName')
-      .populate('submission',   'answers submittedAt status')
-      .populate('examSession',  'title subject maxScore startTime');
+    const grading = await repo.findGradingDetailed({ _id: id, ...campusFilter, isDeleted: false });
 
     if (!grading) return sendNotFound(res, 'Grading');
 
@@ -121,7 +103,7 @@ const gradingQueue = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: sessionId, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: sessionId, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
     const { page, limit, skip } = parsePagination(req.query);
@@ -134,19 +116,11 @@ const gradingQueue = async (req, res) => {
 
     // Teachers see only submissions assigned to them via existing ExamGrading entries
     if (req.user.role === 'TEACHER') {
-      const assigned = await ExamGrading.find({ examSession: sessionId, grader: req.user.id }).distinct('submission');
+      const assigned = await repo.distinctGradedSubmissions(sessionId, req.user.id);
       match._id = { $in: assigned };
     }
 
-    const [submissions, total] = await Promise.all([
-      ExamSubmission.find(match)
-        .populate('student', 'firstName lastName matricule')
-        .sort({ submittedAt: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      ExamSubmission.countDocuments(match),
-    ]);
+    const { docs: submissions, total } = await repo.paginateSubmissions(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Grading queue retrieved.', submissions, { total, page, limit });
   } catch (err) {
@@ -169,13 +143,13 @@ const gradeSubmission = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const submission = await ExamSubmission.findOne({ _id: submissionId, isDeleted: false });
+    const submission = await repo.findSubmissionById(submissionId);
     if (!submission) return sendNotFound(res, 'Submission');
     if (submission.status === 'IN_PROGRESS') {
       return sendError(res, 400, 'Cannot grade an in-progress submission.');
     }
 
-    const session = await ExamSession.findOne({
+    const session = await repo.findSessionByFilter({
       _id:       submission.examSession,
       ...campusFilter,
       isDeleted: false,
@@ -186,25 +160,23 @@ const gradeSubmission = async (req, res) => {
       return sendError(res, 400, `Score must be between 0 and ${session.maxScore}.`);
     }
 
-    const existing = await ExamGrading.findOne({ submission: submissionId, isDeleted: false });
+    const existing = await repo.findGradingBySubmission(submissionId);
     if (existing && existing.status !== 'PENDING') {
       return sendError(res, 409, 'This submission has already been graded.');
     }
 
     const grading = existing
-      ? await ExamGrading.findByIdAndUpdate(
+      ? await repo.updateGradingById(
           existing._id,
           {
-            $set: {
-              score, rubricScores, annotations, graderFeedback,
-              isBlindGrading: isBlindGrading ?? false,
-              status:    'GRADED',
-              updatedBy: req.user.id,
-            },
+            score, rubricScores, annotations, graderFeedback,
+            isBlindGrading: isBlindGrading ?? false,
+            status:    'GRADED',
+            updatedBy: req.user.id,
           },
           { new: true, runValidators: true }
         )
-      : await ExamGrading.create({
+      : await repo.createGrading({
           schoolCampus:  campusFilter.schoolCampus || session.schoolCampus,
           submission:    submissionId,
           examSession:   session._id,
@@ -220,7 +192,7 @@ const gradeSubmission = async (req, res) => {
           createdBy:     req.user.id,
         });
 
-    await ExamSubmission.findByIdAndUpdate(submissionId, { status: 'GRADED' });
+    await repo.setSubmissionStatus(submissionId, 'GRADED');
 
     return sendCreated(res, 'Grading submitted.', grading);
   } catch (err) {
@@ -236,7 +208,7 @@ const updateGrading = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid grading ID.');
 
-    const grading = await ExamGrading.findOne({ _id: id, isDeleted: false });
+    const grading = await repo.findGradingById(id);
     if (!grading) return sendNotFound(res, 'Grading');
     if (grading.status === 'PUBLISHED') {
       return sendError(res, 400, 'Published gradings cannot be modified.');
@@ -246,7 +218,7 @@ const updateGrading = async (req, res) => {
     const updates = { updatedBy: req.user.id };
     ALLOWED.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
 
-    const updated = await ExamGrading.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true });
+    const updated = await repo.updateGradingById(id, updates, { new: true, runValidators: true });
     return sendSuccess(res, 200, 'Grading updated.', updated);
   } catch (err) {
     console.error('❌ updateGrading:', err);
@@ -266,15 +238,15 @@ const assignSecondGrader = async (req, res) => {
     const { teacherId } = req.body;
     if (!isValidObjectId(teacherId)) return sendError(res, 400, 'Valid teacherId is required.');
 
-    const grading = await ExamGrading.findOne({ _id: id, isDeleted: false });
+    const grading = await repo.findGradingById(id);
     if (!grading) return sendNotFound(res, 'Grading');
     if (!['GRADED'].includes(grading.status)) {
       return sendError(res, 400, 'Second grader can only be assigned to GRADED entries.');
     }
 
-    const updated = await ExamGrading.findByIdAndUpdate(
+    const updated = await repo.updateGradingById(
       id,
-      { $set: { secondGrader: teacherId, updatedBy: req.user.id } },
+      { secondGrader: teacherId, updatedBy: req.user.id },
       { new: true }
     );
     return sendSuccess(res, 200, 'Second grader assigned.', updated);
@@ -294,7 +266,7 @@ const submitSecondGrade = async (req, res) => {
     const { secondScore } = req.body;
     if (secondScore == null) return sendError(res, 400, 'secondScore is required.');
 
-    const grading = await ExamGrading.findOne({ _id: id, isDeleted: false });
+    const grading = await repo.findGradingById(id);
     if (!grading) return sendNotFound(res, 'Grading');
     if (grading.status !== 'GRADED') {
       return sendError(res, 400, 'Only GRADED entries accept a second score.');
@@ -303,9 +275,9 @@ const submitSecondGrade = async (req, res) => {
       return sendError(res, 403, 'Only the assigned second grader can submit a second score.');
     }
 
-    const updated = await ExamGrading.findByIdAndUpdate(
+    const updated = await repo.updateGradingById(
       id,
-      { $set: { secondScore, status: 'DOUBLE_GRADED', updatedBy: req.user.id } },
+      { secondScore, status: 'DOUBLE_GRADED', updatedBy: req.user.id },
       { new: true, runValidators: true }
     );
     return sendSuccess(res, 200, 'Second grade submitted.', updated);
@@ -327,15 +299,15 @@ const mediate = async (req, res) => {
     const { mediatorScore } = req.body;
     if (mediatorScore == null) return sendError(res, 400, 'mediatorScore is required.');
 
-    const grading = await ExamGrading.findOne({ _id: id, isDeleted: false });
+    const grading = await repo.findGradingById(id);
     if (!grading) return sendNotFound(res, 'Grading');
     if (!grading.needsMediation) {
       return sendError(res, 400, 'This grading does not require mediation.');
     }
 
-    const updated = await ExamGrading.findByIdAndUpdate(
+    const updated = await repo.updateGradingById(
       id,
-      { $set: { mediatorScore, status: 'MEDIATED', updatedBy: req.user.id } },
+      { mediatorScore, status: 'MEDIATED', updatedBy: req.user.id },
       { new: true, runValidators: true }
     );
     return sendSuccess(res, 200, 'Mediation complete.', updated);
@@ -359,13 +331,12 @@ const publishGrades = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: sessionId, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: sessionId, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
-    const result = await ExamGrading.updateMany(
-      { examSession: sessionId, status: { $in: ['GRADED', 'MEDIATED'] }, isDeleted: false },
-      { $set: { status: 'PUBLISHED', publishedAt: new Date(), updatedBy: req.user.id } }
-    );
+    const result = await repo.publishSessionGradings(sessionId, {
+      status: 'PUBLISHED', publishedAt: new Date(), updatedBy: req.user.id,
+    });
 
     examAnalyticsWorker.emit('examAnalytics:compute', sessionId);
 

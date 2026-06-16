@@ -13,10 +13,7 @@
  *    POST   /submissions/:id/anti-cheat-event    → logAntiCheat    [STUDENT]
  */
 
-const ExamSession       = require('../models/exam.session.model');
-const ExamEnrollment    = require('../models/exam.enrollment.model');
-const ExamSubmission    = require('../models/exam.submission.model');
-const QuestionBank      = require('../models/question-bank.model');
+const repo              = require('../exam.repository');
 const settingsService   = require('../../settings').service; // façade module settings (§3)
 const {
   sendSuccess,
@@ -56,7 +53,7 @@ const startAttempt = async (req, res) => {
 
     const studentId = req.user.id;
 
-    const session = await ExamSession.findOne({ _id: id, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: id, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
     if (!['SCHEDULED', 'ONGOING'].includes(session.status)) {
@@ -66,22 +63,14 @@ const startAttempt = async (req, res) => {
       return sendError(res, 400, 'Physical exams do not use online submission.');
     }
 
-    const enrollment = await ExamEnrollment.findOne({
-      examSession: id,
-      student:     studentId,
-      isDeleted:   false,
-    });
+    const enrollment = await repo.findEnrollment(id, studentId);
     if (!enrollment) return sendError(res, 403, 'You are not enrolled in this exam.');
     if (!enrollment.isEligible) {
       return sendError(res, 403, `You are not eligible: ${enrollment.eligibilityNotes || ''}`);
     }
 
     // Idempotent — return existing attempt if already started
-    const existing = await ExamSubmission.findOne({
-      examSession: id,
-      student:     studentId,
-      isDeleted:   false,
-    });
+    const existing = await repo.findSubmissionForStudent(id, studentId);
     if (existing) {
       if (existing.status === 'SUBMITTED') {
         return sendError(res, 409, 'You have already submitted this exam.');
@@ -94,7 +83,7 @@ const startAttempt = async (req, res) => {
       });
     }
 
-    const submission = await ExamSubmission.create({
+    const submission = await repo.createSubmission({
       schoolCampus: session.schoolCampus,
       examSession:  id,
       student:      studentId,
@@ -107,7 +96,7 @@ const startAttempt = async (req, res) => {
 
     // Mark exam ONGOING if not already
     if (session.status === 'SCHEDULED') {
-      await ExamSession.findByIdAndUpdate(id, { status: 'ONGOING' });
+      await repo.setSessionStatus(id, 'ONGOING');
     }
 
     return sendCreated(res, 'Exam attempt started.', {
@@ -131,14 +120,10 @@ const getQuestions = async (req, res) => {
 
     const studentId = req.user.id;
 
-    const submission = await ExamSubmission.findOne({
-      _id:     id,
-      student: studentId,
-      isDeleted: false,
-    });
+    const submission = await repo.findSubmissionByIdForStudent(id, studentId);
     if (!submission) return sendNotFound(res, 'Submission');
 
-    const session = await ExamSession.findById(submission.examSession);
+    const session = await repo.findSessionById(submission.examSession);
     if (!session) return sendNotFound(res, 'Exam session');
 
     // Enforce: answers not exposed before session COMPLETED
@@ -149,8 +134,7 @@ const getQuestions = async (req, res) => {
     const questionRefs = session.questions || [];
     const questionIds  = questionRefs.map((q) => q.questionId);
 
-    const rawQuestions = await QuestionBank.find({ _id: { $in: questionIds } })
-      .select('questionText questionType options points difficulty bloomLevel language translations');
+    const rawQuestions = await repo.findQuestionsForDelivery(questionIds);
 
     // Build ordered map
     const qMap = Object.fromEntries(rawQuestions.map((q) => [q._id.toString(), q.toObject()]));
@@ -221,21 +205,16 @@ const saveAnswer = async (req, res) => {
       return sendError(res, 400, 'Valid questionId is required.');
     }
 
-    const submission = await ExamSubmission.findOne({
-      _id:      id,
-      student:  req.user.id,
-      status:   'IN_PROGRESS',
-      isDeleted: false,
-    });
+    const submission = await repo.findActiveSubmission(id, req.user.id);
     if (!submission) return sendNotFound(res, 'Active submission');
 
     // Check server-side timer
-    const session = await ExamSession.findById(submission.examSession, 'endTime');
+    const session = await repo.findSessionEndTimeById(submission.examSession);
     if (session && new Date() > new Date(session.endTime)) {
       // Auto-submit
       submission.status          = 'SUBMITTED';
       submission.autoSubmittedAt = new Date();
-      await submission.save();
+      await repo.saveSubmissionDoc(submission);
       return sendError(res, 410, 'Exam time has expired. Your answers have been auto-submitted.');
     }
 
@@ -255,7 +234,7 @@ const saveAnswer = async (req, res) => {
       submission.answers.push(answerDoc);
     }
 
-    await submission.save();
+    await repo.saveSubmissionDoc(submission);
     return sendSuccess(res, 200, 'Answer saved.', { questionId, savedAt: answerDoc.savedAt });
   } catch (err) {
     console.error('❌ saveAnswer:', err);
@@ -270,11 +249,7 @@ const submitExam = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid submission ID.');
 
-    const submission = await ExamSubmission.findOne({
-      _id:      id,
-      student:  req.user.id,
-      isDeleted: false,
-    });
+    const submission = await repo.findSubmissionByIdForStudent(id, req.user.id);
     if (!submission) return sendNotFound(res, 'Submission');
 
     if (submission.status === 'SUBMITTED') {
@@ -286,7 +261,7 @@ const submitExam = async (req, res) => {
 
     submission.status      = 'SUBMITTED';
     submission.submittedAt = new Date();
-    await submission.save();
+    await repo.saveSubmissionDoc(submission);
 
     // MCQ auto-grading (if session has questions with correctAnswer)
     // Dispatched asynchronously — no blocking
@@ -307,14 +282,11 @@ const submitExam = async (req, res) => {
 
 const _autoGradeMCQ = async (submission) => {
   try {
-    const session = await ExamSession.findById(submission.examSession);
+    const session = await repo.findSessionById(submission.examSession);
     if (!session) return;
 
     const questionIds = session.questions.map((q) => q.questionId);
-    const questions   = await QuestionBank.find({
-      _id:          { $in: questionIds },
-      questionType: 'MCQ',
-    }).select('_id options');
+    const questions   = await repo.findMcqQuestionsByIds(questionIds, '_id options');
 
     const correctMap = {};
     for (const q of questions) {
@@ -334,10 +306,9 @@ const _autoGradeMCQ = async (submission) => {
       }
     }
 
-    const ExamGrading = require('../models/exam.grading.model');
-    const existing    = await ExamGrading.findOne({ submission: submission._id });
+    const existing = await repo.findGradingBySubmissionAny(submission._id);
     if (!existing) {
-      await ExamGrading.create({
+      await repo.createGrading({
         schoolCampus: session.schoolCampus,
         submission:   submission._id,
         examSession:  session._id,
@@ -347,7 +318,7 @@ const _autoGradeMCQ = async (submission) => {
         maxScore: session.maxScore,
         status:   'GRADED',
       });
-      await ExamSubmission.findByIdAndUpdate(submission._id, { status: 'GRADED' });
+      await repo.setSubmissionStatus(submission._id, 'GRADED');
     }
   } catch (err) {
     console.error('❌ _autoGradeMCQ:', err);
@@ -364,19 +335,14 @@ const logAntiCheat = async (req, res) => {
     const { type, detail } = req.body;
     if (!type) return sendError(res, 400, 'event type is required.');
 
-    const submission = await ExamSubmission.findOne({
-      _id:      id,
-      student:  req.user.id,
-      status:   'IN_PROGRESS',
-      isDeleted: false,
-    });
+    const submission = await repo.findActiveSubmission(id, req.user.id);
     if (!submission) return sendNotFound(res, 'Active submission');
 
     submission.antiCheatFlags.push({ type, detail, timestamp: new Date() });
 
     if (type === 'TAB_SWITCH') submission.tabSwitchCount += 1;
 
-    await submission.save();
+    await repo.saveSubmissionDoc(submission);
 
     return sendSuccess(res, 200, 'Anti-cheat event logged.', {
       tabSwitchCount: submission.tabSwitchCount,
@@ -395,7 +361,7 @@ const getSubmission = async (req, res) => {
     const { id } = req.params; // submissionId
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid submission ID.');
 
-    const submission = await ExamSubmission.findOne({ _id: id, isDeleted: false });
+    const submission = await repo.findSubmissionByIdAny(id);
     if (!submission) return sendNotFound(res, 'Submission');
 
     // Students can only see their own submission; staff sees any
@@ -403,7 +369,7 @@ const getSubmission = async (req, res) => {
       return sendError(res, 403, 'You can only view your own submission.');
     }
 
-    const session = await ExamSession.findById(submission.examSession, 'title status maxScore subject startTime endTime');
+    const session = await repo.findSessionSummaryById(submission.examSession);
 
     // For students: strip antiCheatFlags and only expose answers after SUBMITTED
     let data = submission.toObject();

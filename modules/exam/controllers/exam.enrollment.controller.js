@@ -18,8 +18,7 @@
 
 const { v4: uuidv4 } = require('uuid');
 
-const ExamSession        = require('../models/exam.session.model');
-const ExamEnrollment     = require('../models/exam.enrollment.model');
+const repo               = require('../exam.repository');
 // Require paresseux : student.dashboard consomme la façade exam (cycle exam ↔ student)
 const studentService     = () => require('../../student').service;
 const {
@@ -49,7 +48,7 @@ const computeEligibility = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: sessionId, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: sessionId, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
     if (!['SCHEDULED', 'DRAFT'].includes(session.status)) {
       return sendError(res, 400, 'Eligibility can only be computed for DRAFT or SCHEDULED sessions.');
@@ -81,20 +80,16 @@ const computeEligibility = async (req, res) => {
         }
       }
 
-      const existing = await ExamEnrollment.findOne({
-        examSession: sessionId,
-        student:     student._id,
-        isDeleted:   false,
-      });
+      const existing = await repo.findEnrollment(sessionId, student._id);
 
       if (existing) {
         existing.isEligible       = isEligible;
         existing.eligibilityNotes = eligibilityNotes;
         existing.updatedBy        = req.user.id;
-        await existing.save();
+        await repo.saveEnrollmentDoc(existing);
         updated.push(existing._id);
       } else {
-        const enrollment = await ExamEnrollment.create({
+        const enrollment = await repo.createEnrollment({
           schoolCampus:    campusFilter.schoolCampus || session.schoolCampus,
           examSession:     sessionId,
           student:         student._id,
@@ -130,7 +125,7 @@ const listEnrollments = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: sessionId, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: sessionId, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
     const { page, limit, skip } = parsePagination(req.query);
@@ -138,15 +133,7 @@ const listEnrollments = async (req, res) => {
     if (req.query.isEligible !== undefined) match.isEligible = req.query.isEligible === 'true';
     if (req.query.attendance) match.attendance = req.query.attendance;
 
-    const [enrollments, total] = await Promise.all([
-      ExamEnrollment.find(match)
-        .populate('student', 'firstName lastName matricule profileImage')
-        .sort({ createdAt: 1 })
-        .skip(skip)
-        .limit(limit)
-        .lean(),
-      ExamEnrollment.countDocuments(match),
-    ]);
+    const { docs: enrollments, total } = await repo.paginateEnrollments(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Enrollments retrieved.', enrollments, { total, page, limit });
   } catch (err) {
@@ -162,12 +149,7 @@ const getEnrollment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await ExamEnrollment.findOne({ _id: id, isDeleted: false })
-      .populate('student', 'firstName lastName matricule profileImage')
-      .populate({
-        path:     'examSession',
-        populate: { path: 'subject', select: 'subject_name' },
-      });
+    const enrollment = await repo.findEnrollmentDetailed(id);
 
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 
@@ -195,7 +177,7 @@ const updateEnrollment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await ExamEnrollment.findOne({ _id: id, isDeleted: false });
+    const enrollment = await repo.findEnrollmentById(id);
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 
     const ALLOWED = ['isEligible', 'eligibilityNotes', 'seatNumber', 'specialNeeds', 'attendance'];
@@ -203,8 +185,7 @@ const updateEnrollment = async (req, res) => {
     ALLOWED.forEach((f) => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
     updates.updatedBy = req.user.id;
 
-    const updated = await ExamEnrollment.findByIdAndUpdate(id, { $set: updates }, { new: true })
-      .populate('student', 'firstName lastName matricule');
+    const updated = await repo.updateEnrollmentById(id, updates);
 
     return sendSuccess(res, 200, 'Enrollment updated.', updated);
   } catch (err) {
@@ -222,16 +203,16 @@ const deleteEnrollment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await ExamEnrollment.findOne({ _id: id, isDeleted: false });
+    const enrollment = await repo.findEnrollmentById(id);
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 
     // Cannot delete enrollment once exam is ONGOING or COMPLETED
-    const session = await ExamSession.findById(enrollment.examSession, 'status');
+    const session = await repo.findSessionStatusById(enrollment.examSession);
     if (session && ['ONGOING', 'COMPLETED'].includes(session.status)) {
       return sendError(res, 400, 'Cannot delete enrollment for an ongoing or completed exam.');
     }
 
-    await ExamEnrollment.findByIdAndUpdate(id, { isDeleted: true, updatedBy: req.user.id });
+    await repo.softDeleteEnrollment(id, req.user.id);
     return sendSuccess(res, 200, 'Enrollment deleted.');
   } catch (err) {
     console.error('❌ deleteEnrollment:', err);
@@ -251,22 +232,16 @@ const generateHallTickets = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false })
-      .populate('subject', 'subject_name')
-      .populate('classes', 'name');
+    const session = await repo.findSessionForHallTickets({ _id: id, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
-    const enrollments = await ExamEnrollment.find({
-      examSession: id,
-      isEligible:  true,
-      isDeleted:   false,
-    }).populate('student', 'firstName lastName matricule profileImage');
+    const enrollments = await repo.findEligibleEnrollments(id);
 
     const ticketData = [];
     for (const enr of enrollments) {
       if (!enr.hallTicketToken) {
         enr.hallTicketToken = uuidv4();
-        await enr.save();
+        await repo.saveEnrollmentDoc(enr);
       }
       ticketData.push({
         enrollmentId:    enr._id,
@@ -301,12 +276,7 @@ const getHallTicket = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await ExamEnrollment.findOne({ _id: id, isDeleted: false })
-      .populate('student', 'firstName lastName matricule profileImage')
-      .populate({
-        path:     'examSession',
-        populate: { path: 'subject', select: 'subject_name' },
-      });
+    const enrollment = await repo.findEnrollmentDetailed(id);
 
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 
@@ -340,11 +310,7 @@ const checkIn = async (req, res) => {
     if (!token || !sessionId) return sendError(res, 400, 'token and sessionId are required.');
     if (!isValidObjectId(sessionId)) return sendError(res, 400, 'Invalid sessionId.');
 
-    const enrollment = await ExamEnrollment.findOne({
-      examSession:     sessionId,
-      hallTicketToken: token,
-      isDeleted:       false,
-    }).populate('student', 'firstName lastName matricule');
+    const enrollment = await repo.findEnrollmentByHallTicket(sessionId, token);
 
     if (!enrollment) {
       return sendError(res, 404, 'Invalid or already used hall ticket.');
@@ -360,7 +326,7 @@ const checkIn = async (req, res) => {
     enrollment.checkedInBy = req.user.id;
     enrollment.attendance  = 'PRESENT';
     enrollment.updatedBy   = req.user.id;
-    await enrollment.save();
+    await repo.saveEnrollmentDoc(enrollment);
 
     return sendSuccess(res, 200, 'Check-in successful.', {
       student:      enrollment.student,

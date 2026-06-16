@@ -12,11 +12,7 @@
  *    GET  /analytics/export                    → exportReport  [MANAGER]
  */
 
-const mongoose = require('mongoose');
-const ExamSession            = require('../models/exam.session.model');
-const ExamGrading            = require('../models/exam.grading.model');
-const ExamEnrollment         = require('../models/exam.enrollment.model');
-const ExamAnalyticsSnapshot  = require('../models/exam.analytics-snapshot.model');
+const repo = require('../exam.repository');
 const {
   sendSuccess,
   sendError,
@@ -47,23 +43,12 @@ const campusOverview = async (req, res) => {
     if (examPeriod)   sessionMatch.examPeriod   = examPeriod;
 
     // Aggregate published gradings for this campus
-    const gradingStats = await ExamGrading.aggregate([
-      { $match: { ...aggFilter, status: 'PUBLISHED', isDeleted: false } },
-      {
-        $group: {
-          _id:              null,
-          totalGraded:      { $sum: 1 },
-          avgScore:         { $avg: '$normalizedScore' },
-          passCount:        { $sum: { $cond: [{ $gte: ['$normalizedScore', 10] }, 1, 0] } },
-          atRiskCount:      { $sum: { $cond: [{ $lt:  ['$normalizedScore',  8] }, 1, 0] } },
-        },
-      },
-    ]);
+    const gradingStats = await repo.aggregateCampusGradingStats({ ...aggFilter, status: 'PUBLISHED', isDeleted: false });
 
     const [totalSessions, ongoingSessions, snapshotCount] = await Promise.all([
-      ExamSession.countDocuments({ ...campusFilter, isDeleted: false }),
-      ExamSession.countDocuments({ ...campusFilter, status: 'ONGOING', isDeleted: false }),
-      ExamAnalyticsSnapshot.countDocuments({ ...campusFilter }),
+      repo.countExamSessions({ ...campusFilter, isDeleted: false }),
+      repo.countExamSessions({ ...campusFilter, status: 'ONGOING', isDeleted: false }),
+      repo.countAnalyticsSnapshots({ ...campusFilter }),
     ]);
 
     const stats = gradingStats[0] || {};
@@ -96,11 +81,10 @@ const getSnapshot = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
-    const snapshot = await ExamAnalyticsSnapshot.findOne({ examSession: id })
-      .populate('examSession', 'title startTime endTime academicYear semester examPeriod');
+    const snapshot = await repo.findSnapshotBySessionPopulated(id);
 
     if (!snapshot) {
       return sendError(
@@ -127,10 +111,10 @@ const itemAnalysis = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const session = await ExamSession.findOne({ _id: id, ...campusFilter, isDeleted: false });
+    const session = await repo.findSessionByFilter({ _id: id, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
-    const snapshot = await ExamAnalyticsSnapshot.findOne({ examSession: id });
+    const snapshot = await repo.findSnapshotBySession(id);
     if (!snapshot?.itemAnalysis?.length) {
       return sendError(res, 404, 'Item analysis not yet available.');
     }
@@ -159,62 +143,13 @@ const earlyWarning = async (req, res) => {
 
     const match = { ...aggFilter, status: 'PUBLISHED', isDeleted: false };
     if (academicYear) {
-      const sessionIds = await ExamSession.find({ ...campusFilter, academicYear, isDeleted: false }).distinct('_id');
+      const sessionIds = await repo.distinctSessionIds({ ...campusFilter, academicYear, isDeleted: false });
       match.examSession = { $in: sessionIds };
     }
 
     const atRiskThreshold = examConfig.ewsRiskThreshold;
 
-    const atRisk = await ExamGrading.aggregate([
-      { $match: match },
-      {
-        $group: {
-          _id:       '$student',
-          avgScore:  { $avg: '$normalizedScore' },
-          examCount: { $sum: 1 },
-          failCount: { $sum: { $cond: [{ $lt: ['$normalizedScore', 10] }, 1, 0] } },
-        },
-      },
-      {
-        $addFields: {
-          failRate:        { $multiply: [{ $divide: ['$failCount', '$examCount'] }, 100] },
-          dropoutRiskScore:{
-            $min: [
-              100,
-              {
-                $add: [
-                  { $multiply: [{ $divide: ['$failCount', '$examCount'] }, 60] },
-                  { $multiply: [{ $subtract: [10, { $min: ['$avgScore', 10] }] }, 4] },
-                ],
-              },
-            ],
-          },
-        },
-      },
-      { $match: { dropoutRiskScore: { $gte: atRiskThreshold } } },
-      { $sort: { dropoutRiskScore: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      {
-        $lookup: {
-          from:         'students',
-          localField:   '_id',
-          foreignField: '_id',
-          as:           'student',
-        },
-      },
-      { $unwind: { path: '$student', preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          student:          { firstName: 1, lastName: 1, matricule: 1, profileImage: 1 },
-          avgScore:         { $round: ['$avgScore', 2] },
-          examCount:        1,
-          failCount:        1,
-          failRate:         { $round: ['$failRate', 1] },
-          dropoutRiskScore: { $round: ['$dropoutRiskScore', 1] },
-        },
-      },
-    ]);
+    const atRisk = await repo.aggregateEarlyWarning(match, { skip, limit, threshold: atRiskThreshold });
 
     return sendSuccess(res, 200, 'Early warning list retrieved.', {
       threshold: atRiskThreshold,
@@ -239,30 +174,13 @@ const exportReport = async (req, res) => {
     const { academicYear, format = 'json' } = req.query;
     if (!academicYear) return sendError(res, 400, 'academicYear is required.');
 
-    const sessions = await ExamSession.find({
-      ...campusFilter,
-      academicYear,
-      isDeleted: false,
-    })
-      .populate('subject', 'subject_name')
-      .populate('classes', 'name')
-      .lean();
+    const sessions = await repo.findSessionsForExport({ ...campusFilter, academicYear, isDeleted: false });
 
     const sessionIds = sessions.map((s) => s._id);
 
     const [gradings, snapshots] = await Promise.all([
-      ExamGrading.aggregate([
-        { $match: { examSession: { $in: sessionIds }, status: 'PUBLISHED', isDeleted: false } },
-        {
-          $group: {
-            _id:         '$examSession',
-            avgScore:    { $avg: '$normalizedScore' },
-            passCount:   { $sum: { $cond: [{ $gte: ['$normalizedScore', 10] }, 1, 0] } },
-            totalGraded: { $sum: 1 },
-          },
-        },
-      ]),
-      ExamAnalyticsSnapshot.find({ examSession: { $in: sessionIds } }).lean(),
+      repo.aggregateSessionGradingStats(sessionIds),
+      repo.findSnapshotsBySessionIds(sessionIds),
     ]);
 
     const gradingMap   = Object.fromEntries(gradings.map((g)   => [g._id.toString(), g]));

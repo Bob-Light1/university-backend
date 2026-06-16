@@ -10,7 +10,7 @@
  */
 
 const { v4: uuidv4 } = require('uuid');
-const ExamGrading = require('../models/exam.grading.model');
+const repo = require('../exam.repository');
 const {
   sendSuccess,
   sendError,
@@ -34,9 +34,7 @@ const generateCertificate = async (req, res) => {
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;
 
-    const grading = await ExamGrading.findOne({ _id: gradingId, isDeleted: false })
-      .populate('student',     'firstName lastName matricule schoolCampus')
-      .populate('examSession', 'title subject academicYear semester examPeriod startTime maxScore');
+    const grading = await repo.findGradingForCertificate(gradingId);
 
     if (!grading) return sendNotFound(res, 'Grading');
     if (grading.status !== 'PUBLISHED') {
@@ -62,7 +60,7 @@ const generateCertificate = async (req, res) => {
     const token = uuidv4();
     grading.certificateToken = token;
     grading.updatedBy        = req.user.id;
-    await grading.save();
+    await repo.saveGradingDoc(grading);
 
     return sendSuccess(res, 201, 'Certificate generated.', {
       token,
@@ -82,9 +80,7 @@ const verifyCertificate = async (req, res) => {
     const { token } = req.params;
     if (!token) return sendError(res, 400, 'Token is required.');
 
-    const grading = await ExamGrading.findOne({ certificateToken: token })
-      .populate('student',     'firstName lastName matricule')
-      .populate('examSession', 'title subject academicYear semester examPeriod startTime');
+    const grading = await repo.findGradingByCertificateToken(token);
 
     if (!grading) {
       return sendError(res, 404, 'Certificate not found or invalid token.');

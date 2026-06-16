@@ -20,9 +20,8 @@
  */
 
 const mongoose   = require('mongoose');
-const ExamSession    = require('./models/exam.session.model');
-const ExamSubmission = require('./models/exam.submission.model');
-const examConfig     = require('./exam.config');
+const repo       = require('./exam.repository');
+const examConfig = require('./exam.config');
 
 const SIMILARITY_THRESHOLD = examConfig.antiCheatSimilarityThreshold; // default 0.85
 const BATCH_SIZE = 50; // sessions processed per run
@@ -78,7 +77,7 @@ const analyzeSession = async (sessionId) => {
     return { sessionId: String(sessionId), pairsChecked: 0, flagged: 0 };
   }
 
-  const session = await ExamSession.findById(sessionId).lean();
+  const session = await repo.findSessionByIdLean(sessionId);
   if (!session) return { sessionId: String(sessionId), pairsChecked: 0, flagged: 0 };
 
   // Canonical question order (MCQ only, based on session.questions array)
@@ -89,11 +88,7 @@ const analyzeSession = async (sessionId) => {
     return { sessionId: String(sessionId), pairsChecked: 0, flagged: 0 };
   }
 
-  const submissions = await ExamSubmission.find({
-    examSession: sessionId,
-    status:      { $in: ['SUBMITTED', 'GRADED'] },
-    isDeleted:   false,
-  }).select('student answers antiCheatFlags').lean();
+  const submissions = await repo.findSubmissionsForAntiCheat(sessionId);
 
   if (submissions.length < 2) {
     return { sessionId: String(sessionId), pairsChecked: 0, flagged: 0 };
@@ -131,12 +126,8 @@ const analyzeSession = async (sessionId) => {
 
         // Append flags — non-blocking, fire-and-forget per pair
         await Promise.all([
-          ExamSubmission.findByIdAndUpdate(vectors[i].submissionId, {
-            $push: { antiCheatFlags: flag },
-          }),
-          ExamSubmission.findByIdAndUpdate(vectors[j].submissionId, {
-            $push: { antiCheatFlags: flagB },
-          }),
+          repo.pushAntiCheatFlag(vectors[i].submissionId, flag),
+          repo.pushAntiCheatFlag(vectors[j].submissionId, flagB),
         ]);
       }
     }
@@ -160,14 +151,7 @@ const runAntiCheatJob = async () => {
 
   const since = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
-  const sessions = await ExamSession.find({
-    status:      'COMPLETED',
-    completedAt: { $gte: since },
-    isDeleted:   false,
-  })
-    .select('_id')
-    .limit(BATCH_SIZE)
-    .lean();
+  const sessions = await repo.findRecentlyCompletedSessions(since, BATCH_SIZE);
 
   let totalFlagged = 0;
   let totalPairs   = 0;
