@@ -23,9 +23,10 @@
 
 const mongoose = require('mongoose');
 
-const { Result, RESULT_STATUS, SEMESTER }  = require('../models/result.model');
-const { GradingScale, GRADING_SYSTEM }     = require('../models/grading-scale.model');
-const { FinalTranscript, TRANSCRIPT_STATUS } = require('../models/final-transcript.model');
+const { RESULT_STATUS, SEMESTER }  = require('../models/result.model');
+const { GRADING_SYSTEM }           = require('../models/grading-scale.model');
+const { TRANSCRIPT_STATUS }        = require('../models/final-transcript.model');
+const resultRepo = require('../result.repository');
 // Require paresseux : student.dashboard consomme la façade result (cycle result ↔ student)
 const getStudentProfileRef = (...args) =>
   require('../../student').service.getStudentProfileRef(...args);
@@ -83,56 +84,8 @@ const getTranscript = asyncHandler(async (req, res) => {
   };
   if (academicYear) matchFilter.academicYear = academicYear;
 
-  // Agrégation : groupe par (academicYear, semester, subject)
-  const pipeline = [
-    { $match: matchFilter },
-    {
-      $group: {
-        _id: { academicYear: '$academicYear', semester: '$semester', subject: '$subject' },
-        evaluations: {
-          $push: {
-            evaluationType:  '$evaluationType',
-            evaluationTitle: '$evaluationTitle',
-            examPeriod:      '$examPeriod',
-            score:           '$score',
-            maxScore:        '$maxScore',
-            normalizedScore: '$normalizedScore',
-            coefficient:     '$coefficient',
-            gradeBand:       '$gradeBand',
-            teacherRemarks:  '$teacherRemarks',
-            strengths:       '$strengths',
-            improvements:    '$improvements',
-          },
-        },
-        subjectAvg:   { $avg: { $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] } },
-        subjectCoeff: { $first: '$coefficient' },
-      },
-    },
-    {
-      $lookup: {
-        from: 'subjects', localField: '_id.subject', foreignField: '_id', as: 'subjectDoc',
-      },
-    },
-    { $unwind: { path: '$subjectDoc', preserveNullAndEmptyArrays: true } },
-    {
-      $group: {
-        _id:      { academicYear: '$_id.academicYear', semester: '$_id.semester' },
-        subjects: {
-          $push: {
-            subjectId:   '$_id.subject',
-            subjectName: '$subjectDoc.subject_name',
-            subjectCode: '$subjectDoc.subject_code',
-            coefficient: { $ifNull: ['$subjectDoc.coefficient', '$subjectCoeff'] },
-            average:     { $round: ['$subjectAvg', 2] },
-            evaluations: '$evaluations',
-          },
-        },
-      },
-    },
-    { $sort: { '_id.academicYear': -1, '_id.semester': 1 } },
-  ];
-
-  const semesters = await Result.aggregate(pipeline);
+  // Agrégation (groupe par année/semestre/matière) — pipeline porté par le repo.
+  const semesters = await resultRepo.aggregateStudentTranscript(matchFilter);
 
   const enriched = semesters.map((sem) => {
     let wSum = 0, wTotal = 0;
@@ -179,7 +132,7 @@ const getClassStatistics = asyncHandler(async (req, res) => {
   if (!evaluationTitle)            return sendError(res, 400, 'evaluationTitle query param is required.');
   if (!academicYear || !semester)  return sendError(res, 400, 'academicYear and semester are required.');
 
-  const stats = await Result.getClassDistribution(
+  const stats = await resultRepo.getClassDistribution(
     classId, subjectId, evaluationTitle, academicYear, semester
   );
   if (!stats) return sendError(res, 404, 'No results found for this evaluation.');
@@ -220,12 +173,7 @@ const getRetakeList = asyncHandler(async (req, res) => {
   };
   if (subjectId && isValidObjectId(subjectId)) filter.subject = subjectId;
 
-  const retakes = await Result.find(filter)
-    .populate('student', 'firstName lastName matricule email')
-    .populate('subject', 'subject_name subject_code coefficient')
-    .select('student subject score maxScore normalizedScore gradeBand evaluationTitle evaluationType')
-    .sort({ normalizedScore: 1 })
-    .lean();
+  const retakes = await resultRepo.listRetakeResults(filter);
 
   // Grouper par étudiant
   const byStudent = {};
@@ -271,56 +219,7 @@ const getCampusOverview = asyncHandler(async (req, res) => {
   if (academicYear) matchFilter.academicYear = academicYear;
   if (semester && Object.values(SEMESTER).includes(semester)) matchFilter.semester = semester;
 
-  const [facets] = await Result.aggregate([
-    { $match: matchFilter },
-    {
-      $facet: {
-        byStatus: [
-          { $group: { _id: '$status', count: { $sum: 1 } } },
-        ],
-        byEvalType: [
-          { $group: { _id: '$evaluationType', count: { $sum: 1 } } },
-        ],
-        byExamPeriod: [
-          {
-            $match: { examPeriod: { $ne: null } },
-          },
-          { $group: { _id: '$examPeriod', count: { $sum: 1 } } },
-        ],
-        generalStats: [
-          {
-            $match: {
-              status:    { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] },
-              isDeleted: false,
-            },
-          },
-          {
-            $group: {
-              _id:            null,
-              avgNormalized:  { $avg: '$normalizedScore' },
-              passingCount:   { $sum: { $cond: [{ $gte: ['$normalizedScore', 10] }, 1, 0] } },
-              totalPublished: { $sum: 1 },
-              retakeEligible: { $sum: { $cond: ['$isRetakeEligible', 1, 0] } },
-              atRisk:         { $sum: { $cond: [{ $gte: ['$dropoutRiskScore', 60] }, 1, 0] } },
-              absentStudents: { $sum: { $cond: [{ $eq: ['$examAttendance', 'absent'] }, 1, 0] } },
-            },
-          },
-          {
-            $project: {
-              avgNormalized:  { $round: ['$avgNormalized', 2] },
-              passingRate: {
-                $round: [
-                  { $multiply: [{ $divide: ['$passingCount', '$totalPublished'] }, 100] },
-                  1,
-                ],
-              },
-              totalPublished: 1, retakeEligible: 1, atRisk: 1, absentStudents: 1,
-            },
-          },
-        ],
-      },
-    },
-  ]);
+  const [facets] = await resultRepo.aggregateCampusOverview(matchFilter);
 
   const overview = {
     byStatus:     Object.fromEntries((facets.byStatus    || []).map((s) => [s._id, s.count])),
@@ -345,13 +244,7 @@ const verifyResult = asyncHandler(async (req, res) => {
   const { token } = req.params;
   if (!token) return sendError(res, 400, 'Verification token is required.');
 
-  const result = await Result.findOne({ verificationToken: token, isDeleted: false })
-    .populate('student', 'firstName lastName matricule')
-    .populate('subject', 'subject_name subject_code')
-    .populate('class',   'className')
-    .select('student subject class academicYear semester evaluationType evaluationTitle ' +
-            'normalizedScore gradeBand publishedAt status examPeriod')
-    .lean();
+  const result = await resultRepo.findResultByVerificationToken(token);
 
   if (!result || result.status === RESULT_STATUS.DRAFT)
     return sendError(res, 404, 'Invalid or expired verification token.');
@@ -390,10 +283,7 @@ const getFinalTranscript = asyncHandler(async (req, res) => {
   if (req.user.role === 'STUDENT' && studentId !== req.user.id)
     return sendForbidden(res, 'Access denied.');
 
-  const transcript = await FinalTranscript.findOne({ student: studentId, academicYear, semester })
-    .populate('student', 'firstName lastName matricule email')
-    .populate('class',   'className')
-    .lean();
+  const transcript = await resultRepo.findTranscriptForStudentPopulated({ studentId, academicYear, semester });
 
   if (!transcript) return sendNotFound(res, 'FinalTranscript');
 
@@ -414,7 +304,7 @@ const validateTranscript = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid transcript ID.');
   if (!isManagerRole(req.user.role)) return sendForbidden(res, 'Only managers can validate transcripts.');
 
-  const transcript = await FinalTranscript.findById(id);
+  const transcript = await resultRepo.findTranscriptForWrite(id);
   if (!transcript) return sendNotFound(res, 'FinalTranscript');
 
   if (!isGlobalRole(req.user.role) &&
@@ -436,7 +326,7 @@ const validateTranscript = asyncHandler(async (req, res) => {
     transcript.verificationToken = randomUUID();
   }
 
-  await transcript.save();
+  await resultRepo.saveTranscriptDoc(transcript);
   return sendSuccess(res, 200, 'Transcript validated.', transcript);
 });
 
@@ -455,7 +345,7 @@ const signTranscript = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid transcript ID.');
   if (!signedBy) return sendError(res, 400, 'signedBy is required.');
 
-  const transcript = await FinalTranscript.findById(id);
+  const transcript = await resultRepo.findTranscriptForWrite(id);
   if (!transcript) return sendNotFound(res, 'FinalTranscript');
 
   try {
@@ -479,9 +369,7 @@ const listGradingScales = asyncHandler(async (req, res) => {
   const campusFilter = getCampusFilter(req, res);
   if (!campusFilter) return; // 403 already sent
 
-  const scales = await GradingScale.find({ isActive: true, ...campusFilter })
-    .sort({ isDefault: -1, name: 1 })
-    .lean();
+  const scales = await resultRepo.listActiveGradingScales(campusFilter);
 
   return sendSuccess(res, 200, 'Grading scales fetched.', scales);
 });
@@ -512,7 +400,7 @@ const createGradingScale = asyncHandler(async (req, res) => {
   if (!resolvedCampus) return sendError(res, 400, 'schoolCampus is required.');
 
   try {
-    const scale = await GradingScale.create({
+    const scale = await resultRepo.createGradingScale({
       schoolCampus: resolvedCampus,
       name, description, system,
       maxScore:  Number(maxScore),
@@ -541,7 +429,7 @@ const updateGradingScale = asyncHandler(async (req, res) => {
   if (!isManagerRole(req.user.role))
     return sendForbidden(res, 'Only managers can update grading scales.');
 
-  const scale = await GradingScale.findById(id);
+  const scale = await resultRepo.findGradingScaleForWrite(id);
   if (!scale || !scale.isActive) return sendNotFound(res, 'GradingScale');
 
   if (!isGlobalRole(req.user.role) &&
@@ -553,7 +441,7 @@ const updateGradingScale = asyncHandler(async (req, res) => {
   scale.updatedBy = req.user.id;
 
   try {
-    await scale.save();
+    await resultRepo.saveGradingScaleDoc(scale);
     return sendSuccess(res, 200, 'Grading scale updated.', scale);
   } catch (err) {
     if (err.message && !err.code) return sendError(res, 400, err.message);

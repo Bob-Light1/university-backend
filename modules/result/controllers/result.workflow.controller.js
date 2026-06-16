@@ -30,11 +30,10 @@
  *  dans computeGeneralAverage exclut les doublons).
  */
 
-const mongoose   = require('mongoose');
 const { randomUUID } = require('crypto');
 
-const { Result, RESULT_STATUS }    = require('../models/result.model');
-const { FinalTranscript }          = require('../models/final-transcript.model');
+const { RESULT_STATUS } = require('../models/result.model');
+const resultRepo = require('../result.repository');
 
 const {
   asyncHandler,
@@ -50,7 +49,6 @@ const {
   isGlobalRole,
   isManagerRole,
   getCampusFilter,
-  RESULT_POPULATE,
 } = require('./result.helper');
 
 // ─── SUBMIT (individuel) ──────────────────────────────────────────────────────
@@ -64,7 +62,7 @@ const submitResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  const result = await Result.findOne({ _id: id, isDeleted: false });
+  const result = await resultRepo.findResultForWrite(id);
   if (!result) return sendNotFound(res, 'Result');
 
   if (result.status !== RESULT_STATUS.DRAFT)
@@ -80,7 +78,7 @@ const submitResult = asyncHandler(async (req, res) => {
   result.status      = RESULT_STATUS.SUBMITTED;
   result.submittedAt = new Date();
   result.submittedBy = req.user.id;
-  await result.save();
+  await resultRepo.saveResultDoc(result);
 
   return sendSuccess(res, 200, 'Result submitted for review.', result);
 });
@@ -118,7 +116,7 @@ const submitBatch = asyncHandler(async (req, res) => {
   // A TEACHER may only submit their own results
   if (req.user.role === 'TEACHER') filter.teacher = req.user.id;
 
-  const { modifiedCount } = await Result.updateMany(filter, {
+  const { modifiedCount } = await resultRepo.updateManyResults(filter, {
     $set: {
       status:      RESULT_STATUS.SUBMITTED,
       submittedAt: new Date(),
@@ -148,7 +146,7 @@ const publishResult = asyncHandler(async (req, res) => {
   if (!isManagerRole(req.user.role))
     return sendForbidden(res, 'Only Campus Managers or Admins can publish results.');
 
-  const resultDoc = await Result.findOne({ _id: id, isDeleted: false });
+  const resultDoc = await resultRepo.findResultForWrite(id);
   if (!resultDoc) return sendNotFound(res, 'Result');
 
   if (!isGlobalRole(req.user.role) &&
@@ -161,7 +159,7 @@ const publishResult = asyncHandler(async (req, res) => {
 
   // ── [S3-2] Transaction pour les RETAKE ───────────────────────────────────
   if (resultDoc.evaluationType === 'RETAKE' && resultDoc.retakeOf) {
-    const session = await mongoose.startSession();
+    const session = await resultRepo.startSession();
     try {
       await session.withTransaction(async () => {
         // 1. Publier le RETAKE
@@ -169,11 +167,11 @@ const publishResult = asyncHandler(async (req, res) => {
         resultDoc.publishedAt       = new Date();
         resultDoc.publishedBy       = req.user.id;
         resultDoc.verificationToken = randomUUID();
-        await resultDoc.save({ session });
+        await resultRepo.saveResultDoc(resultDoc, { session });
 
         // 2. S'assurer que la note originale a bien retakeOf renseigné
         //    (normalement fait à la création, mais on le vérifie ici)
-        const original = await Result.findById(resultDoc.retakeOf).session(session);
+        const original = await resultRepo.findResultById(resultDoc.retakeOf, { session });
         if (original && !original.retakeOf) {
           // La note originale est correctement liée — elle sera exclue de
           // computeGeneralAverage via le filtre retakeOf: null
@@ -192,12 +190,12 @@ const publishResult = asyncHandler(async (req, res) => {
     resultDoc.publishedAt       = new Date();
     resultDoc.publishedBy       = req.user.id;
     resultDoc.verificationToken = randomUUID();
-    await resultDoc.save();
+    await resultRepo.saveResultDoc(resultDoc);
   }
 
   // Calcul asynchrone du risque de décrochage (fire-and-forget)
-  Result.computeDropoutRisk(resultDoc.student, resultDoc.schoolCampus)
-    .then((risk) => Result.updateOne({ _id: resultDoc._id }, { $set: { dropoutRiskScore: risk } }))
+  resultRepo.computeDropoutRisk(resultDoc.student, resultDoc.schoolCampus)
+    .then((risk) => resultRepo.setDropoutRiskScore(resultDoc._id, risk))
     .catch((err) => console.error('[DropoutRisk] computation failed:', err.message));
 
   return sendSuccess(res, 200, 'Result published. Student can now view this result.', resultDoc);
@@ -235,7 +233,7 @@ const publishBatch = asyncHandler(async (req, res) => {
   };
 
   // On doit itérer pour déclencher pre-save (verificationToken + gradeBand)
-  const toPublish = await Result.find(filter);
+  const toPublish = await resultRepo.findResultsForWrite(filter);
   const now = new Date();
 
   await Promise.all(
@@ -244,15 +242,15 @@ const publishBatch = asyncHandler(async (req, res) => {
       r.publishedAt        = now;
       r.publishedBy        = req.user.id;
       r.verificationToken  = randomUUID();
-      return r.save();
+      return resultRepo.saveResultDoc(r);
     })
   );
 
   // Dropout risk — fire-and-forget per unique student (mirrors publishResult behaviour)
   const uniqueStudents = [...new Map(toPublish.map((r) => [r.student.toString(), r])).values()];
   for (const r of uniqueStudents) {
-    Result.computeDropoutRisk(r.student, r.schoolCampus)
-      .then((risk) => Result.updateOne({ _id: r._id }, { $set: { dropoutRiskScore: risk } }))
+    resultRepo.computeDropoutRisk(r.student, r.schoolCampus)
+      .then((risk) => resultRepo.setDropoutRiskScore(r._id, risk))
       .catch((err) => console.error('[DropoutRisk] batch computation failed:', err.message));
   }
 
@@ -274,7 +272,7 @@ const archiveResult = asyncHandler(async (req, res) => {
   if (!isManagerRole(req.user.role))
     return sendForbidden(res, 'Only managers can archive results.');
 
-  const result = await Result.findOne({ _id: id, isDeleted: false });
+  const result = await resultRepo.findResultForWrite(id);
   if (!result) return sendNotFound(res, 'Result');
 
   if (!isGlobalRole(req.user.role) &&
@@ -286,7 +284,7 @@ const archiveResult = asyncHandler(async (req, res) => {
 
   result.status    = RESULT_STATUS.ARCHIVED;
   result.archivedBy = req.user.id;
-  await result.save();
+  await resultRepo.saveResultDoc(result);
 
   return sendSuccess(res, 200, 'Result archived.', result);
 });
@@ -312,38 +310,23 @@ const lockSemester = asyncHandler(async (req, res) => {
   const campusFilter = getCampusFilter(req, res);
   if (!campusFilter) return; // 403 already sent
 
+  const lockMatch = {
+    academicYear,
+    semester,
+    status:    { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] },
+    isDeleted: false,
+    ...campusFilter,
+  };
+
   // ── 1. Verrouillage des résultats ─────────────────────────────────────────
-  const { modifiedCount } = await Result.updateMany(
-    {
-      academicYear,
-      semester,
-      status:    { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] },
-      isDeleted: false,
-      ...campusFilter,
-    },
+  const { modifiedCount } = await resultRepo.updateManyResults(
+    lockMatch,
     { $set: { periodLocked: true } }
   );
 
   // ── 2. [S2-1] Génération des FinalTranscripts ─────────────────────────────
   // Une seule agrégation : étudiants distincts avec classId et campusId
-  const studentDetails = await Result.aggregate([
-    {
-      $match: {
-        academicYear,
-        semester,
-        status:    { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] },
-        isDeleted: false,
-        ...campusFilter,
-      },
-    },
-    {
-      $group: {
-        _id:          '$student',
-        classId:      { $first: '$class' },
-        campusId:     { $first: '$schoolCampus' },
-      },
-    },
-  ]);
+  const studentDetails = await resultRepo.aggregateDistinctStudentsForLock(lockMatch);
 
   // Génération en parallèle (limité à 10 simultanés pour éviter les timeouts)
   const BATCH = 10;
@@ -354,7 +337,7 @@ const lockSemester = asyncHandler(async (req, res) => {
     const batch = studentDetails.slice(i, i + BATCH);
     const results = await Promise.allSettled(
       batch.map((s) =>
-        FinalTranscript.generateForStudent({
+        resultRepo.generateTranscriptForStudent({
           studentId:   s._id,
           classId:     s.classId,
           campusId:    s.campusId,
@@ -403,7 +386,7 @@ const auditCorrection = asyncHandler(async (req, res) => {
   if (!reason || reason.trim().length < 10)
     return sendError(res, 400, 'A reason of at least 10 characters is required for any audit correction.');
 
-  const result = await Result.findOne({ _id: id, isDeleted: false });
+  const result = await resultRepo.findResultForWrite(id);
   if (!result) return sendNotFound(res, 'Result');
 
   if (result.status === RESULT_STATUS.DRAFT)
@@ -423,7 +406,7 @@ const auditCorrection = asyncHandler(async (req, res) => {
     result.teacherRemarks = teacherRemarks;
   }
 
-  await result.save();
+  await resultRepo.saveResultDoc(result);
 
   return sendSuccess(res, 200, 'Audit correction applied and logged.', {
     result,

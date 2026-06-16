@@ -18,7 +18,8 @@
 const mongoose = require('mongoose');
 const { parse: csvParse } = require('csv-parse/sync');
 
-const { Result, RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
+const { RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
+const resultRepo = require('../result.repository');
 const { getClassCampusRef } = require('../../class').service; // façade module class (§3)
 
 const {
@@ -48,7 +49,6 @@ const {
   validateResultContext,
   validateResultIds,
   parsePositiveInt,
-  RESULT_POPULATE,
 } = require('./result.helper');
 
 // ─── CREATE (individuel) ──────────────────────────────────────────────────────
@@ -93,7 +93,7 @@ const createResult = asyncHandler(async (req, res) => {
   }
 
   try {
-    const result = await Result.create({
+    const result = await resultRepo.createResult({
       student, class: classId, subject, teacher,
       score:           Number(score),
       maxScore:        Number(maxScore),
@@ -228,7 +228,7 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
 
   let inserted = [], duplicates = [];
   try {
-    inserted = await Result.insertMany(toInsert, { ordered: false });
+    inserted = await resultRepo.insertManyResults(toInsert);
   } catch (err) {
     if (err.code === 11000 || err.name === 'BulkWriteError') {
       inserted   = err.insertedDocs  || [];
@@ -332,13 +332,10 @@ const getResults = asyncHandler(async (req, res) => {
   const pageNum  = parsePositiveInt(page,  1);
   const limitNum = parsePositiveInt(limit, 50);
 
-  let query = Result.find(filter).sort({ createdAt: -1 });
-  for (const p of RESULT_POPULATE.LIST) query = query.populate(p);
-
-  const [results, total] = await Promise.all([
-    query.skip((pageNum - 1) * limitNum).limit(limitNum).lean(),
-    Result.countDocuments(filter),
-  ]);
+  const { docs: results, total } = await resultRepo.paginateResults(filter, {
+    skip:  (pageNum - 1) * limitNum,
+    limit: limitNum,
+  });
 
   return sendPaginated(res, 200, 'Results fetched.', results, { total, page: pageNum, limit: limitNum });
 });
@@ -351,9 +348,7 @@ const getResultById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  let query = Result.findOne({ _id: id, isDeleted: false });
-  for (const p of RESULT_POPULATE.DETAIL) query = query.populate(p);
-  const result = await query.lean();
+  const result = await resultRepo.findResultByIdPopulated(id);
 
   if (!result) return sendNotFound(res, 'Result');
 
@@ -396,7 +391,7 @@ const updateResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  const result = await Result.findOne({ _id: id, isDeleted: false });
+  const result = await resultRepo.findResultForWrite(id);
   if (!result) return sendNotFound(res, 'Result');
 
   // Vérification des droits via canModify [S3-1]
@@ -428,7 +423,7 @@ const updateResult = asyncHandler(async (req, res) => {
     result.classManager = new mongoose.Types.ObjectId(req.user.id);
   }
 
-  await result.save();
+  await resultRepo.saveResultDoc(result);
   return sendSuccess(res, 200, 'Result updated.', result);
 });
 
@@ -443,7 +438,7 @@ const deleteResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  const result = await Result.findOne({ _id: id, isDeleted: false });
+  const result = await resultRepo.findResultForWrite(id);
   if (!result) return sendNotFound(res, 'Result');
 
   if (!isGlobalRole(req.user.role) &&
@@ -459,7 +454,7 @@ const deleteResult = asyncHandler(async (req, res) => {
   result.isDeleted = true;
   result.deletedAt = new Date();
   result.deletedBy = req.user.id;
-  await result.save();
+  await resultRepo.saveResultDoc(result);
 
   return sendSuccess(res, 200, 'Result deleted.', { _id: result._id });
 });

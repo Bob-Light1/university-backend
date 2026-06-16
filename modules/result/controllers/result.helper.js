@@ -152,29 +152,6 @@ const parsePositiveInt = (val, fallback) => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-// ─── POPULATE STANDARDS ───────────────────────────────────────────────────────
-
-/**
- * Options de populate réutilisées dans plusieurs endpoints.
- * Centralisées ici pour éviter la duplication et faciliter la maintenance.
- */
-const RESULT_POPULATE = Object.freeze({
-  LIST: [
-    { path: 'student', select: 'firstName lastName matricule' },
-    { path: 'subject', select: 'subject_name subject_code coefficient' },
-    { path: 'teacher', select: 'firstName lastName email' },
-    { path: 'class',   select: 'className' },
-  ],
-  DETAIL: [
-    { path: 'student',      select: 'firstName lastName matricule email' },
-    { path: 'subject',      select: 'subject_name subject_code coefficient' },
-    { path: 'teacher',      select: 'firstName lastName email' },
-    { path: 'class',        select: 'className' },
-    { path: 'classManager', select: 'firstName lastName email' },
-    { path: 'gradingScale', select: 'name system maxScore passMark bands' },
-  ],
-});
-
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -190,6 +167,4 @@ module.exports = {
   isValidTransition,
   // Pagination
   parsePositiveInt,
-  // Populate
-  RESULT_POPULATE,
 };

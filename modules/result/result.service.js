@@ -10,10 +10,12 @@
  *   - parent : listStudentPublishedResults, listStudentResultComments,
  *     getRecentResultsForChild, listStudentTranscripts, signTranscriptByParent
  *   - academic-print : getTranscriptForPrint
+ *
+ * Toute la persistance passe par result.repository (étape 0 pré-Postgres) ;
+ * le service conserve l'API inter-modules et la construction des filtres métier.
  */
 
-const { Result }          = require('./models/result.model');
-const { FinalTranscript } = require('./models/final-transcript.model');
+const resultRepo = require('./result.repository');
 
 // ── Results : compteurs ───────────────────────────────────────────────────────
 
@@ -31,7 +33,7 @@ const countPublishedResults = ({ campusId, studentIds, withDeleted = false }) =>
   const filter = { schoolCampus: campusId, status: 'PUBLISHED' };
   if (!withDeleted) filter.isDeleted = false;
   if (studentIds)   filter.student   = { $in: studentIds };
-  return Result.countDocuments(filter);
+  return resultRepo.countResults(filter);
 };
 
 // ── Results : listes paginées ─────────────────────────────────────────────────
@@ -67,17 +69,7 @@ const listCampusResults = async ({
   if (examPeriod)     filter.examPeriod     = examPeriod;
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [docs, total] = await Promise.all([
-    Result.find(filter)
-      .select('-__v')
-      .populate('student', 'firstName lastName matricule profileImage')
-      .populate('subject', 'subject_name')
-      .populate('class',   'className')
-      .sort({ createdAt: -1 })
-      .skip(skip).limit(Number(limit)).lean(),
-    Result.countDocuments(filter),
-  ]);
-  return { docs, total };
+  return resultRepo.paginateCampusResults(filter, { skip, limit: Number(limit) });
 };
 
 /**
@@ -99,19 +91,7 @@ const listStudentPublishedResults = async ({
   if (subjectId)    filter.subject      = subjectId;
 
   const skipN = skip != null ? skip : (Number(page) - 1) * Number(limit);
-  const [results, total] = await Promise.all([
-    Result.find(filter)
-      .select('-auditLog -verificationToken -dropoutRiskScore -__v')
-      .populate('subject',  'subject_name subject_code')
-      .populate('teacher',  'firstName lastName email')
-      .populate('class',    'className level')
-      .sort({ examDate: -1, publishedAt: -1 })
-      .skip(skipN)
-      .limit(Number(limit))
-      .lean({ virtuals: true }),
-    Result.countDocuments(filter),
-  ]);
-  return { results, total };
+  return resultRepo.paginateStudentPublishedResults(filter, { skip: skipN, limit: Number(limit) });
 };
 
 /**
@@ -139,63 +119,37 @@ const listStudentResultComments = async ({
   if (semester)     filter.semester     = semester;
 
   const skipN = skip != null ? skip : (Number(page) - 1) * Number(limit);
-  const [comments, total] = await Promise.all([
-    Result.find(filter)
-      .select('academicYear semester evaluationTitle evaluationType teacherRemarks classManagerRemarks strengths improvements publishedAt subject teacher')
-      .populate('subject', 'subject_name subject_code')
-      .populate('teacher', 'firstName lastName')
-      .sort({ publishedAt: -1 })
-      .skip(skipN)
-      .limit(Number(limit))
-      .lean({ virtuals: true }),
-    Result.countDocuments(filter),
-  ]);
-  return { comments, total };
+  return resultRepo.paginateStudentResultComments(filter, { skip: skipN, limit: Number(limit) });
 };
 
 // ── Results : derniers résultats (dashboards) ─────────────────────────────────
 
 /** Dashboard étudiant : 5 derniers résultats PUBLISHED (scores inclus). */
 const getRecentResultsForStudent = (studentId, campusId, limit = 5) =>
-  Result.find({
+  resultRepo.findRecentResultsForStudent({
     student:      studentId,
     schoolCampus: campusId,
     status:       'PUBLISHED',
     isDeleted:    false,
-  })
-    .select('evaluationTitle evaluationType academicYear semester normalizedScore score maxScore gradeBand publishedAt subject')
-    .populate('subject', 'subject_name subject_code')
-    .sort({ publishedAt: -1 })
-    .limit(limit)
-    .lean({ virtuals: true });
+  }, limit);
 
 /** Dashboard parent : 5 derniers résultats PUBLISHED d'un enfant. */
 const getRecentResultsForChild = (studentId, campusId, limit = 5) =>
-  Result.find({
+  resultRepo.findRecentResultsForChild({
     student:      studentId,
     schoolCampus: campusId,
     status:       'PUBLISHED',
     isDeleted:    false,
-  })
-    .select('evaluationTitle evaluationType academicYear semester normalizedScore gradeBand publishedAt subject')
-    .populate('subject', 'subject_name')
-    .sort({ publishedAt: -1 })
-    .limit(limit)
-    .lean({ virtuals: true });
+  }, limit);
 
-/** Dashboard mentor : 5 derniers résultats PUBLISHED de ses étudiants. */
+/** Dashboard mentor : 5 derniers résultats PUBLISHED de ses étudiants.
+ *  (incohérence historique préservée : pas de filtre isDeleted). */
 const getRecentResultsForStudents = (studentIds, campusId, limit = 5) =>
-  Result.find({
+  resultRepo.findRecentResultsForStudents({
     student:      { $in: studentIds },
     schoolCampus: campusId,
     status:       'PUBLISHED',
-  })
-    .select('student subject score maxScore grade evaluationTitle createdAt')
-    .populate('student', 'firstName lastName profileImage')
-    .populate('subject', 'subject_name')
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .lean();
+  }, limit);
 
 // ── Transcripts ───────────────────────────────────────────────────────────────
 
@@ -212,12 +166,7 @@ const listStudentTranscripts = ({ studentId, campusId, academicYear, semester })
   if (academicYear) filter.academicYear = academicYear;
   if (semester)     filter.semester     = semester;
 
-  return FinalTranscript.find(filter)
-    .select('-__v')
-    .populate('class',   'className level')
-    .populate('student', 'firstName lastName profileImage')
-    .sort({ academicYear: -1, semester: 1 })
-    .lean({ virtuals: true });
+  return resultRepo.listStudentTranscripts(filter);
 };
 
 /**
@@ -226,11 +175,7 @@ const listStudentTranscripts = ({ studentId, campusId, academicYear, semester })
  * @returns {Promise<{transcriptId, parentSignature}|null>} null si introuvable
  */
 const signTranscriptByParent = async ({ transcriptId, studentId, campusId, parentId, ip, method = 'click' }) => {
-  const transcript = await FinalTranscript.findOne({
-    _id:          transcriptId,
-    student:      studentId,
-    schoolCampus: campusId,
-  });
+  const transcript = await resultRepo.findTranscriptForSignature({ transcriptId, studentId, campusId });
   if (!transcript) return null;
 
   await transcript.signByParent(parentId, ip, method);
@@ -242,12 +187,7 @@ const signTranscriptByParent = async ({ transcriptId, studentId, campusId, paren
  * @returns {Promise<Object|null>} lean
  */
 const getTranscriptForPrint = ({ studentId, campusId, academicYear, semester }) =>
-  FinalTranscript.findOne({
-    student:      studentId,
-    schoolCampus: campusId,
-    academicYear,
-    semester,
-  }).lean();
+  resultRepo.findTranscriptForPrint({ studentId, campusId, academicYear, semester });
 
 module.exports = {
   countPublishedResults,
