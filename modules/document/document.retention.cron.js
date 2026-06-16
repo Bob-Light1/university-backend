@@ -16,8 +16,7 @@
  *   cron.schedule('0 2 * * 0', runRetentionJob); // Every Sunday at 02:00
  */
 
-const Document      = require('./models/document.model');
-const DocumentAudit = require('./models/document.audit.model');
+const repo = require('./document.repository');
 // require paresseux (au moment du job) : academic-print consomme la façade
 // document (generateQrCodeDataUrl) — un require au chargement créerait un
 // cycle document ↔ academic-print et une façade partiellement initialisée.
@@ -42,14 +41,13 @@ const runRetentionJob = async () => {
   let hasMore   = true;
 
   while (hasMore) {
-    const expired = await Document.find({
-      retentionUntil: { $ne: null, $lte: new Date() },
-      deletedAt:      null,
-    })
-      .select('_id campusId ref retentionPolicy retentionUntil')
-      .skip(skip)
-      .limit(BATCH_SIZE)
-      .lean();
+    const expired = await repo.findExpiredDocuments(
+      {
+        retentionUntil: { $ne: null, $lte: new Date() },
+        deletedAt:      null,
+      },
+      { skip, limit: BATCH_SIZE },
+    );
 
     if (expired.length === 0) {
       hasMore = false;
@@ -58,12 +56,12 @@ const runRetentionJob = async () => {
 
     for (const doc of expired) {
       try {
-        await Document.findByIdAndUpdate(doc._id, {
+        await repo.updateDocumentById(doc._id, {
           deletedAt: new Date(),
           deletedBy: { userId: null, userModel: 'System' },
         });
 
-        await DocumentAudit.create({
+        await repo.createAudit({
           documentId:  doc._id,
           campusId:    doc.campusId,
           action:      'DELETE',

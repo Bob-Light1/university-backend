@@ -32,7 +32,7 @@ const fs        = require('fs').promises;
 const crypto    = require('crypto');
 
 const { saveFile }   = require('./document.storage.service');
-const Document       = require('../models/document.model');
+const repo           = require('../document.repository');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
@@ -276,10 +276,7 @@ ${bodyHtml}
 const generateDocumentPdf = async (documentId, versionId, campusName) => {
   await initPool();
 
-  const doc = await Document
-    .findById(documentId)
-    .select('ref title body branding printConfig campusId currentVersion pdfSnapshot')
-    .lean();
+  const doc = await repo.findDocumentForPdf(documentId);
 
   if (!doc) {
     throw Object.assign(new Error('Document not found'), { statusCode: 404 });
@@ -333,7 +330,7 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
         await fs.writeFile(filePath, pdfBuffer);
 
         // Update pdfSnapshot on the document record
-        await Document.findByIdAndUpdate(documentId, { pdfSnapshot: fileName });
+        await repo.setPdfSnapshot(documentId, fileName);
 
         clearTimeout(timeout);
         resolve({ fileName, buffer: pdfBuffer });
@@ -358,10 +355,7 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
  * @returns {Promise<{ fileName: string, filePath: string, buffer: Buffer }>}
  */
 const getOrGeneratePdf = async (documentId, campusName) => {
-  const doc = await Document
-    .findById(documentId)
-    .select('ref pdfSnapshot currentVersion campusId')
-    .lean();
+  const doc = await repo.findDocumentForPdfCache(documentId);
 
   if (!doc) throw Object.assign(new Error('Document not found'), { statusCode: 404 });
 

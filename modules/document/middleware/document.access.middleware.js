@@ -18,8 +18,8 @@
  * Role-specific scope enforcement (TEACHER, STUDENT, PARENT) is also applied here.
  */
 
-const mongoose = require('mongoose');
-const Document = require('../models/document.model');
+const mongoose = require('mongoose'); // conservé pour ObjectId.isValid
+const repo = require('../document.repository');
 // require paresseux de la façade course (évite tout cycle au chargement :
 // document est chargé très tôt via server.js).
 const courseService = () => require('../../course').service;
@@ -49,10 +49,10 @@ const loadAndVerifyDocument = async (req, res, next) => {
     }
 
     // Select only fields needed for access control — avoid loading full body in middleware
-    const doc = await Document
-      .findById(id)
-      .select('campusId type status isOfficial createdBy linkedEntities deletedAt')
-      .lean();
+    const doc = await repo.findDocumentByIdLean(
+      id,
+      'campusId type status isOfficial createdBy linkedEntities deletedAt',
+    );
 
     if (!doc || doc.deletedAt) {
       return sendNotFound(res, 'Document');

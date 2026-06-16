@@ -16,10 +16,10 @@
  *   Layer 3 → document.access.middleware.js (doc.campusId === req.campusId cross-check)
  */
 
-const mongoose = require('mongoose');
+const mongoose = require('mongoose'); // conservé pour le cast ObjectId du $match
 // Require paresseux : document est dans la cloture statique de campus (via staff)
 const getCampusStorageInfo = (...args) => require('../../campus').service.getCampusStorageInfo(...args);
-const Document = require('../models/document.model');
+const repo = require('../document.repository');
 
 const { sendError, sendForbidden } = require('../../../shared/utils/response-helpers');
 
@@ -47,22 +47,13 @@ const computeCampusStorageUsageMB = async (campusId) => {
     return cached.valueMB;
   }
 
-  const result = await Document.aggregate([
-    {
-      $match: {
-        // Fix: use `new` — direct constructor call is deprecated in Mongoose 7+
-        campusId:                new mongoose.Types.ObjectId(campusId),
-        deletedAt:               null,
-        'importedFile.sizeBytes': { $exists: true, $ne: null },
-      },
-    },
-    {
-      $group: {
-        _id:        null,
-        totalBytes: { $sum: '$importedFile.sizeBytes' },
-      },
-    },
-  ]);
+  // $match casté en ObjectId par l'appelant (convention agrégats du repo).
+  const result = await repo.aggregateImportedStorageBytes({
+    // Fix: use `new` — direct constructor call is deprecated in Mongoose 7+
+    campusId:                 new mongoose.Types.ObjectId(campusId),
+    deletedAt:                null,
+    'importedFile.sizeBytes': { $exists: true, $ne: null },
+  });
 
   const totalBytes = result.length > 0 ? result[0].totalBytes : 0;
   const totalMB    = totalBytes / (1024 * 1024);

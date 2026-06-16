@@ -15,7 +15,7 @@
 const { runRetentionJob }       = require('./document.retention.cron');
 const { shutdownPool }          = require('./services/document.pdf.service');
 const { generateQrCodeDataUrl } = require('./services/document.qr.service');
-const Document                  = require('./models/document.model');
+const repo                      = require('./document.repository');
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -40,14 +40,7 @@ const listPublishedForCampus = async ({ campusId, page = 1, limit = 20, search, 
   }
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [docs, total] = await Promise.all([
-    Document.find(filter)
-      .select('-__v -auditLog -versions')
-      .sort({ createdAt: -1 })
-      .skip(skip).limit(Number(limit)).lean(),
-    Document.countDocuments(filter),
-  ]);
-  return { docs, total };
+  return repo.paginatePublishedForCampus(filter, { skip, limit: Number(limit) });
 };
 
 module.exports = {

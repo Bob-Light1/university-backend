@@ -21,8 +21,7 @@
 
 const crypto = require('crypto');
 
-const Document        = require('../models/document.model');
-const DocumentShare   = require('../models/document.share.model');
+const repo = require('../document.repository');
 const { AUDIT_ACTION }    = require('../models/document.audit.model');
 const documentService     = require('../services/document.service');
 const pdfService          = require('../services/document.pdf.service');
@@ -57,14 +56,14 @@ const createShareLink = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Creating share links requires CAMPUS_MANAGER or higher role');
   }
 
-  const doc = await Document
-    .findOne({
+  const doc = await repo.findDocumentLean(
+    {
       _id:       req.params.id,
       campusId:  req.isGlobalRole ? undefined : req.campusId,
       deletedAt: null,
-    })
-    .select('_id campusId status isOfficial')
-    .lean();
+    },
+    '_id campusId status isOfficial',
+  );
 
   if (!doc) return sendNotFound(res, 'Document');
 
@@ -90,7 +89,7 @@ const createShareLink = asyncHandler(async (req, res) => {
   const plainToken = crypto.randomBytes(32).toString('hex');
   const tokenHash  = crypto.createHash('sha256').update(plainToken).digest('hex');
 
-  const share = await DocumentShare.create({
+  const share = await repo.createShare({
     documentId: doc._id,
     campusId:   doc.campusId,
     tokenHash,
@@ -146,10 +145,7 @@ const accessSharedDocument = asyncHandler(async (req, res) => {
 
   const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
 
-  const share = await DocumentShare
-    .findOne({ tokenHash, revoked: false })
-    .populate('documentId', 'title ref campusId status isOfficial pdfSnapshot currentVersion')
-    .lean();
+  const share = await repo.findShareByTokenHashPopulated(tokenHash);
 
   if (!share) {
     return sendError(res, 404, 'Share link not found or has been revoked');
@@ -169,10 +165,7 @@ const accessSharedDocument = asyncHandler(async (req, res) => {
   }
 
   // Log access IP and increment download counter
-  await DocumentShare.findByIdAndUpdate(share._id, {
-    $inc:  { downloadCount: 1 },
-    $push: { accessedIps: req.ip },
-  });
+  await repo.registerShareAccess(share._id, req.ip);
 
   // Auto-lock if official document and not already locked
   if (doc.isOfficial) {
@@ -210,15 +203,11 @@ const revokeShareLink = asyncHandler(async (req, res) => {
     ? { _id: req.params.shareId, revoked: false }
     : { _id: req.params.shareId, campusId: req.campusId, revoked: false };
 
-  const share = await DocumentShare.findOneAndUpdate(
-    filter,
-    {
-      revoked:   true,
-      revokedAt: new Date(),
-      revokedBy: req.user.id,
-    },
-    { new: true },
-  );
+  const share = await repo.revokeShare(filter, {
+    revoked:   true,
+    revokedAt: new Date(),
+    revokedBy: req.user.id,
+  });
 
   if (!share) return sendNotFound(res, 'Share link');
 
@@ -244,11 +233,7 @@ const listShareLinks = asyncHandler(async (req, res) => {
   };
   if (!req.isGlobalRole) filter.campusId = req.campusId;
 
-  const shares = await DocumentShare
-    .find(filter)
-    .select('-tokenHash')   // Never expose the hash in the API response
-    .sort({ createdAt: -1 })
-    .lean();
+  const shares = await repo.listShares(filter);
 
   return sendSuccess(res, 200, 'Share links retrieved', { shares });
 });

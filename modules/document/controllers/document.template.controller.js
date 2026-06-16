@@ -21,10 +21,7 @@
  *   POST   /api/documents/generate/badge/:entityType/:entityId
  */
 
-const mongoose = require('mongoose');
-
-const DocumentTemplate = require('../models/document.template.model');
-const Document         = require('../models/document.model');
+const repo = require('../document.repository');
 const { AUDIT_ACTION }     = require('../models/document.audit.model');
 const documentService      = require('../services/document.service');
 const { validateContentBlocks, validateTemplateData } = require('../services/document.validation.service');
@@ -71,7 +68,7 @@ const createTemplate = asyncHandler(async (req, res) => {
     userModel: documentService.resolveUserModel(req.user.role),
   };
 
-  const template = await DocumentTemplate.create(dto);
+  const template = await repo.createTemplate(dto);
   return sendCreated(res, 'Template created successfully', { template });
 });
 
@@ -90,10 +87,7 @@ const listTemplates = asyncHandler(async (req, res) => {
 
   if (req.query.type) filter.type = req.query.type;
 
-  const templates = await DocumentTemplate
-    .find(filter)
-    .sort({ usageCount: -1, createdAt: -1 })
-    .lean();
+  const templates = await repo.listTemplates(filter);
 
   return sendSuccess(res, 200, 'Templates retrieved', { templates });
 });
@@ -102,7 +96,7 @@ const listTemplates = asyncHandler(async (req, res) => {
  * GET /api/documents/templates/:id
  */
 const getTemplate = asyncHandler(async (req, res) => {
-  const template = await DocumentTemplate.findById(req.params.id).lean();
+  const template = await repo.findTemplateByIdLean(req.params.id);
   if (!template) return sendNotFound(res, 'Template');
 
   // Campus isolation check
@@ -123,7 +117,7 @@ const updateTemplate = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Updating templates requires CAMPUS_MANAGER or higher role');
   }
 
-  const template = await DocumentTemplate.findById(req.params.id);
+  const template = await repo.findTemplateForWrite(req.params.id);
   if (!template) return sendNotFound(res, 'Template');
 
   if (template.isGlobal && !['ADMIN', 'DIRECTOR'].includes(req.user.role)) {
@@ -147,7 +141,7 @@ const updateTemplate = asyncHandler(async (req, res) => {
   };
 
   Object.assign(template, dto);
-  await template.save();
+  await repo.saveTemplateDoc(template);
 
   return sendSuccess(res, 200, 'Template updated successfully', { template });
 });
@@ -161,7 +155,7 @@ const deleteTemplate = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Deleting templates requires CAMPUS_MANAGER or higher role');
   }
 
-  const template = await DocumentTemplate.findById(req.params.id);
+  const template = await repo.findTemplateForWrite(req.params.id);
   if (!template) return sendNotFound(res, 'Template');
 
   if (template.isGlobal && !['ADMIN', 'DIRECTOR'].includes(req.user.role)) {
@@ -169,7 +163,7 @@ const deleteTemplate = asyncHandler(async (req, res) => {
   }
 
   template.isActive = false;
-  await template.save();
+  await repo.saveTemplateDoc(template);
 
   return sendSuccess(res, 200, 'Template deactivated successfully');
 });
@@ -188,7 +182,7 @@ const generateFromTemplate = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Document generation requires CAMPUS_MANAGER or higher role');
   }
 
-  const template = await DocumentTemplate.findById(req.params.id).lean();
+  const template = await repo.findTemplateByIdLean(req.params.id);
   if (!template || !template.isActive) return sendNotFound(res, 'Template');
 
   // Campus access check
@@ -225,7 +219,7 @@ const generateFromTemplate = asyncHandler(async (req, res) => {
   const document = await documentService.createDocument(req, dto);
 
   // Increment template usage count (non-blocking)
-  DocumentTemplate.findByIdAndUpdate(template._id, { $inc: { usageCount: 1 } }).catch(() => {});
+  repo.incrementTemplateUsage(template._id).catch(() => {});
 
   // Write template generation audit
   await documentService.writeAudit(null, {
@@ -244,7 +238,7 @@ const generateFromTemplate = asyncHandler(async (req, res) => {
  * Returns the rendered HTML for a template without saving to the database.
  */
 const previewTemplate = asyncHandler(async (req, res) => {
-  const template = await DocumentTemplate.findById(req.params.id).lean();
+  const template = await repo.findTemplateByIdLean(req.params.id);
   if (!template || !template.isActive) return sendNotFound(res, 'Template');
 
   const { templateData = {} } = req.body;

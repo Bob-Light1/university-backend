@@ -12,9 +12,7 @@
  *   POST /api/documents/:id/versions/:version/restore — Restore to a version (requires reason)
  */
 
-const DocumentAudit   = require('../models/document.audit.model');
-const DocumentVersion = require('../models/document.version.model');
-const Document        = require('../models/document.model');
+const repo = require('../document.repository');
 const { AUDIT_ACTION }    = require('../models/document.audit.model');
 const documentService     = require('../services/document.service');
 
@@ -42,15 +40,7 @@ const getDocumentAudit = asyncHandler(async (req, res) => {
   const filter = { documentId: req.params.id };
   if (!req.isGlobalRole) filter.campusId = req.campusId;
 
-  const [data, total] = await Promise.all([
-    DocumentAudit
-      .find(filter)
-      .sort({ performedAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean(),
-    DocumentAudit.countDocuments(filter),
-  ]);
+  const { data, total } = await repo.paginateAudits(filter, { skip, limit: limitNum });
 
   return sendPaginated(res, 200, 'Audit log retrieved', data, { total, page: pageNum, limit: limitNum });
 });
@@ -82,15 +72,7 @@ const getCampusAudit = asyncHandler(async (req, res) => {
     if (to)   filter.performedAt.$lte = new Date(to);
   }
 
-  const [data, total] = await Promise.all([
-    DocumentAudit
-      .find(filter)
-      .sort({ performedAt: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean(),
-    DocumentAudit.countDocuments(filter),
-  ]);
+  const { data, total } = await repo.paginateAudits(filter, { skip, limit: limitNum });
 
   return sendPaginated(res, 200, 'Campus audit log retrieved', data, { total, page: pageNum, limit: limitNum });
 });
@@ -115,16 +97,7 @@ const listVersions = asyncHandler(async (req, res) => {
   const filter = { documentId: req.params.id };
   if (!req.isGlobalRole) filter.campusId = req.campusId;
 
-  const [data, total] = await Promise.all([
-    DocumentVersion
-      .find(filter)
-      .sort({ version: -1 })
-      .skip(skip)
-      .limit(limitNum)
-      .select('-body')   // Omit full body from list — use getVersion for full snapshot
-      .lean(),
-    DocumentVersion.countDocuments(filter),
-  ]);
+  const { data, total } = await repo.paginateVersions(filter, { skip, limit: limitNum });
 
   return sendPaginated(res, 200, 'Version history retrieved', data, { total, page: pageNum, limit: limitNum });
 });
@@ -146,7 +119,7 @@ const getVersion = asyncHandler(async (req, res) => {
   };
   if (!req.isGlobalRole) filter.campusId = req.campusId;
 
-  const version = await DocumentVersion.findOne(filter).lean();
+  const version = await repo.findVersionLean(filter);
   if (!version) return sendNotFound(res, 'Version');
 
   return sendSuccess(res, 200, 'Version snapshot retrieved', { version });
@@ -177,17 +150,17 @@ const restoreVersion = asyncHandler(async (req, res) => {
   };
   if (!req.isGlobalRole) versionFilter.campusId = req.campusId;
 
-  const snapshot = await DocumentVersion.findOne(versionFilter).lean();
+  const snapshot = await repo.findVersionLean(versionFilter);
   if (!snapshot) return sendNotFound(res, 'Version');
 
   const docFilter = { _id: req.params.id, deletedAt: null };
   if (!req.isGlobalRole) docFilter.campusId = req.campusId;
 
-  const session = await require('mongoose').startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
-    const doc = await Document.findOne(docFilter).session(session);
+    const doc = await repo.findDocumentForWrite(docFilter, { session });
     if (!doc) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
 
     // Take a snapshot of the current state before restoring
@@ -200,7 +173,7 @@ const restoreVersion = asyncHandler(async (req, res) => {
       userId:    req.user.id,
       userModel: documentService.resolveUserModel(req.user.role),
     };
-    await doc.save({ session });
+    await repo.saveDocumentDoc(doc, { session });
 
     await documentService.writeAudit(session, {
       documentId: doc._id,

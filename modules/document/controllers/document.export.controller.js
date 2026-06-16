@@ -19,11 +19,10 @@
  *   PRINT    → written when a print job is created.
  */
 
-const mongoose   = require('mongoose');
 const archiver   = require('archiver');
 const path       = require('path');
 
-const Document       = require('../models/document.model');
+const repo           = require('../document.repository');
 const { AUDIT_ACTION }   = require('../models/document.audit.model');
 const documentService    = require('../services/document.service');
 const pdfService         = require('../services/document.pdf.service');
@@ -60,10 +59,7 @@ const exportPdf = asyncHandler(async (req, res) => {
   // This avoids the campusId filter bug where undefined campusId causes a silent DB mismatch.
   const baseDoc = req.document; // { _id, campusId, type, status, ... }
 
-  const doc = await Document
-    .findById(baseDoc._id)
-    .select('ref title pdfSnapshot currentVersion campusId status')
-    .lean();
+  const doc = await repo.findDocumentByIdLean(baseDoc._id, 'ref title pdfSnapshot currentVersion campusId status');
 
   if (!doc) return sendNotFound(res, 'Document');
 
@@ -73,7 +69,7 @@ const exportPdf = asyncHandler(async (req, res) => {
   const { fileName, buffer } = await pdfService.getOrGeneratePdf(doc._id.toString(), campusName);
 
   // Increment download count (non-blocking)
-  Document.findByIdAndUpdate(doc._id, { $inc: { downloadCount: 1 } }).catch(() => {});
+  repo.incrementDownloadCount(doc._id).catch(() => {});
 
   // Write audit (non-blocking)
   documentService.writeAudit(null, {
@@ -103,10 +99,7 @@ const exportRaw = asyncHandler(async (req, res) => {
   // Reload only the fields not selected by the middleware (importedFile, title).
   const baseDoc = req.document;
 
-  const doc = await Document
-    .findById(baseDoc._id)
-    .select('type importedFile campusId title')
-    .lean();
+  const doc = await repo.findDocumentByIdLean(baseDoc._id, 'type importedFile campusId title');
 
   if (!doc) return sendNotFound(res, 'Document');
 
@@ -115,7 +108,7 @@ const exportRaw = asyncHandler(async (req, res) => {
   }
 
   // Increment download count (non-blocking)
-  Document.findByIdAndUpdate(doc._id, { $inc: { downloadCount: 1 } }).catch(() => {});
+  repo.incrementDownloadCount(doc._id).catch(() => {});
 
   documentService.writeAudit(null, {
     documentId: doc._id,
@@ -164,10 +157,7 @@ const bulkExport = asyncHandler(async (req, res) => {
     ? { _id: { $in: documentIds }, deletedAt: null }
     : { _id: { $in: documentIds }, campusId: req.campusId, deletedAt: null };
 
-  const documents = await Document
-    .find(campusFilter)
-    .select('_id ref title campusId pdfSnapshot currentVersion')
-    .lean();
+  const documents = await repo.findDocumentsByFilterLean(campusFilter, '_id ref title campusId pdfSnapshot currentVersion');
 
   if (documents.length === 0) {
     return sendError(res, 404, 'No accessible documents found for the provided IDs');

@@ -20,9 +20,7 @@
  * Audit entries are written for every workflow transition.
  */
 
-const mongoose = require('mongoose');
-
-const Document        = require('../models/document.model');
+const repo = require('../document.repository');
 const { DOCUMENT_STATUS } = require('../models/document.model');
 const { AUDIT_ACTION }    = require('../models/document.audit.model');
 const documentService     = require('../services/document.service');
@@ -46,7 +44,7 @@ const publishDocument = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Publishing requires CAMPUS_MANAGER or higher role');
   }
 
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
@@ -55,9 +53,7 @@ const publishDocument = asyncHandler(async (req, res) => {
     const publishFilter = { _id: req.params.id, deletedAt: null };
     if (!req.isGlobalRole) publishFilter.campusId = req.campusId;
 
-    const doc = await Document
-      .findOne(publishFilter)
-      .session(session);
+    const doc = await repo.findDocumentForWrite(publishFilter, { session });
 
     if (!doc) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
     if (doc.status !== DOCUMENT_STATUS.DRAFT) {
@@ -71,7 +67,7 @@ const publishDocument = asyncHandler(async (req, res) => {
     doc.status      = DOCUMENT_STATUS.PUBLISHED;
     doc.publishedAt = new Date();
     doc.lastModifiedBy = { userId: req.user.id, userModel: documentService.resolveUserModel(req.user.role) };
-    await doc.save({ session });
+    await repo.saveDocumentDoc(doc, { session });
 
     await documentService.writeAudit(session, {
       documentId: doc._id,
@@ -104,7 +100,7 @@ const archiveDocument = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Archiving requires CAMPUS_MANAGER or higher role');
   }
 
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
@@ -113,9 +109,7 @@ const archiveDocument = asyncHandler(async (req, res) => {
     const archiveFilter = { _id: req.params.id, deletedAt: null };
     if (!req.isGlobalRole) archiveFilter.campusId = req.campusId;
 
-    const doc = await Document
-      .findOne(archiveFilter)
-      .session(session);
+    const doc = await repo.findDocumentForWrite(archiveFilter, { session });
 
     if (!doc) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
     if (![DOCUMENT_STATUS.PUBLISHED, DOCUMENT_STATUS.LOCKED].includes(doc.status)) {
@@ -128,7 +122,7 @@ const archiveDocument = asyncHandler(async (req, res) => {
     doc.status     = DOCUMENT_STATUS.ARCHIVED;
     doc.archivedAt = new Date();
     doc.lastModifiedBy = { userId: req.user.id, userModel: documentService.resolveUserModel(req.user.role) };
-    await doc.save({ session });
+    await repo.saveDocumentDoc(doc, { session });
 
     await documentService.writeAudit(session, {
       documentId: doc._id,
@@ -166,7 +160,7 @@ const restoreDocument = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'A reason of at least 10 characters is required to restore a document');
   }
 
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
@@ -175,9 +169,7 @@ const restoreDocument = asyncHandler(async (req, res) => {
     const restoreFilter = { _id: req.params.id, deletedAt: null };
     if (!req.isGlobalRole) restoreFilter.campusId = req.campusId;
 
-    const doc = await Document
-      .findOne(restoreFilter)
-      .session(session);
+    const doc = await repo.findDocumentForWrite(restoreFilter, { session });
 
     if (!doc) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
     if (doc.status !== DOCUMENT_STATUS.ARCHIVED) {
@@ -188,7 +180,7 @@ const restoreDocument = asyncHandler(async (req, res) => {
     doc.status     = DOCUMENT_STATUS.DRAFT;
     doc.archivedAt = null;
     doc.lastModifiedBy = { userId: req.user.id, userModel: documentService.resolveUserModel(req.user.role) };
-    await doc.save({ session });
+    await repo.saveDocumentDoc(doc, { session });
 
     await documentService.writeAudit(session, {
       documentId: doc._id,
@@ -227,13 +219,11 @@ const duplicateDocument = asyncHandler(async (req, res) => {
   const duplicateFilter = { _id: req.params.id, deletedAt: null };
   if (!req.isGlobalRole) duplicateFilter.campusId = req.campusId;
 
-  const source = await Document
-    .findOne(duplicateFilter)
-    .lean();
+  const source = await repo.findDocumentLean(duplicateFilter);
 
   if (!source) return sendNotFound(res, 'Document');
 
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
@@ -268,7 +258,7 @@ const duplicateDocument = asyncHandler(async (req, res) => {
       lastModifiedBy: { userId: null, userModel: null },
     };
 
-    const [duplicate] = await Document.create([copyData], { session });
+    const [duplicate] = await repo.createDocuments([copyData], { session });
 
     await documentService.writeAudit(session, {
       documentId: duplicate._id,
@@ -306,11 +296,11 @@ const lockDocument = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'A reason of at least 10 characters is required to lock a document');
   }
 
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
-    const doc = await Document.findById(req.params.id).session(session);
+    const doc = await repo.findDocumentByIdForWrite(req.params.id, { session });
     if (!doc || doc.deletedAt) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
 
     if (doc.status === DOCUMENT_STATUS.LOCKED) {
@@ -324,7 +314,7 @@ const lockDocument = asyncHandler(async (req, res) => {
 
     doc.status   = DOCUMENT_STATUS.LOCKED;
     doc.lockedAt = new Date();
-    await doc.save({ session });
+    await repo.saveDocumentDoc(doc, { session });
 
     await documentService.writeAudit(session, {
       documentId: doc._id, campusId: doc.campusId,
@@ -359,11 +349,11 @@ const unlockDocument = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'A reason of at least 10 characters is required to unlock a document');
   }
 
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
-    const doc = await Document.findById(req.params.id).session(session);
+    const doc = await repo.findDocumentByIdForWrite(req.params.id, { session });
     if (!doc || doc.deletedAt) { await session.abortTransaction(); return sendNotFound(res, 'Document'); }
 
     if (doc.status !== DOCUMENT_STATUS.LOCKED) {
@@ -373,7 +363,7 @@ const unlockDocument = asyncHandler(async (req, res) => {
 
     doc.status   = DOCUMENT_STATUS.PUBLISHED;
     doc.lockedAt = null;
-    await doc.save({ session });
+    await repo.saveDocumentDoc(doc, { session });
 
     await documentService.writeAudit(session, {
       documentId: doc._id, campusId: doc.campusId,
@@ -404,7 +394,7 @@ const markOfficial = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Marking a document as official requires CAMPUS_MANAGER or higher role');
   }
 
-  const doc = await Document.findByIdAndUpdate(
+  const doc = await repo.updateDocumentById(
     req.params.id,
     { isOfficial: true, lastModifiedBy: { userId: req.user.id, userModel: documentService.resolveUserModel(req.user.role) } },
     { new: true },

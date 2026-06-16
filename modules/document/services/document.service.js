@@ -15,13 +15,10 @@
  *   - Document ref generation (DOC-{YEAR}-{CODE}-{nanoid8})
  */
 
-const mongoose = require('mongoose');
 const slugify  = require('slugify');
 const { nanoid } = require('nanoid');
 
-const Document         = require('../models/document.model');
-const DocumentAudit    = require('../models/document.audit.model');
-const DocumentVersion  = require('../models/document.version.model');
+const repo = require('../document.repository');
 // Require paresseux : document est dans la cloture statique de campus (via staff)
 const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
@@ -185,10 +182,10 @@ const writeAudit = async (session, {
   };
 
   const createOptions = session ? { session } : {};
-  await DocumentAudit.create([entry], createOptions);
+  await repo.createAudit([entry], createOptions);
 
   const updateOptions = session ? { session } : {};
-  await Document.findByIdAndUpdate(
+  await repo.updateDocumentById(
     documentId,
     {
       lastAuditEntry: {
@@ -211,7 +208,7 @@ const writeAudit = async (session, {
  * @returns {Promise<Document>}
  */
 const createDocument = async (req, dto) => {
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
@@ -253,7 +250,7 @@ const createDocument = async (req, dto) => {
       retentionUntil,
     };
 
-    const [document] = await Document.create([docData], { session });
+    const [document] = await repo.createDocuments([docData], { session });
 
     await writeAudit(session, {
       documentId: document._id,
@@ -341,16 +338,11 @@ const listDocuments = async (req, queryParams) => {
   const skip      = (pageNum - 1) * limitNum;
   const sortOrder = sortDir === 'asc' ? 1 : -1;
 
-  const [data, total] = await Promise.all([
-    Document
-      .find(filter)
-      .sort({ [sortBy]: sortOrder })
-      .skip(skip)
-      .limit(limitNum)
-      .select('-body -rawHtml')   // Omit heavy fields from list view
-      .lean(),
-    Document.countDocuments(filter),
-  ]);
+  const { data, total } = await repo.paginateDocuments(filter, {
+    skip,
+    limit: limitNum,
+    sort:  { [sortBy]: sortOrder },
+  });
 
   return { data, total, page: pageNum, limit: limitNum };
 };
@@ -367,10 +359,7 @@ const getDocumentById = async (documentId, req) => {
     ? { _id: documentId, deletedAt: null }
     : { _id: documentId, campusId: req.campusId, deletedAt: null };
 
-  return Document
-    .findOne(filter)
-    .populate('templateId', 'name type')
-    .lean();
+  return repo.findDocumentByIdPopulated(filter);
 };
 
 /**
@@ -390,7 +379,7 @@ const getDocumentById = async (documentId, req) => {
  * @returns {Promise<Document>}
  */
 const updateDocument = async (documentId, dto, reason, req) => {
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
@@ -398,7 +387,7 @@ const updateDocument = async (documentId, dto, reason, req) => {
       ? { _id: documentId, deletedAt: null }
       : { _id: documentId, campusId: req.campusId, deletedAt: null };
 
-    const current = await Document.findOne(filter).session(session);
+    const current = await repo.findDocumentForWrite(filter, { session });
     if (!current) throw Object.assign(new Error('Document not found'), { statusCode: 404 });
 
     // Require reason for updates on sensitive status documents
@@ -428,8 +417,7 @@ const updateDocument = async (documentId, dto, reason, req) => {
       },
     };
 
-    const updated = await Document
-      .findByIdAndUpdate(documentId, { $set: updates }, { new: true, session });
+    const updated = await repo.updateDocumentById(documentId, { $set: updates }, { new: true, session });
 
     await writeAudit(session, {
       documentId: updated._id,
@@ -461,7 +449,7 @@ const updateDocument = async (documentId, dto, reason, req) => {
  * @param {import('express').Request} req
  */
 const softDeleteDocument = async (documentId, reason, req) => {
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
@@ -469,7 +457,7 @@ const softDeleteDocument = async (documentId, reason, req) => {
       ? { _id: documentId, deletedAt: null }
       : { _id: documentId, campusId: req.campusId, deletedAt: null };
 
-    const doc = await Document.findOne(filter).session(session);
+    const doc = await repo.findDocumentForWrite(filter, { session });
     if (!doc) throw Object.assign(new Error('Document not found'), { statusCode: 404 });
 
     if (!reason || reason.trim().length < 10) {
@@ -499,7 +487,7 @@ const softDeleteDocument = async (documentId, reason, req) => {
       userId:    req.user.id,
       userModel: resolveUserModel(req.user.role),
     };
-    await doc.save({ session });
+    await repo.saveDocumentDoc(doc, { session });
 
     invalidateStorageCache(doc.campusId.toString());
 
@@ -529,20 +517,20 @@ const softDeleteDocument = async (documentId, reason, req) => {
  * @param {import('express').Request} req
  */
 const hardDeleteDocument = async (documentId, req) => {
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
-    const doc = await Document.findById(documentId).session(session);
+    const doc = await repo.findDocumentByIdForWrite(documentId, { session });
     if (!doc) throw Object.assign(new Error('Document not found'), { statusCode: 404 });
 
-    await DocumentVersion.deleteMany({ documentId }, { session });
-    await Document.findByIdAndDelete(documentId, { session });
+    await repo.deleteVersionsByDocument(documentId, { session });
+    await repo.deleteDocumentById(documentId, { session });
 
     invalidateStorageCache(doc.campusId.toString());
 
     // Audit written WITHOUT the document (already removed) — no lastAuditEntry update needed
-    await DocumentAudit.create([{
+    await repo.createAudit([{
       documentId:  doc._id,
       campusId:    doc.campusId,
       action:      AUDIT_ACTION.DELETE,
@@ -588,16 +576,12 @@ const takeVersionSnapshot = async (doc, snapshotReason = 'auto', req, session = 
     const debounceMs = SNAPSHOT_DEBOUNCE_MINUTES * 60 * 1000;
     const threshold  = new Date(Date.now() - debounceMs);
 
-    const recentVersion = await DocumentVersion
-      .findOne({
-        documentId:     doc._id,
-        snapshotReason: 'auto',
-        'takenBy.userId': req.user.id,
-        takenAt:        { $gte: threshold },
-      })
-      .select('_id takenAt')
-      .lean()
-      .session(session);
+    const recentVersion = await repo.findRecentAutoSnapshot({
+      documentId:     doc._id,
+      snapshotReason: 'auto',
+      'takenBy.userId': req.user.id,
+      takenAt:        { $gte: threshold },
+    }, { session });
 
     if (recentVersion) {
       // Debounce: skip creating a new version
@@ -623,10 +607,10 @@ const takeVersionSnapshot = async (doc, snapshotReason = 'auto', req, session = 
   };
 
   const createOptions = session ? { session } : {};
-  const [version] = await DocumentVersion.create([versionData], createOptions);
+  const [version] = await repo.createVersions([versionData], createOptions);
 
   const updateOptions = session ? { session } : {};
-  await Document.findByIdAndUpdate(
+  await repo.updateDocumentById(
     doc._id,
     {
       $inc:  { currentVersion: 1 },
@@ -648,21 +632,21 @@ const takeVersionSnapshot = async (doc, snapshotReason = 'auto', req, session = 
  * @returns {Promise<void>}
  */
 const autoLockIfOfficial = async (documentId) => {
-  const doc = await Document.findById(documentId).select('status isOfficial campusId');
+  const doc = await repo.findDocumentByIdLean(documentId, 'status isOfficial campusId');
   if (!doc || !doc.isOfficial) return;
   if (doc.status === DOCUMENT_STATUS.LOCKED) return;
 
-  const session = await mongoose.startSession();
+  const session = await repo.startSession();
   session.startTransaction();
 
   try {
-    await Document.findByIdAndUpdate(
+    await repo.updateDocumentById(
       documentId,
       { status: DOCUMENT_STATUS.LOCKED, lockedAt: new Date() },
       { session },
     );
 
-    await DocumentAudit.create([{
+    await repo.createAudit([{
       documentId:  doc._id,
       campusId:    doc.campusId,
       action:      AUDIT_ACTION.LOCK,
@@ -732,16 +716,12 @@ const searchDocuments = async (req, params) => {
     ? { score: { $meta: 'textScore' } }
     : { createdAt: -1 };
 
-  const [data, total] = await Promise.all([
-    Document
-      .find(filter, useTextSearch ? { score: { $meta: 'textScore' } } : {})
-      .sort(sortClause)
-      .skip(skip)
-      .limit(limitNum)
-      .select('-body -rawHtml')
-      .lean(),
-    Document.countDocuments(filter),
-  ]);
+  const { data, total } = await repo.searchDocuments(filter, {
+    skip,
+    limit:      limitNum,
+    sort:       sortClause,
+    projection: useTextSearch ? { score: { $meta: 'textScore' } } : {},
+  });
 
   return { data, total, page: pageNum, limit: limitNum };
 };
