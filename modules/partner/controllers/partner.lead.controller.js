@@ -26,9 +26,7 @@
 const crypto   = require('crypto');
 const mongoose = require('mongoose');
 
-const Partner           = require('../models/partner.model');
-const PartnerLead       = require('../models/partner.lead.model');
-const PartnerCommission = require('../models/partner.commission.model');
+const partnerRepo = require('../partner.repository');
 // Require paresseux vers la façade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
 const getCampusCommissionConfig = (...args) => require('../../campus').service.getCampusCommissionConfig(...args);
 
@@ -80,7 +78,7 @@ const VALID_TRANSITIONS = {
  */
 const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
   // Vérifier qu'aucune commission n'existe déjà pour ce lead
-  const existing = await PartnerCommission.findOne({ lead: lead._id }).lean();
+  const existing = await partnerRepo.findCommissionByLead(lead._id);
   if (existing) return existing;
 
   // Config de commission : priorité partner override → campus config
@@ -97,7 +95,7 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
 
   if (!config || !config.ruleType) {
     // Pas de config — créer une commission à 0 en pending pour validation manuelle
-    const commission = new PartnerCommission({
+    return partnerRepo.createCommission({
       schoolCampus:  lead.schoolCampus,
       partner:       partner._id,
       lead:          lead._id,
@@ -107,8 +105,6 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
       status:        'pending',
       notes:         'No commission config found — amount set to 0 for manual review.',
     });
-    await commission.save();
-    return commission;
   }
 
   let amount = 0;
@@ -132,7 +128,7 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
     tier:        partner.tier || null,
   };
 
-  const commission = new PartnerCommission({
+  const commission = await partnerRepo.createCommission({
     schoolCampus: lead.schoolCampus,
     partner:      partner._id,
     lead:         lead._id,
@@ -143,10 +139,8 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
     fraudFlags:   lead.fraudFlags || [],
   });
 
-  await commission.save();
-
   // Lier la commission au lead
-  await PartnerLead.findByIdAndUpdate(lead._id, { commissionId: commission._id });
+  await partnerRepo.setLeadCommission(lead._id, commission._id);
 
   return commission;
 };
@@ -163,13 +157,7 @@ const resolveCode = asyncHandler(async (req, res) => {
   const { code } = req.params;
   if (!code?.trim()) return sendError(res, 400, 'Partner code is required.');
 
-  const partner = await Partner.findOne({
-    partnerCode: code.toUpperCase().trim(),
-    status:      'active',
-  })
-    .select('partnerCode firstName lastName schoolCampus')
-    .populate('schoolCampus', 'campus_name logo primaryColor')
-    .lean();
+  const partner = await partnerRepo.findActivePartnerByCodeForResolve(code);
 
   if (!partner) return sendNotFound(res, 'Partner code');
 
@@ -216,10 +204,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   const normalizedCode  = referralCode.toUpperCase().trim();
 
   // Résoudre le partenaire depuis le code
-  const partner = await Partner.findOne({
-    partnerCode: normalizedCode,
-    status:      'active',
-  }).select('_id email schoolCampus partnerCode commissionConfig tier').lean();
+  const partner = await partnerRepo.findActivePartnerForPreRegister(normalizedCode);
 
   if (!partner) return sendError(res, 404, 'Invalid or inactive referral code.');
 
@@ -231,14 +216,10 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   }
 
   // 3. DUPLICATE_LEAD — même email OU même téléphone sur le même campus
-  const dupFilter = {
-    schoolCampus: campusId,
-    honeypotTripped: false,
-    $or: [{ email: normalizedEmail }],
-  };
-  if (phone?.trim()) dupFilter.$or.push({ phone: phone.trim() });
+  const dupOr = [{ email: normalizedEmail }];
+  if (phone?.trim()) dupOr.push({ phone: phone.trim() });
 
-  const duplicate = await PartnerLead.findOne(dupFilter).lean();
+  const duplicate = await partnerRepo.findActiveLeadByContact({ campusId, dupOr });
   if (duplicate) {
     return sendError(res, 409, 'A registration with this email or phone already exists for this campus.');
   }
@@ -249,11 +230,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   const fraudFlags = [];
 
   const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const ipBurstCount = await PartnerLead.countDocuments({
-    ipAddressHash: ipHash,
-    createdAt:     { $gte: oneHourAgo },
-    honeypotTripped: false,
-  });
+  const ipBurstCount = await partnerRepo.countRecentLeadsByIp({ ipAddressHash: ipHash, since: oneHourAgo });
 
   if (ipBurstCount >= 5) {
     fraudFlags.push('IP_BURST');
@@ -262,7 +239,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   // Détecter source depuis le contexte de la requête
   const detectedSource = source || (req.query.ref ? 'referral_link' : 'manual_code');
 
-  const lead = new PartnerLead({
+  const lead = await partnerRepo.createLead({
     schoolCampus:    campusId,
     partner:         partner._id,
     partnerCode:     normalizedCode,
@@ -282,10 +259,8 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     fraudFlags,
   });
 
-  await lead.save();
-
   // Mettre à jour lastActivityAt du partenaire (fire-and-forget)
-  Partner.findByIdAndUpdate(partner._id, { lastActivityAt: new Date() }).exec().catch(() => {});
+  partnerRepo.touchActivity(partner._id).catch(() => {});
 
   // TODO P2: Notifier Campus Manager (WhatsApp + in-app) — nouveau lead
   // TODO P2: Notifier Partner (in-app) — nouveau lead dans le pipeline
@@ -344,15 +319,10 @@ const listLeads = asyncHandler(async (req, res) => {
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
   const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
 
-  const [leads, total] = await Promise.all([
-    PartnerLead.find(filter)
-      .populate('partner', 'firstName lastName partnerCode')
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean({ virtuals: true }),
-    PartnerLead.countDocuments(filter),
-  ]);
+  const { data: leads, total } = await partnerRepo.paginateLeads(filter, {
+    skip: (pageNum - 1) * limitNum,
+    limit: limitNum,
+  });
 
   return sendPaginated(res, 200, 'Leads retrieved.', leads, { total, page: pageNum, limit: limitNum });
 });
@@ -373,9 +343,7 @@ const getLead = asyncHandler(async (req, res) => {
     Object.assign(filter, campusFilter);
   }
 
-  const lead = await PartnerLead.findOne(filter)
-    .populate('partner', 'firstName lastName partnerCode tier')
-    .lean({ virtuals: true });
+  const lead = await partnerRepo.findLeadScoped(filter);
 
   if (!lead) return sendNotFound(res, 'Lead');
 
@@ -392,11 +360,8 @@ const updateLeadStatus = asyncHandler(async (req, res) => {
   if (!newStatus)           return sendError(res, 400, 'status is required.');
 
   const campusFilter = buildCampusFilter(req);
-  const lead = await PartnerLead.findOne({
-    _id: new mongoose.Types.ObjectId(id),
-    honeypotTripped: false,
-    ...campusFilter,
-  });
+  const leadId = new mongoose.Types.ObjectId(id);
+  const lead = await partnerRepo.findLeadForWrite(leadId, campusFilter);
 
   if (!lead) return sendNotFound(res, 'Lead');
 
@@ -409,23 +374,20 @@ const updateLeadStatus = asyncHandler(async (req, res) => {
     return sendError(res, 400, `Invalid transition: '${currentStatus}' → '${newStatus}'. Allowed: [${allowed.join(', ')}].`);
   }
 
-  // Mise à jour statut
-  lead.status = newStatus;
-  lead.statusHistory.push({
+  // Mise à jour statut + historisation
+  const updatedLead = await partnerRepo.applyLeadStatus(leadId, campusFilter, newStatus, {
     status:    newStatus,
     changedBy: req.user.id,
     changedAt: new Date(),
     note:      note?.trim() || null,
   });
 
-  await lead.save();
-
   // Si enrolled → déclencher le moteur de commission
   let commission = null;
   if (newStatus === 'enrolled') {
-    const partner = await Partner.findById(lead.partner).select('commissionConfig tier schoolCampus').lean();
+    const partner = await partnerRepo.findPartnerForCommission(updatedLead.partner);
     if (partner) {
-      commission = await triggerCommissionEngine(lead, partner, tuitionFee || null);
+      commission = await triggerCommissionEngine(updatedLead, partner, tuitionFee || null);
     }
     // TODO P2: Notifier Partner (WhatsApp + in-app) — lead converti, commission pending
   } else {
@@ -433,7 +395,7 @@ const updateLeadStatus = asyncHandler(async (req, res) => {
   }
 
   return sendSuccess(res, 200, `Lead status updated to '${newStatus}'.`, {
-    lead,
+    lead: updatedLead,
     ...(commission && { commission }),
   });
 });
@@ -445,11 +407,7 @@ const deleteLead = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid lead ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const lead = await PartnerLead.findOne({
-    _id: new mongoose.Types.ObjectId(id),
-    honeypotTripped: false,
-    ...campusFilter,
-  }).lean();
+  const lead = await partnerRepo.findLeadForWrite(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!lead) return sendNotFound(res, 'Lead');
 
@@ -458,16 +416,11 @@ const deleteLead = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Cannot delete a lead with an associated commission.');
   }
 
-  await PartnerLead.findByIdAndUpdate(lead._id, {
-    status: 'abandoned',
-    $push:  {
-      statusHistory: {
-        status:    'abandoned',
-        changedBy: req.user.id,
-        changedAt: new Date(),
-        note:      'Soft-deleted by manager.',
-      },
-    },
+  await partnerRepo.softAbandonLead(lead._id, {
+    status:    'abandoned',
+    changedBy: req.user.id,
+    changedAt: new Date(),
+    note:      'Soft-deleted by manager.',
   });
 
   return sendSuccess(res, 200, 'Lead marked as abandoned.');
@@ -483,11 +436,7 @@ const exportLeads = asyncHandler(async (req, res) => {
   if (status    && status !== 'all') filter.status  = status;
   if (partnerId && isValidObjectId(partnerId)) filter.partner = new mongoose.Types.ObjectId(partnerId);
 
-  const leads = await PartnerLead.find(filter)
-    .populate('partner', 'firstName lastName partnerCode')
-    .select('firstName lastName email phone programInterest source status partnerCode createdAt')
-    .sort({ createdAt: -1 })
-    .lean();
+  const leads = await partnerRepo.listLeadsForExport(filter);
 
   const rows = leads.map((l) => ({
     'First Name':     l.firstName,

@@ -23,9 +23,10 @@
 
 const mongoose = require('mongoose');
 
-const PartnerCommission = require('../models/partner.commission.model');
-const PartnerLead       = require('../models/partner.lead.model');
-const Partner           = require('../models/partner.model');
+const partnerRepo = require('../partner.repository');
+// Require paresseux vers la façade campus (hub) : la config de commission est
+// embarquée dans le model Campus — voir campus.repository.
+const campusService = () => require('../../campus').service;
 
 const {
   asyncHandler,
@@ -93,23 +94,9 @@ const listCommissions = asyncHandler(async (req, res) => {
   const summaryFilter = { ...filter };
   delete summaryFilter.status;
 
-  const [commissions, total, kpis] = await Promise.all([
-    PartnerCommission.find(filter)
-      .populate('partner', 'firstName lastName partnerCode')
-      .populate('lead',    'firstName lastName email')
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean(),
-    PartnerCommission.countDocuments(filter),
-    PartnerCommission.aggregate([
-      { $match: summaryFilter },
-      { $group: {
-          _id:      '$status',
-          count:    { $sum: 1 },
-          totalAmt: { $sum: '$amount' },
-      }},
-    ]),
+  const [{ data: commissions, total }, kpis] = await Promise.all([
+    partnerRepo.paginateCommissions(filter, { skip: (pageNum - 1) * limitNum, limit: limitNum }),
+    partnerRepo.aggregateCommissionStatusStats(summaryFilter),
   ]);
 
   const summary = Object.fromEntries(
@@ -128,10 +115,7 @@ const validateCommission = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid commission ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const commission = await PartnerCommission.findOne({
-    _id: new mongoose.Types.ObjectId(id),
-    ...campusFilter,
-  });
+  const commission = await partnerRepo.findCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!commission) return sendNotFound(res, 'Commission');
 
@@ -139,15 +123,15 @@ const validateCommission = asyncHandler(async (req, res) => {
     return sendError(res, 400, `Cannot validate a commission with status '${commission.status}'.`);
   }
 
-  commission.status      = 'validated';
-  commission.validatedBy = req.user.id;
-  commission.validatedAt = new Date();
-
-  await commission.save();
+  const updated = await partnerRepo.updateCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter, {
+    status:      'validated',
+    validatedBy: req.user.id,
+    validatedAt: new Date(),
+  });
 
   // TODO P2: Notifier partenaire (WhatsApp + in-app) — commission validée
 
-  return sendSuccess(res, 200, 'Commission validated.', commission);
+  return sendSuccess(res, 200, 'Commission validated.', updated);
 });
 
 // ── MARK PAID ─────────────────────────────────────────────────────────────────
@@ -167,10 +151,7 @@ const markPaid = asyncHandler(async (req, res) => {
   }
 
   const campusFilter = buildCampusFilter(req);
-  const commission = await PartnerCommission.findOne({
-    _id: new mongoose.Types.ObjectId(id),
-    ...campusFilter,
-  });
+  const commission = await partnerRepo.findCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!commission) return sendNotFound(res, 'Commission');
 
@@ -178,17 +159,17 @@ const markPaid = asyncHandler(async (req, res) => {
     return sendError(res, 400, `Cannot mark as paid: commission must be validated first (current status: '${commission.status}').`);
   }
 
-  commission.status         = 'paid';
-  commission.paymentChannel = paymentChannel;
-  commission.paymentRef     = paymentRef?.trim() || null;
-  commission.paidAt         = paidAt ? new Date(paidAt) : new Date();
-  commission.paidBy         = req.user.id;
-
-  await commission.save();
+  const updated = await partnerRepo.updateCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter, {
+    status:         'paid',
+    paymentChannel,
+    paymentRef:     paymentRef?.trim() || null,
+    paidAt:         paidAt ? new Date(paidAt) : new Date(),
+    paidBy:         req.user.id,
+  });
 
   // TODO P2: Notifier partenaire (WhatsApp + in-app + générer PDF reçu via puppeteer-core)
 
-  return sendSuccess(res, 200, 'Commission marked as paid.', commission);
+  return sendSuccess(res, 200, 'Commission marked as paid.', updated);
 });
 
 // ── DISPUTE COMMISSION ────────────────────────────────────────────────────────
@@ -200,10 +181,7 @@ const disputeCommission = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid commission ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const commission = await PartnerCommission.findOne({
-    _id: new mongoose.Types.ObjectId(id),
-    ...campusFilter,
-  });
+  const commission = await partnerRepo.findCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!commission) return sendNotFound(res, 'Commission');
 
@@ -211,17 +189,18 @@ const disputeCommission = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Cannot dispute a paid commission.');
   }
 
-  if (!commission.fraudFlags.includes('MANUAL_REVIEW')) {
-    commission.fraudFlags.push('MANUAL_REVIEW');
-  }
-  commission.status = 'disputed';
+  const fraudFlags = (commission.fraudFlags || []).includes('MANUAL_REVIEW')
+    ? commission.fraudFlags
+    : [...(commission.fraudFlags || []), 'MANUAL_REVIEW'];
+
+  const set = { status: 'disputed', fraudFlags };
   if (reason?.trim()) {
-    commission.notes = (commission.notes ? commission.notes + '\n' : '') + `[DISPUTE] ${reason.trim()}`;
+    set.notes = (commission.notes ? commission.notes + '\n' : '') + `[DISPUTE] ${reason.trim()}`;
   }
 
-  await commission.save();
+  const updated = await partnerRepo.updateCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter, set);
 
-  return sendSuccess(res, 200, 'Commission flagged for dispute.', commission);
+  return sendSuccess(res, 200, 'Commission flagged for dispute.', updated);
 });
 
 // ── CANCEL COMMISSION ─────────────────────────────────────────────────────────
@@ -234,10 +213,7 @@ const cancelCommission = asyncHandler(async (req, res) => {
   if (!cancellationReason?.trim()) return sendError(res, 400, 'cancellationReason is required.');
 
   const campusFilter = buildCampusFilter(req);
-  const commission = await PartnerCommission.findOne({
-    _id: new mongoose.Types.ObjectId(id),
-    ...campusFilter,
-  });
+  const commission = await partnerRepo.findCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!commission) return sendNotFound(res, 'Commission');
 
@@ -245,14 +221,14 @@ const cancelCommission = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Cannot cancel a paid commission.');
   }
 
-  commission.status             = 'cancelled';
-  commission.cancelledBy        = req.user.id;
-  commission.cancelledAt        = new Date();
-  commission.cancellationReason = cancellationReason.trim();
+  const updated = await partnerRepo.updateCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter, {
+    status:             'cancelled',
+    cancelledBy:        req.user.id,
+    cancelledAt:        new Date(),
+    cancellationReason: cancellationReason.trim(),
+  });
 
-  await commission.save();
-
-  return sendSuccess(res, 200, 'Commission cancelled.', commission);
+  return sendSuccess(res, 200, 'Commission cancelled.', updated);
 });
 
 // ── EXPORT COMMISSIONS ────────────────────────────────────────────────────────
@@ -265,11 +241,7 @@ const exportCommissions = asyncHandler(async (req, res) => {
   if (status    && status !== 'all') filter.status  = status;
   if (partnerId && isValidObjectId(partnerId)) filter.partner = new mongoose.Types.ObjectId(partnerId);
 
-  const commissions = await PartnerCommission.find(filter)
-    .populate('partner', 'firstName lastName partnerCode')
-    .populate('lead',    'firstName lastName email')
-    .sort({ createdAt: -1 })
-    .lean();
+  const commissions = await partnerRepo.listCommissionsForExport(filter);
 
   const rows = commissions.map((c) => ({
     'Partner':         c.partner ? `${c.partner.firstName} ${c.partner.lastName}` : '',
@@ -311,10 +283,7 @@ const getCommissionConfig = asyncHandler(async (req, res) => {
 
   if (!campusId) return sendError(res, 400, 'campusId is required for ADMIN/DIRECTOR.');
 
-  const Campus = mongoose.model('Campus');
-  const campus = await Campus.findById(campusId)
-    .select('commissionConfig campus_name')
-    .lean();
+  const campus = await campusService().getCampusCommissionConfigWithName(campusId);
 
   if (!campus) return sendNotFound(res, 'Campus');
 
@@ -342,21 +311,13 @@ const updateCommissionConfig = asyncHandler(async (req, res) => {
 
   if (!campusId) return sendError(res, 400, 'campusId is required for ADMIN/DIRECTOR.');
 
-  const Campus = mongoose.model('Campus');
-  const campus = await Campus.findByIdAndUpdate(
-    campusId,
-    {
-      $set: {
-        'commissionConfig.ruleType':        ruleType,
-        'commissionConfig.fixedAmount':     fixedAmount || null,
-        'commissionConfig.percentage':      percentage  || null,
-        'commissionConfig.defaultCurrency': defaultCurrency || 'XAF',
-        'commissionConfig.updatedBy':       req.user.id,
-        'commissionConfig.updatedAt':       new Date(),
-      },
-    },
-    { new: true, runValidators: true }
-  ).select('commissionConfig campus_name').lean();
+  const campus = await campusService().setCampusCommissionConfig(campusId, {
+    ruleType,
+    fixedAmount:     fixedAmount || null,
+    percentage:      percentage  || null,
+    defaultCurrency: defaultCurrency || 'XAF',
+    updatedBy:       req.user.id,
+  });
 
   if (!campus) return sendNotFound(res, 'Campus');
 
@@ -370,32 +331,10 @@ const getPartnerDashboard = asyncHandler(async (req, res) => {
   const campusId   = new mongoose.Types.ObjectId(req.user.campusId);
 
   const [leadStats, commissionStats, recentLeads, recentCommissions] = await Promise.all([
-    PartnerLead.aggregate([
-      { $match: { partner: partnerId, schoolCampus: campusId, honeypotTripped: false } },
-      { $group: {
-          _id:      null,
-          total:    { $sum: 1 },
-          enrolled: { $sum: { $cond: [{ $eq: ['$status', 'enrolled'] }, 1, 0] } },
-      }},
-    ]),
-    PartnerCommission.aggregate([
-      { $match: { partner: partnerId, schoolCampus: campusId } },
-      { $group: {
-          _id:      '$status',
-          count:    { $sum: 1 },
-          totalAmt: { $sum: '$amount' },
-      }},
-    ]),
-    PartnerLead.find({ partner: partnerId, schoolCampus: campusId, honeypotTripped: false })
-      .select('firstName lastName source status createdAt')
-      .sort({ createdAt: -1 })
-      .limit(5)
-      .lean(),
-    PartnerCommission.find({ partner: partnerId, schoolCampus: campusId })
-      .select('amount currency status paymentChannel createdAt')
-      .sort({ createdAt: -1 })
-      .limit(3)
-      .lean(),
+    partnerRepo.aggregateLeadConversionStats({ partner: partnerId, schoolCampus: campusId, honeypotTripped: false }),
+    partnerRepo.aggregateCommissionStatusStats({ partner: partnerId, schoolCampus: campusId }),
+    partnerRepo.listRecentLeadsForPartner({ partnerId, campusId, limit: 5 }),
+    partnerRepo.listRecentCommissionsForPartner({ partnerId, campusId, limit: 3 }),
   ]);
 
   const leads = leadStats[0] || { total: 0, enrolled: 0 };
@@ -423,14 +362,11 @@ const downloadReceipt = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid commission ID.');
 
-  const commission = await PartnerCommission.findOne({
-    _id:         new mongoose.Types.ObjectId(id),
-    partner:     new mongoose.Types.ObjectId(req.user.id),
-    schoolCampus: new mongoose.Types.ObjectId(req.user.campusId),
-    status:      'paid',
-  }).populate('partner', 'firstName lastName partnerCode')
-    .populate('lead',    'firstName lastName email')
-    .lean();
+  const commission = await partnerRepo.findPaidCommissionReceipt({
+    id:        new mongoose.Types.ObjectId(id),
+    partnerId: new mongoose.Types.ObjectId(req.user.id),
+    campusId:  new mongoose.Types.ObjectId(req.user.campusId),
+  });
 
   if (!commission) return sendNotFound(res, 'Commission receipt');
 

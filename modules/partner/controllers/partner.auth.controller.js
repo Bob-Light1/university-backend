@@ -28,7 +28,7 @@ const path    = require('path');
 const fs      = require('fs').promises;
 const mongoose = require('mongoose');
 
-const Partner    = require('../models/partner.model');
+const partnerRepo = require('../partner.repository');
 const {
   sendSuccess,
   sendError,
@@ -136,12 +136,12 @@ const register = async (req, res) => {
     }
 
     // Unicité email
-    const existing = await Partner.findOne({ email: email.toLowerCase().trim() }).lean();
+    const existing = await partnerRepo.findPartnerByEmail(email.toLowerCase().trim());
     if (existing) return sendError(res, 409, 'A partner with this email already exists.');
 
     // Génération partnerCode
     const year = new Date().getFullYear();
-    const partnerCode = await Partner.generatePartnerCode(
+    const partnerCode = await partnerRepo.generatePartnerCode(
       lastName.trim(),
       firstName.trim(),
       country || 'CMR',
@@ -153,7 +153,7 @@ const register = async (req, res) => {
     const qrCodeFileName  = await generatePartnerQR(referralLink, campusId, partnerCode);
 
     // Création du partenaire (le pre-save hook hash le password)
-    const partner = new Partner({
+    const partner = await partnerRepo.createPartner({
       schoolCampus:     campusId,
       firstName:        firstName.trim(),
       lastName:         lastName.trim(),
@@ -178,8 +178,6 @@ const register = async (req, res) => {
       createdBy:        req.user.id,
       status:           'active',
     });
-
-    await partner.save();
 
     const safePartner = buildPartnerResponse(partner);
     return sendCreated(res, 'Partner account created successfully.', safePartner);
@@ -214,7 +212,7 @@ const login = async (req, res) => {
 
     if (!email || !password) return sendError(res, 400, 'Email and password are required.');
 
-    const partner = await Partner.findOne({ email: email.toLowerCase().trim() }).select('+password');
+    const partner = await partnerRepo.findPartnerByEmailWithPassword(email.toLowerCase().trim());
     if (!partner) return sendError(res, 401, 'Invalid credentials.');
 
     const isMatch = await partner.comparePassword(password);
@@ -231,10 +229,7 @@ const login = async (req, res) => {
     );
 
     // Fire-and-forget: lastLoginAt + lastActivityAt
-    Partner.findByIdAndUpdate(partner._id, {
-      lastLoginAt:    new Date(),
-      lastActivityAt: new Date(),
-    }).exec().catch(() => {});
+    partnerRepo.touchLoginActivity(partner._id).catch(() => {});
 
     const safePartner = buildPartnerResponse(partner);
     const prefs = await getLoginPrefs(partner._id, 'PARTNER', partner.schoolCampus ?? null);
@@ -263,9 +258,7 @@ const forgotPassword = async (req, res) => {
     const { email } = req.body;
     if (!email?.trim()) return sendError(res, 400, 'email is required.');
 
-    const partner = await Partner.findOne({ email: email.toLowerCase().trim() })
-      .select('+password')
-      .lean();
+    const partner = await partnerRepo.findPartnerByEmailWithPasswordLean(email.toLowerCase().trim());
 
     // Toujours répondre 200 pour ne pas révéler si l'email existe
     if (!partner) {
@@ -323,7 +316,7 @@ const resetPassword = async (req, res) => {
 
     if (decoded.purpose !== 'pwd-reset') return sendError(res, 400, 'Invalid reset token.');
 
-    const partner = await Partner.findById(decoded.id).select('+password');
+    const partner = await partnerRepo.findPartnerByIdWithPassword(decoded.id);
     if (!partner) return sendError(res, 404, 'Partner not found.');
 
     // Vérifier que le nonce correspond — invalide si le mot de passe a déjà été changé
@@ -334,7 +327,7 @@ const resetPassword = async (req, res) => {
     const salt = await bcrypt.genSalt(SALT_ROUNDS);
     const hashed = await bcrypt.hash(newPassword, salt);
 
-    await Partner.findByIdAndUpdate(partner._id, { password: hashed });
+    await partnerRepo.setPartnerPassword(partner._id, hashed);
 
     return sendSuccess(res, 200, 'Password reset successfully.');
 
@@ -352,10 +345,10 @@ const resetPassword = async (req, res) => {
  */
 const getMe = async (req, res) => {
   try {
-    const partner = await Partner.findOne({
-      _id:          req.user.id,
-      schoolCampus: new mongoose.Types.ObjectId(req.user.campusId),
-    }).select('-password -__v').lean({ virtuals: true });
+    const partner = await partnerRepo.findOwnProfile(
+      req.user.id,
+      new mongoose.Types.ObjectId(req.user.campusId)
+    );
 
     if (!partner) return sendNotFound(res, 'Partner');
 
@@ -390,11 +383,11 @@ const updateMyProfile = async (req, res) => {
       return sendError(res, 400, `No updatable fields provided. Allowed: ${allowed.join(', ')}.`);
     }
 
-    const partner = await Partner.findOneAndUpdate(
-      { _id: req.user.id, schoolCampus: new mongoose.Types.ObjectId(req.user.campusId) },
-      { $set: updates },
-      { new: true, runValidators: true }
-    ).select('-password -__v').lean({ virtuals: true });
+    const partner = await partnerRepo.updateOwnProfile(
+      req.user.id,
+      new mongoose.Types.ObjectId(req.user.campusId),
+      updates
+    );
 
     if (!partner) return sendNotFound(res, 'Partner');
 
@@ -431,10 +424,10 @@ const changeMyPassword = async (req, res) => {
       return sendError(res, 400, 'New password must differ from the current password.');
     }
 
-    const partner = await Partner.findOne({
-      _id:          req.user.id,
-      schoolCampus: new mongoose.Types.ObjectId(req.user.campusId),
-    }).select('+password');
+    const partner = await partnerRepo.findOwnProfileWithPassword(
+      req.user.id,
+      new mongoose.Types.ObjectId(req.user.campusId)
+    );
 
     if (!partner) return sendNotFound(res, 'Partner');
 
@@ -445,7 +438,7 @@ const changeMyPassword = async (req, res) => {
     const salt   = await bcrypt.genSalt(SALT_ROUNDS);
     const hashed = await bcrypt.hash(newPassword, salt);
 
-    await Partner.findByIdAndUpdate(partner._id, { password: hashed });
+    await partnerRepo.setPartnerPassword(partner._id, hashed);
 
     return sendSuccess(res, 200, 'Password updated successfully.');
 
@@ -472,11 +465,11 @@ const uploadProfileImage = async (req, res) => {
       return sendError(res, 400, 'profileImageUrl is required.');
     }
 
-    const partner = await Partner.findOneAndUpdate(
-      { _id: req.user.id, schoolCampus: new mongoose.Types.ObjectId(req.user.campusId) },
-      { $set: { profileImage: profileImageUrl.trim() } },
-      { new: true }
-    ).select('_id firstName lastName profileImage').lean({ virtuals: true });
+    const partner = await partnerRepo.updateOwnProfileImage(
+      req.user.id,
+      new mongoose.Types.ObjectId(req.user.campusId),
+      profileImageUrl.trim()
+    );
 
     if (!partner) return sendNotFound(res, 'Partner');
 

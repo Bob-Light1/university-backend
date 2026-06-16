@@ -27,9 +27,7 @@ const path     = require('path');
 const fs       = require('fs').promises;
 const QRCode   = require('qrcode');
 
-const Partner           = require('../models/partner.model');
-const PartnerLead       = require('../models/partner.lead.model');
-const PartnerCommission = require('../models/partner.commission.model');
+const partnerRepo = require('../partner.repository');
 
 const {
   asyncHandler,
@@ -115,27 +113,16 @@ const listPartners = asyncHandler(async (req, res) => {
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
   const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
 
-  const [partners, total] = await Promise.all([
-    Partner.find(filter)
-      .select('-password -__v')
-      .sort({ createdAt: -1 })
-      .skip((pageNum - 1) * limitNum)
-      .limit(limitNum)
-      .lean({ virtuals: true }),
-    Partner.countDocuments(filter),
-  ]);
+  const { data: partners, total } = await partnerRepo.paginatePartners(filter, {
+    skip: (pageNum - 1) * limitNum,
+    limit: limitNum,
+  });
 
   // Computed stats : leads + converted par partenaire
   const ids = partners.map((p) => p._id);
   const [leadCounts, convertedCounts] = await Promise.all([
-    PartnerLead.aggregate([
-      { $match: { partner: { $in: ids }, honeypotTripped: false } },
-      { $group: { _id: '$partner', count: { $sum: 1 } } },
-    ]),
-    PartnerLead.aggregate([
-      { $match: { partner: { $in: ids }, status: 'enrolled', honeypotTripped: false } },
-      { $group: { _id: '$partner', count: { $sum: 1 } } },
-    ]),
+    partnerRepo.aggregateLeadCountsByPartner(ids),
+    partnerRepo.aggregateEnrolledCountsByPartner(ids),
   ]);
 
   const leadMap      = Object.fromEntries(leadCounts.map((x) => [x._id.toString(), x.count]));
@@ -157,18 +144,15 @@ const getPartner = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const filter = { _id: new mongoose.Types.ObjectId(id), ...campusFilter };
 
-  const partner = await Partner.findOne(filter)
-    .select('-password -__v')
-    .lean({ virtuals: true });
+  const partner = await partnerRepo.findPartnerByIdScoped(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!partner) return sendNotFound(res, 'Partner');
 
   const [totalLeads, totalConverted, pendingCommissions] = await Promise.all([
-    PartnerLead.countDocuments({ partner: partner._id, honeypotTripped: false }),
-    PartnerLead.countDocuments({ partner: partner._id, status: 'enrolled' }),
-    PartnerCommission.countDocuments({ partner: partner._id, status: { $in: ['pending', 'validated'] } }),
+    partnerRepo.countLeadsForPartner(partner._id),
+    partnerRepo.countEnrolledLeadsForPartner(partner._id),
+    partnerRepo.countBlockingCommissions(partner._id),
   ]);
 
   return sendSuccess(res, 200, 'Partner retrieved.', {
@@ -186,7 +170,6 @@ const updatePartner = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const filter = { _id: new mongoose.Types.ObjectId(id), ...campusFilter };
 
   // Champs que le gestionnaire peut modifier
   const managerFields = [
@@ -211,26 +194,19 @@ const updatePartner = asyncHandler(async (req, res) => {
   // Vérifier email uniqueness si l'email est changé
   if (updates.email) {
     updates.email = updates.email.toLowerCase().trim();
-    const taken = await Partner.findOne({ email: updates.email, _id: { $ne: id } }).lean();
+    const taken = await partnerRepo.findPartnerByEmailExcluding(updates.email, id);
     if (taken) return sendError(res, 409, 'Email already in use.');
   }
 
   // Bloquer archive via update direct si commissions pending/validated
   if (updates.status === 'archived') {
-    const blocking = await PartnerCommission.countDocuments({
-      partner: new mongoose.Types.ObjectId(id),
-      status:  { $in: ['pending', 'validated'] },
-    });
+    const blocking = await partnerRepo.countBlockingCommissions(new mongoose.Types.ObjectId(id));
     if (blocking > 0) {
       return sendForbidden(res, `Cannot archive: ${blocking} unresolved commission(s) must be paid or cancelled first.`);
     }
   }
 
-  const updated = await Partner.findOneAndUpdate(
-    filter,
-    { $set: updates },
-    { new: true, runValidators: true }
-  ).select('-password -__v').lean({ virtuals: true });
+  const updated = await partnerRepo.updatePartnerScoped(new mongoose.Types.ObjectId(id), campusFilter, updates);
 
   if (!updated) return sendNotFound(res, 'Partner');
 
@@ -251,23 +227,15 @@ const toggleStatus = asyncHandler(async (req, res) => {
   }
 
   const campusFilter = buildCampusFilter(req);
-  const filter = { _id: new mongoose.Types.ObjectId(id), ...campusFilter };
 
   if (status === 'archived') {
-    const blocking = await PartnerCommission.countDocuments({
-      partner: new mongoose.Types.ObjectId(id),
-      status:  { $in: ['pending', 'validated'] },
-    });
+    const blocking = await partnerRepo.countBlockingCommissions(new mongoose.Types.ObjectId(id));
     if (blocking > 0) {
       return sendForbidden(res, `Cannot archive: ${blocking} unresolved commission(s) must be paid or cancelled first.`);
     }
   }
 
-  const updated = await Partner.findOneAndUpdate(
-    filter,
-    { $set: { status } },
-    { new: true }
-  ).select('-password -__v').lean({ virtuals: true });
+  const updated = await partnerRepo.setPartnerStatusScoped(new mongoose.Types.ObjectId(id), campusFilter, status);
 
   if (!updated) return sendNotFound(res, 'Partner');
 
@@ -280,20 +248,13 @@ const archivePartner = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
 
-  const blocking = await PartnerCommission.countDocuments({
-    partner: new mongoose.Types.ObjectId(id),
-    status:  { $in: ['pending', 'validated'] },
-  });
+  const blocking = await partnerRepo.countBlockingCommissions(new mongoose.Types.ObjectId(id));
   if (blocking > 0) {
     return sendForbidden(res, `Cannot archive: ${blocking} unresolved commission(s) must be paid or cancelled first.`);
   }
 
   const campusFilter = buildCampusFilter(req);
-  const updated = await Partner.findOneAndUpdate(
-    { _id: new mongoose.Types.ObjectId(id), ...campusFilter },
-    { $set: { status: 'archived' } },
-    { new: true }
-  ).select('-password -__v').lean({ virtuals: true });
+  const updated = await partnerRepo.setPartnerStatusScoped(new mongoose.Types.ObjectId(id), campusFilter, 'archived');
 
   if (!updated) return sendNotFound(res, 'Partner');
 
@@ -307,11 +268,7 @@ const restorePartner = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const updated = await Partner.findOneAndUpdate(
-    { _id: new mongoose.Types.ObjectId(id), ...campusFilter, status: 'archived' },
-    { $set: { status: 'active' } },
-    { new: true }
-  ).select('-password -__v').lean({ virtuals: true });
+  const updated = await partnerRepo.restorePartnerScoped(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!updated) return sendNotFound(res, 'Partner (archived)');
 
@@ -325,7 +282,7 @@ const regenerateQR = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const partner = await Partner.findOne({ _id: new mongoose.Types.ObjectId(id), ...campusFilter });
+  const partner = await partnerRepo.findPartnerDocByIdScoped(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!partner) return sendNotFound(res, 'Partner');
   if (!partner.partnerCode) return sendError(res, 400, 'Partner has no partnerCode — cannot generate QR.');
@@ -337,7 +294,7 @@ const regenerateQR = asyncHandler(async (req, res) => {
   );
 
   partner.qrCodeFileName = qrCodeFileName;
-  await partner.save();
+  await partnerRepo.savePartnerDoc(partner);
 
   return sendSuccess(res, 200, 'QR code regenerated.', { qrCodeFileName });
 });
@@ -352,9 +309,7 @@ const downloadKit = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const partner = await Partner.findOne({ _id: new mongoose.Types.ObjectId(id), ...campusFilter })
-    .select('-password')
-    .lean({ virtuals: true });
+  const partner = await partnerRepo.findPartnerForKit(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!partner) return sendNotFound(res, 'Partner');
   if (!partner.partnerCode) return sendError(res, 400, 'Partner has no partnerCode.');
@@ -408,10 +363,7 @@ const exportPartners = asyncHandler(async (req, res) => {
   if (partnerType) filter.partnerType = partnerType;
   if (tier)        filter.tier        = tier;
 
-  const partners = await Partner.find(filter)
-    .select('firstName lastName email partnerType tier partnerCode status organization createdAt')
-    .sort({ createdAt: -1 })
-    .lean();
+  const partners = await partnerRepo.listPartnersForExport(filter);
 
   const rows = partners.map((p) => ({
     'First Name':    p.firstName,
@@ -447,29 +399,13 @@ const getCommissionSummary = asyncHandler(async (req, res) => {
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
 
   const campusFilter = buildCampusFilter(req);
-  const partner = await Partner.findOne({ _id: new mongoose.Types.ObjectId(id), ...campusFilter })
-    .select('_id firstName lastName partnerCode')
-    .lean();
+  const partner = await partnerRepo.findPartnerSummaryFields(new mongoose.Types.ObjectId(id), campusFilter);
 
   if (!partner) return sendNotFound(res, 'Partner');
 
   const [leadStats, commissionStats] = await Promise.all([
-    PartnerLead.aggregate([
-      { $match: { partner: partner._id, honeypotTripped: false } },
-      { $group: {
-          _id:       null,
-          total:     { $sum: 1 },
-          enrolled:  { $sum: { $cond: [{ $eq: ['$status', 'enrolled'] }, 1, 0] } },
-      }},
-    ]),
-    PartnerCommission.aggregate([
-      { $match: { partner: partner._id } },
-      { $group: {
-          _id:      '$status',
-          count:    { $sum: 1 },
-          totalAmt: { $sum: '$amount' },
-      }},
-    ]),
+    partnerRepo.aggregateLeadConversionStats({ partner: partner._id, honeypotTripped: false }),
+    partnerRepo.aggregateCommissionStatusStats({ partner: partner._id }),
   ]);
 
   const leads = leadStats[0] || { total: 0, enrolled: 0 };

@@ -5,11 +5,13 @@
  *
  * Consommateur unique : public-portal (pré-inscription, opt-in alerte,
  * candidatures partenaire, contacts gagnants de compétition).
+ *
+ * Toute la persistance passe par partner.repository (étape 0 pré-Postgres) :
+ * ce fichier ne porte que l'orchestration métier (déduplication first-touch,
+ * détection IP_BURST, transitions de revue), jamais d'accès model direct.
  */
 
-const Partner            = require('./models/partner.model');
-const PartnerLead        = require('./models/partner.lead.model');
-const PartnerApplication = require('./models/partner.application.model');
+const partnerRepo = require('./partner.repository');
 
 // ── Partner ───────────────────────────────────────────────────────────────────
 
@@ -18,11 +20,7 @@ const PartnerApplication = require('./models/partner.application.model');
  * @param {string} code
  * @returns {Promise<{_id, email, schoolCampus, partnerCode}|null>} lean
  */
-const findActivePartnerByCode = (code) =>
-  Partner.findOne({
-    partnerCode: String(code).toUpperCase().trim(),
-    status:      'active',
-  }).select('_id email schoolCampus partnerCode').lean();
+const findActivePartnerByCode = (code) => partnerRepo.findActivePartnerByCode(code);
 
 // ── Leads ─────────────────────────────────────────────────────────────────────
 
@@ -53,47 +51,40 @@ const upsertPreRegistrationLead = async ({
   const dupOr = [{ email }];
   if (phone) dupOr.push({ phone });
 
-  const existingLead = await PartnerLead.findOne({
-    schoolCampus:    campusId,
-    honeypotTripped: false,
-    $or:             dupOr,
-  });
+  const existingLead = await partnerRepo.findActiveLeadByContact({ campusId, dupOr });
 
   if (existingLead) {
-    if (programInterest) existingLead.programInterest = programInterest;
-    if (phone && !existingLead.phone) existingLead.phone = phone;
-    if (city)    existingLead.city    = city;
-    if (country) existingLead.country = country;
+    const set = {};
+    if (programInterest) set.programInterest = programInterest;
+    if (phone && !existingLead.phone) set.phone = phone;
+    if (city)    set.city    = city;
+    if (country) set.country = country;
 
     // First-touch : on ne réattribue jamais un lead déjà rattaché à un partenaire.
     if (partner?._id && !existingLead.partner) {
-      existingLead.partner     = partner._id;
-      existingLead.partnerCode = partnerCode;
-      existingLead.source      = source;
+      set.partner     = partner._id;
+      set.partnerCode = partnerCode;
+      set.source      = source;
     }
-    if (notifyNextBatch) existingLead.notifyNextBatch = true;
+    if (notifyNextBatch) set.notifyNextBatch = true;
 
-    existingLead.statusHistory.push({
+    const historyEntry = {
       status:    existingLead.status,
       changedBy: null,
       changedAt: new Date(),
       note:      'Portal re-submission — deduplicated update.',
-    });
+    };
 
-    await existingLead.save();
+    await partnerRepo.updateLeadById(existingLead._id, set, historyEntry);
     return { leadId: existingLead._id, status: existingLead.status, created: false };
   }
 
   const fraudFlags = [];
   const tenMinAgo  = new Date(Date.now() - 10 * 60 * 1000);
-  const burstCount = await PartnerLead.countDocuments({
-    ipAddressHash,
-    createdAt:       { $gte: tenMinAgo },
-    honeypotTripped: false,
-  });
+  const burstCount = await partnerRepo.countRecentLeadsByIp({ ipAddressHash, since: tenMinAgo });
   if (burstCount >= 5) fraudFlags.push('IP_BURST');
 
-  const lead = new PartnerLead({
+  const lead = await partnerRepo.createLead({
     schoolCampus:    campusId,
     partner:         partner?._id || null,
     partnerCode:     partnerCode || null,
@@ -114,10 +105,8 @@ const upsertPreRegistrationLead = async ({
     notifyNextBatch: !!notifyNextBatch,
   });
 
-  await lead.save();
-
   if (partner?._id) {
-    Partner.findByIdAndUpdate(partner._id, { lastActivityAt: new Date() }).exec().catch(() => {});
+    partnerRepo.touchActivity(partner._id).catch(() => {});
   }
 
   return { leadId: lead._id, status: lead.status, created: true };
@@ -135,22 +124,22 @@ const upsertPreRegistrationLead = async ({
 const registerSessionAlert = async ({ campusId, email, phone, programInterest, ipAddressHash }) => {
   let lead = null;
   if (email) {
-    lead = await PartnerLead.findOne({ email, schoolCampus: campusId });
+    lead = await partnerRepo.findLeadByEmailOnCampus(email, campusId);
   }
   if (!lead && phone) {
-    lead = await PartnerLead.findOne({ phone, schoolCampus: campusId });
+    lead = await partnerRepo.findLeadByPhoneOnCampus(phone, campusId);
   }
 
   if (lead) {
-    lead.notifyNextBatch = true;
+    const set = { notifyNextBatch: true };
     if (programInterest && !lead.programInterest) {
-      lead.programInterest = programInterest;
+      set.programInterest = programInterest;
     }
-    await lead.save();
+    await partnerRepo.updateLeadById(lead._id, set);
     return { leadId: lead._id, created: false };
   }
 
-  const newLead = new PartnerLead({
+  const newLead = await partnerRepo.createLead({
     schoolCampus:    campusId,
     firstName:       'Alert',
     lastName:        'Subscriber',
@@ -165,7 +154,6 @@ const registerSessionAlert = async ({ campusId, email, phone, programInterest, i
     notifyNextBatch: true,
   });
 
-  await newLead.save();
   return { leadId: newLead._id, created: true };
 };
 
@@ -174,8 +162,7 @@ const registerSessionAlert = async ({ campusId, email, phone, programInterest, i
  * @param {ObjectId|string} leadId
  * @returns {Promise<{firstName, email, phone}|null>} lean
  */
-const getLeadContact = (leadId) =>
-  PartnerLead.findById(leadId).select('firstName email phone').lean();
+const getLeadContact = (leadId) => partnerRepo.getLeadContact(leadId);
 
 // ── Applications (candidatures partenaire, spec §4.9) ─────────────────────────
 
@@ -185,7 +172,7 @@ const getLeadContact = (leadId) =>
  * @returns {Promise<{applicationId}>}
  */
 const createApplication = async (data) => {
-  const doc = await PartnerApplication.create(data);
+  const doc = await partnerRepo.createApplication(data);
   return { applicationId: doc._id };
 };
 
@@ -202,15 +189,7 @@ const listApplications = async ({ campusFilter = {}, status, page = 1, limit = 2
   if (status) filter.status = status;
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [data, total] = await Promise.all([
-    PartnerApplication.find(filter)
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean(),
-    PartnerApplication.countDocuments(filter),
-  ]);
-  return { data, total };
+  return partnerRepo.paginateApplications(filter, { skip, limit: Number(limit) });
 };
 
 /**
@@ -218,7 +197,7 @@ const listApplications = async ({ campusFilter = {}, status, page = 1, limit = 2
  * @returns {Promise<Object|null>} lean
  */
 const getApplicationById = (id, campusFilter = {}) =>
-  PartnerApplication.findOne({ _id: id, ...campusFilter }).lean();
+  partnerRepo.findApplicationScoped(id, campusFilter);
 
 /**
  * Revue d'une candidature (approve/reject). L'approbation ne crée PAS de
@@ -227,28 +206,24 @@ const getApplicationById = (id, campusFilter = {}) =>
  * @returns {Promise<{result: 'NOT_FOUND'|'CONFLICT'|'OK', application?: Object}>}
  */
 const reviewApplication = async ({ id, campusFilter = {}, status, reviewNote, partnerId, reviewerId }) => {
-  const doc = await PartnerApplication.findOne({ _id: id, ...campusFilter });
+  const doc = await partnerRepo.findApplicationScoped(id, campusFilter);
   if (!doc) return { result: 'NOT_FOUND' };
   if (doc.status !== 'pending') return { result: 'CONFLICT' };
 
-  doc.status     = status;
-  doc.reviewedBy = reviewerId;
-  doc.reviewedAt = new Date();
-  if (reviewNote) doc.reviewNote = reviewNote;
-  if (status === 'approved' && partnerId) doc.partnerId = partnerId;
+  const set = { status, reviewedBy: reviewerId, reviewedAt: new Date() };
+  if (reviewNote) set.reviewNote = reviewNote;
+  if (status === 'approved' && partnerId) set.partnerId = partnerId;
 
-  await doc.save();
-  return { result: 'OK', application: doc };
+  const application = await partnerRepo.updateApplicationScoped(id, campusFilter, set);
+  return { result: 'OK', application };
 };
 
 /**
  * Suppression d'une candidature dans le périmètre campus de l'appelant.
  * @returns {Promise<boolean>} true si supprimée
  */
-const deleteApplication = async (id, campusFilter = {}) => {
-  const doc = await PartnerApplication.findOneAndDelete({ _id: id, ...campusFilter });
-  return doc != null;
-};
+const deleteApplication = (id, campusFilter = {}) =>
+  partnerRepo.deleteApplicationScoped(id, campusFilter);
 
 module.exports = {
   findActivePartnerByCode,

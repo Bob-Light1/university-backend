@@ -87,6 +87,28 @@ const getCampusDocById = (campusId) => Campus.findById(campusId);
 const getCampusCommissionConfig = (campusId) =>
   Campus.findById(campusId).select('commissionConfig').lean();
 
+/** Config de commission + nom du campus (back-office partner.commission). */
+const getCampusCommissionConfigWithName = (campusId) =>
+  Campus.findById(campusId).select('commissionConfig campus_name').lean();
+
+/**
+ * Met à jour la config de commission embarquée (back-office partner.commission).
+ * @param {Object} cfg — { ruleType, fixedAmount, percentage, defaultCurrency, updatedBy }
+ */
+const setCampusCommissionConfig = (campusId, cfg) =>
+  Campus.findByIdAndUpdate(
+    campusId,
+    { $set: {
+      'commissionConfig.ruleType':        cfg.ruleType,
+      'commissionConfig.fixedAmount':     cfg.fixedAmount,
+      'commissionConfig.percentage':      cfg.percentage,
+      'commissionConfig.defaultCurrency': cfg.defaultCurrency,
+      'commissionConfig.updatedBy':       cfg.updatedBy,
+      'commissionConfig.updatedAt':       new Date(),
+    } },
+    { new: true, runValidators: true }
+  ).select('commissionConfig campus_name').lean();
+
 const getActiveCampusBySlug = (campusSlug, select = '_id') =>
   Campus.findOne({ campusSlug, status: 'active' }).select(select).lean();
 
@@ -115,6 +137,8 @@ module.exports = {
   getCampusDefaults,
   getCampusDocById,
   getCampusCommissionConfig,
+  getCampusCommissionConfigWithName,
+  setCampusCommissionConfig,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,

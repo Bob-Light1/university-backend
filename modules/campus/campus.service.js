@@ -9,6 +9,8 @@
  *   - getCampusDefaults         : langue/timezone/format de note par défaut (settings).
  *   - getCampusDocById          : document Mongoose complet (méthodes d'instance — class.canAddClass).
  *   - getCampusCommissionConfig : config de commission (partner.lead).
+ *   - getCampusCommissionConfigWithName : config + nom du campus (partner.commission).
+ *   - setCampusCommissionConfig : mise à jour de la config (partner.commission).
  *   - getActiveCampusBySlug     : résolution portail public par slug (status actif).
  *   - getActiveCampusById       : résolution portail public par _id (status actif).
  *   - listActivePublicCampuses  : liste des campus publics (sélecteur de portail).
@@ -28,6 +30,8 @@ const getCampusStorageInfo      = (campusId) => campusRepo.getCampusStorageInfo(
 const getCampusDefaults         = (campusId) => campusRepo.getCampusDefaults(campusId);
 const getCampusDocById          = (campusId) => campusRepo.getCampusDocById(campusId);
 const getCampusCommissionConfig = (campusId) => campusRepo.getCampusCommissionConfig(campusId);
+const getCampusCommissionConfigWithName = (campusId) => campusRepo.getCampusCommissionConfigWithName(campusId);
+const setCampusCommissionConfig = (campusId, cfg) => campusRepo.setCampusCommissionConfig(campusId, cfg);
 const getActiveCampusBySlug     = (slug, select) => campusRepo.getActiveCampusBySlug(slug, select);
 const getActiveCampusById       = (campusId, select) => campusRepo.getActiveCampusById(campusId, select);
 const listActivePublicCampuses  = (select) => campusRepo.listActivePublicCampuses(select);
@@ -39,6 +43,8 @@ module.exports = {
   getCampusDefaults,
   getCampusDocById,
   getCampusCommissionConfig,
+  getCampusCommissionConfigWithName,
+  setCampusCommissionConfig,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,
