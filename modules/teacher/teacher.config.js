@@ -1,7 +1,10 @@
-const Teacher    = require('./models/teacher.model');
+const Teacher    = require('./models/teacher.model'); // exception assumée : Model du GenericEntityController
+const teacherRepo = require('./teacher.repository');
 const classService = require('../class').service; // façade module class (§3)
 const mongoose   = require('mongoose');
 const { getDepartmentCampusRef } = require('../department').service; // façade module department (§3)
+// campus.service en require PARESSEUX (campus est un hub qui requiert teacher → cycle)
+const campusService = () => require('../campus').service;
 
 /**
  * TEACHER CONFIGURATION FOR GENERIC ENTITY CONTROLLER
@@ -138,13 +141,9 @@ const teacherConfig = {
 
       // Validate matricule uniqueness within campus
       if (fields.matricule) {
-        const existingTeacher = await Teacher.findOne({
-          matricule:    fields.matricule,
-          schoolCampus: campusId,
-        })
-          .select('_id')
-          .session(session)
-          .lean();
+        const existingTeacher = await teacherRepo.findTeacherByMatriculeInCampus(
+          fields.matricule, campusId, { session }
+        );
 
         if (existingTeacher) {
           return {
@@ -206,11 +205,9 @@ const teacherConfig = {
   beforeCreate: async (fields, campusId, session) => {
     try {
       if (!fields.matricule) {
-        const teacherCount = await Teacher.countDocuments({
-          schoolCampus: campusId,
-        }).session(session);
+        const teacherCount = await teacherRepo.countTeachersInCampus(campusId, { session });
 
-        const campus       = await mongoose.model('Campus').findById(campusId).select('campus_number');
+        const campus       = await campusService().getCampusNumber(campusId);
         const campusPrefix = campus?.campus_number || 'CAM';
 
         fields.matricule = `${campusPrefix}-TCH-${String(teacherCount + 1).padStart(4, '0')}`;
@@ -279,11 +276,9 @@ const teacherConfig = {
 
       // Validate matricule uniqueness if being changed
       if (updates.matricule && updates.matricule !== teacher.matricule) {
-        const existingTeacher = await Teacher.findOne({
-          matricule:    updates.matricule,
-          schoolCampus: teacher.schoolCampus,
-          _id:          { $ne: teacher._id },
-        }).select('_id');
+        const existingTeacher = await teacherRepo.findTeacherByMatriculeExcluding(
+          updates.matricule, teacher.schoolCampus, teacher._id
+        );
 
         if (existingTeacher) {
           return { success: false, error: `Matricule "${updates.matricule}" is already in use` };

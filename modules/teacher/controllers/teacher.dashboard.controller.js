@@ -19,8 +19,7 @@
 
 const mongoose = require('mongoose');
 
-const Teacher        = require('../models/teacher.model');
-const TeacherSchedule = require('../models/teacher.schedule.model');
+const teacherRepo    = require('../teacher.repository');
 const studentService = require('../../student').service; // façade module student (§3)
 const examService    = require('../../exam').service; // façade module exam (§3)
 const {
@@ -48,12 +47,7 @@ const getDashboard = async (req, res) => {
     const teacherId = req.user.id;
 
     // ── 1. Teacher profile ────────────────────────────────────────────────────
-    const teacher = await Teacher.findById(teacherId)
-      .populate('subjects',      'subject_name subject_code')
-      .populate('classes',       'className level')
-      .populate('department',    'name')
-      .populate('schoolCampus',  'campus_name')
-      .lean({ virtuals: true });
+    const teacher = await teacherRepo.findTeacherDashboardProfile(teacherId);
 
     if (!teacher) return sendNotFound(res, 'Teacher');
 
@@ -77,50 +71,16 @@ const getDashboard = async (req, res) => {
     ] = await Promise.all([
 
       // Sessions happening today
-      TeacherSchedule.find({
-        'teacher.teacherId': teacherId,
-        status:    'PUBLISHED',
-        isDeleted: false,
-        startTime: { $gte: todayStart, $lte: todayEnd },
-      }).sort({ startTime: 1 }).lean(),
+      teacherRepo.listTeacherTodaySessions(teacherId, { gte: todayStart, lte: todayEnd }),
 
       // Sessions in the next 7 days (excluding today)
-      TeacherSchedule.find({
-        'teacher.teacherId': teacherId,
-        status:    'PUBLISHED',
-        isDeleted: false,
-        startTime: { $gt: todayEnd, $lte: weekEnd },
-      }).sort({ startTime: 1 }).limit(8).lean(),
+      teacherRepo.listTeacherUpcomingSessions(teacherId, { gt: todayEnd, lte: weekEnd, limit: 8 }),
 
       // Past published sessions where the roll-call was never submitted
-      TeacherSchedule.find({
-        'teacher.teacherId':   teacherId,
-        status:                'PUBLISHED',
-        isDeleted:             false,
-        startTime:             { $lt: todayStart },
-        'rollCall.submitted':  false,
-      }).sort({ startTime: -1 }).limit(10).lean(),
+      teacherRepo.listTeacherPendingRollCalls(teacherId, { lt: todayStart, limit: 10 }),
 
       // Academic-year workload aggregate
-      TeacherSchedule.aggregate([
-        {
-          $match: {
-            'teacher.teacherId': toObjectId(teacherId),
-            status:              'PUBLISHED',
-            isDeleted:           false,
-            academicYear:        acYear,
-          },
-        },
-        {
-          $group: {
-            _id:               null,
-            totalSessions:     { $sum: 1 },
-            deliveredSessions: { $sum: { $cond: ['$rollCall.submitted', 1, 0] } },
-            scheduledMinutes:  { $sum: '$durationMinutes' },
-            deliveredMinutes:  { $sum: { $cond: ['$rollCall.submitted', '$durationMinutes', 0] } },
-          },
-        },
-      ]),
+      teacherRepo.aggregateTeacherWorkload({ teacherOid: toObjectId(teacherId), academicYear: acYear }),
 
       // Submissions assigned to this teacher not yet graded (status PENDING)
       examService.countPendingGrading(teacherId),

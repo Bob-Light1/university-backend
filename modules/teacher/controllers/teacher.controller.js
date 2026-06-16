@@ -2,7 +2,8 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
-const Teacher = require('../models/teacher.model');
+const Teacher = require('../models/teacher.model'); // exception assumée : Model du GenericBulkController
+const teacherRepo = require('../teacher.repository');
 const departmentService = require('../../department').service; // façade module department (§3)
 
 const {
@@ -128,11 +129,7 @@ const loginTeacher = async (req, res) => {
       return sendError(res, 400, 'Invalid email format.');
     }
 
-    const teacher = await Teacher.findOne(query)
-      .select('+password')
-      .populate('department', 'name')
-      .populate('subjects', 'subject_name')
-      .populate('schoolCampus', 'campus_name');
+    const teacher = await teacherRepo.findTeacherForLogin(query);
 
     // Generic error for security
     if (!teacher) {
@@ -166,10 +163,7 @@ const loginTeacher = async (req, res) => {
     );
 
     // Update last login
-    await Teacher.updateOne(
-      { _id: teacher._id },
-      { $set: { lastLogin: new Date() } }
-    );
+    await teacherRepo.touchLastLogin(teacher._id);
 
     const prefs = await getLoginPrefs(teacher._id, 'TEACHER', teacher.schoolCampus?._id ?? null);
 
@@ -231,7 +225,7 @@ const updateTeacherPassword = async (req, res) => {
     }
 
     // Fetch teacher with password
-    const teacher = await Teacher.findById(id).select('+password');
+    const teacher = await teacherRepo.findTeacherByIdWithPassword(id);
     if (!teacher) {
       return sendNotFound(res, 'teacher');
     }
@@ -252,7 +246,7 @@ const updateTeacherPassword = async (req, res) => {
     const salt = await bcrypt.genSalt(SALT_ROUNDS);
     teacher.password = await bcrypt.hash(newPassword, salt);
 
-    await teacher.save();
+    await teacherRepo.saveTeacherDoc(teacher);
 
     return sendSuccess(res, 200, 'Password updated successfully');
 
@@ -277,7 +271,7 @@ const deleteTeacherPermanently = async (req, res) => {
       return sendError(res, 400, 'Invalid teacher ID format');
     }
 
-    const teacher = await Teacher.findById(id);
+    const teacher = await teacherRepo.findTeacherDocById(id);
     if (!teacher) {
       return sendNotFound(res, 'Teacher');
     }
@@ -288,7 +282,7 @@ const deleteTeacherPermanently = async (req, res) => {
     }
 
     // Delete teacher from database
-    await Teacher.findByIdAndDelete(id);
+    await teacherRepo.deleteTeacherById(id);
 
     return sendSuccess(res, 200, 'Teacher deleted permanently');
 

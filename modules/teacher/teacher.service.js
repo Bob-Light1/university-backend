@@ -21,11 +21,13 @@
  *     (student.schedule.controller).
  *   - upsert/updateTeacherScheduleByReference : miroir des sessions d'examen
  *     (exam.schedule.helper).
+ *
+ * Toute la persistance passe par teacher.repository (étape 0 pré-Postgres) ;
+ * le service conserve l'API inter-modules et la construction des filtres métier.
  */
 
 const mongoose = require('mongoose');
-const Teacher = require('./models/teacher.model');
-const TeacherSchedule = require('./models/teacher.schedule.model');
+const teacherRepo = require('./teacher.repository');
 
 /**
  * Check if a teacher belongs to a specific campus
@@ -40,7 +42,7 @@ const validateTeacherBelongsToCampus = async (teacherId, campusId) => {
       return false;
     }
 
-    const teacher = await Teacher.findById(teacherId);
+    const teacher = await teacherRepo.getTeacherCampusRef(teacherId);
 
     if (!teacher) {
       return false;
@@ -60,7 +62,7 @@ const validateTeacherBelongsToCampus = async (teacherId, campusId) => {
  * @returns {Promise<number>}
  */
 const countTeachersOnCampus = (teacherIds, campusId) =>
-  Teacher.countDocuments({ _id: { $in: teacherIds }, schoolCampus: campusId });
+  teacherRepo.countTeachersByIdsOnCampus(teacherIds, campusId);
 
 /**
  * Compte les teachers non archivés d'un campus.
@@ -68,12 +70,8 @@ const countTeachersOnCampus = (teacherIds, campusId) =>
  * @param {{createdSince?: Date}} [opts] - borne basse optionnelle sur createdAt
  * @returns {Promise<number>}
  */
-const countActiveTeachers = (campusId, { createdSince } = {}) =>
-  Teacher.countDocuments({
-    schoolCampus: campusId,
-    status: { $ne: 'archived' },
-    ...(createdSince ? { createdAt: { $gte: createdSince } } : {}),
-  });
+const countActiveTeachers = (campusId, opts) =>
+  teacherRepo.countActiveTeachers(campusId, opts);
 
 /**
  * Compte les teachers non archivés rattachés à un département (garde
@@ -82,14 +80,14 @@ const countActiveTeachers = (campusId, { createdSince } = {}) =>
  * @returns {Promise<number>}
  */
 const countActiveInDepartment = (departmentId) =>
-  Teacher.countDocuments({ department: departmentId, status: { $ne: 'archived' } });
+  teacherRepo.countActiveInDepartment(departmentId);
 
 /**
  * Listing paginé des teachers pour le portail staff (classes + subjects
  * peuplés, tri alphabétique). `search` doit déjà être échappé par l'appelant.
  * @returns {Promise<{docs: Array, total: number}>}
  */
-const listTeachersForStaff = async ({ campusId, status, search, page = 1, limit = 20 }) => {
+const listTeachersForStaff = ({ campusId, status, search, page = 1, limit = 20 }) => {
   const filter = { schoolCampus: campusId };
   if (status) {
     filter.status = status;
@@ -102,17 +100,7 @@ const listTeachersForStaff = async ({ campusId, status, search, page = 1, limit 
   }
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [docs, total] = await Promise.all([
-    Teacher.find(filter)
-      .select('-password -__v -contractSnapshot')
-      .populate('classes',  'className')
-      .populate('subjects', 'subject_name subject_code')
-      .sort({ lastName: 1, firstName: 1 })
-      .skip(skip).limit(Number(limit)).lean({ virtuals: true }),
-    Teacher.countDocuments(filter),
-  ]);
-
-  return { docs, total };
+  return teacherRepo.paginateStaffTeachers(filter, { skip, limit: Number(limit) });
 };
 
 /**
@@ -120,7 +108,7 @@ const listTeachersForStaff = async ({ campusId, status, search, page = 1, limit 
  * création desc, sans populate). `search` doit déjà être échappé.
  * @returns {Promise<{docs: Array, total: number}>}
  */
-const listTeachersForCampusDashboard = async ({ campusId, status, search, page = 1, limit = 20 }) => {
+const listTeachersForCampusDashboard = ({ campusId, status, search, page = 1, limit = 20 }) => {
   const filter = { schoolCampus: campusId };
   if (status) {
     filter.status = status;
@@ -136,17 +124,7 @@ const listTeachersForCampusDashboard = async ({ campusId, status, search, page =
   }
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [docs, total] = await Promise.all([
-    Teacher.find(filter)
-      .select('-password -salary')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(Number(limit))
-      .lean(),
-    Teacher.countDocuments(filter),
-  ]);
-
-  return { docs, total };
+  return teacherRepo.paginateCampusDashboardTeachers(filter, { skip, limit: Number(limit) });
 };
 
 /**
@@ -156,7 +134,7 @@ const listTeachersForCampusDashboard = async ({ campusId, status, search, page =
  * @returns {Promise<Object|null>}
  */
 const getTeacherForPayslip = (teacherId, campusId) =>
-  Teacher.findOne({ _id: teacherId, schoolCampus: campusId }).lean();
+  teacherRepo.getTeacherForPayslip(teacherId, campusId);
 
 /**
  * Référence campus d'un teacher (validation cross-campus).
@@ -164,7 +142,7 @@ const getTeacherForPayslip = (teacherId, campusId) =>
  * @returns {Promise<{_id, schoolCampus}|null>}
  */
 const getTeacherCampusRef = (teacherId) =>
-  Teacher.findById(teacherId).select('schoolCampus').lean();
+  teacherRepo.getTeacherCampusRef(teacherId);
 
 /**
  * Resolves a teacherId string into the denormalised `teacher{}` shape
@@ -185,13 +163,7 @@ const getTeacherCampusRef = (teacherId) =>
 const resolveTeacherForSchedule = async (teacherId, campusId) => {
   if (!teacherId) return null;
 
-  const doc = await Teacher.findOne({
-    _id:          teacherId,
-    schoolCampus: campusId,   // campus-isolation guard
-    status:       { $ne: 'archived' },
-  })
-    .select('_id firstName lastName email matricule')
-    .lean();
+  const doc = await teacherRepo.findActiveTeacherRef(teacherId, campusId);
 
   if (!doc) return null;
 
@@ -246,17 +218,10 @@ const syncTeacherScheduleMirror = async (ss, actorId) => {
     // CRITICAL: findOneAndUpdate with upsert does NOT trigger pre('save') hooks.
     // Generate reference manually in $setOnInsert so it is written once at creation
     // and never overwritten on subsequent updates (avoids E11000 on null unique index).
-    const count = await TeacherSchedule.countDocuments();
+    const count = await teacherRepo.countTeacherSchedules();
     const reference = `TS-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
 
-    await TeacherSchedule.findOneAndUpdate(
-      { studentScheduleRef: ss._id },
-      {
-        $set:         $setPayload,
-        $setOnInsert: { reference },
-      },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+    await teacherRepo.upsertTeacherScheduleMirror(ss._id, $setPayload, reference);
   } catch (err) {
     console.error('[syncTeacherSchedule] failed to sync TeacherSchedule:', err.message, err.code);
   }
@@ -266,7 +231,7 @@ const syncTeacherScheduleMirror = async (ss, actorId) => {
  * Planning paginé du portail staff (subject/classes/teacher peuplés).
  * @returns {Promise<{docs: Array, total: number}>}
  */
-const listTeacherSchedulesForStaff = async ({ campusId, status, from, to, page = 1, limit = 20 }) => {
+const listTeacherSchedulesForStaff = ({ campusId, status, from, to, page = 1, limit = 20 }) => {
   const filter = { schoolCampus: campusId };
   if (status) {
     filter.status = status;
@@ -280,18 +245,7 @@ const listTeacherSchedulesForStaff = async ({ campusId, status, from, to, page =
   }
 
   const skip = (Number(page) - 1) * Number(limit);
-  const [docs, total] = await Promise.all([
-    TeacherSchedule.find(filter)
-      .select('-__v')
-      .populate('subject', 'subject_name subject_code')
-      .populate('classes', 'className')
-      .populate('teacher', 'firstName lastName')
-      .sort({ startTime: 1 })
-      .skip(skip).limit(Number(limit)).lean(),
-    TeacherSchedule.countDocuments(filter),
-  ]);
-
-  return { docs, total };
+  return teacherRepo.paginateStaffTeacherSchedules(filter, { skip, limit: Number(limit) });
 };
 
 /**
@@ -300,25 +254,21 @@ const listTeacherSchedulesForStaff = async ({ campusId, status, from, to, page =
  * @returns {Promise<{hasConflict: boolean, conflicts: Array}>}
  */
 const detectTeacherConflicts = (params) =>
-  TeacherSchedule.detectTeacherConflicts(params);
+  teacherRepo.detectTeacherConflicts(params);
 
 /**
  * Upsert d'une entrée TeacherSchedule par référence (miroir des sessions
  * d'examen — références EXAM-TS-*).
  */
 const upsertTeacherScheduleByReference = (reference, fields) =>
-  TeacherSchedule.findOneAndUpdate(
-    { reference },
-    { $set: fields },
-    { upsert: true, new: true }
-  );
+  teacherRepo.upsertTeacherScheduleByReference(reference, fields);
 
 /**
  * Mise à jour d'une entrée TeacherSchedule par référence (statut/horaires
  * d'une session d'examen annulée/reportée).
  */
 const updateTeacherScheduleByReference = (reference, fields) =>
-  TeacherSchedule.findOneAndUpdate({ reference }, { $set: fields });
+  teacherRepo.updateTeacherScheduleByReference(reference, fields);
 
 module.exports = {
   validateTeacherBelongsToCampus,

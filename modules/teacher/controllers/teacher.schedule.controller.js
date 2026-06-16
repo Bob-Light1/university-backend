@@ -21,7 +21,7 @@
  */
 
 const mongoose        = require('mongoose');
-const TeacherSchedule = require('../models/teacher.schedule.model');
+const teacherRepo     = require('../teacher.repository');
 const studentService  = require('../../student').service; // façade module student (§3)
 const { SCHEDULE_STATUS, SEMESTER } = require('../../../shared/utils/schedule.base');
 
@@ -111,7 +111,7 @@ const getMyTeacherCalendar = asyncHandler(async (req, res) => {
     return sendError(res, 400, "'to' must be after 'from'.");
   }
 
-  const sessions = await TeacherSchedule.getTeacherCalendar(
+  const sessions = await teacherRepo.getTeacherCalendar(
     teacherId,
     start,
     end,
@@ -123,7 +123,7 @@ const getMyTeacherCalendar = asyncHandler(async (req, res) => {
     : sessions;
 
   const weekLabel = toISOWeekLabel(new Date());
-  const workload  = await TeacherSchedule.getWorkloadSummary(teacherId, weekLabel, 'WEEKLY');
+  const workload  = await teacherRepo.getWorkloadSummary(teacherId, weekLabel, 'WEEKLY');
 
   return sendSuccess(res, 200, 'Calendar fetched.', filtered, {
     count:          filtered.length,
@@ -143,7 +143,7 @@ const getTeacherSessionById = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await TeacherSchedule.findOne({ _id: id, isDeleted: false }).lean();
+  const session = await teacherRepo.findScheduleSessionLean(id);
   if (!session) return sendError(res, 404, 'Session not found.');
 
   const isAdmin        = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'].includes(req.user.role);
@@ -169,7 +169,7 @@ const openRollCall = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await TeacherSchedule.findOne({ _id: id, isDeleted: false });
+  const session = await teacherRepo.findScheduleSessionForWrite(id);
   if (!session) return sendError(res, 404, 'Session not found.');
 
   const isAdmin        = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'].includes(req.user.role);
@@ -197,7 +197,7 @@ const openRollCall = asyncHandler(async (req, res) => {
 
   session.rollCall.opened   = true;
   session.rollCall.openedAt = new Date();
-  await session.save();
+  await teacherRepo.saveScheduleDoc(session);
 
   return sendSuccess(res, 200, 'Roll-call opened.', { rollCall: session.rollCall });
 });
@@ -217,7 +217,7 @@ const submitRollCall = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Attendance counts must be non-negative numbers.');
   }
 
-  const session = await TeacherSchedule.findOne({ _id: id, isDeleted: false });
+  const session = await teacherRepo.findScheduleSessionForWrite(id);
   if (!session) return sendError(res, 404, 'Session not found.');
 
   const isAdmin        = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'].includes(req.user.role);
@@ -238,7 +238,7 @@ const submitRollCall = asyncHandler(async (req, res) => {
   session.rollCall.totalPresent = Number(present);
   session.rollCall.totalAbsent  = Number(absent);
   session.rollCall.totalLate    = Number(late);
-  await session.save();
+  await teacherRepo.saveScheduleDoc(session);
 
   // Synchronisation du résumé dans StudentSchedule (fire-and-forget)
   if (session.studentScheduleRef) {
@@ -278,7 +278,7 @@ const requestPostponement = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'A reason with at least 10 characters is required.');
   }
 
-  const session = await TeacherSchedule.findOne({ _id: id, isDeleted: false });
+  const session = await teacherRepo.findScheduleSessionForWrite(id);
   if (!session) return sendError(res, 404, 'Session not found.');
 
   const isOwnerTeacher = session.teacher.teacherId.toString() === req.user.id;
@@ -301,7 +301,7 @@ const requestPostponement = asyncHandler(async (req, res) => {
     proposedEnd:   proposedEnd   ? new Date(proposedEnd)   : undefined,
     status:        'PENDING',
   });
-  await session.save();
+  await teacherRepo.saveScheduleDoc(session);
 
   await dispatchWorkflowNotification('POSTPONEMENT_REQUESTED', {
     sessionId:   session._id,
@@ -335,11 +335,7 @@ const reviewPostponement = asyncHandler(async (req, res) => {
     return sendError(res, 400, "status must be 'APPROVED' or 'REJECTED'.");
   }
 
-  const session = await TeacherSchedule.findOne({
-    'postponementRequests._id': requestId,
-    isDeleted: false,
-  });
-
+  const session = await teacherRepo.findScheduleByPostponementRequest(requestId);
   if (!session) return sendError(res, 404, 'Postponement request not found.');
 
   const request = session.postponementRequests.id(requestId);
@@ -362,7 +358,7 @@ const reviewPostponement = asyncHandler(async (req, res) => {
   }
 
   session.lastModifiedBy = req.user.id;
-  await session.save();
+  await teacherRepo.saveScheduleDoc(session);
 
   await dispatchWorkflowNotification(
     status === 'APPROVED' ? 'POSTPONEMENT_APPROVED' : 'POSTPONEMENT_REJECTED',
@@ -405,13 +401,7 @@ const getPendingPostponements = asyncHandler(async (req, res) => {
 
   const campusFilter = buildCampusFilter(req);
 
-  const sessions = await TeacherSchedule.find({
-    ...campusFilter,
-    'postponementRequests.status': status,
-    isDeleted: false,
-  })
-    .select('reference teacher subject startTime endTime postponementRequests')
-    .lean();
+  const sessions = await teacherRepo.listSchedulesWithPostponements(campusFilter, status);
 
   const rows = [];
   for (const session of sessions) {
@@ -487,18 +477,13 @@ const upsertAvailability = asyncHandler(async (req, res) => {
   }
 
   // Document profil de disponibilité : pas de studentScheduleRef et pas de sessionType
-  let profileDoc = await TeacherSchedule.findOne({
-    'teacher.teacherId': teacherId,
-    studentScheduleRef:  null,
-    sessionType:         { $exists: false },
-    isDeleted:           false,
-  });
+  let profileDoc = await teacherRepo.findAvailabilityProfileForWrite(teacherId);
 
   const now = new Date();
   const defaultYear = `${now.getFullYear()}-${now.getFullYear() + 1}`;
 
   if (!profileDoc) {
-    profileDoc = new TeacherSchedule({
+    profileDoc = teacherRepo.newTeacherScheduleDoc({
       teacher:      { teacherId },
       schoolCampus: campusId,
       academicYear: academicYear || defaultYear,
@@ -510,7 +495,7 @@ const upsertAvailability = asyncHandler(async (req, res) => {
 
   profileDoc.availabilitySlots = slots;
   profileDoc.lastModifiedBy    = teacherId;
-  await profileDoc.save();
+  await teacherRepo.saveScheduleDoc(profileDoc);
 
   return sendSuccess(res, 200, 'Availability preferences saved.', profileDoc.availabilitySlots);
 });
@@ -523,14 +508,7 @@ const getMyAvailability = asyncHandler(async (req, res) => {
   // Cast to ObjectId — req.user.id is a string from the JWT payload
   const teacherId = new mongoose.Types.ObjectId(req.user.id);
 
-  const profileDoc = await TeacherSchedule.findOne(
-    {
-      'teacher.teacherId': teacherId,
-      studentScheduleRef:  null,
-      isDeleted:           false,
-    },
-    { availabilitySlots: 1 }
-  ).lean();
+  const profileDoc = await teacherRepo.findAvailabilityProfile(teacherId);
 
   return sendSuccess(
     res,
@@ -565,7 +543,7 @@ const getMyWorkloadSummary = asyncHandler(async (req, res) => {
       : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   );
 
-  const summary = await TeacherSchedule.getWorkloadSummary(teacherId, label, periodType);
+  const summary = await teacherRepo.getWorkloadSummary(teacherId, label, periodType);
 
   return sendSuccess(res, 200, 'Workload summary fetched.', { periodType, periodLabel: label, ...summary });
 });
@@ -580,7 +558,7 @@ const getStudentRoster = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await TeacherSchedule.findOne({ _id: id, isDeleted: false }).lean();
+  const session = await teacherRepo.findScheduleSessionLean(id);
   if (!session) return sendError(res, 404, 'Session not found.');
 
   const isAdmin        = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'].includes(req.user.role);
@@ -649,14 +627,10 @@ const getTeacherSessionsAdmin = asyncHandler(async (req, res) => {
   const limitNum = parsePositiveInt(limit, 50);
   const skip     = (pageNum - 1) * limitNum;
 
-  const [sessions, total] = await Promise.all([
-    TeacherSchedule.find(filter)
-      .sort({ startTime: 1 })
-      .skip(skip)
-      .limit(limitNum)
-      .lean(),
-    TeacherSchedule.countDocuments(filter),
-  ]);
+  const { docs: sessions, total } = await teacherRepo.paginateTeacherSessions(
+    filter,
+    { skip, limit: limitNum }
+  );
 
   return sendPaginated(
     res,
@@ -692,55 +666,7 @@ const getAllTeachersWorkload = asyncHandler(async (req, res) => {
 
   if (department) matchStage['subject.department'] = department;
 
-  const report = await TeacherSchedule.aggregate([
-    { $match: matchStage },
-    { $unwind: '$workloadSnapshots' },
-    {
-      $match: {
-        'workloadSnapshots.periodLabel': label,
-        'workloadSnapshots.periodType':  periodType,
-      },
-    },
-    {
-      $group: {
-        _id:             '$teacher.teacherId',
-        firstName:       { $first: '$teacher.firstName' },
-        lastName:        { $first: '$teacher.lastName' },
-        email:           { $first: '$teacher.email' },
-        matricule:       { $first: '$teacher.matricule' },
-        scheduledHours:  { $sum: '$workloadSnapshots.scheduledHours' },
-        deliveredHours:  { $sum: '$workloadSnapshots.deliveredHours' },
-        cancelledHours:  { $sum: '$workloadSnapshots.cancelledHours' },
-        contractHours:   { $max: '$workloadSnapshots.contractHours' },
-      },
-    },
-    {
-      $project: {
-        firstName:      1,
-        lastName:       1,
-        email:          1,
-        matricule:      1,
-        scheduledHours: 1,
-        deliveredHours: 1,
-        cancelledHours: 1,
-        contractHours:  1,
-        deviation:      { $subtract: ['$deliveredHours', '$contractHours'] },
-        completionRate: {
-          $cond: [
-            { $gt: ['$contractHours', 0] },
-            {
-              $round: [
-                { $multiply: [{ $divide: ['$deliveredHours', '$contractHours'] }, 100] },
-                1,
-              ],
-            },
-            null,
-          ],
-        },
-      },
-    },
-    { $sort: { lastName: 1 } },
-  ]);
+  const report = await teacherRepo.aggregateAllTeachersWorkload(matchStage);
 
   return sendSuccess(res, 200, 'Workload report fetched.', report, {
     periodType,
