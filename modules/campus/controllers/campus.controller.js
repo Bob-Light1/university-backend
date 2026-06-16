@@ -8,7 +8,7 @@ const GenericEntityController = require('../../../shared/lib/generic-entity.cont
 // Escape user input before embedding in MongoDB $regex to prevent ReDoS / injection
 const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const Campus = require('../campus.model');
+const campusRepo = require('../campus.repository');
 const { getLoginPrefs } = require('../../settings').service;
 const teacherService = require('../../teacher').service; // façade module teacher (§3)
 const studentService = require('../../student').service; // façade module student (§3)
@@ -165,7 +165,7 @@ class CampusController extends GenericEntityController {
         });
       }
 
-      const existingCampus = await Campus.findOne({ email: email.toLowerCase() });
+      const existingCampus = await campusRepo.findByEmail(email.toLowerCase());
 
       if (existingCampus) {
         return sendConflict(res, 'A campus with this email is already registered');
@@ -187,8 +187,7 @@ class CampusController extends GenericEntityController {
         campus_image,
       };
 
-      const campus = new Campus(campusData);
-      const savedCampus = await campus.save();
+      const savedCampus = await campusRepo.create(campusData);
 
       if (this.afterCreate) {
         await this.afterCreate(savedCampus);
@@ -238,9 +237,7 @@ class CampusController extends GenericEntityController {
       }
 
       // Find campus with password
-      const campus = await Campus.findOne({
-        email: email.toLowerCase().trim()
-      }).select('+password');
+      const campus = await campusRepo.findByEmailWithPassword(email.toLowerCase().trim());
 
       if (!campus) {
         return sendError(res, 401, 'Invalid email or password');
@@ -276,10 +273,8 @@ class CampusController extends GenericEntityController {
       );
 
       // Update last login
-      Campus.updateOne(
-        { _id: campus._id },
-        { $set: { lastLogin: new Date() } }
-      ).catch(err => console.error('Failed to update lastLogin:', err));; 
+      campusRepo.touchLastLogin(campus._id)
+        .catch(err => console.error('Failed to update lastLogin:', err));
 
       const prefs = await getLoginPrefs(campus._id, 'CAMPUS_MANAGER', campus._id);
 
@@ -319,36 +314,15 @@ class CampusController extends GenericEntityController {
         city
       } = req.query;
 
-      // Build filter
-      const filter = {};
-
-      if (status) {
-        filter.status = status;
-      }
-
-      if (city) {
-        filter['location.city'] = { $regex: escapeRegex(city), $options: 'i' };
-      }
-
-      if (search) {
-        filter.$or = [
-          { campus_name: { $regex: escapeRegex(search), $options: 'i' } },
-          { manager_name: { $regex: escapeRegex(search), $options: 'i' } },
-          { email: { $regex: escapeRegex(search), $options: 'i' } },
-          { campus_number: { $regex: escapeRegex(search), $options: 'i' } }
-        ];
-      }
-
       const skip = (Number(page) - 1) * Number(limit);
 
-      const campuses = await Campus.find(filter)
-        .select('-password')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(Number(limit))
-        .lean();
-
-      const total = await Campus.countDocuments(filter);
+      const { data: campuses, total } = await campusRepo.paginate({
+        status,
+        city,
+        search,
+        skip,
+        limit: Number(limit),
+      });
 
       return sendPaginated(
         res,
@@ -378,7 +352,7 @@ class CampusController extends GenericEntityController {
       return sendError(res, 400, 'Invalid campus ID format');
     }
 
-    const campus = await Campus.findById(id).select('-password').lean();
+    const campus = await campusRepo.findByIdSafe(id);
 
     if (!campus) {
       return sendNotFound(res, 'Campus');
@@ -434,7 +408,7 @@ class CampusController extends GenericEntityController {
       }
 
       // Find campus
-      const campus = await Campus.findById(id).select('+password');
+      const campus = await campusRepo.findByIdWithPassword(id);
       if (!campus) {
         return sendNotFound(res, 'Campus');
       }
@@ -453,9 +427,9 @@ class CampusController extends GenericEntityController {
 
       // Hash new password
       const salt = await bcrypt.genSalt(SALT_ROUNDS);
-      campus.password = await bcrypt.hash(newPassword, salt);
+      const hashed = await bcrypt.hash(newPassword, salt);
 
-      await campus.save();
+      await campusRepo.updatePassword(id, hashed);
 
       return sendSuccess(res, 200, 'Password updated successfully');
 
@@ -486,7 +460,7 @@ class CampusController extends GenericEntityController {
 
       // Parallel queries
       const [campus, studentsCount, teachersCount, classesCount] = await Promise.all([
-        Campus.findById(campusId).select('-password').lean(),
+        campusRepo.findByIdSafe(campusId),
         studentService.countStudents({ campusId, excludeArchived: true }),
         teacherService.countActiveTeachers(campusId),
         classService.countClasses({ campusId, excludeArchived: true })
@@ -912,11 +886,7 @@ const updateCampusDefaults = async (req, res) => {
       return sendError(res, 400, 'No valid fields to update.');
     }
 
-    const campus = await Campus.findByIdAndUpdate(
-      id,
-      { $set: update },
-      { new: true, runValidators: true }
-    ).select('defaultLanguage defaultTimezone defaultGradeFormat campus_name');
+    const campus = await campusRepo.updateDefaults(id, update);
 
     if (!campus) return sendNotFound(res, 'Campus');
 
