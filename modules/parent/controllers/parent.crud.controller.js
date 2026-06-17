@@ -126,6 +126,20 @@ const createParent = async (req, res) => {
 
     const parent = await parentRepo.create(body);
 
+    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget.
+    require('../../notification').service.notify({
+      recipient: {
+        id:       parent._id,
+        model:    'Parent',
+        email:    parent.email,
+        campusId: parent.schoolCampus,
+      },
+      channels: ['inapp', 'email'],
+      template: 'account.welcome',
+      data:     { name: parent.firstName },
+      locale:   parent.preferredLanguage,
+    }).catch((err) => console.error('[notify] account.welcome (parent) failed:', err.message));
+
     auditLog(req, 'CREATE_PARENT', parent._id);
 
     const populated = await parentRepo.findByIdForResponse(parent._id);

@@ -245,6 +245,19 @@ const createAdmin = asyncHandler(async (req, res) => {
       }],
     });
 
+    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget :
+    // n'impacte jamais la création. Admin/Director sont globaux → pas de campusId.
+    require('../../notification').service.notify({
+      recipient: {
+        id:    newAdmin._id,
+        model: newAdmin.role === 'DIRECTOR' ? 'Director' : 'Admin',
+        email: newAdmin.email,
+      },
+      channels: ['inapp', 'email'],
+      template: 'account.welcome',
+      data:     { name: newAdmin.admin_name },
+    }).catch((err) => console.error('[notify] account.welcome (admin) failed:', err.message));
+
     const response = newAdmin.toObject();
     delete response.password;
 

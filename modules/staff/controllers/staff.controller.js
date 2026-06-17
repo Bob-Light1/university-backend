@@ -181,6 +181,20 @@ const createStaff = async (req, res) => {
     if (!body.password) body.password = 'Staff@123';
 
     const staff = await staffRepo.create(body);
+
+    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget.
+    require('../../notification').service.notify({
+      recipient: {
+        id:       staff._id,
+        model:    'Staff',
+        email:    staff.email,
+        campusId: staff.schoolCampus,
+      },
+      channels: ['inapp', 'email'],
+      template: 'account.welcome',
+      data:     { name: staff.firstName },
+    }).catch((err) => console.error('[notify] account.welcome (staff) failed:', err.message));
+
     const doc = staff.toObject({ virtuals: true });
     delete doc.password;
 

@@ -161,6 +161,19 @@ const createMentor = async (req, res) => {
 
     const mentor = await mentorRepo.create(body);
 
+    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget.
+    require('../../notification').service.notify({
+      recipient: {
+        id:       mentor._id,
+        model:    'Mentor',
+        email:    mentor.email,
+        campusId: mentor.schoolCampus,
+      },
+      channels: ['inapp', 'email'],
+      template: 'account.welcome',
+      data:     { name: mentor.firstName },
+    }).catch((err) => console.error('[notify] account.welcome (mentor) failed:', err.message));
+
     const doc = mentor.toObject({ virtuals: true });
     delete doc.password;
 
