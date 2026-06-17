@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const { Schema, Types: { ObjectId } } = mongoose;
 
-const SUPPORTED_LANGUAGES = ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
+const { SUPPORTED_LANGUAGES } = require('../../../shared/i18n/languages');
 const SUPPORTED_TIMEZONES  = require('./timezone-whitelist');
 
 const UserPreferencesSchema = new Schema(

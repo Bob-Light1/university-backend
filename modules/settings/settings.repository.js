@@ -43,9 +43,9 @@ const upsertWithSet = (userId, set, insertDoc) =>
     UPSERT_OPTS,
   ).lean();
 
-/** Liste blanche des langues supportées (statique du schéma + repli). */
+/** Liste blanche des langues supportées (statique du schéma + repli sur la source unique). */
 const getSupportedLanguages = () =>
-  UserPreferences.schema.statics.SUPPORTED_LANGUAGES || ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
+  UserPreferences.schema.statics.SUPPORTED_LANGUAGES || require('../../shared/i18n/languages').SUPPORTED_LANGUAGES;
 
 module.exports = {
   findByUserId,

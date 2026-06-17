@@ -850,7 +850,7 @@ class CampusController extends GenericEntityController {
 const campusController = new CampusController(campusConfig);
 
 // ── PATCH /api/campus/:id/defaults ────────────────────────────────────────────
-const SUPPORTED_LANGUAGES_DEF  = ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
+const { SUPPORTED_LANGUAGES: SUPPORTED_LANGUAGES_DEF } = require('../../../shared/i18n/languages');
 const SUPPORTED_TIMEZONES_DEF  = require('../../settings').service.SUPPORTED_TIMEZONES; // façade settings (§3)
 const SUPPORTED_GRADE_FMTS_DEF = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
 

@@ -16,6 +16,7 @@
 
 const mongoose = require('mongoose');
 const bcrypt   = require('bcrypt');
+const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
 
 const SALT_ROUNDS = 12;
 
@@ -188,7 +189,7 @@ const parentSchema = new mongoose.Schema(
 
     preferredLanguage: {
       type:    String,
-      enum:    { values: ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'], message: '{VALUE} is not a valid language' },
+      enum:    { values: SUPPORTED_LANGUAGES, message: '{VALUE} is not a valid language' },
       default: 'fr',
     },
 

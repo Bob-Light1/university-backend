@@ -10,7 +10,7 @@
  * Usage: app.use(localeMiddleware) in server.js, before all routes.
  */
 
-const SUPPORTED = ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'];
+const { normalize } = require('../i18n/languages');
 
 /**
  * Parse Accept-Language header and return the best supported code.
@@ -29,12 +29,9 @@ function parse(header) {
     .sort((a, b) => b.q - a.q);
 
   for (const { tag } of tags) {
-    if (SUPPORTED.includes(tag)) return tag;
-    // Try base language (e.g. 'fr' from 'fr-FR')
-    const base = tag.split('-')[0];
-    if (SUPPORTED.includes(base)) return base;
-    // Special case: zh-CN from any zh-* variant
-    if (base === 'zh') return 'zh-CN';
+    // normalize() gère « fr-FR » → « fr » et toute variante « zh-* » → « zh-CN ».
+    const code = normalize(tag);
+    if (code) return code;
   }
   return null;
 }

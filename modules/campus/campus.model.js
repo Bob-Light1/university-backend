@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
 
 /**
  * Campus Model
@@ -188,7 +189,7 @@ const campusSchema = new mongoose.Schema(
     // i18n defaults — Directors set these in Campus Settings
     defaultLanguage: {
       type: String,
-      enum: ['en', 'fr', 'es', 'ar', 'zh-CN', 'de'],
+      enum: SUPPORTED_LANGUAGES,
       default: 'en',
     },
     defaultTimezone: {

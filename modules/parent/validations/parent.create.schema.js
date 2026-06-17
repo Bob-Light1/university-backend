@@ -13,6 +13,7 @@
  */
 
 const mongoose = require('mongoose');
+const { SUPPORTED_LANGUAGES } = require('../../../shared/i18n/languages');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
@@ -156,8 +157,8 @@ const runValidation = (body, isCreate) => {
 
   // preferredLanguage (optional)
   if (body.preferredLanguage !== undefined) {
-    if (!['en', 'fr', 'es', 'ar', 'zh-CN', 'de'].includes(body.preferredLanguage)) {
-      errors.push({ field: 'preferredLanguage', message: "preferredLanguage must be one of: en, fr, es, ar, zh-CN, de." });
+    if (!SUPPORTED_LANGUAGES.includes(body.preferredLanguage)) {
+      errors.push({ field: 'preferredLanguage', message: `preferredLanguage must be one of: ${SUPPORTED_LANGUAGES.join(', ')}.` });
     }
   }
 
@@ -245,8 +246,8 @@ const validateUpdateProfile = (req, res, next) => {
   }
 
   if (preferredLanguage !== undefined) {
-    if (!['en', 'fr', 'es', 'ar', 'zh-CN', 'de'].includes(preferredLanguage)) {
-      errors.push({ field: 'preferredLanguage', message: "preferredLanguage must be one of: en, fr, es, ar, zh-CN, de." });
+    if (!SUPPORTED_LANGUAGES.includes(preferredLanguage)) {
+      errors.push({ field: 'preferredLanguage', message: `preferredLanguage must be one of: ${SUPPORTED_LANGUAGES.join(', ')}.` });
     }
   }
 
