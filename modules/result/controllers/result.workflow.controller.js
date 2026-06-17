@@ -34,6 +34,20 @@ const { randomUUID } = require('crypto');
 
 const { RESULT_STATUS } = require('../models/result.model');
 const resultRepo = require('../result.repository');
+const notification = require('../../notification').service;
+
+/**
+ * Notifie un étudiant (in-app) qu'un résultat vient d'être publié.
+ * Fire-and-forget : un échec de notification ne doit jamais bloquer la
+ * publication (même contrat que le calcul du risque de décrochage ci-dessous).
+ */
+const notifyResultPublished = (studentId, campusId) =>
+  notification.notify({
+    recipient: { id: studentId, model: 'Student', campusId },
+    channels: ['inapp'],
+    template: 'result.published',
+    data: {},
+  }).catch((err) => console.error('[notify] result.published failed:', err.message));
 
 const {
   asyncHandler,
@@ -198,6 +212,9 @@ const publishResult = asyncHandler(async (req, res) => {
     .then((risk) => resultRepo.setDropoutRiskScore(resultDoc._id, risk))
     .catch((err) => console.error('[DropoutRisk] computation failed:', err.message));
 
+  // Notification in-app à l'étudiant (fire-and-forget)
+  notifyResultPublished(resultDoc.student, resultDoc.schoolCampus);
+
   return sendSuccess(res, 200, 'Result published. Student can now view this result.', resultDoc);
 });
 
@@ -252,6 +269,8 @@ const publishBatch = asyncHandler(async (req, res) => {
     resultRepo.computeDropoutRisk(r.student, r.schoolCampus)
       .then((risk) => resultRepo.setDropoutRiskScore(r._id, risk))
       .catch((err) => console.error('[DropoutRisk] batch computation failed:', err.message));
+    // Une seule notification in-app par étudiant (évite le spam multi-matières)
+    notifyResultPublished(r.student, r.schoolCampus);
   }
 
   return sendSuccess(res, 200, `${toPublish.length} result(s) published.`, {

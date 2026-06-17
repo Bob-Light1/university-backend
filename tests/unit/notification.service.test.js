@@ -132,6 +132,25 @@ describe('runRetryJob', () => {
   });
 });
 
+describe('templates', () => {
+  const templates = require('../../modules/notification/templates');
+
+  test('result.published rend un contenu localisé (fr) sur les 3 canaux', () => {
+    expect(templates.has('result.published')).toBe(true);
+    const inapp = templates.render('result.published', 'inapp', {}, 'fr');
+    expect(inapp.subject).toMatch(/résultat/i);
+    expect(inapp.body).toMatch(/publié/i);
+    expect(templates.render('result.published', 'email', { name: 'Alice' }, 'fr').body).toMatch(/Alice/);
+    expect(templates.render('result.published', 'whatsapp', {}, 'en').body).toMatch(/result/i);
+  });
+
+  test('interpolation et repli en par défaut', () => {
+    const out = templates.render('payment.reminder', 'inapp', { amount: 500, currency: 'XAF', dueDate: '2026-07-01' }, 'xx');
+    expect(out.body).toContain('500');
+    expect(out.body).toContain('XAF'); // locale inconnue → repli en
+  });
+});
+
 describe('inbox helpers', () => {
   test('markRead renvoie true quand une ligne est modifiée', async () => {
     repo.markRead.mockResolvedValue({ modifiedCount: 1 });

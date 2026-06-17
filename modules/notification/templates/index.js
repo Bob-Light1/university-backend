@@ -63,6 +63,29 @@ const templates = {
     }),
   },
 
+  'result.published': {
+    inapp: (d, l) => ({
+      subject: pick({ en: 'New result available', fr: 'Nouveau résultat disponible' }, l),
+      body: interpolate(pick({
+        en: 'A new result has been published. You can now view it in your results.',
+        fr: 'Un nouveau résultat a été publié. Vous pouvez le consulter dans vos résultats.',
+      }, l), d),
+    }),
+    email: (d, l) => ({
+      subject: pick({ en: 'Your result has been published', fr: 'Votre résultat a été publié' }, l),
+      body: interpolate(pick({
+        en: 'Hello {name},\n\nA new result has been published and is now available in your portal.',
+        fr: 'Bonjour {name},\n\nUn nouveau résultat a été publié et est disponible sur votre portail.',
+      }, l), d),
+    }),
+    whatsapp: (d, l) => ({
+      body: interpolate(pick({
+        en: 'A new result has been published. Check your portal.',
+        fr: 'Un nouveau résultat a été publié. Consultez votre portail.',
+      }, l), d),
+    }),
+  },
+
   'payment.reminder': {
     inapp: (d, l) => ({
       subject: pick({ en: 'Payment due', fr: 'Paiement à venir' }, l),
