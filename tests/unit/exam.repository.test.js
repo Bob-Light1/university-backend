@@ -274,6 +274,16 @@ describe('exam — ExamGrading', () => {
     );
   });
 
+  test('findSessionGradingRecipients : GRADED/MEDIATED, projection student/campus, lean', async () => {
+    ExamGrading.__setLean([{ student: 'st1', schoolCampus: 'c1' }]);
+    const out = await repo.findSessionGradingRecipients('s1');
+    expect(ExamGrading.find).toHaveBeenCalledWith(
+      { examSession: 's1', status: { $in: ['GRADED', 'MEDIATED'] }, isDeleted: false },
+      'student schoolCampus'
+    );
+    expect(out).toEqual([{ student: 'st1', schoolCampus: 'c1' }]);
+  });
+
   test('countPendingGradingForGrader : cast ObjectId + PENDING', () => {
     const oid = '5f9d88b9c1d2a30017e8b123';
     repo.countPendingGradingForGrader(oid);

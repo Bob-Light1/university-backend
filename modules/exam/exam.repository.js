@@ -395,6 +395,17 @@ const publishSessionGradings = (sessionId, setFields) =>
     { $set: setFields }
   );
 
+/**
+ * Destinataires d'une publication à venir : { student, schoolCampus } des
+ * corrections encore publiables (mêmes critères que publishSessionGradings).
+ * À appeler AVANT la publication pour notifier les étudiants concernés.
+ */
+const findSessionGradingRecipients = (sessionId) =>
+  ExamGrading.find(
+    { examSession: sessionId, status: { $in: ['GRADED', 'MEDIATED'] }, isDeleted: false },
+    'student schoolCampus'
+  ).lean();
+
 /** Nombre de copies en attente pour un correcteur (façade dashboard). */
 const countPendingGradingForGrader = (graderId) =>
   ExamGrading.countDocuments({
@@ -702,6 +713,7 @@ module.exports = {
   saveGradingDoc,
   updateGradingById,
   publishSessionGradings,
+  findSessionGradingRecipients,
   countPendingGradingForGrader,
   // ExamAppeal
   findAppealByGradingAndStudent,

@@ -144,6 +144,13 @@ describe('templates', () => {
     expect(templates.render('result.published', 'whatsapp', {}, 'en').body).toMatch(/result/i);
   });
 
+  test('exam.graded rend un contenu localisé sur les 3 canaux', () => {
+    expect(templates.has('exam.graded')).toBe(true);
+    expect(templates.render('exam.graded', 'inapp', {}, 'fr').subject).toMatch(/note/i);
+    expect(templates.render('exam.graded', 'email', { name: 'Bob' }, 'fr').body).toMatch(/Bob/);
+    expect(templates.render('exam.graded', 'whatsapp', {}, 'en').body).toMatch(/exam/i);
+  });
+
   test('interpolation et repli en par défaut', () => {
     const out = templates.render('payment.reminder', 'inapp', { amount: 500, currency: 'XAF', dueDate: '2026-07-01' }, 'xx');
     expect(out.body).toContain('500');

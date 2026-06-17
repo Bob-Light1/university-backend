@@ -86,6 +86,29 @@ const templates = {
     }),
   },
 
+  'exam.graded': {
+    inapp: (d, l) => ({
+      subject: pick({ en: 'Exam grade published', fr: 'Note d\'examen publiée' }, l),
+      body: interpolate(pick({
+        en: 'Your grade for an exam has been published. You can now view it.',
+        fr: 'Votre note d\'examen a été publiée. Vous pouvez la consulter.',
+      }, l), d),
+    }),
+    email: (d, l) => ({
+      subject: pick({ en: 'Your exam grade is available', fr: 'Votre note d\'examen est disponible' }, l),
+      body: interpolate(pick({
+        en: 'Hello {name},\n\nYour grade for an exam has been published and is now available in your portal.',
+        fr: 'Bonjour {name},\n\nVotre note d\'examen a été publiée et est disponible sur votre portail.',
+      }, l), d),
+    }),
+    whatsapp: (d, l) => ({
+      body: interpolate(pick({
+        en: 'Your exam grade has been published. Check your portal.',
+        fr: 'Votre note d\'examen a été publiée. Consultez votre portail.',
+      }, l), d),
+    }),
+  },
+
   'payment.reminder': {
     inapp: (d, l) => ({
       subject: pick({ en: 'Payment due', fr: 'Paiement à venir' }, l),

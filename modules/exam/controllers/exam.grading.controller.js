@@ -31,6 +31,17 @@ const {
   parsePagination,
 } = require('./exam.helper');
 const { examAnalyticsWorker } = require('../exam-analytics.worker');
+const notification = require('../../notification').service;
+
+// Notifie un étudiant que sa note d'examen est publiée (in-app, best-effort :
+// n'échoue jamais la publication — même contrat que l'émission result.published).
+const notifyExamGraded = (studentId, campusId) =>
+  notification.notify({
+    recipient: { id: studentId, model: 'Student', campusId },
+    channels: ['inapp'],
+    template: 'exam.graded',
+    data: {},
+  }).catch((err) => console.error('[notify] exam.graded failed:', err.message));
 
 // ─── List gradings ────────────────────────────────────────────────────────────
 
@@ -334,11 +345,18 @@ const publishGrades = async (req, res) => {
     const session = await repo.findSessionByFilter({ _id: sessionId, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
+    // Destinataires capturés AVANT publication (après, le filtre GRADED/MEDIATED
+    // ne les renverrait plus).
+    const recipients = await repo.findSessionGradingRecipients(sessionId);
+
     const result = await repo.publishSessionGradings(sessionId, {
       status: 'PUBLISHED', publishedAt: new Date(), updatedBy: req.user.id,
     });
 
     examAnalyticsWorker.emit('examAnalytics:compute', sessionId);
+
+    // Une notif in-app par étudiant dont la note vient d'être publiée.
+    recipients.forEach((g) => notifyExamGraded(g.student, g.schoolCampus));
 
     return sendSuccess(res, 200, `${result.modifiedCount} grade(s) published.`, {
       sessionId,
