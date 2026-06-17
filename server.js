@@ -121,11 +121,13 @@ try {
   const { runExpiryJob }     = require('./modules/announcement').service;
   const { runCompetitionClosingJob } = require('./modules/public-portal').service;
   const { runRetryJob: runNotificationRetryJob } = require('./modules/notification').service;
+  const { runOverdueJob: runFinanceOverdueJob }  = require('./modules/finance').service;
   cron.schedule('0 2 * * 0', runRetentionJob);          // Every Sunday at 02:00
   cron.schedule('0 3 * * *', runAntiCheatJob);          // Nightly at 03:00
   cron.schedule('0 1 * * *', runExpiryJob);             // Nightly at 01:00
   cron.schedule('5 0 1 * *', runCompetitionClosingJob); // 1st of month at 00:05
   cron.schedule('*/10 * * * *', runNotificationRetryJob); // Every 10 min — flush external sends
+  cron.schedule('0 6 * * *', runFinanceOverdueJob);       // Nightly at 06:00 — overdue fees + reminders
 } catch {
   console.warn('⚠️  node-cron not available — cron jobs disabled.');
 }
