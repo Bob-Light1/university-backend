@@ -17,7 +17,28 @@ const config = {
     apiKey: process.env.SENDGRID_API_KEY,
     from: process.env.EMAIL_FROM,
     fromName: process.env.EMAIL_FROM_NAME
-  }
+  },
+  // ── Socle notifications ─────────────────────────────────────────────────────
+  // Chaque canal est INERTE tant que sa config est absente : le module ne fait
+  // aucun appel externe (dev / CI / tests passent sans SMTP ni WhatsApp).
+  notification: {
+    // Transport SMTP (canal email). Réutilise EMAIL_FROM / EMAIL_FROM_NAME ci-dessus.
+    smtp: {
+      host:     process.env.SMTP_HOST,
+      port:     parseInt(process.env.SMTP_PORT, 10) || 587,
+      secure:   process.env.SMTP_SECURE === 'true',
+      user:     process.env.SMTP_USER,
+      password: process.env.SMTP_PASSWORD,
+    },
+    // WhatsApp Cloud API (Meta) — appelé en HTTPS natif (fetch), aucun SDK requis.
+    whatsapp: {
+      token:         process.env.WHATSAPP_TOKEN,
+      phoneNumberId: process.env.WHATSAPP_PHONE_ID,
+      apiVersion:    process.env.WHATSAPP_API_VERSION || 'v21.0',
+    },
+    // Tentatives de livraison avant abandon (canaux externes uniquement).
+    maxAttempts: parseInt(process.env.NOTIFICATION_MAX_ATTEMPTS, 10) || 3,
+  },
 };
 
 module.exports = config;

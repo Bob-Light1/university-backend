@@ -15,8 +15,8 @@
 const MODULES = [
   'academic-print', 'admin', 'announcement', 'campus', 'class', 'course',
   'department', 'document', 'exam', 'finance', 'gaet', 'level', 'mentor',
-  'parent', 'partner', 'public-portal', 'result', 'settings', 'staff',
-  'student', 'subject', 'teacher',
+  'notification', 'parent', 'partner', 'public-portal', 'result', 'settings',
+  'staff', 'student', 'subject', 'teacher',
 ];
 
 describe('Forme de façade { routes, service } pour chaque module', () => {
@@ -45,6 +45,7 @@ describe('API inter-modules — fonctions de service attendues', () => {
     ['exam',    ['getUpcomingExamsForStudent', 'listCampusExaminations', 'countPendingGrading']],
     ['document', ['runRetentionJob', 'generateQrCodeDataUrl', 'listPublishedForCampus']],
     ['parent',  ['removeChildFromAllParents']],
+    ['notification', ['notify', 'runRetryJob', 'getInbox', 'getUnreadCount', 'markRead', 'markAllRead']],
   ];
 
   describe.each(CONTRACTS)('modules/%s.service', (name, fns) => {

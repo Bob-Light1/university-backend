@@ -211,6 +211,7 @@ const staffRoutes             = require('./modules/staff').routes; // /api/staff
 const announcementRouter      = require('./modules/announcement').routes;
 const gaetRouter              = require('./modules/gaet').routes;
 const settingsRouter          = require('./modules/settings').routes;
+const notificationRouter      = require('./modules/notification').routes;
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -232,6 +233,7 @@ app.use('/api',                staffRoutes); // → /api/staff/... + /api/staff-
 app.use('/api/announcements',  announcementRouter);
 app.use('/api/gaet',          gaetRouter);
 app.use('/api/settings',      settingsRouter);
+app.use('/api/notifications', notificationRouter);
 
 // ========================================
 // 404 HANDLER
