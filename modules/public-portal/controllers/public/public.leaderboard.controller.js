@@ -14,8 +14,7 @@
  * Aucune donnée personnelle (email, téléphone, IP) n'est exposée.
  */
 
-const mongoose     = require('mongoose');
-const QuizSession  = require('../../models/quiz.session.model');
+const repo = require('../../public-portal.repository');
 // Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
@@ -62,11 +61,7 @@ const getLeaderboard = asyncHandler(async (req, res) => {
 
   const limit = scope === 'national' ? 20 : 50;
 
-  const entries = await QuizSession.find(filter)
-    .sort({ score: -1, completedAt: 1 })
-    .limit(limit)
-    .select('displayName city country score category period completedAt')
-    .lean();
+  const entries = await repo.findLeaderboardEntries(filter, limit);
 
   const ranked = entries.map((entry, idx) => ({
     rank:        idx + 1,

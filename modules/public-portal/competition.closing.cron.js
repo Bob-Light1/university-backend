@@ -21,8 +21,7 @@
  *    await closeCompetition(competitionId);
  */
 
-const CompetitionPrize = require('./models/competition.prize.model');
-const QuizSession      = require('./models/quiz.session.model');
+const repo = require('./public-portal.repository');
 const { notifyWinners } = require('./notification.service');
 
 // Nombre de gagnants retenus par compétition (top N — couvre 1er, 2e-3e, top 10 de la spec)
@@ -46,7 +45,7 @@ function currentPeriod() {
  * @returns {Promise<{ winners: number }>}
  */
 const closeCompetition = async (competitionId) => {
-  const competition = await CompetitionPrize.findById(competitionId);
+  const competition = await repo.findCompetitionByIdForWrite(competitionId);
   if (!competition) {
     console.warn(`[CompetitionClosing] Competition ${competitionId} not found.`);
     return { winners: 0 };
@@ -56,15 +55,10 @@ const closeCompetition = async (competitionId) => {
   }
 
   // Meilleures sessions de la période pour ce campus — une session par token (déjà unique)
-  const topSessions = await QuizSession.find({
-    schoolCampus: competition.schoolCampus,
-    period:       competition.period,
-    completedAt:  { $ne: null },
-  })
-    .sort({ score: -1, completedAt: 1 }) // meilleur score, puis le plus rapide à finir
-    .limit(TOP_N)
-    .select('_id lead displayName score')
-    .lean();
+  const topSessions = await repo.findTopQuizSessions(
+    { schoolCampus: competition.schoolCampus, period: competition.period },
+    TOP_N,
+  );
 
   competition.winners = topSessions.map((s, idx) => ({
     rank:        idx + 1,
@@ -76,7 +70,7 @@ const closeCompetition = async (competitionId) => {
   }));
   competition.isActive = false;
 
-  await competition.save();
+  await repo.saveCompetitionDoc(competition);
 
   const brandName = process.env.BRAND_NAME || process.env.NEXT_PUBLIC_BRAND_NAME || 'AcadERP';
   const { notified } = await notifyWinners(competition, brandName);
@@ -96,12 +90,7 @@ const runCompetitionClosingJob = async () => {
   const period = currentPeriod();
 
   // Actives ET d'une période strictement antérieure à la période courante
-  const due = await CompetitionPrize.find({
-    isActive: true,
-    period:   { $lt: period },
-  })
-    .select('_id')
-    .lean();
+  const due = await repo.findActiveCompetitionsBeforePeriod(period);
 
   let totalWinners = 0;
   for (const c of due) {

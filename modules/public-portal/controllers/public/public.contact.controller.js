@@ -10,7 +10,7 @@
  * Creates a ContactMessage document. Rate-limited to 5 req/h/IP via the caller.
  */
 
-const ContactMessage = require('../../models/contact.message.model');
+const repo = require('../../public-portal.repository');
 // Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
@@ -60,7 +60,7 @@ const submitContact = asyncHandler(async (req, res) => {
   const validSubjects = ['registration', 'partnership', 'other'];
   const resolvedSubject = validSubjects.includes(subject) ? subject : 'other';
 
-  const doc = await ContactMessage.create({
+  const doc = await repo.createContactMessage({
     schoolCampus:    campusId,
     name:            name.trim(),
     email:           normalizedEmail,

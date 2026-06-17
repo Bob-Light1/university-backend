@@ -34,13 +34,13 @@ const resolveCampusId = (user, body) =>
   GLOBAL_ROLES.includes(user.role) ? body.campusId : user.campusId;
 
 /**
- * @param {import('mongoose').Model} Model
+ * @param {object} repo            Content-repo slice liée au model (public-portal.repository → contentRepo(name)).
  * @param {object} opts
  * @param {string}   opts.label        Human label for messages (e.g. 'Testimonial').
  * @param {string[]} opts.allowed      Body fields accepted on create/update.
  * @param {string[]} [opts.searchKeys] Document paths searched by ?search= (regex).
  */
-function makeContentController(Model, { label, allowed, searchKeys = [] }) {
+function makeContentController(repo, { label, allowed, searchKeys = [] }) {
   // ─── CREATE ────────────────────────────────────────────────────────────────
   const create = async (req, res) => {
     try {
@@ -53,7 +53,7 @@ function makeContentController(Model, { label, allowed, searchKeys = [] }) {
         if (req.body[key] !== undefined) doc[key] = req.body[key];
       }
 
-      const created = await Model.create(doc);
+      const created = await repo.create(doc);
       return sendCreated(res, `${label} created.`, created);
     } catch (err) {
       if (err.name === 'ValidationError') {
@@ -83,10 +83,7 @@ function makeContentController(Model, { label, allowed, searchKeys = [] }) {
         filter.$or = searchKeys.map((k) => ({ [k]: rx }));
       }
 
-      const [data, total] = await Promise.all([
-        Model.find(filter).sort({ order: 1, createdAt: -1 }).skip(skip).limit(safeLimit).lean(),
-        Model.countDocuments(filter),
-      ]);
+      const { data, total } = await repo.paginate(filter, { skip, limit: safeLimit });
 
       return sendPaginated(res, 200, `${label}s retrieved.`, data, {
         total, page: safePage, limit: safeLimit,
@@ -101,7 +98,7 @@ function makeContentController(Model, { label, allowed, searchKeys = [] }) {
   const getOne = async (req, res) => {
     try {
       if (!isValidObjectId(req.params.id)) return sendError(res, 400, `Invalid ${label} ID format.`);
-      const doc = await Model.findOne({ _id: req.params.id, ...buildCampusFilter(req.user) }).lean();
+      const doc = await repo.findOneLean({ _id: req.params.id, ...buildCampusFilter(req.user) });
       if (!doc) return sendNotFound(res, label);
       return sendSuccess(res, 200, `${label} retrieved.`, doc);
     } catch (err) {
@@ -114,14 +111,14 @@ function makeContentController(Model, { label, allowed, searchKeys = [] }) {
   const update = async (req, res) => {
     try {
       if (!isValidObjectId(req.params.id)) return sendError(res, 400, `Invalid ${label} ID format.`);
-      const doc = await Model.findOne({ _id: req.params.id, ...buildCampusFilter(req.user) });
+      const doc = await repo.findOneForWrite({ _id: req.params.id, ...buildCampusFilter(req.user) });
       if (!doc) return sendNotFound(res, label);
 
       for (const key of allowed) {
         if (req.body[key] !== undefined) doc[key] = req.body[key];
       }
 
-      await doc.save();
+      await repo.save(doc);
       return sendSuccess(res, 200, `${label} updated.`, doc);
     } catch (err) {
       if (err.name === 'ValidationError') {
@@ -137,11 +134,11 @@ function makeContentController(Model, { label, allowed, searchKeys = [] }) {
   const togglePublish = async (req, res) => {
     try {
       if (!isValidObjectId(req.params.id)) return sendError(res, 400, `Invalid ${label} ID format.`);
-      const doc = await Model.findOne({ _id: req.params.id, ...buildCampusFilter(req.user) });
+      const doc = await repo.findOneForWrite({ _id: req.params.id, ...buildCampusFilter(req.user) });
       if (!doc) return sendNotFound(res, label);
 
       doc.isPublished = typeof req.body.isPublished === 'boolean' ? req.body.isPublished : !doc.isPublished;
-      await doc.save();
+      await repo.save(doc);
 
       return sendSuccess(res, 200, `${label} ${doc.isPublished ? 'published' : 'unpublished'}.`, doc);
     } catch (err) {
@@ -154,7 +151,7 @@ function makeContentController(Model, { label, allowed, searchKeys = [] }) {
   const remove = async (req, res) => {
     try {
       if (!isValidObjectId(req.params.id)) return sendError(res, 400, `Invalid ${label} ID format.`);
-      const doc = await Model.findOneAndDelete({ _id: req.params.id, ...buildCampusFilter(req.user) });
+      const doc = await repo.findOneAndDelete({ _id: req.params.id, ...buildCampusFilter(req.user) });
       if (!doc) return sendNotFound(res, label);
       return sendSuccess(res, 200, `${label} deleted.`);
     } catch (err) {

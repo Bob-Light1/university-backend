@@ -18,6 +18,8 @@
  *   AT_SENDER_ID         — Africa's Talking shortcode/sender ID (optional)
  */
 
+const repo = require('./public-portal.repository');
+
 // ── Lazy-load integrations (no crash when packages are absent) ────────────────
 
 let Resend = null;
@@ -207,7 +209,7 @@ async function notifyWinners(competition, brandName = 'AcadERP') {
   }
 
   if (notified > 0) {
-    await competition.save();
+    await repo.saveCompetitionDoc(competition);
   }
 
   return { notified, skipped };

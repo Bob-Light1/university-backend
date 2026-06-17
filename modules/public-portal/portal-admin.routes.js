@@ -21,9 +21,7 @@ const { makeContentController } = require('./controllers/portal-admin/portal-adm
 const competitionCtrl          = require('./controllers/portal-admin/competition.admin.controller');
 const applicationCtrl          = require('./controllers/portal-admin/partner.application.admin.controller');
 
-const Testimonial   = require('./models/testimonial.model');
-const FaqEntry       = require('./models/faq.entry.model');
-const CoursePreview  = require('./models/course.preview.model');
+const repo = require('./public-portal.repository');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 
@@ -31,19 +29,19 @@ const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 router.use(authenticate, authorize(MGMT_ROLES));
 
 // ─── Generic content resources (testimonials, faq, course previews) ────────────
-const testimonialsCtrl = makeContentController(Testimonial, {
+const testimonialsCtrl = makeContentController(repo.contentRepo('Testimonial'), {
   label:      'Testimonial',
   allowed:    ['firstName', 'city', 'graduationYear', 'program', 'quote', 'photoUrl', 'employer', 'isPublished', 'order'],
   searchKeys: ['firstName', 'employer', 'program'],
 });
 
-const faqCtrl = makeContentController(FaqEntry, {
+const faqCtrl = makeContentController(repo.contentRepo('FaqEntry'), {
   label:      'FAQ',
   allowed:    ['question', 'answer', 'category', 'order', 'isPublished'],
   searchKeys: ['question.fr', 'question.en'],
 });
 
-const coursesCtrl = makeContentController(CoursePreview, {
+const coursesCtrl = makeContentController(repo.contentRepo('CoursePreview'), {
   label:      'Course preview',
   allowed:    ['program', 'title', 'content', 'videoUrl', 'order', 'isPublished'],
   searchKeys: ['program', 'title.fr'],

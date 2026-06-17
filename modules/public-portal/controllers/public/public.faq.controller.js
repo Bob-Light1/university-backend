@@ -11,7 +11,7 @@
 
 // Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
-const FaqEntry = require('../../models/faq.entry.model');
+const repo = require('../../public-portal.repository');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getFaq = asyncHandler(async (req, res) => {
@@ -23,13 +23,7 @@ const getFaq = asyncHandler(async (req, res) => {
 
   if (!campus) return sendNotFound(res, 'Campus');
 
-  const entries = await FaqEntry.find({
-    schoolCampus: campus._id,
-    isPublished:  true,
-  })
-    .sort({ order: 1, createdAt: -1 })
-    .select('question answer category')
-    .lean();
+  const entries = await repo.listPublicFaq({ schoolCampus: campus._id, isPublished: true });
 
   return sendSuccess(res, 200, 'FAQ retrieved.', { entries });
 });

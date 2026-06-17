@@ -10,7 +10,7 @@
  * closeCompetition), which freezes winners from the period's QuizSessions.
  */
 
-const CompetitionPrize = require('../../models/competition.prize.model');
+const repo = require('../../public-portal.repository');
 const { closeCompetition } = require('../../competition.closing.cron');
 const {
   buildCampusFilter,
@@ -41,7 +41,7 @@ const create = async (req, res) => {
       if (req.body[key] !== undefined) doc[key] = req.body[key];
     }
 
-    const created = await CompetitionPrize.create(doc);
+    const created = await repo.createCompetition(doc);
     return sendCreated(res, 'Competition created.', created);
   } catch (err) {
     if (err.name === 'ValidationError') {
@@ -69,10 +69,7 @@ const list = async (req, res) => {
     if (active === 'true')  filter.isActive = true;
     if (active === 'false') filter.isActive = false;
 
-    const [data, total] = await Promise.all([
-      CompetitionPrize.find(filter).sort({ period: -1 }).skip(skip).limit(safeLimit).lean(),
-      CompetitionPrize.countDocuments(filter),
-    ]);
+    const { data, total } = await repo.paginateCompetitions(filter, { skip, limit: safeLimit });
 
     return sendPaginated(res, 200, 'Competitions retrieved.', data, {
       total, page: safePage, limit: safeLimit,
@@ -87,7 +84,7 @@ const list = async (req, res) => {
 const getOne = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid competition ID format.');
-    const doc = await CompetitionPrize.findOne({ _id: req.params.id, ...buildCampusFilter(req.user) }).lean();
+    const doc = await repo.findCompetitionLean({ _id: req.params.id, ...buildCampusFilter(req.user) });
     if (!doc) return sendNotFound(res, 'Competition');
     return sendSuccess(res, 200, 'Competition retrieved.', doc);
   } catch (err) {
@@ -100,14 +97,14 @@ const getOne = async (req, res) => {
 const update = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid competition ID format.');
-    const doc = await CompetitionPrize.findOne({ _id: req.params.id, ...buildCampusFilter(req.user) });
+    const doc = await repo.findCompetitionForWrite({ _id: req.params.id, ...buildCampusFilter(req.user) });
     if (!doc) return sendNotFound(res, 'Competition');
 
     for (const key of EDITABLE) {
       if (req.body[key] !== undefined) doc[key] = req.body[key];
     }
 
-    await doc.save();
+    await repo.saveCompetitionDoc(doc);
     return sendSuccess(res, 200, 'Competition updated.', doc);
   } catch (err) {
     if (err.name === 'ValidationError') {
@@ -123,11 +120,11 @@ const update = async (req, res) => {
 const toggleActive = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid competition ID format.');
-    const doc = await CompetitionPrize.findOne({ _id: req.params.id, ...buildCampusFilter(req.user) });
+    const doc = await repo.findCompetitionForWrite({ _id: req.params.id, ...buildCampusFilter(req.user) });
     if (!doc) return sendNotFound(res, 'Competition');
 
     doc.isActive = typeof req.body.isActive === 'boolean' ? req.body.isActive : !doc.isActive;
-    await doc.save();
+    await repo.saveCompetitionDoc(doc);
 
     return sendSuccess(res, 200, `Competition ${doc.isActive ? 'activated' : 'deactivated'}.`, doc);
   } catch (err) {
@@ -142,12 +139,12 @@ const closeNow = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid competition ID format.');
     // Campus guard: ensure the competition belongs to the caller's scope first.
-    const doc = await CompetitionPrize.findOne({ _id: req.params.id, ...buildCampusFilter(req.user) }).select('_id isActive');
+    const doc = await repo.findCompetitionScopedStatus({ _id: req.params.id, ...buildCampusFilter(req.user) });
     if (!doc) return sendNotFound(res, 'Competition');
     if (!doc.isActive) return sendError(res, 400, 'Competition is already closed.');
 
     await closeCompetition(doc._id);
-    const updated = await CompetitionPrize.findById(doc._id).lean();
+    const updated = await repo.findCompetitionByIdLean(doc._id);
     return sendSuccess(res, 200, 'Competition closed and winners frozen.', updated);
   } catch (err) {
     console.error('closeNow competition error:', err);
@@ -159,7 +156,7 @@ const closeNow = async (req, res) => {
 const remove = async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid competition ID format.');
-    const doc = await CompetitionPrize.findOneAndDelete({ _id: req.params.id, ...buildCampusFilter(req.user) });
+    const doc = await repo.deleteCompetition({ _id: req.params.id, ...buildCampusFilter(req.user) });
     if (!doc) return sendNotFound(res, 'Competition');
     return sendSuccess(res, 200, 'Competition deleted.');
   } catch (err) {

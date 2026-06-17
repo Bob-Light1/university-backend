@@ -13,7 +13,7 @@
 
 // Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
-const CompetitionPrize = require('../../models/competition.prize.model');
+const repo = require('../../public-portal.repository');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
 const getCompetitionPrizes = asyncHandler(async (req, res) => {
@@ -26,13 +26,10 @@ const getCompetitionPrizes = asyncHandler(async (req, res) => {
   if (!campus) return sendNotFound(res, 'Campus');
 
   // Compétition active la plus récente pour ce campus
-  const competition = await CompetitionPrize.findOne({
+  const competition = await repo.findActivePublicCompetition({
     schoolCampus: campus._id,
     isActive:     true,
-  })
-    .sort({ period: -1 })
-    .select('period prizes closingDate winners')
-    .lean();
+  });
 
   if (!competition) {
     // Pas de compétition en cours — réponse vide mais valide (le portail masque la section)

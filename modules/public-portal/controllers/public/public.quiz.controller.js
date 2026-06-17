@@ -17,9 +17,8 @@
  * period        : 'YYYY-MM' calculé depuis la date de soumission.
  */
 
-const mongoose    = require('mongoose');
-const QuizQuestion = require('../../models/quiz.question.model');
-const QuizSession  = require('../../models/quiz.session.model');
+const mongoose    = require('mongoose'); // conservé pour le cast/validation d'ObjectId
+const repo        = require('../../public-portal.repository');
 // Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
@@ -48,11 +47,7 @@ const getQuizQuestions = asyncHandler(async (req, res) => {
   // Agrégation $sample pour randomiser. L'agrégation NE respecte PAS select:false,
   // donc on passe par une liste blanche explicite : correctIndex et tout champ
   // interne (schoolCampus, isPublished, timestamps) restent côté ERP.
-  const questions = await QuizQuestion.aggregate([
-    { $match: filter },
-    { $sample: { size: limitNum } },
-    { $project: { _id: 1, text: 1, options: 1, category: 1, difficulty: 1, lang: 1 } },
-  ]);
+  const questions = await repo.sampleQuizQuestions(filter, limitNum);
 
   return sendSuccess(res, 200, 'Quiz questions retrieved.', {
     campusSlug: campusSlug.toLowerCase().trim(),
@@ -87,7 +82,7 @@ const submitQuiz = asyncHandler(async (req, res) => {
   if (!campus) return sendNotFound(res, 'Campus');
 
   // Vérifier qu'une session avec ce token n'existe pas déjà (évite double soumission)
-  const existingSession = await QuizSession.findOne({ sessionToken }).lean();
+  const existingSession = await repo.findQuizSessionByToken(sessionToken);
   if (existingSession) {
     return sendError(res, 409, 'This quiz session has already been submitted.');
   }
@@ -107,13 +102,11 @@ const submitQuiz = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'No valid questionId values provided.');
   }
 
-  const questions = await QuizQuestion.find({
+  const questions = await repo.findPublishedQuestionsWithAnswers({
     _id:          { $in: questionIds.map((id) => new mongoose.Types.ObjectId(id)) },
     schoolCampus: campus._id,
     isPublished:  true,
-  })
-    .select('+correctIndex')
-    .lean();
+  });
 
   if (questions.length === 0) {
     return sendError(res, 404, 'No valid published questions found for these IDs.');
@@ -134,7 +127,7 @@ const submitQuiz = asyncHandler(async (req, res) => {
   const now    = new Date();
   const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-  const session = new QuizSession({
+  const session = await repo.createQuizSession({
     schoolCampus:   campus._id,
     partnerCode:    partnerCode?.toUpperCase().trim() || null,
     sessionToken:   sessionToken.trim(),
@@ -149,8 +142,6 @@ const submitQuiz = asyncHandler(async (req, res) => {
     ipAddressHash:  req.ipHash,
     period,
   });
-
-  await session.save();
 
   // For placement tests, map score to a campus program recommendation.
   let recommendedProgram = null;
