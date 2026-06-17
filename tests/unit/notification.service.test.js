@@ -151,6 +151,13 @@ describe('templates', () => {
     expect(templates.render('exam.graded', 'whatsapp', {}, 'en').body).toMatch(/exam/i);
   });
 
+  test('fraud.alert interpole le compteur et se localise (fr)', () => {
+    expect(templates.has('fraud.alert')).toBe(true);
+    expect(templates.render('fraud.alert', 'inapp', { count: 7 }, 'fr').body).toContain('7');
+    expect(templates.render('fraud.alert', 'inapp', { count: 7 }, 'fr').subject).toMatch(/suspecte/i);
+    expect(templates.render('fraud.alert', 'whatsapp', { count: 7 }, 'en').body).toMatch(/fraud/i);
+  });
+
   test('account.welcome interpole le nom et se localise (fr)', () => {
     expect(templates.has('account.welcome')).toBe(true);
     expect(templates.render('account.welcome', 'inapp', { name: 'Alice' }, 'fr').body).toMatch(/Bienvenue Alice/);

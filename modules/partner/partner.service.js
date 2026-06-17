@@ -109,6 +109,19 @@ const upsertPreRegistrationLead = async ({
     partnerRepo.touchActivity(partner._id).catch(() => {});
   }
 
+  // Alerte anti-fraude au gestionnaire du campus (compte Campus) si rafale d'IP.
+  // In-app uniquement (inbox du campus) ; fire-and-forget, n'impacte jamais la
+  // pré-inscription du lead. Le compte Campus porte email/manager_phone : un push
+  // email pourra s'ajouter plus tard via lookup du contact campus.
+  if (fraudFlags.includes('IP_BURST')) {
+    require('../notification').service.notify({
+      recipient: { id: campusId, model: 'Campus', campusId },
+      channels: ['inapp'],
+      template: 'fraud.alert',
+      data:     { count: burstCount },
+    }).catch((err) => console.error('[notify] fraud.alert failed:', err.message));
+  }
+
   return { leadId: lead._id, status: lead.status, created: true };
 };
 

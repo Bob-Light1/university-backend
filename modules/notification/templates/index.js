@@ -109,6 +109,29 @@ const templates = {
     }),
   },
 
+  'fraud.alert': {
+    inapp: (d, l) => ({
+      subject: pick({ en: 'Suspicious activity detected', fr: 'Activité suspecte détectée' }, l),
+      body: interpolate(pick({
+        en: 'A burst of {count} pre-registrations from the same source was flagged. Please review the recent leads.',
+        fr: 'Une rafale de {count} pré-inscriptions depuis la même source a été signalée. Vérifiez les leads récents.',
+      }, l), d),
+    }),
+    email: (d, l) => ({
+      subject: pick({ en: 'Anti-fraud alert: suspicious pre-registrations', fr: 'Alerte anti-fraude : pré-inscriptions suspectes' }, l),
+      body: interpolate(pick({
+        en: 'A burst of {count} pre-registrations from the same source was flagged on your campus. Please review the recent leads in your dashboard.',
+        fr: 'Une rafale de {count} pré-inscriptions depuis la même source a été signalée sur votre campus. Vérifiez les leads récents dans votre tableau de bord.',
+      }, l), d),
+    }),
+    whatsapp: (d, l) => ({
+      body: interpolate(pick({
+        en: 'Anti-fraud alert: {count} suspicious pre-registrations flagged. Check your dashboard.',
+        fr: 'Alerte anti-fraude : {count} pré-inscriptions suspectes signalées. Consultez votre tableau de bord.',
+      }, l), d),
+    }),
+  },
+
   'payment.reminder': {
     inapp: (d, l) => ({
       subject: pick({ en: 'Payment due', fr: 'Paiement à venir' }, l),
