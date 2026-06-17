@@ -161,11 +161,20 @@ const studentConfig = {
    * After create hook - Post-creation actions
    */
    afterCreate: async (student) => {
-    // Could trigger additional actions:
-    // - Send welcome email
-    // - Create student portal account
-    // - Notify department head
-    // - Add to default student groups
+    // Notification de bienvenue : in-app + email (ce dernier inerte → skipped
+    // tant que le SMTP n'est pas configuré). Fire-and-forget : n'impacte jamais
+    // la création du compte (le contrôleur générique l'exécute déjà hors transaction).
+    require('../notification').service.notify({
+      recipient: {
+        id:       student._id,
+        model:    'Student',
+        email:    student.email,
+        campusId: student.schoolCampus,
+      },
+      channels: ['inapp', 'email'],
+      template: 'account.welcome',
+      data:     { name: student.firstName },
+    }).catch((err) => console.error('[notify] account.welcome (student) failed:', err.message));
   },
 
   /**

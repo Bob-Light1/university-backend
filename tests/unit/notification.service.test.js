@@ -151,6 +151,12 @@ describe('templates', () => {
     expect(templates.render('exam.graded', 'whatsapp', {}, 'en').body).toMatch(/exam/i);
   });
 
+  test('account.welcome interpole le nom et se localise (fr)', () => {
+    expect(templates.has('account.welcome')).toBe(true);
+    expect(templates.render('account.welcome', 'inapp', { name: 'Alice' }, 'fr').body).toMatch(/Bienvenue Alice/);
+    expect(templates.render('account.welcome', 'email', { name: 'Bob' }, 'en').body).toMatch(/Bob/);
+  });
+
   test('interpolation et repli en par défaut', () => {
     const out = templates.render('payment.reminder', 'inapp', { amount: 500, currency: 'XAF', dueDate: '2026-07-01' }, 'xx');
     expect(out.body).toContain('500');

@@ -240,6 +240,20 @@ const teacherConfig = {
     const classIds   = (teacher.classes || []).map((id) => id.toString());
     const managerOf  = fields.classManagerOf || null;
 
+    // Notification de bienvenue (in-app + email inerte sans SMTP). Indépendante
+    // de la synchro de classes ci-dessous : fire-and-forget, n'échoue jamais.
+    require('../notification').service.notify({
+      recipient: {
+        id:       teacher._id,
+        model:    'Teacher',
+        email:    teacher.email,
+        campusId: teacher.schoolCampus,
+      },
+      channels: ['inapp', 'email'],
+      template: 'account.welcome',
+      data:     { name: teacher.firstName },
+    }).catch((err) => console.error('[notify] account.welcome (teacher) failed:', err.message));
+
     try {
       // 1. Add teacher to Class.teachers[] for all assigned classes
       await _syncTeacherInClasses(teacherId, classIds, [], campusId);
