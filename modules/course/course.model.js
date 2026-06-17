@@ -164,7 +164,7 @@ const CourseSchema = new mongoose.Schema(
       unique:    true,
       uppercase: true,
       trim:      true,
-      match:     [/^[A-Z0-9\-]{2,30}$/, 'Course code must be uppercase alphanumeric with dashes (e.g. CS-101)'],
+      match:     [/^[A-Z0-9-]{2,30}$/, 'Course code must be uppercase alphanumeric with dashes (e.g. CS-101)'],
       index:     true,
     },
     slug: {

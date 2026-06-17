@@ -170,10 +170,8 @@ const ALLOWED_IMPORT_TYPES = new Set([
 
 /** Accept JPEG / PNG / WEBP only — GIF excluded (not useful for school management). */
 const imageFilter = (req, file, cb) => {
-  if (IS_PRODUCTION) {
-    // In dev, log to assist debugging; in prod keep logs clean
-    /* eslint-disable-next-line no-console */
-  } else {
+  // In dev, log to assist debugging; in prod keep logs clean
+  if (!IS_PRODUCTION) {
     console.log(`[Upload] imageFilter — ${file.fieldname} | ${file.mimetype} | ${file.originalname}`);
   }
 

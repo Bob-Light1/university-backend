@@ -100,7 +100,7 @@ const initSessionAttendance = asyncHandler(async (req, res) => {
   const dayStart = new Date(sessionDate); dayStart.setHours(0,  0,  0,   0);
   const dayEnd   = new Date(sessionDate); dayEnd.setHours(23, 59, 59, 999);
 
-  const arrivalTime = Boolean(isLate) ? computeArrivalTime(sessionStartTime, lateMinutes) : undefined;
+  const arrivalTime = isLate ? computeArrivalTime(sessionStartTime, lateMinutes) : undefined;
 
   // Check for existing record
   const existing = await teacherRepo.findTeacherAttendanceForWrite({

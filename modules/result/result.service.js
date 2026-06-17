@@ -109,10 +109,10 @@ const listStudentResultComments = async ({
     isDeleted:    false,
     // At least one comment field must exist
     $or: [
-      { teacherRemarks:      { $exists: true, $ne: null, $ne: '' } },
-      { classManagerRemarks: { $exists: true, $ne: null, $ne: '' } },
-      { strengths:           { $exists: true, $ne: null, $ne: '' } },
-      { improvements:        { $exists: true, $ne: null, $ne: '' } },
+      { teacherRemarks:      { $exists: true, $nin: [null, ''] } },
+      { classManagerRemarks: { $exists: true, $nin: [null, ''] } },
+      { strengths:           { $exists: true, $nin: [null, ''] } },
+      { improvements:        { $exists: true, $nin: [null, ''] } },
     ],
   };
   if (academicYear) filter.academicYear = academicYear;
