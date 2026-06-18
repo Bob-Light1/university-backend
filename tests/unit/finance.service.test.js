@@ -10,10 +10,17 @@ jest.mock('../../modules/finance/finance.repository');
 jest.mock('../../modules/notification', () => ({
   service: { notify: jest.fn().mockResolvedValue([]) },
 }));
+jest.mock('../../modules/student', () => ({
+  service: { getStudentContact: jest.fn().mockResolvedValue({ email: 'stud@example.test' }) },
+}));
 
 const repo = require('../../modules/finance/finance.repository');
 const { service: notification } = require('../../modules/notification');
 const finance = require('../../modules/finance/finance.service');
+
+// La notif de solde est fire-and-forget + résout d'abord le contact (await) :
+// on laisse vider la file de microtâches avant d'asserter l'appel à notify.
+const flush = () => new Promise((resolve) => setImmediate(resolve));
 
 // Fabrique un faux document Mongoose de dette (mutable + save/toObject).
 function fakeFeeDoc(over = {}) {
@@ -52,10 +59,11 @@ describe('createFee', () => {
 
     expect(repo.createFee).toHaveBeenCalled();
     expect(fee.balance).toBe(250);
+    await flush();
     expect(notification.notify).toHaveBeenCalledWith(expect.objectContaining({
       template: 'payment.reminder',
-      channels: ['inapp'],
-      recipient: expect.objectContaining({ id: 'stud-1', model: 'Student' }),
+      channels: ['inapp', 'email'],
+      recipient: expect.objectContaining({ id: 'stud-1', model: 'Student', email: 'stud@example.test' }),
       data: expect.objectContaining({ amount: 250, currency: 'XAF' }),
     }));
   });

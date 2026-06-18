@@ -29,6 +29,7 @@ const getCampusName             = (campusId) => campusRepo.getCampusName(campusI
 const getCampusForPdf           = (campusId) => campusRepo.getCampusForPdf(campusId);
 const getCampusStorageInfo      = (campusId) => campusRepo.getCampusStorageInfo(campusId);
 const getCampusDefaults         = (campusId) => campusRepo.getCampusDefaults(campusId);
+const getCampusNotificationContact = (campusId) => campusRepo.getCampusNotificationContact(campusId);
 const getCampusNumber           = (campusId, opts) => campusRepo.getCampusNumber(campusId, opts);
 const getCampusDocById          = (campusId) => campusRepo.getCampusDocById(campusId);
 const getCampusCommissionConfig = (campusId) => campusRepo.getCampusCommissionConfig(campusId);
@@ -43,6 +44,7 @@ module.exports = {
   getCampusForPdf,
   getCampusStorageInfo,
   getCampusDefaults,
+  getCampusNotificationContact,
   getCampusNumber,
   getCampusDocById,
   getCampusCommissionConfig,

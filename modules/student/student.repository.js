@@ -105,6 +105,12 @@ const getStudentNamesByIds = (studentIds, campusId) =>
     .select('firstName lastName matricule')
     .lean();
 
+/** Coordonnées de notification (email/téléphone) d'un lot d'étudiants. */
+const getStudentContactsByIds = (studentIds) =>
+  Student.find({ _id: { $in: studentIds } })
+    .select('email phone')
+    .lean();
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT — listings paginés (service inter-modules)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -666,6 +672,7 @@ module.exports = {
   listClassStudentsForCards,
   listClassStudentsForList,
   getStudentNamesByIds,
+  getStudentContactsByIds,
   // Student — listings paginés
   paginateStudentsForStaff,
   paginateStudentsForMentor,

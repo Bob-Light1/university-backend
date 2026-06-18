@@ -41,13 +41,20 @@ const notification = require('../../notification').service;
  * Fire-and-forget : un échec de notification ne doit jamais bloquer la
  * publication (même contrat que le calcul du risque de décrochage ci-dessous).
  */
-const notifyResultPublished = (studentId, campusId) =>
-  notification.notify({
-    recipient: { id: studentId, model: 'Student', campusId },
-    channels: ['inapp'],
-    template: 'result.published',
-    data: {},
-  }).catch((err) => console.error('[notify] result.published failed:', err.message));
+const notifyResultPublished = async (studentId, campusId) => {
+  try {
+    // Contact résolu via la façade student (le socle ne touche aucun model).
+    const contact = await require('../../student').service.getStudentContact(studentId);
+    await notification.notify({
+      recipient: { id: studentId, model: 'Student', campusId, email: contact?.email },
+      channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
+      template: 'result.published',
+      data: {},
+    });
+  } catch (err) {
+    console.error('[notify] result.published failed:', err.message);
+  }
+};
 
 const {
   asyncHandler,

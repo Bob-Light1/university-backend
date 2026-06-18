@@ -35,10 +35,10 @@ const notification = require('../../notification').service;
 
 // Notifie un étudiant que sa note d'examen est publiée (in-app, best-effort :
 // n'échoue jamais la publication — même contrat que l'émission result.published).
-const notifyExamGraded = (studentId, campusId) =>
+const notifyExamGraded = (studentId, campusId, email) =>
   notification.notify({
-    recipient: { id: studentId, model: 'Student', campusId },
-    channels: ['inapp'],
+    recipient: { id: studentId, model: 'Student', campusId, email },
+    channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
     template: 'exam.graded',
     data: {},
   }).catch((err) => console.error('[notify] exam.graded failed:', err.message));
@@ -355,8 +355,16 @@ const publishGrades = async (req, res) => {
 
     examAnalyticsWorker.emit('examAnalytics:compute', sessionId);
 
-    // Une notif in-app par étudiant dont la note vient d'être publiée.
-    recipients.forEach((g) => notifyExamGraded(g.student, g.schoolCampus));
+    // Une notif (in-app + email) par étudiant dont la note vient d'être publiée.
+    // Emails résolus en un seul appel via la façade student (best-effort).
+    let emailByStudent = new Map();
+    try {
+      const contacts = await require('../../student').service.getStudentContacts(recipients.map((g) => g.student));
+      emailByStudent = new Map(contacts.map((c) => [String(c._id), c.email]));
+    } catch (err) {
+      console.error('[notify] exam.graded contact lookup failed:', err.message);
+    }
+    recipients.forEach((g) => notifyExamGraded(g.student, g.schoolCampus, emailByStudent.get(String(g.student))));
 
     return sendSuccess(res, 200, `${result.modifiedCount} grade(s) published.`, {
       sessionId,

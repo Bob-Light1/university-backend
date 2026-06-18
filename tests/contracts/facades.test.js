@@ -32,11 +32,11 @@ describe('Forme de façade { routes, service } pour chaque module', () => {
 describe('API inter-modules — fonctions de service attendues', () => {
   // [module, [fonctions exposées et consommées ailleurs]]
   const CONTRACTS = [
-    ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses']],
+    ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusNotificationContact', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses']],
     ['class',   ['countClassesOnCampus', 'resolveClassesForSchedule', 'getClassCampusRef', 'findClassForBulk', 'addTeacherToClasses', 'setClassManager']],
     ['subject', ['countSubjectsOnCampus', 'listCampusSubjects', 'getSubjectCampusRef', 'resolveSubjectForSchedule']],
     ['teacher', ['validateTeacherBelongsToCampus', 'countTeachersOnCampus', 'resolveTeacherForSchedule', 'syncTeacherScheduleMirror', 'detectTeacherConflicts']],
-    ['student', ['validateStudentBelongsToCampus', 'countStudents', 'listStudentIds', 'resolveSessionParticipants', 'syncTeacherSchedule', 'summarizeStudentAttendance']],
+    ['student', ['validateStudentBelongsToCampus', 'countStudents', 'listStudentIds', 'resolveSessionParticipants', 'syncTeacherSchedule', 'summarizeStudentAttendance', 'getStudentContact', 'getStudentContacts']],
     ['result',  ['countPublishedResults', 'listCampusResults', 'getRecentResultsForStudent']],
     ['department', ['getDepartmentCampusRef', 'findDepartmentForBulk', 'listDepartmentsForCampus']],
     ['settings', ['getLoginPrefs', 'getPreferredLanguage']],

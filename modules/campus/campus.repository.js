@@ -81,6 +81,10 @@ const getCampusStorageInfo = (campusId) =>
 const getCampusDefaults = (campusId) =>
   Campus.findById(campusId).select('defaultLanguage defaultTimezone defaultGradeFormat').lean();
 
+/** Coordonnées de notification du compte campus (email/téléphone/langue). */
+const getCampusNotificationContact = (campusId) =>
+  Campus.findById(campusId).select('email manager_phone defaultLanguage').lean();
+
 /**
  * Numéro/préfixe du campus (génération de matricule student, en session de
  * transaction). `opts.session` propagé pour participer à la transaction appelante.
@@ -142,6 +146,7 @@ module.exports = {
   getCampusForPdf,
   getCampusStorageInfo,
   getCampusDefaults,
+  getCampusNotificationContact,
   getCampusNumber,
   getCampusDocById,
   getCampusCommissionConfig,

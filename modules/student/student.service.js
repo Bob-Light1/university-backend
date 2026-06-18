@@ -236,6 +236,24 @@ const listClassStudentsForList = (classId, campusId) =>
 const getStudentNamesByIds = (studentIds, campusId) =>
   studentRepo.getStudentNamesByIds(studentIds, campusId);
 
+/**
+ * Coordonnées de notification d'un lot d'étudiants (email/téléphone).
+ * Consommé par les émetteurs de notification (result/exam) pour activer le
+ * canal email sans qu'ils touchent le model Student.
+ * @returns {Promise<Array<{_id, email, phone}>>}
+ */
+const getStudentContacts = (studentIds) =>
+  studentRepo.getStudentContactsByIds(studentIds);
+
+/**
+ * Coordonnées d'un seul étudiant (commodité pour les émetteurs unitaires).
+ * @returns {Promise<{_id, email, phone}|null>}
+ */
+const getStudentContact = async (studentId) => {
+  const [contact] = await studentRepo.getStudentContactsByIds([studentId]);
+  return contact || null;
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT SCHEDULE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -388,6 +406,8 @@ module.exports = {
   listClassStudentsForCards,
   listClassStudentsForList,
   getStudentNamesByIds,
+  getStudentContacts,
+  getStudentContact,
 
   // StudentSchedule
   resolveSessionParticipants,

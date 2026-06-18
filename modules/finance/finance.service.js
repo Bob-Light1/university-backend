@@ -27,21 +27,25 @@ function countPendingIncomes(campusId) {
  * n'interroge pas le model Student (façade §3).
  * @param {Object} fee  dette (lean, avec virtuel `balance`)
  */
-function notifyBalanceDue(fee) {
+async function notifyBalanceDue(fee) {
   const balance = fee.balance ?? Math.max(0, (fee.amountDue || 0) - (fee.amountPaid || 0));
-  if (balance <= 0) return Promise.resolve();
-  return notification
-    .notify({
-      recipient: { id: fee.student, model: 'Student', campusId: fee.schoolCampus },
-      channels: ['inapp'],
+  if (balance <= 0) return;
+  try {
+    // Contact résolu via la façade student (finance ne touche pas le model Student).
+    const contact = await require('../student').service.getStudentContact(fee.student);
+    await notification.notify({
+      recipient: { id: fee.student, model: 'Student', campusId: fee.schoolCampus, email: contact?.email },
+      channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
       template: 'payment.reminder',
       data: {
         amount: balance,
         currency: fee.currency,
         dueDate: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 10) : '—',
       },
-    })
-    .catch((err) => console.error('[notify] payment.reminder failed:', err.message));
+    });
+  } catch (err) {
+    console.error('[notify] payment.reminder failed:', err.message);
+  }
 }
 
 /**
