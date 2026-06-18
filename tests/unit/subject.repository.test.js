@@ -11,7 +11,7 @@ jest.mock('../../modules/subject/subject.model', () => {
   let nextDoc = null;
   const makeQuery = () => {
     const q = {};
-    ['populate', 'select', 'sort', 'skip', 'limit'].forEach((m) => { q[m] = jest.fn(() => q); });
+    ['populate', 'select', 'sort', 'skip', 'limit', 'session'].forEach((m) => { q[m] = jest.fn(() => q); });
     q.lean = jest.fn(() => Promise.resolve(nextLean));
     q.then = (res, rej) => Promise.resolve(nextDoc).then(res, rej);
     return q;
@@ -123,5 +123,12 @@ describe('API inter-modules', () => {
     const out = await repo.resolveForSchedule(null, 'c1');
     expect(out).toBeNull();
     expect(Subject.findOne).not.toHaveBeenCalled();
+  });
+
+  test('getCampusRefsByIds : { _id:$in } + select schoolCampus (validation batch teacher)', async () => {
+    Subject.__setLean([{ _id: 's1', schoolCampus: 'c1' }, { _id: 's2', schoolCampus: 'c1' }]);
+    const out = await repo.getCampusRefsByIds(['s1', 's2'], { session: 'sx' });
+    expect(Subject.find).toHaveBeenCalledWith({ _id: { $in: ['s1', 's2'] } });
+    expect(out).toHaveLength(2);
   });
 });

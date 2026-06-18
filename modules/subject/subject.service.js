@@ -29,6 +29,8 @@ const listActiveSubjectsLinkedToCourse = (courseId) =>
 
 const getSubjectCampusRef = (subjectId) => subjectRepo.getCampusRef(subjectId);
 
+const getSubjectsCampusRefs = (subjectIds, opts) => subjectRepo.getCampusRefsByIds(subjectIds, opts);
+
 const resolveSubjectForSchedule = (subjectId, campusId) =>
   subjectRepo.resolveForSchedule(subjectId, campusId);
 
@@ -38,5 +40,6 @@ module.exports = {
   getLinkedCourseRefIds,
   listActiveSubjectsLinkedToCourse,
   getSubjectCampusRef,
+  getSubjectsCampusRefs,
   resolveSubjectForSchedule,
 };

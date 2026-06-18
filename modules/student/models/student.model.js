@@ -253,42 +253,16 @@ studentSchema.pre('save', function () {
   }
 });
 
-// **PRE-VALIDATE MIDDLEWARE**
-// Ensure student's class belongs to the same campus
-studentSchema.pre('validate', async function () {
-  if (this.isNew || this.isModified('studentClass') || this.isModified('schoolCampus')) {
-    if (this.studentClass && this.schoolCampus) {
-      try {
-        const Class = mongoose.model('Class');
-        const studentClassDoc = await Class.findById(this.studentClass)
-          .select('schoolCampus')
-          .lean();
-        
-        if (studentClassDoc) {
-          if(studentClassDoc.schoolCampus.toString() !== this.schoolCampus.toString()){
-            this.invalidate(
-              'studentClass',
-              'The selected class does not belong to this campus.',
-              this.studentClass
-            );
-          }
-        }else {
-          this.invalidate(
-            'studentClass',
-            'Selected class does not exist.',
-            this.studentClass
-          );
-        }
-      } catch (error) {
-        this.invalidate(
-          'studentClass',
-          'Error during class verification',
-          this.studentClass
-        );
-      }
-    }
-  }
-});
+// NOTE — La règle « la classe doit appartenir au même campus » ne vit PLUS dans
+// un hook de schéma. Un model ne doit pas lire une autre collection
+// (`mongoose.model('Class')`) depuis un hook : logique métier cross-entité
+// implicite, non testable, et qui ne s'exécute que sur les chemins `.save()`
+// (jamais sur `findByIdAndUpdate`/`updateMany`). La règle est désormais portée
+// par la couche orchestration du chemin d'écriture, via la façade du module
+// propriétaire (`class`) :
+//   - création : student.config.js → customValidation (getClassCampusRefForValidation)
+//   - bulk change-class : generic-bulk.controller.js (vérif campus inline)
+// (Patron de référence pour la sortie des hooks async cross-entité des autres models.)
 
 // **METHODS**
 // Check if student can login (active status)

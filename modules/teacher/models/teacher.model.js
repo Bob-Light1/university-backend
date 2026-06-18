@@ -308,53 +308,13 @@ teacherSchema.pre('save', function () {
   }
 });
 
-// **PRE-VALIDATE MIDDLEWARE**
-// Ensure teacher's classes and subjects belong to the same campus
-teacherSchema.pre('validate', async function () {
-  if (this.isNew || this.isModified('classes') || this.isModified('schoolCampus')) {
-    if (this.classes && this.classes.length > 0 && this.schoolCampus) {
-      try {
-        const Class = mongoose.model('Class');
-        
-        // Check all classes belong to the same campus
-        const classDocs = await Class.find(
-          { _id: { $in: this.classes } },
-          'schoolCampus'
-        ).lean();
-
-        if (classDocs.length !== this.classes.length) {
-          throw new Error('One or more assigned classes does not exist !');
-        }
-     
-        const wrongCampus = classDocs.some(
-          c => c.schoolCampus.toString() !== this.schoolCampus.toString()
-        );
-
-        if (wrongCampus) {
-          throw new Error('All assigned classes must belong to the same campus as the teacher');
-        }
-
-        //Subjects verification
-        if ((this.isModified('subjects') || this.isModified('schoolCampus')) && this.subjects?.length > 0) {
-            const Subject = mongoose.model('Subject');
-            const subjectDocs = await Subject.find(
-              { _id: { $in: this.subjects } },
-            ).lean();
-
-            const wrongSubjectCampus = subjectDocs.some(
-              s => s.schoolCampus && s.schoolCampus.toString() !== this.schoolCampus.toString()
-            );
-
-            if (wrongSubjectCampus) {
-              throw new Error('All assigned subjects must belong to the same campus as the teacher.');
-            }
-        }
-      } catch (error) {
-        throw new Error(error.message);
-      }
-    }
-  }
-});
+// NOTE — La règle « classes[] et subjects[] doivent appartenir au même campus »
+// ne vit PLUS dans un hook de schéma : un model ne doit pas lire d'autres
+// collections (`mongoose.model('Class'/'Subject')`) — logique cross-entité
+// implicite, non testable, ignorée par findByIdAndUpdate/updateMany. Elle est
+// désormais portée par teacher.config.js → customValidation, via les façades
+// class (getClassesCampusRefs) et subject (getSubjectsCampusRefs).
+// (Même patron que student.model.js.)
 
 // **METHODS**
 // Check if teacher can login (active status)

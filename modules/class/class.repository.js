@@ -167,6 +167,10 @@ const getCampusRef = (classId) => Class.findById(classId).select('schoolCampus')
 const getCampusRefForValidation = (classId, { session } = {}) =>
   Class.findById(classId).select('schoolCampus className').session(session).lean();
 
+/** Réfs campus d'un lot de classes (validation batch classes∈campus — teacher.config). */
+const getCampusRefsByIds = (classIds, { session } = {}) =>
+  Class.find({ _id: { $in: classIds } }).select('schoolCampus').session(session).lean();
+
 const existsInCampus = (classId, campusId) =>
   Class.findOne({ _id: classId, schoolCampus: campusId }).select('_id').lean();
 
@@ -203,6 +207,7 @@ module.exports = {
   // service
   countOnCampus, countByCampus, listForCampusDashboard, resolveForSchedule,
   findForCourseLink, findForDocumentList, getCampusRef, getCampusRefForValidation,
+  getCampusRefsByIds,
   existsInCampus, findManagedBy, getName, getNameInCampus, findForBulk,
   addTeacherToClasses, removeTeacherFromClasses, setClassManager, clearClassManager,
 };

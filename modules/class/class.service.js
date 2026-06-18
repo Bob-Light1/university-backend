@@ -19,6 +19,7 @@ const getClassForCourseLink = (classId, campusId) => classRepo.findForCourseLink
 const getClassForDocumentList = (classId, campusId) => classRepo.findForDocumentList(classId, campusId);
 const getClassCampusRef = (classId) => classRepo.getCampusRef(classId);
 const getClassCampusRefForValidation = (classId, opts) => classRepo.getCampusRefForValidation(classId, opts);
+const getClassesCampusRefs = (classIds, opts) => classRepo.getCampusRefsByIds(classIds, opts);
 const classExistsInCampus = (classId, campusId) => classRepo.existsInCampus(classId, campusId);
 const findClassManagedBy = (teacherId, campusId) => classRepo.findManagedBy(teacherId, campusId);
 const getClassName = (classId) => classRepo.getName(classId);
@@ -38,6 +39,7 @@ module.exports = {
   getClassForDocumentList,
   getClassCampusRef,
   getClassCampusRefForValidation,
+  getClassesCampusRefs,
   getClassName,
   getClassNameInCampus,
   classExistsInCampus,

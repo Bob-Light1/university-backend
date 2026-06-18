@@ -106,4 +106,11 @@ describe('service inter-modules', () => {
     expect(filter).toEqual({ _id: 'k1', classManager: 't1', schoolCampus: 'c1' });
     expect(update).toEqual({ $set: { classManager: null } });
   });
+
+  test('getCampusRefsByIds : { _id:$in } + select schoolCampus (validation batch teacher)', async () => {
+    Class.__setLean([{ _id: 'k1', schoolCampus: 'c1' }, { _id: 'k2', schoolCampus: 'c1' }]);
+    const out = await repo.getCampusRefsByIds(['k1', 'k2'], { session: 'sx' });
+    expect(Class.find).toHaveBeenCalledWith({ _id: { $in: ['k1', 'k2'] } });
+    expect(out).toHaveLength(2);
+  });
 });

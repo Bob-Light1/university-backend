@@ -35,6 +35,10 @@ const findByIdForResponse = (id) =>
 const findByIdDetailed = (id) =>
   Subject.findById(id).populate('schoolCampus', 'campus_name location').lean();
 
+/** Réfs campus d'un lot de subjects (validation batch subjects∈campus — teacher.config). */
+const getCampusRefsByIds = (subjectIds, { session } = {}) =>
+  Subject.find({ _id: { $in: subjectIds } }).select('schoolCampus').session(session).lean();
+
 /**
  * Liste paginée (campus + statut/catégorie/recherche), campus_name peuplé,
  * tri par subject_name.
@@ -163,5 +167,6 @@ module.exports = {
   distinctLinkedCourseRefs,
   listActiveLinkedToCourse,
   getCampusRef,
+  getCampusRefsByIds,
   resolveForSchedule,
 };

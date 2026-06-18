@@ -1,6 +1,7 @@
 const Teacher    = require('./models/teacher.model'); // exception assumée : Model du GenericEntityController
 const teacherRepo = require('./teacher.repository');
 const classService = require('../class').service; // façade module class (§3)
+const subjectService = require('../subject').service; // façade module subject (§3)
 const mongoose   = require('mongoose');
 const { getDepartmentCampusRef } = require('../department').service; // façade module department (§3)
 // campus.service en require PARESSEUX (campus est un hub qui requiert teacher → cycle)
@@ -23,9 +24,10 @@ const campusService = () => require('../campus').service;
  *
  * Campus isolation note
  * ──────────────────────
- * The teacher model's pre-validate middleware already rejects classes that
- * don't belong to the same campus. The hooks below add an extra guard at the
- * controller level for defence-in-depth.
+ * L'appartenance campus des `classes[]` et `subjects[]` assignés est validée
+ * par customValidation ci-dessous (via les façades class/subject), PAS par un
+ * hook de schéma : un model ne doit pas lire d'autres collections. Les hooks
+ * afterCreate/afterUpdate gardent la synchro Class.teachers[]/classManager.
  */
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -114,8 +116,9 @@ const teacherConfig = {
   // ─── Custom validation ─────────────────────────────────────────────────────
 
   /**
-   * Validates department and matricule before creation or update.
-   * Classes are validated by the Mongoose pre-validate hook on Teacher.
+   * Validates department, assigned classes/subjects (campus isolation) and
+   * matricule before creation or update. Remplace l'ancien hook pre-validate
+   * du model Teacher (sortie de la logique cross-entité hors du schéma).
    */
   customValidation: async (fields, campusId, session) => {
     try {
@@ -135,6 +138,32 @@ const teacherConfig = {
           return {
             valid: false,
             error: `The selected department "${selectedDepartment.name}" does not belong to this campus`,
+          };
+        }
+      }
+
+      // Validate assigned classes belong to this campus (ex-hook pre-validate)
+      if (Array.isArray(fields.classes) && fields.classes.length > 0) {
+        const classRefs = await classService.getClassesCampusRefs(fields.classes, { session });
+        if (classRefs.length !== fields.classes.length) {
+          return { valid: false, error: 'One or more assigned classes does not exist' };
+        }
+        if (classRefs.some(c => c.schoolCampus.toString() !== campusId.toString())) {
+          return {
+            valid: false,
+            error: 'All assigned classes must belong to the same campus as the teacher',
+          };
+        }
+      }
+
+      // Validate assigned subjects belong to this campus (ex-hook pre-validate).
+      // Tolérant : un subject sans schoolCampus passe (comportement historique).
+      if (Array.isArray(fields.subjects) && fields.subjects.length > 0) {
+        const subjectRefs = await subjectService.getSubjectsCampusRefs(fields.subjects, { session });
+        if (subjectRefs.some(s => s.schoolCampus && s.schoolCampus.toString() !== campusId.toString())) {
+          return {
+            valid: false,
+            error: 'All assigned subjects must belong to the same campus as the teacher',
           };
         }
       }
