@@ -344,6 +344,26 @@ const teacherConfig = {
         }
       }
 
+      // Validate updated classes belong to this campus (ferme l'angle mort update :
+      // findByIdAndUpdate ne déclenche aucun hook document — cf. retrait du pre-validate).
+      if (Array.isArray(updates.classes) && updates.classes.length > 0) {
+        const classRefs = await classService.getClassesCampusRefs(updates.classes);
+        if (classRefs.length !== updates.classes.length) {
+          return { success: false, error: 'One or more assigned classes does not exist' };
+        }
+        if (classRefs.some(c => c.schoolCampus.toString() !== teacher.schoolCampus.toString())) {
+          return { success: false, error: 'All assigned classes must belong to the same campus as the teacher' };
+        }
+      }
+
+      // Validate updated subjects belong to this campus (tolérant : subject sans campus passe)
+      if (Array.isArray(updates.subjects) && updates.subjects.length > 0) {
+        const subjectRefs = await subjectService.getSubjectsCampusRefs(updates.subjects);
+        if (subjectRefs.some(s => s.schoolCampus && s.schoolCampus.toString() !== teacher.schoolCampus.toString())) {
+          return { success: false, error: 'All assigned subjects must belong to the same campus as the teacher' };
+        }
+      }
+
       // Validate classManagerOf coherence if provided in updates
       if (updates.classManagerOf !== undefined) {
         const incomingClasses = updates.classes

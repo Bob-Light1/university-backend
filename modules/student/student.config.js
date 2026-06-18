@@ -200,6 +200,23 @@ const studentConfig = {
         }
       }
 
+      // Validate class change belongs to this campus (ferme l'angle mort update :
+      // le campus est immuable ici, mais studentClass peut changer — findByIdAndUpdate
+      // ne déclenche aucun hook document, donc la règle doit être vérifiée ICI).
+      if (updates.studentClass &&
+          updates.studentClass.toString() !== (student.studentClass?.toString() ?? '')) {
+        if (!mongoose.Types.ObjectId.isValid(updates.studentClass)) {
+          return { success: false, error: 'Invalid class ID format (ObjectId expected)' };
+        }
+        const selectedClass = await getClassCampusRefForValidation(updates.studentClass);
+        if (!selectedClass) {
+          return { success: false, error: 'Selected class does not exist' };
+        }
+        if (selectedClass.schoolCampus.toString() !== student.schoolCampus.toString()) {
+          return { success: false, error: 'The selected class does not belong to this campus' };
+        }
+      }
+
       return { success: true };
 
     } catch (error) {
