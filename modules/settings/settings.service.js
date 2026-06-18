@@ -71,10 +71,23 @@ const getPreferredLanguage = async (userId) => {
   return prefs?.preferredLanguage || 'en';
 };
 
+/**
+ * Langues préférées d'un lot d'utilisateurs, en une requête.
+ * Consommé par les émetteurs de notification multi-destinataires (exam.graded)
+ * pour traduire chaque notif sans N requêtes.
+ * @param {Array<ObjectId|string>} userIds
+ * @returns {Promise<Map<string,string>>} userId (string) → langue ('en' si absent)
+ */
+const getPreferredLanguages = async (userIds) => {
+  const rows = await settingsRepo.findLanguagesByUserIds(userIds);
+  return new Map(rows.map((r) => [String(r.userId), r.preferredLanguage || 'en']));
+};
+
 module.exports = {
   // Liste blanche des timezones supportées (consommée par campus.controller
   // pour valider PATCH /api/campus/:id/defaults).
   SUPPORTED_TIMEZONES,
   getPreferredLanguage,
+  getPreferredLanguages,
   getLoginPrefs,
 };

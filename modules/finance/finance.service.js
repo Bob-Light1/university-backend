@@ -21,22 +21,27 @@ function countPendingIncomes(campusId) {
 // ── Suivi paiement étudiant ───────────────────────────────────────────────────
 
 /**
- * Notifie l'étudiant (in-app) d'un solde à régler. Fire-and-forget : un échec
- * d'envoi ne doit jamais bloquer l'opération comptable (même contrat que les
- * autres émetteurs). Décou­plé : on ne fournit que { id, model } — le socle
- * n'interroge pas le model Student (façade §3).
+ * Notifie l'étudiant (in-app + email) d'un solde à régler. Fire-and-forget : un
+ * échec d'envoi ne doit jamais bloquer l'opération comptable (même contrat que
+ * les autres émetteurs). Contact (email) et langue résolus via les façades
+ * student/settings — finance n'interroge jamais leurs models (façade §3).
  * @param {Object} fee  dette (lean, avec virtuel `balance`)
  */
 async function notifyBalanceDue(fee) {
   const balance = fee.balance ?? Math.max(0, (fee.amountDue || 0) - (fee.amountPaid || 0));
   if (balance <= 0) return;
   try {
-    // Contact résolu via la façade student (finance ne touche pas le model Student).
-    const contact = await require('../student').service.getStudentContact(fee.student);
+    // Contact + langue via les façades (finance ne touche pas le model Student ;
+    // langue depuis UserPreferences, source unique).
+    const [contact, locale] = await Promise.all([
+      require('../student').service.getStudentContact(fee.student),
+      require('../settings').service.getPreferredLanguage(fee.student),
+    ]);
     await notification.notify({
       recipient: { id: fee.student, model: 'Student', campusId: fee.schoolCampus, email: contact?.email },
       channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
       template: 'payment.reminder',
+      locale,
       data: {
         amount: balance,
         currency: fee.currency,

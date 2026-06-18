@@ -13,6 +13,9 @@ jest.mock('../../modules/notification', () => ({
 jest.mock('../../modules/student', () => ({
   service: { getStudentContact: jest.fn().mockResolvedValue({ email: 'stud@example.test' }) },
 }));
+jest.mock('../../modules/settings', () => ({
+  service: { getPreferredLanguage: jest.fn().mockResolvedValue('fr') },
+}));
 
 const repo = require('../../modules/finance/finance.repository');
 const { service: notification } = require('../../modules/notification');
@@ -65,6 +68,7 @@ describe('createFee', () => {
       channels: ['inapp', 'email'],
       recipient: expect.objectContaining({ id: 'stud-1', model: 'Student', email: 'stud@example.test' }),
       data: expect.objectContaining({ amount: 250, currency: 'XAF' }),
+      locale: 'fr',
     }));
   });
 

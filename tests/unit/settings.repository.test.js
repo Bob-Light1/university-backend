@@ -13,6 +13,7 @@ jest.mock('../../modules/settings/models/userPreferences.model', () => {
   });
   return {
     findOne:          jest.fn(() => chain({ userId: 'u1', preferredLanguage: 'fr' })),
+    find:             jest.fn(() => chain([{ userId: 'u1', preferredLanguage: 'fr' }])),
     findOneAndUpdate: jest.fn(() => chain({ userId: 'u1', preferredLanguage: 'fr', timezone: 'UTC' })),
     schema: { statics: { SUPPORTED_LANGUAGES: ['en', 'fr', 'es'] } },
   };
@@ -38,6 +39,16 @@ describe('lectures', () => {
     await repo.findLanguageByUserId('u1');
     expect(UserPreferences.findOne).toHaveBeenCalledWith({ userId: 'u1' });
     expect(q.select).toHaveBeenCalledWith('preferredLanguage');
+  });
+
+  test('findLanguagesByUserIds : find({ $in }) projeté userId+langue', async () => {
+    const q = UserPreferences.find();
+    UserPreferences.find.mockClear();
+    UserPreferences.find.mockReturnValueOnce(q);
+    const rows = await repo.findLanguagesByUserIds(['u1', 'u2']);
+    expect(UserPreferences.find).toHaveBeenCalledWith({ userId: { $in: ['u1', 'u2'] } });
+    expect(q.select).toHaveBeenCalledWith('userId preferredLanguage');
+    expect(rows).toEqual([{ userId: 'u1', preferredLanguage: 'fr' }]);
   });
 });
 

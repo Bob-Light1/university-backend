@@ -43,13 +43,18 @@ const notification = require('../../notification').service;
  */
 const notifyResultPublished = async (studentId, campusId) => {
   try {
-    // Contact résolu via la façade student (le socle ne touche aucun model).
-    const contact = await require('../../student').service.getStudentContact(studentId);
+    // Contact + langue résolus via les façades (le socle ne touche aucun model).
+    // La langue vient de UserPreferences (source unique), pas du model Student.
+    const [contact, locale] = await Promise.all([
+      require('../../student').service.getStudentContact(studentId),
+      require('../../settings').service.getPreferredLanguage(studentId),
+    ]);
     await notification.notify({
       recipient: { id: studentId, model: 'Student', campusId, email: contact?.email },
       channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
       template: 'result.published',
       data: {},
+      locale,
     });
   } catch (err) {
     console.error('[notify] result.published failed:', err.message);

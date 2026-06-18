@@ -39,7 +39,7 @@ describe('API inter-modules — fonctions de service attendues', () => {
     ['student', ['validateStudentBelongsToCampus', 'countStudents', 'listStudentIds', 'resolveSessionParticipants', 'syncTeacherSchedule', 'summarizeStudentAttendance', 'getStudentContact', 'getStudentContacts']],
     ['result',  ['countPublishedResults', 'listCampusResults', 'getRecentResultsForStudent']],
     ['department', ['getDepartmentCampusRef', 'findDepartmentForBulk', 'listDepartmentsForCampus']],
-    ['settings', ['getLoginPrefs', 'getPreferredLanguage']],
+    ['settings', ['getLoginPrefs', 'getPreferredLanguage', 'getPreferredLanguages']],
     ['course',  ['listApprovedCourses', 'isTeacherOfAnyCourse', 'getApprovedCourseForLinking']],
     ['partner', ['findActivePartnerByCode', 'upsertPreRegistrationLead', 'getLeadContact', 'createApplication']],
     ['exam',    ['getUpcomingExamsForStudent', 'listCampusExaminations', 'countPendingGrading']],

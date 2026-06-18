@@ -22,6 +22,10 @@ const findByUserId = (userId) => UserPreferences.findOne({ userId }).lean();
 const findLanguageByUserId = (userId) =>
   UserPreferences.findOne({ userId }).select('preferredLanguage').lean();
 
+/** Langues préférées d'un lot d'utilisateurs (projeté userId+langue). @returns {Promise<Array<{userId, preferredLanguage}>>} */
+const findLanguagesByUserIds = (userIds) =>
+  UserPreferences.find({ userId: { $in: userIds } }).select('userId preferredLanguage').lean();
+
 /**
  * Upsert paresseux : crée le document avec `insertDoc` s'il n'existe pas, sinon
  * renvoie l'existant inchangé. (login, premier accès, filet de migration.)
@@ -50,6 +54,7 @@ const getSupportedLanguages = () =>
 module.exports = {
   findByUserId,
   findLanguageByUserId,
+  findLanguagesByUserIds,
   upsertOnInsert,
   upsertWithSet,
   getSupportedLanguages,

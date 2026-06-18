@@ -35,12 +35,13 @@ const notification = require('../../notification').service;
 
 // Notifie un étudiant que sa note d'examen est publiée (in-app, best-effort :
 // n'échoue jamais la publication — même contrat que l'émission result.published).
-const notifyExamGraded = (studentId, campusId, email) =>
+const notifyExamGraded = (studentId, campusId, email, locale) =>
   notification.notify({
     recipient: { id: studentId, model: 'Student', campusId, email },
     channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
     template: 'exam.graded',
     data: {},
+    locale,
   }).catch((err) => console.error('[notify] exam.graded failed:', err.message));
 
 // ─── List gradings ────────────────────────────────────────────────────────────
@@ -356,15 +357,27 @@ const publishGrades = async (req, res) => {
     examAnalyticsWorker.emit('examAnalytics:compute', sessionId);
 
     // Une notif (in-app + email) par étudiant dont la note vient d'être publiée.
-    // Emails résolus en un seul appel via la façade student (best-effort).
+    // Emails + langues résolus chacun en un seul appel batch via les façades
+    // (best-effort ; langue depuis UserPreferences, source unique).
+    const studentIds = recipients.map((g) => g.student);
     let emailByStudent = new Map();
+    let localeByStudent = new Map();
     try {
-      const contacts = await require('../../student').service.getStudentContacts(recipients.map((g) => g.student));
+      const [contacts, locales] = await Promise.all([
+        require('../../student').service.getStudentContacts(studentIds),
+        require('../../settings').service.getPreferredLanguages(studentIds),
+      ]);
       emailByStudent = new Map(contacts.map((c) => [String(c._id), c.email]));
+      localeByStudent = locales;
     } catch (err) {
-      console.error('[notify] exam.graded contact lookup failed:', err.message);
+      console.error('[notify] exam.graded contact/locale lookup failed:', err.message);
     }
-    recipients.forEach((g) => notifyExamGraded(g.student, g.schoolCampus, emailByStudent.get(String(g.student))));
+    recipients.forEach((g) => notifyExamGraded(
+      g.student,
+      g.schoolCampus,
+      emailByStudent.get(String(g.student)),
+      localeByStudent.get(String(g.student)),
+    ));
 
     return sendSuccess(res, 200, `${result.modifiedCount} grade(s) published.`, {
       sessionId,
