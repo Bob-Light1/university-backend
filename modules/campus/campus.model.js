@@ -42,7 +42,10 @@ const campusSchema = new mongoose.Schema(
     email: {
       type: String,
       required: [true, 'Email is required'],
-
+      // Campus login is performed by email — it must be globally unique and
+      // indexed, otherwise concurrent creations can register duplicates and
+      // every login performs a full-collection scan.
+      unique: true,
       lowercase: true,
       trim: true,
       match: [

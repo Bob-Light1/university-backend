@@ -51,6 +51,26 @@ describe('controller', () => {
     expect(filter.$or[0].campus_name.$regex).toBe('a\\.b');
   });
 
+  test('paginate : projection -password par défaut (vue privilégiée)', async () => {
+    const q = Campus.find();
+    Campus.find.mockClear();
+    Campus.find.mockReturnValueOnce(q);
+    await repo.paginate({ skip: 0, limit: 50 });
+    expect(q.select).toHaveBeenCalledWith('-password');
+  });
+
+  test('paginate : publicView restreint aux champs publics (pas d email/téléphone)', async () => {
+    const q = Campus.find();
+    Campus.find.mockClear();
+    Campus.find.mockReturnValueOnce(q);
+    await repo.paginate({ skip: 0, limit: 50, publicView: true });
+    const projection = q.select.mock.calls[0][0];
+    expect(projection).not.toContain('email');
+    expect(projection).not.toContain('manager_phone');
+    expect(projection).not.toContain('commissionConfig');
+    expect(projection).toContain('campus_name');
+  });
+
   test('touchLastLogin : updateOne $set lastLogin', async () => {
     await repo.touchLastLogin('c1');
     const [filter, update] = Campus.updateOne.mock.calls[0];

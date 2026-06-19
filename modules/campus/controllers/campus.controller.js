@@ -49,7 +49,8 @@ const studentEntityController = new GenericEntityController(studentConfig);
 
 // Constants
 const JWT_SECRET = process.env.JWT_SECRET;
-const SALT_ROUNDS = 10;
+// bcrypt cost factor — CLAUDE.md §8 mandates 12 for password hashing.
+const SALT_ROUNDS = 12;
 
 //reusable helper Function for Location
 const parseLocation = (fields) => {
@@ -307,21 +308,32 @@ class CampusController extends GenericEntityController {
   getAll = async (req, res) => {
     try {
       const {
-        page = 1,
-        limit = 50,
+        page,
+        limit,
         search = '',
         status,
         city
       } = req.query;
 
-      const skip = (Number(page) - 1) * Number(limit);
+      // Sanitise & clamp pagination — this endpoint is reachable publicly
+      // (optionalAuth), so an unbounded limit would let anyone dump the whole
+      // collection in a single request.
+      const safeLimit = Math.min(Math.max(Number(limit) || 50, 1), 100);
+      const safePage  = Math.max(Number(page) || 1, 1);
+      const skip      = (safePage - 1) * safeLimit;
+
+      // Only authenticated ADMIN / DIRECTOR receive the full record (manager
+      // email/phone, commission config, quotas…). Everyone else (public portal,
+      // other roles) gets a PII-free public projection.
+      const isPrivileged = req.user && ['ADMIN', 'DIRECTOR'].includes(req.user.role);
 
       const { data: campuses, total } = await campusRepo.paginate({
         status,
         city,
         search,
         skip,
-        limit: Number(limit),
+        limit: safeLimit,
+        publicView: !isPrivileged,
       });
 
       return sendPaginated(
@@ -329,7 +341,7 @@ class CampusController extends GenericEntityController {
         200,
         'All campuses fetched successfully',
         campuses,
-        { total, page, limit }
+        { total, page: safePage, limit: safeLimit }
       );
 
     } catch (error) {
@@ -400,7 +412,7 @@ class CampusController extends GenericEntityController {
       }
 
       // Authorization
-      const isOwner = req.user.campusId === id;
+      const isOwner = String(req.user.campusId) === String(id);
       const isAdmin = ['ADMIN', 'DIRECTOR'].includes(req.user.role);
 
       if (!isOwner && !isAdmin) {
@@ -821,10 +833,11 @@ class CampusController extends GenericEntityController {
         return sendError(res, 400, 'Invalid campus ID format');
       }
 
-      // Authorization
+      // Authorization — every campus-scoped role (CAMPUS_MANAGER, TEACHER) may
+      // only read departments of its own campus. ADMIN / DIRECTOR are global.
       if (
-        req.user.role === 'CAMPUS_MANAGER' &&
-        req.user.campusId.toString() !== campusId.toString()
+        ['CAMPUS_MANAGER', 'TEACHER'].includes(req.user.role) &&
+        String(req.user.campusId) !== String(campusId)
       ) {
         return sendError(res, 403, 'You can only access departments from your own campus');
       }
@@ -901,6 +914,27 @@ const updateCampusDefaults = async (req, res) => {
   }
 };
 
+// ── GET /api/campus/:campusId/students/stats ──────────────────────────────────
+// Ownership-guarded wrapper around the generic student stats handler. Without
+// it a CAMPUS_MANAGER could read another campus's student statistics by passing
+// an arbitrary :campusId (campus-isolation boundary — CLAUDE.md §2).
+const getCampusStudentsStats = async (req, res) => {
+  const { campusId } = req.params;
+
+  if (!isValidObjectId(campusId)) {
+    return sendError(res, 400, 'Invalid campus ID format');
+  }
+
+  if (
+    req.user.role === 'CAMPUS_MANAGER' &&
+    String(req.user.campusId) !== String(campusId)
+  ) {
+    return sendError(res, 403, 'You can only access statistics from your own campus');
+  }
+
+  return studentEntityController.getStats(req, res);
+};
+
 // ========================================
 // EXPORT CONTROLLER METHODS
 // ========================================
@@ -928,6 +962,6 @@ module.exports = {
   getCampusSubjects: campusController.getSubjects,
   updateCampusDefaults,
 
-  // Statistics (using student controller)
-  getCampusStudentsStats: studentEntityController.getStats
+  // Statistics (ownership-guarded wrapper around the student controller)
+  getCampusStudentsStats
 };

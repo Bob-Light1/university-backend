@@ -22,7 +22,7 @@ const {
   updateCampusDefaults,
 } = require('./controllers/campus.controller');
 
-const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { authenticate, authorize, optionalAuth } = require('../../shared/middleware/auth');
 const { loginLimiter, strictLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
 
 
@@ -42,10 +42,12 @@ router.post("/login", loginLimiter, loginCampus);
 /**
  * @route   GET /api/campus/all
  * @desc    Get all campuses (with pagination)
- * @access  Public
- * @note    Consider adding authentication if this contains sensitive data
+ * @access  Public (PII-free projection) — authenticated ADMIN/DIRECTOR get the
+ *          full record. optionalAuth lets the same endpoint serve both the
+ *          public portal and the admin console without leaking manager
+ *          contact details or commission config to anonymous callers.
  */
-router.get("/all", apiLimiter, getAllCampus);
+router.get("/all", apiLimiter, optionalAuth, getAllCampus);
 
 // ========================================
 // PROTECTED ROUTES (Authentication Required)
@@ -245,6 +247,7 @@ router.get(
  */
 router.get(
   "/:campusId/departments",
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER']),
   getCampusDepartments
 );
 

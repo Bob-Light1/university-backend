@@ -31,11 +31,20 @@ const findByEmailWithPassword = (email) =>
 const touchLastLogin = (id) =>
   Campus.updateOne({ _id: id }, { $set: { lastLogin: new Date() } });
 
+// Public-safe projection: never exposes PII (manager email/phone), business
+// config (commissionConfig), quotas (features) or auth metadata (lastLogin)
+// to unauthenticated / non-privileged callers of GET /campus/all.
+const PUBLIC_FIELDS =
+  'campus_name campus_number campus_image manager_name ' +
+  'location.address location.city location.country status campusSlug createdAt';
+
 /**
- * Paginated list (without password). Filters: status/city/search.
+ * Paginated list. Filters: status/city/search.
+ * @param {boolean} [publicView] — when true, restricts the projection to
+ *   public-safe fields (no manager email/phone, commission config, quotas…).
  * @returns {Promise<{data, total}>}
  */
-const paginate = async ({ status, city, search, skip, limit }) => {
+const paginate = async ({ status, city, search, skip, limit, publicView = false }) => {
   const filter = {};
   if (status) filter.status = status;
   if (city) filter['location.city'] = { $regex: escapeRegex(city), $options: 'i' };
@@ -44,8 +53,10 @@ const paginate = async ({ status, city, search, skip, limit }) => {
     filter.$or = [rx('campus_name'), rx('manager_name'), rx('email'), rx('campus_number')];
   }
 
+  const projection = publicView ? PUBLIC_FIELDS : '-password';
+
   const [data, total] = await Promise.all([
-    Campus.find(filter).select('-password').sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
+    Campus.find(filter).select(projection).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
     Campus.countDocuments(filter),
   ]);
   return { data, total };
