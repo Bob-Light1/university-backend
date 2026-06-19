@@ -15,21 +15,42 @@
 
 const Announcement     = require('./models/announcement.model');
 const UserNotification = require('./models/user-notification.model');
-const { escapeRegex }  = require('../../shared/utils/validation-helpers');
+const { escapeRegex, isValidObjectId } = require('../../shared/utils/validation-helpers');
 
 // ── Constructeurs de filtres internes ─────────────────────────────────────────
+
+/**
+ * Guards against a campus-isolation breach: a scoped role with a missing or
+ * invalid campusId would yield `{ schoolCampus: undefined }`, which Mongoose
+ * silently strips — turning a campus-scoped query into a full-collection scan
+ * that leaks every campus' data. Throw instead so the caller returns 403.
+ * @throws {Error} code 'CAMPUS_ISOLATION' when campusId is missing/invalid
+ */
+const requireCampus = (campusId) => {
+  if (!isValidObjectId(String(campusId))) {
+    const err = new Error('Campus isolation: missing or invalid campusId for scoped role.');
+    err.code = 'CAMPUS_ISOLATION';
+    throw err;
+  }
+  return campusId;
+};
 
 // Admin scope: all (ADMIN/DIRECTOR) or own campus, excluding deleted.
 const adminScope = ({ isGlobalRole, campusId, requestedCampusId }) => {
   const filter = { deletedAt: null };
-  if (!isGlobalRole) filter.schoolCampus = campusId;
-  else if (requestedCampusId) filter.schoolCampus = requestedCampusId;
+  if (!isGlobalRole) {
+    filter.schoolCampus = requireCampus(campusId);
+  } else if (requestedCampusId && isValidObjectId(String(requestedCampusId))) {
+    // ADMIN/DIRECTOR may narrow to one campus; ignore malformed input rather
+    // than letting it reach Mongoose as a CastError.
+    filter.schoolCampus = requestedCampusId;
+  }
   return filter;
 };
 
 // User-visible scope: published, not expired, targeting their role.
 const visibleScope = (campusId, role) => ({
-  schoolCampus: campusId,
+  schoolCampus: requireCampus(campusId),
   status:       'published',
   deletedAt:    null,
   $and: [
@@ -86,9 +107,16 @@ const applyUpdate = async ({ id, isGlobalRole, campusId }, fields) => {
 
 // ── USER (visible announcements + read receipts) ──────────────────────────────
 
-/** Read receipts for a user on a campus (ids of read announcements). */
-const listReadAnnouncementIds = async (userId, campusId) => {
-  const receipts = await UserNotification.find({ userId, schoolCampus: campusId })
+/**
+ * Read-announcement ids restricted to a bounded set of candidates.
+ * Scopes the receipt scan to the page / visible set instead of every receipt
+ * the user ever created (which grows unbounded over the account's lifetime).
+ * @returns {Promise<ObjectId[]>}
+ */
+const listReadAmong = async (userId, announcementIds) => {
+  if (!announcementIds || announcementIds.length === 0) return [];
+  const receipts = await UserNotification
+    .find({ userId, announcement: { $in: announcementIds } })
     .select('announcement').lean();
   return receipts.map((r) => r.announcement);
 };
@@ -144,7 +172,7 @@ const markAllVisibleRead = async ({ userId, campusId, role }) => {
   const visibleIds = await listVisibleIds({ campusId, role });
   if (visibleIds.length === 0) return { visibleCount: 0, marked: 0 };
 
-  const readIds = await listReadAnnouncementIds(userId, campusId);
+  const readIds = await listReadAmong(userId, visibleIds);
   const readSet = new Set(readIds.map((id) => id.toString()));
 
   const ops = visibleIds
@@ -188,7 +216,7 @@ module.exports = {
   paginateForAdmin,
   findForAdmin,
   applyUpdate,
-  listReadAnnouncementIds,
+  listReadAmong,
   paginateVisible,
   distinctVisibleIds,
   listVisibleIds,

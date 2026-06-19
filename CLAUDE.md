@@ -87,18 +87,22 @@ Response shape: `{ success, message, data, meta }`.
 - Campus-scoped: `campusId: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
 - Global collections (`Course`, `Partner`, `GradingScale`): no `campusId`.
 - Soft delete: `isDeleted` + `deletedAt` — never hard delete.
-- Enums: `Object.freeze({})` — exported and reused in controllers + Yup.
+- Enums: `Object.freeze({})` — exported and reused across backend controllers/validators (the frontend mirrors the same values in its Yup schemas).
 - Auto-increment refs via `counter` model. `{ timestamps: true }` on every schema.
 - Compound indexes at schema level for frequent query patterns.
 
 ---
 
-## 6. Validation (two layers)
+## 6. Validation
 
-1. **Route layer** — Yup schema via `validate()` middleware before the controller.
-2. **Service layer** — cross-document checks (circular deps, quotas, conflicts).
+> **Yup is a frontend-only dependency — it is NOT installed on the backend.** Do not add Yup or a generic `validate()` middleware to a backend module.
 
-Yup rules: ObjectId fields use `.matches(/^[a-f\d]{24}$/i, 'Invalid ID format')`; enums mirror the model exactly (import from the model when possible).
+**Backend (two layers):**
+1. **Input layer** — validated in the controller (presence, format, enums). `ObjectId` fields via `isValidObjectId()` from `shared/utils/validation-helpers`. The model also enforces enums / `maxlength` / required as the last line of defense.
+   - *Optional route-layer middleware:* a module may extract input validation into hand-rolled middleware under `modules/<domain>/validations/*.schema.js` (plain JS, no Yup) returning `400 { success, message, errors: [{ field, message }] }`. Currently only `parent` does this; follow that pattern if you add one.
+2. **Service / cross-document layer** — checks that span documents (circular deps, quotas, conflicts, campus membership).
+
+**Frontend** — Yup schemas under `src/yupSchema/`; `ObjectId` fields use `.matches(/^[a-f\d]{24}$/i, 'Invalid ID format')`; enums mirror the backend models exactly (single source of truth = backend).
 
 ---
 

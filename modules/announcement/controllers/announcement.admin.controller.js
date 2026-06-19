@@ -7,10 +7,38 @@ const {
   sendError,
   sendPaginated,
   sendNotFound,
+  sendForbidden,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
 const isGlobalRole = (role) => ['ADMIN', 'DIRECTOR'].includes(role);
+
+/**
+ * Maps repository/Mongoose errors to the right HTTP response.
+ *  - CAMPUS_ISOLATION → 403 (scoped role without a valid campusId)
+ *  - ValidationError  → 400 (first schema message)
+ *  - CastError        → 400 (malformed input, e.g. invalid date)
+ *  - otherwise        → 500
+ */
+const handleError = (res, err, context, fallback) => {
+  if (err.code === 'CAMPUS_ISOLATION') return sendForbidden(res, 'Campus access denied.');
+  if (err.name === 'ValidationError') {
+    return sendError(res, 400, Object.values(err.errors)[0]?.message || 'Validation failed.');
+  }
+  if (err.name === 'CastError') return sendError(res, 400, 'Invalid field value.');
+  console.error(`${context} error:`, err);
+  return sendError(res, 500, fallback);
+};
+
+// Rejects a non-null date that is not strictly in the future. Returns an error
+// message string, or null when valid.
+const futureDateError = (value, label) => {
+  if (value === undefined || value === null || value === '') return null;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return `Invalid ${label}.`;
+  if (d.getTime() <= Date.now()) return `${label} must be in the future.`;
+  return null;
+};
 
 // ─── CREATE ──────────────────────────────────────────────────────────────────
 
@@ -32,6 +60,13 @@ const createAnnouncement = async (req, res) => {
       return sendError(res, 400, 'Invalid campusId format.');
     }
 
+    const expiryErr = futureDateError(expiresAt, 'expiry date');
+    if (expiryErr) return sendError(res, 400, expiryErr);
+    if (pinned) {
+      const pinErr = futureDateError(pinnedUntil, 'auto-unpin date');
+      if (pinErr) return sendError(res, 400, pinErr);
+    }
+
     const announcement = await announcementRepo.create({
       schoolCampus: campusId,
       title,
@@ -50,12 +85,7 @@ const createAnnouncement = async (req, res) => {
 
     return sendCreated(res, 'Announcement created.', announcement);
   } catch (err) {
-    if (err.name === 'ValidationError') {
-      const msg = Object.values(err.errors)[0]?.message || 'Validation failed.';
-      return sendError(res, 400, msg);
-    }
-    console.error('createAnnouncement error:', err);
-    return sendError(res, 500, 'Failed to create announcement.');
+    return handleError(res, err, 'createAnnouncement', 'Failed to create announcement.');
   }
 };
 
@@ -87,8 +117,7 @@ const getAllAnnouncements = async (req, res) => {
       limit: safeLimit,
     });
   } catch (err) {
-    console.error('getAllAnnouncements error:', err);
-    return sendError(res, 500, 'Failed to fetch announcements.');
+    return handleError(res, err, 'getAllAnnouncements', 'Failed to fetch announcements.');
   }
 };
 
@@ -104,8 +133,7 @@ const getOneAnnouncement = async (req, res) => {
 
     return sendSuccess(res, 200, 'Announcement retrieved.', announcement);
   } catch (err) {
-    console.error('getOneAnnouncement error:', err);
-    return sendError(res, 500, 'Failed to fetch announcement.');
+    return handleError(res, err, 'getOneAnnouncement', 'Failed to fetch announcement.');
   }
 };
 
@@ -129,16 +157,22 @@ const updateAnnouncement = async (req, res) => {
       if (req.body[key] !== undefined) fields[key] = req.body[key];
     }
 
+    if (fields.expiresAt) {
+      const expiryErr = futureDateError(fields.expiresAt, 'expiry date');
+      if (expiryErr) return sendError(res, 400, expiryErr);
+    }
+    // Validate auto-unpin against the resulting pinned state (incoming or current).
+    const willBePinned = fields.pinned !== undefined ? fields.pinned : current.pinned;
+    if (willBePinned && fields.pinnedUntil) {
+      const pinErr = futureDateError(fields.pinnedUntil, 'auto-unpin date');
+      if (pinErr) return sendError(res, 400, pinErr);
+    }
+
     const announcement = await announcementRepo.applyUpdate(scope, fields);
     if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement updated.', announcement);
   } catch (err) {
-    if (err.name === 'ValidationError') {
-      const msg = Object.values(err.errors)[0]?.message || 'Validation failed.';
-      return sendError(res, 400, msg);
-    }
-    console.error('updateAnnouncement error:', err);
-    return sendError(res, 500, 'Failed to update announcement.');
+    return handleError(res, err, 'updateAnnouncement', 'Failed to update announcement.');
   }
 };
 
@@ -165,8 +199,7 @@ const publishAnnouncement = async (req, res) => {
     if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement published.', announcement);
   } catch (err) {
-    console.error('publishAnnouncement error:', err);
-    return sendError(res, 500, 'Failed to publish announcement.');
+    return handleError(res, err, 'publishAnnouncement', 'Failed to publish announcement.');
   }
 };
 
@@ -190,8 +223,7 @@ const archiveAnnouncement = async (req, res) => {
     if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement archived.', announcement);
   } catch (err) {
-    console.error('archiveAnnouncement error:', err);
-    return sendError(res, 500, 'Failed to archive announcement.');
+    return handleError(res, err, 'archiveAnnouncement', 'Failed to archive announcement.');
   }
 };
 
@@ -209,7 +241,9 @@ const togglePin = async (req, res) => {
     const fields = { pinned: nextPinned };
     if (!nextPinned) {
       fields.pinnedUntil = null;
-    } else if (req.body.pinnedUntil !== undefined) {
+    } else if (req.body.pinnedUntil !== undefined && req.body.pinnedUntil !== null) {
+      const pinErr = futureDateError(req.body.pinnedUntil, 'auto-unpin date');
+      if (pinErr) return sendError(res, 400, pinErr);
       fields.pinnedUntil = req.body.pinnedUntil;
     }
 
@@ -219,8 +253,7 @@ const togglePin = async (req, res) => {
     const action = announcement.pinned ? 'pinned' : 'unpinned';
     return sendSuccess(res, 200, `Announcement ${action}.`, announcement);
   } catch (err) {
-    console.error('togglePin error:', err);
-    return sendError(res, 500, 'Failed to update pin status.');
+    return handleError(res, err, 'togglePin', 'Failed to update pin status.');
   }
 };
 
@@ -236,8 +269,7 @@ const deleteAnnouncement = async (req, res) => {
 
     return sendSuccess(res, 200, 'Announcement deleted.');
   } catch (err) {
-    console.error('deleteAnnouncement error:', err);
-    return sendError(res, 500, 'Failed to delete announcement.');
+    return handleError(res, err, 'deleteAnnouncement', 'Failed to delete announcement.');
   }
 };
 

@@ -45,6 +45,10 @@ jest.mock('../../modules/announcement/models/user-notification.model', () => {
 const Announcement = require('../../modules/announcement/models/announcement.model');
 const repo = require('../../modules/announcement/announcement.repository');
 
+// Valid 24-hex ObjectId strings (campusIds are always ObjectIds in production).
+const C1 = 'aaaaaaaaaaaaaaaaaaaaaaaa';
+const C2 = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+
 beforeEach(() => {
   jest.clearAllMocks();
   Announcement.__setDoc(null);
@@ -52,18 +56,35 @@ beforeEach(() => {
 
 describe('paginateForAdmin — isolation campus', () => {
   test('rôle non-global → verrouillé sur son campus + non supprimés', async () => {
-    await repo.paginateForAdmin({ isGlobalRole: false, campusId: 'c1', skip: 0, limit: 20 });
+    await repo.paginateForAdmin({ isGlobalRole: false, campusId: C1, skip: 0, limit: 20 });
     const filter = Announcement.find.mock.calls[0][0];
-    expect(filter).toMatchObject({ deletedAt: null, schoolCampus: 'c1' });
+    expect(filter).toMatchObject({ deletedAt: null, schoolCampus: C1 });
+  });
+
+  test('rôle non-global sans campusId → refus (anti-fuite cross-campus)', async () => {
+    await expect(
+      repo.paginateForAdmin({ isGlobalRole: false, campusId: undefined, skip: 0, limit: 20 })
+    ).rejects.toMatchObject({ code: 'CAMPUS_ISOLATION' });
+  });
+
+  test('rôle non-global avec campusId invalide → refus', async () => {
+    await expect(
+      repo.paginateForAdmin({ isGlobalRole: false, campusId: 'not-an-id', skip: 0, limit: 20 })
+    ).rejects.toMatchObject({ code: 'CAMPUS_ISOLATION' });
   });
 
   test('rôle global + campus demandé → ciblé sur ce campus', async () => {
-    await repo.paginateForAdmin({ isGlobalRole: true, campusId: 'c1', requestedCampusId: 'c2', skip: 0, limit: 20 });
-    expect(Announcement.find.mock.calls[0][0]).toMatchObject({ deletedAt: null, schoolCampus: 'c2' });
+    await repo.paginateForAdmin({ isGlobalRole: true, campusId: C1, requestedCampusId: C2, skip: 0, limit: 20 });
+    expect(Announcement.find.mock.calls[0][0]).toMatchObject({ deletedAt: null, schoolCampus: C2 });
+  });
+
+  test('rôle global + campus demandé invalide → ignoré (pas de CastError)', async () => {
+    await repo.paginateForAdmin({ isGlobalRole: true, requestedCampusId: 'garbage', skip: 0, limit: 20 });
+    expect(Announcement.find.mock.calls[0][0]).toEqual({ deletedAt: null });
   });
 
   test('rôle global sans campus demandé → pas de restriction campus', async () => {
-    await repo.paginateForAdmin({ isGlobalRole: true, campusId: 'c1', skip: 0, limit: 20 });
+    await repo.paginateForAdmin({ isGlobalRole: true, campusId: C1, skip: 0, limit: 20 });
     const filter = Announcement.find.mock.calls[0][0];
     expect(filter).toEqual({ deletedAt: null });
   });
@@ -86,20 +107,20 @@ describe('applyUpdate — load→assign→save', () => {
   test('assigne les champs et save', async () => {
     const save = jest.fn().mockResolvedValue();
     Announcement.__setDoc({ _id: '1', status: 'draft', save });
-    const out = await repo.applyUpdate({ id: '1', isGlobalRole: false, campusId: 'c1' }, { status: 'published' });
+    const out = await repo.applyUpdate({ id: '1', isGlobalRole: false, campusId: C1 }, { status: 'published' });
     expect(out.status).toBe('published');
     expect(save).toHaveBeenCalledTimes(1);
     // the admin scope (campus + not deleted) is applied to the search
-    expect(Announcement.findOne.mock.calls[0][0]).toMatchObject({ _id: '1', deletedAt: null, schoolCampus: 'c1' });
+    expect(Announcement.findOne.mock.calls[0][0]).toMatchObject({ _id: '1', deletedAt: null, schoolCampus: C1 });
   });
 });
 
 describe('findVisibleById — portée de visibilité', () => {
   test('filtre publié + non supprimé + campus', async () => {
     Announcement.__setDoc({ _id: '1' });
-    await repo.findVisibleById({ id: '1', campusId: 'c1', role: 'STUDENT' });
+    await repo.findVisibleById({ id: '1', campusId: C1, role: 'STUDENT' });
     const filter = Announcement.findOne.mock.calls[0][0];
-    expect(filter).toMatchObject({ _id: '1', schoolCampus: 'c1', status: 'published', deletedAt: null });
+    expect(filter).toMatchObject({ _id: '1', schoolCampus: C1, status: 'published', deletedAt: null });
     expect(Array.isArray(filter.$and)).toBe(true);
   });
 });

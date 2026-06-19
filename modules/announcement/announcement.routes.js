@@ -5,8 +5,9 @@ const router  = express.Router();
 
 const adminCtrl = require('./controllers/announcement.admin.controller');
 const userCtrl  = require('./controllers/announcement.user.controller');
-const { authenticate, authorize, requirePermission } = require('../../shared/middleware/auth');
+const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { apiLimiter } = require('../../shared/middleware/rate-limiter');
+const { sendForbidden } = require('../../shared/utils/response-helpers');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 const ALL_ROLES  = [
@@ -24,7 +25,7 @@ const canManage = (req, res, next) => {
   if (role === 'STAFF' && Array.isArray(permissions) && permissions.includes('announcements')) {
     return next();
   }
-  return res.status(403).json({ success: false, message: 'Access denied. Insufficient permissions.' });
+  return sendForbidden(res, 'Access denied. Insufficient permissions.');
 };
 
 router.use(authenticate);

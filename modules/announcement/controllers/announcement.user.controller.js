@@ -26,18 +26,32 @@ const getMyAnnouncements = async (req, res) => {
     const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
     const skip = (safePage - 1) * safeLimit;
 
-    // Read receipts: needed for the "unread" filter AND the isRead flag.
-    const readIds = await announcementRepo.listReadAnnouncementIds(userId, campusId);
-    const readSet = new Set(readIds.map((id) => id.toString()));
+    // "Unread only": exclude read announcements at query time. The read set is
+    // scoped to the currently-visible ids (bounded), never the user's lifetime
+    // receipt history.
+    if (unreadOnly === 'true') {
+      const visibleIds = await announcementRepo.listVisibleIds({ campusId, role });
+      const readIds    = await announcementRepo.listReadAmong(userId, visibleIds);
 
+      const { data: announcements, total } = await announcementRepo.paginateVisible({
+        campusId, role, type, excludeIds: readIds, skip, limit: safeLimit,
+      });
+
+      const data = announcements.map((a) => ({ ...a, isRead: false }));
+      return sendPaginated(res, 200, 'Announcements retrieved.', data, {
+        total, page: safePage, limit: safeLimit,
+      });
+    }
+
+    // Default view: fetch the page, then resolve isRead only for that page
+    // (at most `limit` receipt lookups).
     const { data: announcements, total } = await announcementRepo.paginateVisible({
-      campusId,
-      role,
-      type,
-      excludeIds: unreadOnly === 'true' ? readIds : undefined,
-      skip,
-      limit: safeLimit,
+      campusId, role, type, skip, limit: safeLimit,
     });
+
+    const pageIds = announcements.map((a) => a._id);
+    const readIds = await announcementRepo.listReadAmong(userId, pageIds);
+    const readSet = new Set(readIds.map((id) => id.toString()));
 
     const data = announcements.map((a) => ({
       ...a,
@@ -45,9 +59,7 @@ const getMyAnnouncements = async (req, res) => {
     }));
 
     return sendPaginated(res, 200, 'Announcements retrieved.', data, {
-      total,
-      page:  safePage,
-      limit: safeLimit,
+      total, page: safePage, limit: safeLimit,
     });
   } catch (err) {
     console.error('getMyAnnouncements error:', err);
