@@ -105,8 +105,20 @@ classSchema.index(
 // For queries filtering by campus and status
 classSchema.index({ schoolCampus: 1, status: 1 });
 
-// Each teacher can be classManager of at most one class (sparse = nulls excluded)
-classSchema.index({ classManager: 1 }, { unique: true, sparse: true });
+// Each teacher can be classManager of at most one class.
+// IMPORTANT: a *sparse* unique index would NOT work here because `classManager`
+// has `default: null` — the field is always present (as null), so MongoDB would
+// index every null value and reject the second manager-less class with E11000.
+// A partial index restricted to real ObjectId values is the correct approach:
+// uniqueness is enforced only among classes that actually have a manager, while
+// any number of classes may have `classManager: null`.
+classSchema.index(
+  { classManager: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { classManager: { $type: 'objectId' } }
+  }
+);
 
 // ========================================
 // VIRTUAL FIELDS
@@ -144,19 +156,18 @@ classSchema.pre('save', function() {
 // PRE-VALIDATE MIDDLEWARE
 // ========================================
 
-// Validate class manager belongs to same campus
-classSchema.pre('validate', async function(next) {
+// Validate class manager belongs to same campus.
+// Async middleware: errors are propagated by throwing (do NOT mix `next` with an
+// async function — the previous version never called `next()` on the happy path,
+// which only worked by accident because the returned promise resolved).
+classSchema.pre('validate', async function() {
   if (this.isNew || this.isModified('classManager') || this.isModified('schoolCampus')) {
     if (this.classManager && this.schoolCampus) {
-      try {
-        const Teacher = mongoose.model('Teacher');
-        const teacher = await Teacher.findById(this.classManager);
-        
-        if (teacher && teacher.schoolCampus.toString() !== this.schoolCampus.toString()) {
-          return next(new Error('Class manager must belong to the same campus as the class'));
-        }
-      } catch (error) {
-        return next(error);
+      const Teacher = mongoose.model('Teacher');
+      const teacher = await Teacher.findById(this.classManager).select('schoolCampus');
+
+      if (teacher && teacher.schoolCampus.toString() !== this.schoolCampus.toString()) {
+        throw new Error('Class manager must belong to the same campus as the class');
       }
     }
   }

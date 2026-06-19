@@ -1,5 +1,6 @@
 const express = require("express");
 const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { apiLimiter } = require('../../shared/middleware/rate-limiter');
 const {
     createClass,
     getAllClass,
@@ -31,14 +32,14 @@ router.use(authenticate);
  * @desc    Create a new class
  * @access  CAMPUS_MANAGER, DIRECTOR
  */
-router.post("/", authorize(adminRoles), createClass);
+router.post("/", apiLimiter, authorize(adminRoles), createClass);
 
 /**
  * @route   GET /api/class
  * @desc    Get all classes (with filters and pagination)
  * @access  CAMPUS_MANAGER, DIRECTOR, TEACHER
  */
-router.get("/", authorize(staffRoles), getAllClass);
+router.get("/", apiLimiter, authorize(staffRoles), getAllClass);
 
 // --- SPECIFIC SEARCH ROUTES ---
 
@@ -47,21 +48,21 @@ router.get("/", authorize(staffRoles), getAllClass);
  * @desc    Get a class by its unique ID
  * @access  CAMPUS_MANAGER, DIRECTOR, TEACHER
  */
-router.get("/single/:id", authorize(staffRoles), getClassById);
+router.get("/single/:id", apiLimiter, authorize(staffRoles), getClassById);
 
 /**
  * @route   GET /api/class/campus/:campusId
  * @desc    Get classes from a specific campus
  * @access  CAMPUS_MANAGER, DIRECTOR, TEACHER
  */
-router.get("/campus/:campusId", authorize(staffRoles), getClassesByCampus);
+router.get("/campus/:campusId", apiLimiter, authorize(staffRoles), getClassesByCampus);
 
 /**
  * @route   GET /api/class/teacher/:teacherId
  * @desc    Get classes managed by a specific teacher
  * @access  CAMPUS_MANAGER, DIRECTOR, TEACHER
  */
-router.get("/teacher/:teacherId", authorize(staffRoles), getClassesByTeacher);
+router.get("/teacher/:teacherId", apiLimiter, authorize(staffRoles), getClassesByTeacher);
 
 // --- MODIFICATION AND DELETION ROUTES ---
 
@@ -70,20 +71,20 @@ router.get("/teacher/:teacherId", authorize(staffRoles), getClassesByTeacher);
  * @desc    Update class information
  * @access  CAMPUS_MANAGER, DIRECTOR
  */
-router.put("/:id", authorize(adminRoles), updateClass);
+router.put("/:id", apiLimiter, authorize(adminRoles), updateClass);
 
 /**
  * @route   DELETE /api/class/:id
  * @desc    Archive a class (Soft Delete)
  * @access  CAMPUS_MANAGER, DIRECTOR
  */
-router.delete("/:id", authorize(adminRoles), deleteClass);
+router.delete("/:id", apiLimiter, authorize(adminRoles), deleteClass);
 
 /**
  * @route   PATCH /api/class/:id/restore
  * @desc    Restore an archived class
  * @access  CAMPUS_MANAGER, DIRECTOR
  */
-router.patch("/:id/restore", authorize(adminRoles), restoreClass);
+router.patch("/:id/restore", apiLimiter, authorize(adminRoles), restoreClass);
 
 module.exports = router;

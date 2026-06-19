@@ -18,6 +18,15 @@ const {
 const validateTeacherBelongsToCampus = (...args) =>
   require('../../teacher').service.validateTeacherBelongsToCampus(...args);
 
+/** Global roles bypass campus isolation (cross-campus access). */
+const isGlobalRole = (role) => role === 'ADMIN' || role === 'DIRECTOR';
+
+// Pagination guards — prevent NaN skips and unbounded result sets at scale.
+// 200 accommodates existing dropdown callers (results / print / examination
+// fetch classes with limit=200) while still bounding the query at scale.
+const MAX_PAGE_SIZE = 200;
+const DEFAULT_PAGE_SIZE = 20;
+
 /**
  * @desc    Create a new class
  * @route   POST /api/class
@@ -43,9 +52,9 @@ exports.createClass = async (req, res) => {
       return sendError(res, 400, 'Invalid campus or level ID format');
     }
 
-    // Campus isolation: CAMPUS_MANAGER can only create classes in their own campus
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (req.user.campusId !== schoolCampus) {
+    // Campus isolation: non-global roles can only create classes in their own campus.
+    if (!isGlobalRole(req.user.role)) {
+      if (String(req.user.campusId) !== String(schoolCampus)) {
         return sendError(res, 403, 'You can only create classes in your own campus');
       }
     }
@@ -123,10 +132,17 @@ exports.getAllClass = async (req, res) => {
       includeArchived,
     } = req.query;
 
-    const baseFilter = buildCampusFilter(req.user, campusId);
+    let baseFilter;
+    try {
+      baseFilter = buildCampusFilter(req.user, campusId);
+    } catch (isolationError) {
+      // Non-global role with no valid campusId — refuse instead of leaking data.
+      return sendError(res, 403, 'Campus access denied');
+    }
 
-    const pageNumber = parseInt(page, 10);
-    const pageSize   = parseInt(limit, 10);
+    // Clamp pagination to safe bounds (guards NaN, negatives and unbounded limits).
+    const pageNumber = Math.max(1, parseInt(page, 10) || 1);
+    const pageSize   = Math.min(MAX_PAGE_SIZE, Math.max(1, parseInt(limit, 10) || DEFAULT_PAGE_SIZE));
     const skip       = (pageNumber - 1) * pageSize;
 
     const { data: classes, total } = await classRepo.paginate({
@@ -172,8 +188,11 @@ exports.getClassById = async (req, res) => {
       return sendNotFound(res, 'Class');
     }
 
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (classData.schoolCampus._id.toString() !== req.user.campusId) {
+    // Campus isolation: every non-global role (CAMPUS_MANAGER, TEACHER, …) is
+    // restricted to its own campus. TEACHER is allowed on this route, so guarding
+    // CAMPUS_MANAGER alone previously leaked cross-campus classes to teachers.
+    if (!isGlobalRole(req.user.role)) {
+      if (classData.schoolCampus._id.toString() !== String(req.user.campusId)) {
         return sendError(res, 403, 'You can only access classes from your own campus');
       }
     }
@@ -200,8 +219,11 @@ exports.getClassesByCampus = async (req, res) => {
       return sendError(res, 400, 'Invalid campus ID format');
     }
 
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (req.user.campusId !== campusId) {
+    // Campus isolation: every non-global role (CAMPUS_MANAGER, TEACHER, …) may only
+    // list classes from its own campus. TEACHER is allowed on this route, so guarding
+    // CAMPUS_MANAGER alone previously let teachers enumerate any campus's classes.
+    if (!isGlobalRole(req.user.role)) {
+      if (String(req.user.campusId) !== String(campusId)) {
         return sendError(res, 403, 'You can only access classes from your own campus');
       }
     }
@@ -294,8 +316,8 @@ exports.updateClass = async (req, res) => {
       return sendNotFound(res, 'Class');
     }
 
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (existingClass.schoolCampus.toString() !== req.user.campusId) {
+    if (!isGlobalRole(req.user.role)) {
+      if (existingClass.schoolCampus.toString() !== String(req.user.campusId)) {
         return sendError(res, 403, 'You can only update classes from your own campus');
       }
     }
@@ -341,7 +363,9 @@ exports.updateClass = async (req, res) => {
     if (schoolCampus)               fields.schoolCampus = schoolCampus;
     if (level)                      fields.level        = level;
     if (className)                  fields.className    = className.trim();
-    if (classManager !== undefined) fields.classManager = classManager;
+    // Normalize empty string to null so the manager can be cleared without an
+    // ObjectId cast error; a non-empty value keeps the assigned teacher.
+    if (classManager !== undefined) fields.classManager = classManager || null;
     if (status)                     fields.status       = status;
     if (maxStudents)                fields.maxStudents  = maxStudents;
     if (academicYear !== undefined) fields.academicYear = academicYear;
@@ -388,8 +412,8 @@ exports.deleteClass = async (req, res) => {
       return sendNotFound(res, 'Class');
     }
 
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (existingClass.schoolCampus.toString() !== req.user.campusId) {
+    if (!isGlobalRole(req.user.role)) {
+      if (existingClass.schoolCampus.toString() !== String(req.user.campusId)) {
         return sendError(res, 403, 'You can only archive classes from your own campus');
       }
     }
@@ -427,8 +451,8 @@ exports.restoreClass = async (req, res) => {
       return sendNotFound(res, 'Class');
     }
 
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (existingClass.schoolCampus.toString() !== req.user.campusId) {
+    if (!isGlobalRole(req.user.role)) {
+      if (existingClass.schoolCampus.toString() !== String(req.user.campusId)) {
         return sendError(res, 403, 'You can only restore classes from your own campus');
       }
     }
