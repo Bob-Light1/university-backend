@@ -1,16 +1,16 @@
 /**
  * @file finance.service.js
- * API publique du module finance (income / suivi paiement étudiant).
- * (Les autres domaines ne touchent JAMAIS directement ces models — §3 du guide.)
- * Toute la persistance passe par finance.repository (étape 0 pré-Postgres).
+ * Public API of the finance module (income / student payment tracking).
+ * (Other domains NEVER touch these models directly — §3 of the guide.)
+ * All persistence goes through finance.repository (step 0 pre-Postgres).
  */
 
 const financeRepo  = require('./finance.repository');
 const notification = require('../notification').service;
 
 /**
- * Nombre de paiements (income) en attente pour un campus.
- * (Consommé par campus.controller pour les paymentAlerts du dashboard.)
+ * Number of pending payments (income) for a campus.
+ * (Consumed by campus.controller for the dashboard paymentAlerts.)
  * @param {string|ObjectId} campusId
  * @returns {Promise<number>}
  */
@@ -18,28 +18,28 @@ function countPendingIncomes(campusId) {
   return financeRepo.countByCampusAndStatus(campusId, 'pending');
 }
 
-// ── Suivi paiement étudiant ───────────────────────────────────────────────────
+// ── Student payment tracking ──────────────────────────────────────────────────
 
 /**
- * Notifie l'étudiant (in-app + email) d'un solde à régler. Fire-and-forget : un
- * échec d'envoi ne doit jamais bloquer l'opération comptable (même contrat que
- * les autres émetteurs). Contact (email) et langue résolus via les façades
- * student/settings — finance n'interroge jamais leurs models (façade §3).
- * @param {Object} fee  dette (lean, avec virtuel `balance`)
+ * Notifies the student (in-app + email) of an outstanding balance. Fire-and-forget: a
+ * send failure must never block the accounting operation (same contract as
+ * the other emitters). Contact (email) and language resolved via the
+ * student/settings facades — finance never queries their models (facade §3).
+ * @param {Object} fee  debt (lean, with virtual `balance`)
  */
 async function notifyBalanceDue(fee) {
   const balance = fee.balance ?? Math.max(0, (fee.amountDue || 0) - (fee.amountPaid || 0));
   if (balance <= 0) return;
   try {
-    // Contact + langue via les façades (finance ne touche pas le model Student ;
-    // langue depuis UserPreferences, source unique).
+    // Contact + language via the facades (finance does not touch the Student model;
+    // language from UserPreferences, single source).
     const [contact, locale] = await Promise.all([
       require('../student').service.getStudentContact(fee.student),
       require('../settings').service.getPreferredLanguage(fee.student),
     ]);
     await notification.notify({
       recipient: { id: fee.student, model: 'Student', campusId: fee.schoolCampus, email: contact?.email },
-      channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
+      channels: ['inapp', 'email'], // email inert without SMTP → skipped
       template: 'payment.reminder',
       locale,
       data: {
@@ -54,9 +54,9 @@ async function notifyBalanceDue(fee) {
 }
 
 /**
- * Crée une dette pour un étudiant et l'informe du solde dû (in-app).
+ * Creates a debt for a student and informs them of the amount due (in-app).
  * @param {Object} input { student, schoolCampus, label, academicYear?, amountDue, currency?, dueDate?, notes?, createdBy? }
- * @returns {Promise<Object>} la dette créée (lean + balance)
+ * @returns {Promise<Object>} the created debt (lean + balance)
  */
 async function createFee(input) {
   const doc = await financeRepo.createFee(input);
@@ -66,11 +66,11 @@ async function createFee(input) {
 }
 
 /**
- * Impute un acompte sur une dette : crée la ligne FeePayment, met à jour le
- * cumul `amountPaid` (le statut est recalculé au save), et renvoie l'état à jour.
+ * Applies a payment to a debt: creates the FeePayment line, updates the
+ * `amountPaid` total (the status is recalculated on save), and returns the updated state.
  *
- * Garde-fous : montant > 0, devise alignée sur la dette, pas de surpaiement
- * au-delà du solde restant, dette non annulée.
+ * Guardrails: amount > 0, currency aligned with the debt, no overpayment
+ * beyond the remaining balance, debt not cancelled.
  *
  * @param {Object} params { feeId, amount, method, reference?, paidAt?, notes?, recordedBy, scope? }
  * @returns {Promise<{ fee: Object, payment: Object }>}
@@ -108,7 +108,7 @@ async function recordPayment({ feeId, amount, method, reference, paidAt, notes, 
     recordedBy,
   });
 
-  feeDoc.amountPaid = (feeDoc.amountPaid || 0) + value; // pre-save recalcule le statut
+  feeDoc.amountPaid = (feeDoc.amountPaid || 0) + value; // pre-save recalculates the status
   await feeDoc.save();
 
   return {
@@ -118,9 +118,9 @@ async function recordPayment({ feeId, amount, method, reference, paidAt, notes, 
 }
 
 /**
- * Relevé complet d'un étudiant : dettes + paiements + totaux.
+ * Full ledger of a student: debts + payments + totals.
  * @param {string|ObjectId} studentId
- * @param {Object} [scope] filtre additionnel (ex: { schoolCampus })
+ * @param {Object} [scope] additional filter (e.g. { schoolCampus })
  * @returns {Promise<{ fees, payments, totals }>}
  */
 async function getStudentLedger(studentId, scope = {}) {
@@ -140,12 +140,12 @@ async function getStudentLedger(studentId, scope = {}) {
   return { fees, payments, totals };
 }
 
-/** Liste paginée des dettes (filtre déjà scopé campus par l'appelant). */
+/** Paginated list of debts (filter already campus-scoped by the caller). */
 function listFees({ filter, skip, limit }) {
   return financeRepo.paginateFees({ filter, skip, limit });
 }
 
-/** Une dette avec ses paiements. @returns {Promise<{ fee, payments }|null>} */
+/** A debt with its payments. @returns {Promise<{ fee, payments }|null>} */
 async function getFeeWithPayments(feeId, scope = {}) {
   const fee = await financeRepo.findFeeById(feeId, scope);
   if (!fee) return null;
@@ -153,12 +153,12 @@ async function getFeeWithPayments(feeId, scope = {}) {
   return { fee, payments };
 }
 
-/** Soft-delete d'une dette. @returns {Promise<Object|null>} */
+/** Soft-delete of a debt. @returns {Promise<Object|null>} */
 function deleteFee(feeId, scope = {}) {
   return financeRepo.softDeleteFee(feeId, scope);
 }
 
-/** (Ré)envoie un rappel de solde pour une dette donnée. @returns {Promise<Object|null>} */
+/** (Re)sends a balance reminder for a given debt. @returns {Promise<Object|null>} */
 async function remindBalance(feeId, scope = {}) {
   const fee = await financeRepo.findFeeById(feeId, scope);
   if (!fee) return null;
@@ -167,8 +167,8 @@ async function remindBalance(feeId, scope = {}) {
 }
 
 /**
- * Cron : passe les dettes échues impayées en `overdue` et envoie un rappel.
- * Best-effort (n'interrompt pas le lot sur un échec d'envoi).
+ * Cron: moves unpaid past-due debts to `overdue` and sends a reminder.
+ * Best-effort (does not interrupt the batch on a send failure).
  * @returns {Promise<{ processed: number }>}
  */
 async function runOverdueJob() {
@@ -176,7 +176,7 @@ async function runOverdueJob() {
   for (const fee of due) {
     const doc = await financeRepo.getFeeDoc(fee._id);
     if (!doc) continue;
-    await doc.save(); // pre-save recalcule → overdue
+    await doc.save(); // pre-save recalculates → overdue
     await notifyBalanceDue(doc.toObject({ virtuals: true }));
   }
   if (due.length) console.log(`💸 [finance] overdue sweep: ${due.length} fee(s) processed`);

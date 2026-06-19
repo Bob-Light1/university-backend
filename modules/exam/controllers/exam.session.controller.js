@@ -19,9 +19,9 @@
  */
 
 const repo = require('../exam.repository');
-const { getSubjectCampusRef } = require('../../subject').service; // façade module subject (§3)
-const { getClassCampusRef }   = require('../../class').service; // façade module class (§3)
-// Require paresseux : teacher.dashboard consomme la façade exam (cycle exam ↔ teacher)
+const { getSubjectCampusRef } = require('../../subject').service; // subject module facade (§3)
+const { getClassCampusRef }   = require('../../class').service; // class module facade (§3)
+// Lazy require: teacher.dashboard consumes the exam facade (cycle exam ↔ teacher)
 const getTeacherCampusRef = (...args) =>
   require('../../teacher').service.getTeacherCampusRef(...args);
 const {

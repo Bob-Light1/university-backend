@@ -4,10 +4,10 @@
  * @file teacher.attendance.controller.js
  * @description Controller for teacher attendance management.
  *
- *  JWT payload (foruni) :
- *    req.user.id        → string (ID teacher dans le JWT)
+ *  JWT payload (foruni):
+ *    req.user.id        → string (teacher ID in the JWT)
  *    req.user.role      → 'ADMIN' | 'DIRECTOR' | 'CAMPUS_MANAGER' | 'TEACHER' | 'STUDENT'
- *    req.user.campusId  → string ObjectId campus (absent pour ADMIN/DIRECTOR)
+ *    req.user.campusId  → string ObjectId campus (absent for ADMIN/DIRECTOR)
  */
 
 const mongoose    = require('mongoose');
@@ -43,8 +43,8 @@ const buildCampusFilter = (req) => {
 };
 
 /**
- * Utilise validateTeacherBelongsToCampus de validationHelpers.js
- * pour vérifier qu'un enseignant appartient au campus du demandeur.
+ * Uses validateTeacherBelongsToCampus from validationHelpers.js
+ * to check that a teacher belongs to the requester's campus.
  */
 const assertTeacherOnCampus = async (teacherId, campusId) => {
   const belongs = await validateTeacherBelongsToCampus(teacherId, campusId);
@@ -321,7 +321,7 @@ const getMyStats = asyncHandler(async (req, res) => {
   if (!academicYear) return sendError(res, 400, 'academicYear is required.');
   if (!semester)     return sendError(res, 400, 'semester is required.');
 
-  // req.user.id = string ID de l'enseignant (JWT)
+  // req.user.id = teacher's string ID (JWT)
   const stats = await teacherRepo.getTeacherAttendanceStats(req.user.id, academicYear, semester, period);
 
   return sendSuccess(res, 200, 'Attendance stats retrieved.', stats);

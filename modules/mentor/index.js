@@ -7,7 +7,7 @@ const routes  = require('./mentor.routes');
 const service = require('./mentor.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/mentors', mentor.routes)
-  service,  // API inter-modules    :  require('../mentor').service.getCampusStats(...)
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js :  app.use('/api/mentors', mentor.routes)
+  service,  // inter-module API     :  require('../mentor').service.getCampusStats(...)
+  // NO model exported. NO controller exported.
 };

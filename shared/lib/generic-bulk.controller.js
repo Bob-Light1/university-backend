@@ -29,8 +29,8 @@ class GenericBulkController {
     this.entityNameLower = this.entityName.toLowerCase();
     
     // Related model for bulk operations (e.g., Class for students).
-    // findRelatedById(id, session) — alternative façade-friendly : permet aux
-    // modules de ne pas injecter le model d'un autre domaine (chantier 20b).
+    // findRelatedById(id, session) — facade-friendly alternative: lets
+    // modules avoid injecting another domain's model (chantier 20b).
     this.RelatedModel = config.RelatedModel || null;
     this.findRelatedById = config.findRelatedById || null;
     this.relatedField = config.relatedField || null; // e.g., 'studentClass'

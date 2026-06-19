@@ -2,13 +2,13 @@
 /**
  * seed-course-previews.js
  *
- * Insère des aperçus de cours publiés (bilingues) pour tous les campus (ou un précis).
+ * Inserts published course previews (bilingual) for all campuses (or a specific one).
  *
- * Usage :
- *   node scripts/seed-course-previews.js                       → tous les campus
- *   node scripts/seed-course-previews.js --slug=campus-douala  → un seul campus
- *   node scripts/seed-course-previews.js --dry-run             → aperçu sans insertion
- *   node scripts/seed-course-previews.js --clear               → supprime et réinsère
+ * Usage:
+ *   node scripts/seed-course-previews.js                       → all campuses
+ *   node scripts/seed-course-previews.js --slug=campus-douala  → a single campus
+ *   node scripts/seed-course-previews.js --dry-run             → preview without inserting
+ *   node scripts/seed-course-previews.js --clear               → deletes and re-inserts
  */
 
 'use strict';

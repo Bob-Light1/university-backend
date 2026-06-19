@@ -3,36 +3,36 @@
 /**
  * @file level.repository.js — couche de persistance du domaine level.
  *
- * SEUL fichier du module autorisé à toucher le model Mongoose `Level`.
- * Controllers et service appellent ce repository (jamais le model directement).
- * Objectif (étape 0 de la préparation Postgres — voir POSTGRES_MIGRATION_ASSESSMENT.md) :
- * isoler la persistance pour pouvoir, plus tard, réécrire l'intérieur (Postgres)
- * sans toucher la couche HTTP ni l'API inter-modules.
+ * Only file in the module allowed to touch the Mongoose `Level` model.
+ * Controllers and service call this repository (never the model directly).
+ * Goal (step 0 of the Postgres migration preparation — see POSTGRES_MIGRATION_ASSESSMENT.md):
+ * isolate persistence so the internals can later be rewritten (Postgres)
+ * without touching the HTTP layer or the inter-module API.
  *
- * Convention : les méthodes de LECTURE renvoient des objets simples (.lean()) ;
- * les ÉCRITURES font load→mutate→save pour préserver les setters/validations du
- * schéma (ex. `uppercase: true` sur name/code).
+ * Convention: READ methods return plain objects (.lean());
+ * WRITE methods do load→mutate→save to preserve the schema's setters/validations
+ * (e.g. `uppercase: true` on name/code).
  */
 
 const Level = require('./level.model');
 
 /**
- * Recherche un niveau par (code, type) — utilisé pour le contrôle d'unicité.
- * @returns {Promise<Object|null>} objet simple ou null
+ * Looks up a level by (code, type) — used for the uniqueness check.
+ * @returns {Promise<Object|null>} plain object or null
  */
 const findByCodeAndType = (code, type) =>
   Level.findOne({ code, type }).lean();
 
 /**
- * Crée un niveau.
+ * Creates a level.
  * @param {Object} data - { name, code, type, order, description }
- * @returns {Promise<Object>} le document créé
+ * @returns {Promise<Object>} the created document
  */
 const create = (data) => Level.create(data);
 
 /**
- * Liste les niveaux actifs, triés par `order` croissant, filtrés optionnellement
- * par type.
+ * Lists active levels, sorted by ascending `order`, optionally filtered
+ * by type.
  * @param {{ type?: string }} [opts]
  * @returns {Promise<Object[]>}
  */
@@ -43,17 +43,17 @@ const listActive = ({ type } = {}) => {
 };
 
 /**
- * Récupère un niveau par id (lecture).
+ * Retrieves a level by id (read).
  * @returns {Promise<Object|null>}
  */
 const findById = (id) => Level.findById(id).lean();
 
 /**
- * Met à jour les champs fournis d'un niveau (load→assign→save : conserve setters
- * et validations, et propage l'erreur de doublon E11000 à l'appelant).
+ * Updates the provided fields of a level (load→assign→save: preserves setters
+ * and validations, and propagates the E11000 duplicate error to the caller).
  * @param {string} id
- * @param {Object} fields - uniquement les champs à modifier
- * @returns {Promise<Object|null>} le document mis à jour, ou null si introuvable
+ * @param {Object} fields - only the fields to modify
+ * @returns {Promise<Object|null>} the updated document, or null if not found
  */
 const updateById = async (id, fields) => {
   const level = await Level.findById(id);
@@ -64,8 +64,8 @@ const updateById = async (id, fields) => {
 };
 
 /**
- * Change le statut d'un niveau (active/archived) — archivage & restauration.
- * @returns {Promise<Object|null>} le document mis à jour, ou null si introuvable
+ * Changes the status of a level (active/archived) — archiving & restoration.
+ * @returns {Promise<Object|null>} the updated document, or null if not found
  */
 const setStatus = async (id, status) => {
   const level = await Level.findById(id);

@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Couche repository — module settings (R1).
- * Verrouille les requêtes UserPreferences (lecture projetée, upserts paresseux,
- * upsert avec $set, statique SUPPORTED_LANGUAGES). Model mocké (sans DB).
+ * Repository layer — settings module (R1).
+ * Locks down the UserPreferences queries (projected read, lazy upserts,
+ * upsert with $set, SUPPORTED_LANGUAGES static). Model mocked (no DB).
  */
 
 jest.mock('../../modules/settings/models/userPreferences.model', () => {

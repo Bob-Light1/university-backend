@@ -2,7 +2,7 @@
 
 /**
  * @file gradingScale.model.js  (v2)
- * @description Barèmes de notation configurables par campus.
+ * @description Configurable grading scales per campus.
  */
 
 const mongoose = require('mongoose');
@@ -10,8 +10,8 @@ const mongoose = require('mongoose');
 // ─── ENUMS ────────────────────────────────────────────────────────────────────
 
 const GRADING_SYSTEM = Object.freeze({
-  NUMERIC_20:  'NUMERIC_20',   // Sur 20  (système français)
-  NUMERIC_100: 'NUMERIC_100',  // Sur 100 (système anglo-saxon)
+  NUMERIC_20:  'NUMERIC_20',   // Out of 20  (French system)
+  NUMERIC_100: 'NUMERIC_100',  // Out of 100 (Anglo-Saxon system)
   LETTER:      'LETTER',       // A, B, C, D, E, F
   GPA:         'GPA',          // 0.0 – 4.0
 });
@@ -19,23 +19,23 @@ const GRADING_SYSTEM = Object.freeze({
 // ─── BAND SUB-SCHEMA ──────────────────────────────────────────────────────────
 
 /**
- * Tranche de mention.
+ * Grade band (mention bracket).
  */
 const GradeBandSchema = new mongoose.Schema(
   {
-    /** Note minimale incluse (dans l'échelle maxScore du barème) */
+    /** Inclusive minimum score (within the scale's maxScore range) */
     min:         { type: Number, required: true },
-    /** Note maximale incluse */
+    /** Inclusive maximum score */
     max:         { type: Number, required: true },
-    /** Lettre de grade — obligatoire pour LETTER et GPA */
+    /** Grade letter — required for LETTER and GPA systems */
     letterGrade: { type: String, uppercase: true, trim: true },
-    /** Libellé affiché sur le bulletin (ex. "Très Bien") */
+    /** Label displayed on the transcript (e.g. "Très Bien") */
     label:       { type: String, required: true, trim: true },
-    /** Équivalent GPA 0.0–4.0 pour l'équivalence internationale */
+    /** GPA equivalent 0.0–4.0 for international equivalence */
     gpa:         { type: Number, min: 0, max: 4 },
-    /** Grade ECTS pour la mobilité internationale */
+    /** ECTS grade for international mobility */
     ectsGrade:   { type: String, enum: ['A', 'B', 'C', 'D', 'E', 'FX', 'F'] },
-    /** Crédits ECTS associés à cette tranche */
+    /** ECTS credits associated with this band */
     ectsCredits: { type: Number, min: 0 },
     /** Couleur hex pour l'affichage UI du bulletin */
     color:       {
@@ -71,7 +71,7 @@ const GradingScaleSchema = new mongoose.Schema(
       maxlength: [300, 'Description must not exceed 300 characters'],
     },
 
-    // ── SYSTÈME DE NOTATION ──────────────────
+    // ── GRADING SYSTEM ───────────────────────
     system: {
       type:     String,
       enum:     { values: Object.values(GRADING_SYSTEM), message: '{VALUE} is not a valid grading system' },
@@ -79,8 +79,8 @@ const GradingScaleSchema = new mongoose.Schema(
     },
 
     /**
-     * Note maximale possible dans ce barème.
-     * Supporte les décimaux (ex. 4.0 pour GPA, 20, 100).
+     * Maximum possible score in this grading scale.
+     * Supports decimals (e.g. 4.0 for GPA, 20, 100).
      */
     maxScore: {
       type:     Number,
@@ -88,7 +88,7 @@ const GradingScaleSchema = new mongoose.Schema(
       min:      [0.01, 'Max score must be positive'],
     },
 
-    /** Note minimale pour valider la matière */
+    /** Minimum score to pass the subject */
     passMark: {
       type:     Number,
       required: [true, 'Pass mark is required'],
@@ -96,18 +96,18 @@ const GradingScaleSchema = new mongoose.Schema(
     },
 
     /**
-     * Tranches de mention.
-     * Triées automatiquement par min croissant en pre-save. 
-     * Les chevauchements sont détectés et rejetés.
+     * Grade bands (mention brackets).
+     * Auto-sorted by ascending min in pre-save.
+     * Overlaps are detected and rejected.
      */
     bands: { type: [GradeBandSchema], default: [] },
 
-    /** Un seul barème par défaut par campus (invariant garanti en pre-save). */
+    /** One default grading scale per campus (invariant enforced in pre-save). */
     isDefault: { type: Boolean, default: false, index: true },
     isActive:  { type: Boolean, default: true,  index: true },
 
     // ── AUDIT ─────────────────────────────────
-    /** String = req.user.id — cohérent avec tous les champs d'audit du projet */
+    /** String = req.user.id — consistent with all audit fields in the project */
     createdBy: { type: String },
     updatedBy: { type: String },
   },
@@ -123,7 +123,7 @@ const GradingScaleSchema = new mongoose.Schema(
 
 GradingScaleSchema.index({ schoolCampus: 1, isDefault: 1 });
 GradingScaleSchema.index({ schoolCampus: 1, isActive:  1 });
-// Unicité du nom par campus (évite les doublons "Barème Standard")
+// Name uniqueness per campus (prevents duplicate scale names)
 GradingScaleSchema.index(
   { schoolCampus: 1, name: 1 },
   { unique: true, name: 'idx_grading_scale_name_per_campus' }
@@ -142,7 +142,7 @@ GradingScaleSchema.pre('save', async function (next) {
       );
     }
 
-    // ── 2. [S1-3] Normalisation des décimaux (IEEE 754) ───────────────────────
+    // ── 2. [S1-3] Decimal normalisation (IEEE 754) ────────────────────────────
     if (this.maxScore != null) this.maxScore = parseFloat(this.maxScore.toFixed(4));
     if (this.passMark != null) this.passMark = parseFloat(this.passMark.toFixed(4));
 
@@ -154,7 +154,7 @@ GradingScaleSchema.pre('save', async function (next) {
     // ── 4. [S1-1] Validation + tri des tranches (bands) ──────────────────────
     if (this.isModified('bands') && this.bands.length > 0) {
 
-      // 4a. Vérification basique de chaque tranche
+      // 4a. Basic validation of each band
       for (let i = 0; i < this.bands.length; i++) {
         const b = this.bands[i];
 
@@ -177,10 +177,10 @@ GradingScaleSchema.pre('save', async function (next) {
         }
       }
 
-      // 4b. Tri par min croissant (correction automatique — convivialité API)
+      // 4b. Sort by ascending min (auto-correction — API friendliness)
       this.bands.sort((a, b) => a.min - b.min);
 
-      // 4c. Détection des chevauchements après tri
+      // 4c. Overlap detection after sort
       for (let i = 0; i < this.bands.length - 1; i++) {
         const cur  = this.bands[i];
         const next_ = this.bands[i + 1];
@@ -195,7 +195,7 @@ GradingScaleSchema.pre('save', async function (next) {
       // 4d. Avertissement si passMark n'est couvert par aucune tranche
       const passInBand = this.bands.some((b) => this.passMark >= b.min && this.passMark <= b.max);
       if (!passInBand) {
-        // Avertissement non-bloquant — le barème reste utilisable
+        // Non-blocking warning — the scale remains usable
         console.warn(
           `[GradingScale "${this.name}"] passMark=${this.passMark} is not covered by any band. ` +
           `Grade resolution at passing threshold will return null.`
@@ -212,9 +212,9 @@ GradingScaleSchema.pre('save', async function (next) {
 // ─── INSTANCE METHODS ─────────────────────────────────────────────────────────
 
 /**
- * Résout la tranche de mention pour une note (dans l'échelle du barème.
+ * Resolves the grade band for a score (within the scale's range).
  *
- * @param {number} score  - Note dans l'échelle du barème (ex. 16 pour /20)
+ * @param {number} score  - Score within the scale's range (e.g. 16 out of 20)
  * @returns {GradeBand|null}
  */
 GradingScaleSchema.methods.resolveBand = function (score) {
@@ -223,11 +223,11 @@ GradingScaleSchema.methods.resolveBand = function (score) {
 };
 
 /**
- * Convertit une note vers une autre échelle.
- * Arrondi à 2 décimales pour éviter les flottants parasites.
+ * Converts a score to another scale.
+ * Rounded to 2 decimal places to avoid floating-point noise.
  *
- * @param {number} score     - Note dans l'échelle actuelle
- * @param {number} targetMax - Échelle cible (ex. 100)
+ * @param {number} score     - Score in the current scale
+ * @param {number} targetMax - Target scale maximum (e.g. 100)
  * @returns {number}
  */
 GradingScaleSchema.methods.convertTo = function (score, targetMax) {
@@ -235,8 +235,8 @@ GradingScaleSchema.methods.convertTo = function (score, targetMax) {
 };
 
 /**
- * Retourne true si la note est suffisante pour valider.
- * Arrondi avant comparaison.
+ * Returns true if the score is sufficient to pass.
+ * Rounded before comparison.
  *
  * @param {number} score
  * @returns {boolean}
@@ -247,14 +247,14 @@ GradingScaleSchema.methods.isPassing = function (score) {
 
 // ─── STATIC METHODS ───────────────────────────────────────────────────────────
 
-/** Retourne le barème par défaut actif d'un campus. */
+/** Returns the active default grading scale for a campus. */
 GradingScaleSchema.statics.getDefault = function (campusId) {
   return this.findOne({ schoolCampus: campusId, isDefault: true, isActive: true });
 };
 
 /**
- * Retourne le barème le plus adapté pour un campus.
- * Priorité : isDefault → premier actif par date de création.
+ * Returns the most suitable grading scale for a campus.
+ * Priority: isDefault → first active by creation date.
  *
  * @param {ObjectId} campusId
  * @returns {Promise<GradingScale|null>}

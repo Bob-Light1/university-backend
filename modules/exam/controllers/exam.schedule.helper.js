@@ -13,8 +13,8 @@
  */
 
 const repo            = require('../exam.repository');
-// Requires paresseux : student.dashboard et teacher.dashboard consomment la
-// façade exam (cycles exam ↔ student et exam ↔ teacher)
+// Lazy requires: student.dashboard and teacher.dashboard consume the
+// exam facade (cycles exam ↔ student and exam ↔ teacher)
 const studentService  = () => require('../../student').service;
 const teacherService  = () => require('../../teacher').service;
 const { SCHEDULE_STATUS } = require('../../../shared/utils/schedule.base');

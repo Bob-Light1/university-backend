@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * Tests de CONTRAT des façades de modules.
+ * CONTRACT tests for module facades.
  *
- * Garantit l'invariant du monolithe modulaire (MODULAR_MONOLITH_MIGRATION.md §3) :
- * chaque module expose exactement `{ routes, service }` via son index.js, et les
- * fonctions de service consommées par d'AUTRES modules (l'API inter-modules
- * construite pendant le chantier 20b vagues B/C) restent présentes.
+ * Guarantees the modular monolith invariant (MODULAR_MONOLITH_MIGRATION.md §3):
+ * each module exposes exactly `{ routes, service }` via its index.js, and the
+ * service functions consumed by OTHER modules (the inter-module API built
+ * during work item 20b waves B/C) remain present.
  *
- * Ce test aurait attrapé un export de façade manquant ou renommé — la classe de
- * régression la plus probable après la migration.
+ * This test would have caught a missing or renamed facade export — the most
+ * likely class of regression after the migration.
  */
 
 const MODULES = [
@@ -22,7 +22,7 @@ const MODULES = [
 describe('Forme de façade { routes, service } pour chaque module', () => {
   test.each(MODULES)('modules/%s expose routes + service', (name) => {
     const mod = require(`../../modules/${name}`);
-    expect(mod).toHaveProperty('routes');        // peut être null (ex. finance)
+    expect(mod).toHaveProperty('routes');        // may be null (e.g. finance)
     expect(mod).toHaveProperty('service');
     expect(typeof mod.service).toBe('object');
     expect(mod.service).not.toBeNull();
@@ -30,7 +30,7 @@ describe('Forme de façade { routes, service } pour chaque module', () => {
 });
 
 describe('API inter-modules — fonctions de service attendues', () => {
-  // [module, [fonctions exposées et consommées ailleurs]]
+  // [module, [functions exposed and consumed elsewhere]]
   const CONTRACTS = [
     ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusNotificationContact', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses']],
     ['class',   ['countClassesOnCampus', 'resolveClassesForSchedule', 'getClassCampusRef', 'findClassForBulk', 'addTeacherToClasses', 'setClassManager']],

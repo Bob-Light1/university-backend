@@ -1,5 +1,5 @@
 const classRepo = require('../class.repository');
-// Require paresseux : class est dans la cloture statique de campus
+// Lazy require: class is in the static closure of campus
 const getCampusDocById = (...args) => require('../../campus').service.getCampusDocById(...args);
 const {
   sendSuccess,
@@ -14,7 +14,7 @@ const {
   isValidObjectId,
   buildCampusFilter,
 } = require('../../../shared/utils/validation-helpers');
-// Require paresseux : teacher.config consommera la façade class en C4 (cycle class ↔ teacher)
+// Lazy require: teacher.config will consume the class facade in C4 (cycle class ↔ teacher)
 const validateTeacherBelongsToCampus = (...args) =>
   require('../../teacher').service.validateTeacherBelongsToCampus(...args);
 

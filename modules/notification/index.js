@@ -1,14 +1,14 @@
 /**
- * @file index.js — FAÇADE du module notification (socle Phase 2).
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3.
+ * @file index.js — FACADE of the notification module (Phase 2 foundation).
+ * Sole public entry point of the module — see MODULAR_MONOLITH_MIGRATION.md §3.
  */
 
 const routes  = require('./notification.routes');
 const service = require('./notification.service');
 
 module.exports = {
-  routes,   // monté par app.js          :  app.use('/api/notifications', notification.routes)
-  service,  // API inter-modules         :  require('../notification').service.notify({ ... })
-  // + cron de retry                      :  cron.schedule('*/10 * * * *', service.runRetryJob)
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by app.js          :  app.use('/api/notifications', notification.routes)
+  service,  // inter-module API           :  require('../notification').service.notify({ ... })
+  // + retry cron                         :  cron.schedule('*/10 * * * *', service.runRetryJob)
+  // NO model exported. NO controller exported.
 };

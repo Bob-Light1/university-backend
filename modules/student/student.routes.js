@@ -5,8 +5,8 @@
  *
  * Monté dans server.js via  app.use('/api', routes)  → URLs INCHANGÉES :
  *   /api/students/*           — CRUD, profil, dashboard
- *   /api/schedules/student/*  — emplois du temps étudiants
- *   /api/attendance/student/* — présences étudiants
+ *   /api/schedules/student/*  — student timetables
+ *   /api/attendance/student/* — student attendance
  */
 
 const express = require('express');

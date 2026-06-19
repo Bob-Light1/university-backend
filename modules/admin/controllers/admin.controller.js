@@ -30,7 +30,7 @@ require('dotenv').config();
 const bcrypt  = require('bcrypt');
 const jwt     = require('jsonwebtoken');
 
-const Admin      = require('../admin.model'); // passé au profileSvc partagé (hors repo)
+const Admin      = require('../admin.model'); // passed to the shared profileSvc (outside repo)
 const adminRepo  = require('../admin.repository');
 const profileSvc = require('../../../shared/services/profile.service');
 
@@ -245,8 +245,8 @@ const createAdmin = asyncHandler(async (req, res) => {
       }],
     });
 
-    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget :
-    // n'impacte jamais la création. Admin/Director sont globaux → pas de campusId.
+    // Welcome notification (in-app + inert email without SMTP). Fire-and-forget:
+    // never affects account creation. Admin/Director are global → no campusId.
     require('../../notification').service.notify({
       recipient: {
         id:    newAdmin._id,

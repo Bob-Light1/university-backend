@@ -71,7 +71,7 @@ const getAllAnnouncements = async (req, res) => {
     const { data, total } = await announcementRepo.paginateForAdmin({
       isGlobalRole:      isGlobalRole(req.user.role),
       campusId:          req.user.campusId,
-      requestedCampusId: campusId, // narrow (ADMIN/DIRECTOR only — appliqué dans le repo)
+      requestedCampusId: campusId, // narrow (ADMIN/DIRECTOR only — applied in the repo)
       status,
       type,
       targetRole,

@@ -47,8 +47,8 @@ const partnerLeadSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // ── PARTENAIRE RÉFÉRENT ───────────────────────────────────────────────
-    // null pour les visites directes (source === 'direct')
+    // ── REFERRING PARTNER ────────────────────────────────────────────────
+    // null for direct visits (source === 'direct')
     partner: {
       type:    mongoose.Schema.Types.ObjectId,
       ref:     'Partner',
@@ -94,7 +94,7 @@ const partnerLeadSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Localisation déclarée par le prospect (spec §4.1 — Pays / Ville)
+    // Location declared by the prospect (spec §4.1 — Country / City)
     city: {
       type:    String,
       trim:    true,
@@ -117,8 +117,8 @@ const partnerLeadSchema = new mongoose.Schema(
       required: [true, 'Source is required'],
     },
 
-    // ── PIPELINE STATUT ───────────────────────────────────────────────────
-    // isConverted est ABSENT — dérivé de status === 'enrolled'
+    // ── PIPELINE STATUS ───────────────────────────────────────────────────
+    // isConverted is ABSENT — derived from status === 'enrolled'
     status: {
       type:    String,
       enum:    {
@@ -148,13 +148,13 @@ const partnerLeadSchema = new mongoose.Schema(
       default: null,
     },
 
-    // SHA-256 hash uniquement — jamais l'IP brute. Retenu 90 jours (RGPD + Loi n°2010/012).
+    // SHA-256 hash only — never the raw IP. Retained 90 days (GDPR + Law n°2010/012).
     ipAddressHash: {
       type:    String,
       default: null,
     },
 
-    // Champ honeypot : true si le bot a rempli le champ caché. Traitement silencieux côté API.
+    // Honeypot field: true if the bot filled the hidden field. Silently handled on the API side.
     honeypotTripped: {
       type:    Boolean,
       default: false,
@@ -202,15 +202,15 @@ const partnerLeadSchema = new mongoose.Schema(
 
 // ── INDEXES ───────────────────────────────────────────────────────────────────
 
-// Déduplication prospect par campus
+// Prospect deduplication by campus
 partnerLeadSchema.index({ email: 1, schoolCampus: 1 });
 partnerLeadSchema.index({ phone: 1, schoolCampus: 1 });
 
-// Requêtes pipeline
+// Pipeline queries
 partnerLeadSchema.index({ schoolCampus: 1, status: 1, partner: 1 });
 partnerLeadSchema.index({ partner: 1, status: 1 });
 
-// Détection IP_BURST
+// IP_BURST detection
 partnerLeadSchema.index({ ipAddressHash: 1, createdAt: 1 });
 
 // ── VIRTUEL ───────────────────────────────────────────────────────────────────

@@ -2,21 +2,21 @@
 
 /**
  * @file competition.closing.cron.js
- * @description Clôture mensuelle de la compétition de quiz (spec §4.5 / §10 Phase 2).
+ * @description Monthly closing of the quiz competition (spec §4.5 / §10 Phase 2).
  *
- *  Déclenché le 1er du mois : pour chaque CompetitionPrize encore active dont la période
- *  est révolue (period < période courante), calcule le classement final depuis les
- *  QuizSession de cette période/campus, peuple winners[] et passe isActive:false.
+ *  Triggered on the 1st of the month: for each CompetitionPrize still active whose period
+ *  has elapsed (period < current period), computes the final ranking from the
+ *  QuizSession of that period/campus, populates winners[] and sets isActive:false.
  *
- *  Les gagnants sont figés (displayName + score) au moment de la clôture. La notification
- *  email/SMS (Africa's Talking + Resend/SendGrid) est un prérequis Phase 3 — non déclenchée
- *  ici, notifiedAt reste null jusqu'à branchement.
+ *  Winners are frozen (displayName + score) at the moment of closing. The email/SMS
+ *  notification (Africa's Talking + Resend/SendGrid) is a Phase 3 prerequisite — not triggered
+ *  here, notifiedAt stays null until wired up.
  *
- *  Usage dans server.js (node-cron) :
+ *  Usage in server.js (node-cron):
  *    const { runCompetitionClosingJob } = require('./crons/competition.closing.cron');
- *    cron.schedule('5 0 1 * *', runCompetitionClosingJob); // 1er du mois à 00:05
+ *    cron.schedule('5 0 1 * *', runCompetitionClosingJob); // 1st of the month at 00:05
  *
- *  Déclenchement manuel (tests / rattrapage) :
+ *  Manual trigger (tests / catch-up):
  *    const { closeCompetition } = require('./crons/competition.closing.cron');
  *    await closeCompetition(competitionId);
  */
@@ -24,11 +24,11 @@
 const repo = require('./public-portal.repository');
 const { notifyWinners } = require('./notification.service');
 
-// Nombre de gagnants retenus par compétition (top N — couvre 1er, 2e-3e, top 10 de la spec)
+// Number of winners kept per competition (top N — covers 1st, 2nd-3rd, top 10 of the spec)
 const TOP_N = 10;
 
 /**
- * Période courante au format 'YYYY-MM' (UTC).
+ * Current period in 'YYYY-MM' format (UTC).
  * @returns {string}
  */
 function currentPeriod() {
@@ -39,7 +39,7 @@ function currentPeriod() {
 }
 
 /**
- * Clôt une compétition : calcule les gagnants depuis les QuizSession et fige le résultat.
+ * Closes a competition: computes winners from QuizSession and freezes the result.
  *
  * @param {import('mongoose').Types.ObjectId|string} competitionId
  * @returns {Promise<{ winners: number }>}
@@ -54,7 +54,7 @@ const closeCompetition = async (competitionId) => {
     return { winners: 0 };
   }
 
-  // Meilleures sessions de la période pour ce campus — une session par token (déjà unique)
+  // Best sessions of the period for this campus — one session per token (already unique)
   const topSessions = await repo.findTopQuizSessions(
     { schoolCampus: competition.schoolCampus, period: competition.period },
     TOP_N,
@@ -82,14 +82,14 @@ const closeCompetition = async (competitionId) => {
 };
 
 /**
- * Job cron : clôt toutes les compétitions actives dont la période est révolue.
+ * Cron job: closes all active competitions whose period has elapsed.
  *
  * @returns {Promise<{ closed: number, totalWinners: number }>}
  */
 const runCompetitionClosingJob = async () => {
   const period = currentPeriod();
 
-  // Actives ET d'une période strictement antérieure à la période courante
+  // Active AND of a period strictly earlier than the current period
   const due = await repo.findActiveCompetitionsBeforePeriod(period);
 
   let totalWinners = 0;

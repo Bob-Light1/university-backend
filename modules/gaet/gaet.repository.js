@@ -1,63 +1,63 @@
 'use strict';
 
 /**
- * @file gaet.repository.js — couche de persistance du domaine GAET.
+ * @file gaet.repository.js — persistence layer of the GAET domain.
  *
- * SEUL fichier du module autorisé à interroger le model GaetConstraint
- * (controller + service + worker). Étape 0 de la préparation Postgres — voir
+ * ONLY file in the module allowed to query the GaetConstraint model
+ * (controller + service + worker). Step 0 of the Postgres preparation — see
  * POSTGRES_MIGRATION_ASSESSMENT.md §7.
  *
- * Le model n'a aucun hook pre/post (seulement des virtuals) : les transitions de
- * statut atomiques (findOneAndUpdate) sont donc fidèles. Le filtre campus
- * (isolation multi-tenant, {schoolCampus}|{}) est construit par le controller et
- * passé en paramètre.
+ * The model has no pre/post hooks (only virtuals): atomic status transitions
+ * (findOneAndUpdate) are therefore faithful. The campus filter
+ * (multi-tenant isolation, {schoolCampus}|{}) is built by the controller and
+ * passed as a parameter.
  */
 
 const GaetConstraint = require('./gaet-constraint.model');
 const { GAET_STATUS } = GaetConstraint;
 
-// ── Lectures ─────────────────────────────────────────────────────────────────
+// ── Reads ────────────────────────────────────────────────────────────────────
 
-/** Contraintes d'un campus (sans les sessions générées — vues liste). */
+/** Constraints of a campus (without the generated sessions — list views). */
 const listForCampus = (query) =>
   GaetConstraint.find(query).select('-generatedSessions').lean();
 
-/** Vue "statut" (polling). */
+/** "Status" view (polling). */
 const findStatusView = (id, campusFilter) =>
   GaetConstraint.findOne({ _id: id, ...campusFilter })
     .select('status qualityReport generatedAt generatingStartedAt generationVersion academicYear semester schoolCampus')
     .lean();
 
-/** Vue "preview" (sessions générées). */
+/** "Preview" view (generated sessions). */
 const findPreviewView = (id, campusFilter) =>
   GaetConstraint.findOne({ _id: id, ...campusFilter })
     .select('status generatedSessions qualityReport academicYear semester schoolCampus')
     .lean();
 
-/** Vue "conflits". */
+/** "Conflicts" view. */
 const findConflictsView = (id, campusFilter) =>
   GaetConstraint.findOne({ _id: id, ...campusFilter })
     .select('status generatedSessions courseRequirements qualityReport')
     .lean();
 
-/** Contrainte par campus + année + semestre (contrôle d'existence). */
+/** Constraint by campus + year + semester (existence check). */
 const findByYearSemester = (campusFilter, academicYear, semester) =>
   GaetConstraint.findOne({ ...campusFilter, academicYear, semester }).lean();
 
-/** Contrainte par id dans la portée campus (fallback). */
+/** Constraint by id within the campus scope (fallback). */
 const findInCampus = (id, campusFilter) =>
   GaetConstraint.findOne({ _id: id, ...campusFilter }).lean();
 
-/** Contrainte pour publication (lecture seule, virtual isPublishable inclus). */
+/** Constraint for publishing (read-only, virtual isPublishable included). */
 const findForPublish = (id, campusFilter) =>
   GaetConstraint.findOne({ _id: id, ...campusFilter }).lean({ virtuals: true });
 
-/** Lecture par id (worker de génération). */
+/** Read by id (generation worker). */
 const findByIdLean = (id) => GaetConstraint.findById(id).lean();
 
-// ── Écritures (transitions atomiques — pas de hook) ────────────────────────────
+// ── Writes (atomic transitions — no hook) ────────────────────────────────────
 
-/** Upsert des contraintes pour (campus, année, semestre). @returns {Promise<Document>} */
+/** Upsert constraints for (campus, year, semester). @returns {Promise<Document>} */
 const upsert = (campusFilter, academicYear, semester, $set) =>
   GaetConstraint.findOneAndUpdate(
     { ...campusFilter, academicYear, semester },
@@ -66,9 +66,9 @@ const upsert = (campusFilter, academicYear, semester, $set) =>
   );
 
 /**
- * Réserve atomiquement la contrainte pour génération (passe en GENERATING si
- * elle n'est ni GENERATING ni PUBLISHED). Renvoie le doc AVANT mise à jour
- * (new:false) — ou null si aucun match.
+ * Atomically claims the constraint for generation (switches to GENERATING if
+ * it is neither GENERATING nor PUBLISHED). Returns the doc BEFORE the update
+ * (new:false) — or null if no match.
  */
 const claimForGeneration = (campusFilter, academicYear, semester) =>
   GaetConstraint.findOneAndUpdate(
@@ -80,11 +80,11 @@ const claimForGeneration = (campusFilter, academicYear, semester) =>
     { new: false },
   );
 
-/** Restaure le statut + efface generatingStartedAt (échec pré-vol). */
+/** Restores the status + clears generatingStartedAt (pre-flight failure). */
 const restoreStatus = (id, originalStatus) =>
   GaetConstraint.findByIdAndUpdate(id, { $set: { status: originalStatus, generatingStartedAt: null } });
 
-/** Persiste le résultat du worker de génération. */
+/** Persists the generation worker result. */
 const applyWorkerResult = (id, { status, sessions, report, generatedBy, generationVersion }) =>
   GaetConstraint.findByIdAndUpdate(id, {
     $set: {
@@ -98,19 +98,19 @@ const applyWorkerResult = (id, { status, sessions, report, generatedBy, generati
     },
   });
 
-/** Marque une génération comme échouée. */
+/** Marks a generation as failed. */
 const markFailed = (id) =>
   GaetConstraint.findByIdAndUpdate(id, { $set: { status: GAET_STATUS.FAILED, generatingStartedAt: null } });
 
-/** Marque la contrainte comme publiée. */
+/** Marks the constraint as published. */
 const markPublished = (id, publishedBy) =>
   GaetConstraint.findByIdAndUpdate(id, {
     $set: { status: GAET_STATUS.PUBLISHED, publishedAt: new Date(), publishedBy },
   });
 
 /**
- * Annule atomiquement un emploi du temps généré (non publié). Renvoie le doc
- * mis à jour (new:true), ou null si l'état ne le permet pas.
+ * Atomically cancels a generated (unpublished) timetable. Returns the updated
+ * doc (new:true), or null if the current state does not allow it.
  */
 const cancel = (id, campusFilter) =>
   GaetConstraint.findOneAndUpdate(
@@ -132,9 +132,9 @@ const cancel = (id, campusFilter) =>
   );
 
 /**
- * Récupère les jobs zombies (GENERATING dépassé) → FAILED.
- * @param {number} thresholdMs - ancienneté minimale de generatingStartedAt
- * @returns {Promise<number>} nombre de jobs récupérés
+ * Recovers zombie jobs (GENERATING timed out) → FAILED.
+ * @param {number} thresholdMs - minimum age of generatingStartedAt
+ * @returns {Promise<number>} number of jobs recovered
  */
 const recoverZombies = async (thresholdMs) => {
   const cutoff = new Date(Date.now() - thresholdMs);

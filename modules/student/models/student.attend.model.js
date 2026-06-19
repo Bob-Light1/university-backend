@@ -24,7 +24,7 @@ const mongoose = require('mongoose');
 // HELPERS
 // ─────────────────────────────────────────────
 
-/** Calcule le numéro de semaine ISO d'une date. */
+/** Computes the ISO week number of a date. */
 const getWeekNumber = (date) => {
   const d      = new Date(date);
   const oneJan = new Date(d.getFullYear(), 0, 1);
@@ -46,7 +46,7 @@ const studentAttendanceSchema = new mongoose.Schema(
       index:    true,
     },
 
-    /** Séance planifiée (StudentSchedule) */
+    /** Planned session (StudentSchedule) */
     schedule: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'StudentSchedule',
@@ -54,7 +54,7 @@ const studentAttendanceSchema = new mongoose.Schema(
       index:    true,
     },
 
-    /** Dénormalisé pour les requêtes rapides */
+    /** Denormalized for fast queries */
     class: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Class',
@@ -70,22 +70,22 @@ const studentAttendanceSchema = new mongoose.Schema(
       index:    true,
     },
 
-    /** Matière (dénormalisé) */
+    /** Subject (denormalized) */
     subject: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Subject',
       required: [true, 'Subject is required'],
     },
 
-    /** Enseignant qui a enregistré la présence */
+    /** Teacher who recorded the attendance */
     recordedBy: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Teacher',
       required: [true, 'Recorder is required'],
     },
 
-    // ── STATUT DE PRÉSENCE ───────────────────
-    /** false = absent (défaut), true = présent */
+    // ── ATTENDANCE STATUS ────────────────────
+    /** false = absent (default), true = present */
     status: {
       type:    Boolean,
       default: false,
@@ -103,7 +103,7 @@ const studentAttendanceSchema = new mongoose.Schema(
     sessionStartTime: { type: String },
     sessionEndTime:   { type: String },
 
-    // ── PÉRIODE ACADÉMIQUE ───────────────────
+    // ── ACADEMIC PERIOD ──────────────────────
     academicYear: {
       type:     String,
       required: [true, 'Academic year is required'],
@@ -114,7 +114,7 @@ const studentAttendanceSchema = new mongoose.Schema(
       },
     },
 
-    /** Cohérent avec studentAttendance existant et schedule.base.js */
+    /** Consistent with existing studentAttendance and schedule.base.js */
     semester: {
       type:     String,
       required: [true, 'Semester is required'],
@@ -149,7 +149,7 @@ const studentAttendanceSchema = new mongoose.Schema(
     justifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     justifiedAt: { type: Date },
 
-    // ── MÉTADONNÉES ─────────────────────────
+    // ── METADATA ────────────────────────────
     remarks: {
       type:      String,
       maxlength: [500, 'Remarks must not exceed 500 characters'],
@@ -171,7 +171,7 @@ const studentAttendanceSchema = new mongoose.Schema(
 // INDEXES
 // ─────────────────────────────────────────────
 
-/** Un seul enregistrement par étudiant, par séance, par date */
+/** One record per student, per session, per date */
 studentAttendanceSchema.index(
   { student: 1, schedule: 1, attendanceDate: 1 },
   { unique: true }
@@ -213,7 +213,7 @@ studentAttendanceSchema.pre('save', function () {
 // ─────────────────────────────────────────────
 
 /**
- * Verrouille l'enregistrement (impossible de modifier le statut ensuite).
+ * Locks the record (status cannot be modified afterwards).
  * @param {ObjectId} lockedBy
  * @param {string}   lockedByModel  – 'Teacher' | 'Campus' | 'System'
  */
@@ -231,10 +231,10 @@ studentAttendanceSchema.methods.lock = async function (
 };
 
 /**
- * Ajoute une justification d'absence.
+ * Adds an absence justification.
  * @param {string}   justification
  * @param {ObjectId} justifiedBy  – ref Teacher
- * @param {string}   [doc]        – URL du document justificatif
+ * @param {string}   [doc]        – URL of the supporting document
  */
 studentAttendanceSchema.methods.addJustification = async function (
   justification,
@@ -254,7 +254,7 @@ studentAttendanceSchema.methods.addJustification = async function (
 };
 
 /**
- * Bascule le statut de présence.
+ * Toggles the attendance status.
  * @param {boolean}  newStatus
  * @param {ObjectId} userId – ref Teacher
  */
@@ -281,7 +281,7 @@ studentAttendanceSchema.methods.toggleStatus = async function (newStatus, userId
 // ─────────────────────────────────────────────
 
 /**
- * Verrouille tous les enregistrements d'une date donnée sur un campus.
+ * Locks all records for a given date on a campus.
  * @param {Date}     date
  * @param {ObjectId} [campusId]
  */
@@ -310,7 +310,7 @@ studentAttendanceSchema.statics.lockDailyAttendance = async function (
 };
 
 /**
- * Statistiques de présence pour un étudiant.
+ * Attendance statistics for a student.
  * @param {ObjectId} studentId
  * @param {string}   academicYear
  * @param {string}   semester  – 'S1' | 'S2' | 'Annual'
@@ -378,7 +378,7 @@ studentAttendanceSchema.statics.getStudentStats = async function (
 };
 
 /**
- * Statistiques de présence pour une classe.
+ * Attendance statistics for a class.
  * @param {ObjectId} classId
  * @param {Date}     [date]
  * @param {string}   period  – 'day' | 'week' | 'month' | 'year'
@@ -435,7 +435,7 @@ studentAttendanceSchema.statics.getClassStats = async function (
 };
 
 /**
- * Présences du jour pour une séance et une classe données.
+ * Today's attendance for a given session and class.
  * @param {ObjectId} scheduleId
  * @param {ObjectId} classId
  * @param {Date}     [date=new Date()]

@@ -19,13 +19,13 @@ const scopeFilter = (id, campusScope) => {
   return f;
 };
 
-/** Rôle actif d'un campus (validation d'affectation côté staff). */
+/** Active role on a campus (assignment validation on the staff side). */
 const findActiveInCampus = (roleId, campusId) =>
   StaffRole.findOne({ _id: roleId, campus: campusId, isActive: true }).lean();
 
 const create = (data) => StaffRole.create(data);
 
-/** Liste paginée (campus peuplé). @returns {Promise<{data, total}>} */
+/** Paginated list (campus populated). @returns {Promise<{data, total}>} */
 const paginate = async ({ campusScope, isActive, search, skip, limit }) => {
   const filter = {};
   if (campusScope) filter.campus = campusScope;
@@ -45,7 +45,7 @@ const paginate = async ({ campusScope, isActive, search, skip, limit }) => {
 const findOneScoped = (roleId, campusScope) =>
   StaffRole.findOne(scopeFilter(roleId, campusScope)).populate('campus', 'campus_name').lean();
 
-/** Lecture brute scoped (préconditions toggle/delete : _id, isActive). */
+/** Raw scoped read (preconditions for toggle/delete: _id, isActive). */
 const findScopedRaw = (roleId, campusScope) =>
   StaffRole.findOne(scopeFilter(roleId, campusScope)).lean();
 
@@ -53,7 +53,7 @@ const updateScoped = (roleId, campusScope, updates) =>
   StaffRole.findOneAndUpdate(scopeFilter(roleId, campusScope), { $set: updates }, { new: true, runValidators: true })
     .populate('campus', 'campus_name').lean();
 
-/** Active/désactive un rôle (pas de hook → findByIdAndUpdate fidèle). */
+/** Activates/deactivates a role (no hook → findByIdAndUpdate is faithful). */
 const setActive = (id, isActive) =>
   StaffRole.findByIdAndUpdate(id, { $set: { isActive } }, { new: true }).lean();
 

@@ -2,15 +2,15 @@
 /**
  * seed-campus-portal.js
  *
- * Peuple les champs du portail sur les documents Campus existants :
- *   - campusSlug  (dérivé de campus_name si absent)
- *   - programs    (liste des formations)
+ * Populates the portal fields on existing Campus documents:
+ *   - campusSlug  (derived from campus_name if absent)
+ *   - programs    (list of programs)
  *   - nextBatchDate
  *
- * Usage :
- *   node scripts/seed-campus-portal.js              → applique les changements
- *   node scripts/seed-campus-portal.js --dry-run    → affiche sans modifier
- *   node scripts/seed-campus-portal.js --list       → liste tous les campus existants
+ * Usage:
+ *   node scripts/seed-campus-portal.js              → applies the changes
+ *   node scripts/seed-campus-portal.js --dry-run    → prints without modifying
+ *   node scripts/seed-campus-portal.js --list       → lists all existing campuses
  */
 
 'use strict';
@@ -23,12 +23,12 @@ const DRY_RUN  = process.argv.includes('--dry-run');
 const LIST_ONLY = process.argv.includes('--list');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONFIGURATION — Modifie ce tableau selon tes campus réels
-// Chaque objet doit avoir :
-//   match     : portion du campus_name (insensible à la casse) pour identifier le campus
-//   slug      : identifiant URL unique, minuscules, tirets uniquement
-//   programs  : formations affichées dans le formulaire de pré-inscription
-//   nextBatch : date de la prochaine cohorte (null si pas encore définie)
+// CONFIGURATION — Edit this array according to your actual campuses
+// Each object must have:
+//   match     : portion of campus_name (case-insensitive) to identify the campus
+//   slug      : unique URL identifier, lowercase, hyphens only
+//   programs  : programs shown in the pre-registration form
+//   nextBatch : date of the next cohort (null if not yet defined)
 // ─────────────────────────────────────────────────────────────────────────────
 const CAMPUS_CONFIG = [
   {
@@ -67,13 +67,13 @@ const CAMPUS_CONFIG = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Génère un slug à partir du campus_name si aucune config ne correspond
+// Generates a slug from campus_name if no config matches
 // ─────────────────────────────────────────────────────────────────────────────
 function autoSlug(name) {
   return name
     .toLowerCase()
     .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')   // supprime les accents
+    .replace(/[̀-ͯ]/g, '')   // strips accents
     .replace(/[^a-z0-9\s-]/g, '')
     .trim()
     .replace(/\s+/g, '-')

@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Couche repository — module subject (R1, dernier).
- * Verrouille les filtres (unicité, pagination campus/statut/recherche, API
- * inter-modules) et la sémantique load→mutate→save. Model mocké (sans DB).
+ * Repository layer — subject module (R1, last).
+ * Locks down the filters (uniqueness, campus/status/search pagination, inter-module
+ * API) and the load→mutate→save semantics. Model mocked (no DB).
  */
 
 jest.mock('../../modules/subject/subject.model', () => {

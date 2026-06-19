@@ -2,17 +2,17 @@
 
 /**
  * @file competition.prize.model.js
- * @description Prix de la compétition mensuelle (spec §8.5).
+ * @description Monthly competition prizes (spec §8.5).
  *
- * Campus isolation : schoolCampus obligatoire. Une période ('YYYY-MM') par campus.
- * prizes[]   : barème des récompenses, défini à l'ouverture de la compétition.
- * winners[]  : peuplé par le cron de clôture (competition.closing.cron.js) le 1er du mois,
- *              depuis les meilleures QuizSession de la période. notifiedAt branché en Phase 3.
+ * Campus isolation: schoolCampus required. One period ('YYYY-MM') per campus.
+ * prizes[]  : reward scale, defined when the competition opens.
+ * winners[] : populated by the closing cron (competition.closing.cron.js) on the 1st of the month,
+ *             from the top QuizSessions of the period. notifiedAt wired in Phase 3.
  */
 
 const mongoose = require('mongoose');
 
-// Barème d'une récompense — description bilingue
+// Reward scale entry — bilingual description
 const prizeSchema = new mongoose.Schema(
   {
     rank: {
@@ -32,7 +32,7 @@ const prizeSchema = new mongoose.Schema(
         default: null,
       },
     },
-    // Valeur indicative (ex. '20% de réduction', 'Badge numérique')
+    // Indicative value (e.g. '20% discount', 'Digital badge')
     value: {
       type: String,
       trim: true,
@@ -42,7 +42,7 @@ const prizeSchema = new mongoose.Schema(
   { _id: false }
 );
 
-// Gagnant figé par le cron de clôture
+// Winner snapshot frozen by the closing cron
 const winnerSchema = new mongoose.Schema(
   {
     rank: {
@@ -60,7 +60,7 @@ const winnerSchema = new mongoose.Schema(
       ref:  'PartnerLead',
       default: null,
     },
-    // Copie figée du pseudonyme/score au moment de la clôture
+    // Frozen snapshot of display name/score at closing time
     displayName: {
       type: String,
       trim: true,
@@ -72,7 +72,7 @@ const winnerSchema = new mongoose.Schema(
       max:     100,
       default: 0,
     },
-    // Renseigné quand la notification est envoyée (Phase 3 — null pour l'instant)
+    // Set when the notification is sent (Phase 3 — null for now)
     notifiedAt: {
       type:    Date,
       default: null,
@@ -90,7 +90,7 @@ const competitionPrizeSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // Format 'YYYY-MM' — une compétition par campus et par mois
+    // Format 'YYYY-MM' — one competition per campus per month
     period: {
       type:     String,
       required: [true, 'period is required'],
@@ -102,20 +102,20 @@ const competitionPrizeSchema = new mongoose.Schema(
       default: [],
     },
 
-    // Compétition en cours ; passée à false par le cron de clôture
+    // Ongoing competition; set to false by the closing cron
     isActive: {
       type:    Boolean,
       default: true,
       index:   true,
     },
 
-    // Date de clôture — utilisée pour le countdown côté portail
+    // Closing date — used for the countdown on the portal side
     closingDate: {
       type:     Date,
       required: [true, 'closingDate is required'],
     },
 
-    // Peuplé par le cron de clôture mensuelle
+    // Populated by the monthly closing cron
     winners: {
       type:    [winnerSchema],
       default: [],
@@ -128,7 +128,7 @@ const competitionPrizeSchema = new mongoose.Schema(
   }
 );
 
-// Une seule compétition par campus et par période
+// One competition per campus per period
 competitionPrizeSchema.index({ schoolCampus: 1, period: 1 }, { unique: true });
 
 const CompetitionPrize = mongoose.model('CompetitionPrize', competitionPrizeSchema);

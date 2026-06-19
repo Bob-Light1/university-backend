@@ -1,28 +1,28 @@
 'use strict';
 
 /**
- * @file shared/i18n/languages.js — source unique des langues supportées.
+ * @file shared/i18n/languages.js — single source of supported languages.
  *
- * Avant ce fichier, la liste était dupliquée dans
- * `shared/middleware/locale.middleware.js` et
- * `modules/settings/models/userPreferences.model.js`. Elle vit désormais ici ;
- * ces deux modules l'importent. Pour ajouter une langue : étendre SUPPORTED_LANGUAGES
- * et fournir ses traductions dans `shared/i18n/catalogs/*`.
+ * Before this file, the list was duplicated in
+ * `shared/middleware/locale.middleware.js` and
+ * `modules/settings/models/userPreferences.model.js`. It now lives here;
+ * both modules import it. To add a language: extend SUPPORTED_LANGUAGES
+ * and provide its translations in `shared/i18n/catalogs/*`.
  */
 
-// Ordre = priorité d'affichage (en d'abord, c'est aussi le repli).
+// Order = display priority (en first, which is also the fallback).
 const SUPPORTED_LANGUAGES = ['en', 'fr', 'es', 'ar', 'zh-CN', 'de', 'pt', 'it', 'ru', 'ja'];
 
 const DEFAULT_LOCALE = 'en';
 
-// Langues à script droite-à-gauche — utile pour le rendu (email/UI).
+// Right-to-left script languages — useful for rendering (email/UI).
 const RTL_LANGUAGES = ['ar'];
 
 const isSupported = (code) => SUPPORTED_LANGUAGES.includes(code);
 
 /**
- * Ramène un code arbitraire vers une langue supportée, sinon null.
- * Gère « fr-FR » → « fr » et toute variante « zh-* » → « zh-CN ».
+ * Maps an arbitrary code to a supported language, or null otherwise.
+ * Handles « fr-FR » → « fr » and any « zh-* » variant → « zh-CN ».
  */
 function normalize(code) {
   if (!code || typeof code !== 'string') return null;

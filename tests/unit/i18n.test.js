@@ -33,7 +33,7 @@ describe('pick / interpolate', () => {
     const dict = { en: 'Hello', fr: 'Bonjour' };
     expect(i18n.pick(dict, 'fr')).toBe('Bonjour');
     expect(i18n.pick(dict, 'xx')).toBe('Hello'); // repli en
-    expect(i18n.pick('brut', 'fr')).toBe('brut'); // chaîne brute passe-plat
+    expect(i18n.pick('brut', 'fr')).toBe('brut'); // raw string passthrough
   });
 
   test('interpolate remplace les variables et vide les manquantes', () => {
@@ -43,7 +43,7 @@ describe('pick / interpolate', () => {
 });
 
 describe('couverture du catalogue notifications', () => {
-  // Collecte toutes les feuilles (dicts { lang: texte }) du catalogue.
+  // Collects all leaves (dicts { lang: text }) of the catalog.
   const leaves = [];
   for (const [template, channels] of Object.entries(catalog)) {
     for (const [channel, parts] of Object.entries(channels)) {

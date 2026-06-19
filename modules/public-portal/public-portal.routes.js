@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * @file public-portal.routes.js — Router composite du module public-portal.
+ * @file public-portal.routes.js — Composite router of the public-portal module.
  *
- * Monté dans server.js via  app.use('/api', routes)  → URLs INCHANGÉES :
- *   /api/public/*        — portail public (X-Portal-Key, pas de JWT)
- *   /api/portal-admin/*  — back-office du portail (JWT, ADMIN/DIRECTOR/CAMPUS_MANAGER)
+ * Mounted in server.js via  app.use('/api', routes)  → URLs UNCHANGED:
+ *   /api/public/*        — public portal (X-Portal-Key, no JWT)
+ *   /api/portal-admin/*  — portal back-office (JWT, ADMIN/DIRECTOR/CAMPUS_MANAGER)
  *
- * Chaque sous-router porte ses propres middlewares (publicPortalMiddleware /
- * authenticate) — aucun middleware global n'est appliqué entre les deux.
+ * Each sub-router carries its own middlewares (publicPortalMiddleware /
+ * authenticate) — no global middleware is applied between the two.
  */
 
 const express = require('express');

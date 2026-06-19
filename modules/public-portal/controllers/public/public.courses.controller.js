@@ -2,16 +2,16 @@
 
 /**
  * @file public.courses.controller.js
- * @description Aperçus de cours publiés pour un campus (spec §4.7).
+ * @description Published course previews for a campus (spec §4.7).
  *
- * Route : GET /api/public/course-previews?campusSlug=...&program=...
- * Renvoie les extraits isPublished, triés par order. Contenu bilingue ({fr, en})
- * transmis tel quel. Filtre optionnel par program.
+ * Route: GET /api/public/course-previews?campusSlug=...&program=...
+ * Returns the isPublished excerpts, sorted by order. Bilingual content ({fr, en})
+ * passed through as-is. Optional filter by program.
  *
- * NOTE : endpoint Phase 2 non détaillé dans la spec §7 — à valider avec le responsable projet.
+ * NOTE: Phase 2 endpoint not detailed in spec §7 — to be validated with the project lead.
  */
 
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 const repo = require('../../public-portal.repository');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');

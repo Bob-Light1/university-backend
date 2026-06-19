@@ -111,7 +111,7 @@ exports.updateLevel = async (req, res) => {
   try {
     const { name, code, type, order, description, status } = req.body;
 
-    // Build the set of fields actually provided (sémantique "update partiel").
+    // Build the set of fields actually provided (partial update semantics).
     const fields = {};
     if (name !== undefined) fields.name = name;
     if (code !== undefined) fields.code = code;

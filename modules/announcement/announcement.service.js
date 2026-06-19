@@ -7,7 +7,7 @@
 const { runExpiryJob } = require('./announcement.expiry.cron');
 
 module.exports = {
-  // Cron nocturne (archivage des annonces expirées + dé-épinglage).
-  // Planifié par server.js : cron.schedule('0 1 * * *', service.runExpiryJob)
+  // Nightly cron (archive expired announcements + unpin).
+  // Scheduled by server.js: cron.schedule('0 1 * * *', service.runExpiryJob)
   runExpiryJob,
 };

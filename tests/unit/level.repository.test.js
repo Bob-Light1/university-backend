@@ -7,15 +7,15 @@
  */
 
 jest.mock('../../modules/level/level.model', () => {
-  let nextDoc = null; // doc renvoyé par findById (configurable par test)
+  let nextDoc = null; // doc returned by findById (configurable per test)
   const leanQuery = (val) => ({
     sort: jest.fn().mockReturnThis(),
     lean: jest.fn().mockResolvedValue(val),
   });
   const findById = jest.fn(() => {
     const doc = nextDoc;
-    const p = Promise.resolve(doc);       // chemin écriture : `await Level.findById(id)`
-    p.lean = jest.fn().mockResolvedValue(doc); // chemin lecture : `.lean()`
+    const p = Promise.resolve(doc);       // write path: `await Level.findById(id)`
+    p.lean = jest.fn().mockResolvedValue(doc); // read path: `.lean()`
     return p;
   });
   return {

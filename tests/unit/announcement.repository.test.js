@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Couche repository — module announcement (R1).
- * Verrouille les filtres (isolation campus admin + portée visible), la sémantique
- * load→mutate→save de applyUpdate, et les requêtes du cron. Models mockés (sans DB).
+ * Repository layer — announcement module (R1).
+ * Locks down the filters (admin campus isolation + visible scope), the
+ * load→mutate→save semantics of applyUpdate, and the cron queries. Models mocked (no DB).
  */
 
 jest.mock('../../modules/announcement/models/announcement.model', () => {
@@ -89,7 +89,7 @@ describe('applyUpdate — load→assign→save', () => {
     const out = await repo.applyUpdate({ id: '1', isGlobalRole: false, campusId: 'c1' }, { status: 'published' });
     expect(out.status).toBe('published');
     expect(save).toHaveBeenCalledTimes(1);
-    // la portée admin (campus + non supprimé) est appliquée à la recherche
+    // the admin scope (campus + not deleted) is applied to the search
     expect(Announcement.findOne.mock.calls[0][0]).toMatchObject({ _id: '1', deletedAt: null, schoolCampus: 'c1' });
   });
 });

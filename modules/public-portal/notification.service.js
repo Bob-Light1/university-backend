@@ -148,8 +148,8 @@ function rankLabel(rank) {
  * @returns {Promise<{ notified: number, skipped: number }>}
  */
 async function notifyWinners(competition, brandName = 'AcadERP') {
-  // Coordonnées des gagnants via la façade partner (le model PartnerLead
-  // appartient au module partner).
+  // Winner contact details via the partner facade (the PartnerLead model
+  // belongs to the partner module).
   const { getLeadContact } = require('../partner').service;
   const period = competition.period;
   let notified = 0;

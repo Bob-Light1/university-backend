@@ -1,22 +1,22 @@
 'use strict';
 
 /**
- * @file finance.repository.js — couche de persistance du domaine finance.
+ * @file finance.repository.js — persistence layer of the finance domain.
  *
- * SEUL fichier du module autorisé à toucher les models (income / expense /
- * expense-category / studentFee / feePayment). Le service appelle ce repository
- * (jamais les models).
- * Étape 0 de la préparation Postgres — voir POSTGRES_MIGRATION_ASSESSMENT.md §7.
+ * The ONLY file in the module allowed to touch the models (income / expense /
+ * expense-category / studentFee / feePayment). The service calls this repository
+ * (never the models).
+ * Step 0 of the Postgres preparation — see POSTGRES_MIGRATION_ASSESSMENT.md §7.
  */
 
 const Income     = require('./models/income.model');
 const StudentFee = require('./models/studentFee.model');
 const FeePayment = require('./models/feePayment.model');
 
-// ── Income (compteur dashboard campus) ────────────────────────────────────────
+// ── Income (campus dashboard counter) ─────────────────────────────────────────
 
 /**
- * Compte les income d'un campus dans un statut donné.
+ * Counts a campus's incomes in a given status.
  * @param {string|ObjectId} campusId
  * @param {string} status
  * @returns {Promise<number>}
@@ -24,21 +24,21 @@ const FeePayment = require('./models/feePayment.model');
 const countByCampusAndStatus = (campusId, status) =>
   Income.countDocuments({ campus: campusId, status });
 
-// ── StudentFee (dettes) ───────────────────────────────────────────────────────
+// ── StudentFee (debts) ────────────────────────────────────────────────────────
 
-/** Crée une dette. @returns {Promise<Object>} document (non-lean, pour réutilisation). */
+/** Creates a debt. @returns {Promise<Object>} document (non-lean, for reuse). */
 const createFee = (doc) => StudentFee.create(doc);
 
-/** Dette par id (filtrée non supprimée), lean enrichi du virtuel `balance`. */
+/** Debt by id (filtered not-deleted), lean enriched with the `balance` virtual. */
 const findFeeById = (id, extra = {}) =>
   StudentFee.findOne({ _id: id, isDeleted: false, ...extra }).lean({ virtuals: true });
 
-/** Document Mongoose d'une dette (pour mutation via save()). */
+/** Mongoose document of a debt (for mutation via save()). */
 const getFeeDoc = (id, extra = {}) =>
   StudentFee.findOne({ _id: id, isDeleted: false, ...extra });
 
 /**
- * Liste paginée des dettes selon un filtre (déjà scopé campus par l'appelant).
+ * Paginated list of debts by a filter (already campus-scoped by the caller).
  * @returns {Promise<{ data: Object[], total: number }>}
  */
 const paginateFees = async ({ filter, skip, limit, sort = { createdAt: -1 } }) => {
@@ -50,13 +50,13 @@ const paginateFees = async ({ filter, skip, limit, sort = { createdAt: -1 } }) =
   return { data, total };
 };
 
-/** Toutes les dettes d'un étudiant (relevé), triées par création. */
+/** All of a student's debts (ledger), sorted by creation. */
 const findFeesByStudent = (studentId, extra = {}) =>
   StudentFee.find({ student: studentId, isDeleted: false, ...extra })
     .sort({ createdAt: -1 })
     .lean({ virtuals: true });
 
-/** Soft-delete d'une dette. @returns {Promise<Object|null>} */
+/** Soft-delete of a debt. @returns {Promise<Object|null>} */
 const softDeleteFee = (id, extra = {}) =>
   StudentFee.findOneAndUpdate(
     { _id: id, isDeleted: false, ...extra },
@@ -65,7 +65,7 @@ const softDeleteFee = (id, extra = {}) =>
   ).lean({ virtuals: true });
 
 /**
- * Dettes échues encore impayées (sweep overdue / rappels).
+ * Past-due debts still unpaid (overdue sweep / reminders).
  * @param {Date} now
  * @param {number} limit
  * @returns {Promise<Object[]>}
@@ -79,16 +79,16 @@ const findOverdueFees = (now, limit = 100) =>
     .limit(limit)
     .lean({ virtuals: true });
 
-// ── FeePayment (acomptes) ─────────────────────────────────────────────────────
+// ── FeePayment (payments) ─────────────────────────────────────────────────────
 
-/** Crée une ligne de paiement. @returns {Promise<Object>} */
+/** Creates a payment line. @returns {Promise<Object>} */
 const createPayment = (doc) => FeePayment.create(doc);
 
-/** Paiements rattachés à une dette, triés par date. */
+/** Payments attached to a debt, sorted by date. */
 const findPaymentsByFee = (feeId) =>
   FeePayment.find({ fee: feeId }).sort({ paidAt: -1 }).lean();
 
-/** Paiements d'un étudiant (relevé global). */
+/** A student's payments (global ledger). */
 const findPaymentsByStudent = (studentId) =>
   FeePayment.find({ student: studentId }).sort({ paidAt: -1 }).lean();
 

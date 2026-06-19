@@ -18,11 +18,11 @@ const config = {
     from: process.env.EMAIL_FROM,
     fromName: process.env.EMAIL_FROM_NAME
   },
-  // ── Socle notifications ─────────────────────────────────────────────────────
-  // Chaque canal est INERTE tant que sa config est absente : le module ne fait
-  // aucun appel externe (dev / CI / tests passent sans SMTP ni WhatsApp).
+  // ── Notification foundation ─────────────────────────────────────────────────
+  // Each channel is INERT as long as its config is absent: the module makes
+  // no external call (dev / CI / tests pass without SMTP or WhatsApp).
   notification: {
-    // Transport SMTP (canal email). Réutilise EMAIL_FROM / EMAIL_FROM_NAME ci-dessus.
+    // SMTP transport (email channel). Reuses EMAIL_FROM / EMAIL_FROM_NAME above.
     smtp: {
       host:     process.env.SMTP_HOST,
       port:     parseInt(process.env.SMTP_PORT, 10) || 587,
@@ -30,13 +30,13 @@ const config = {
       user:     process.env.SMTP_USER,
       password: process.env.SMTP_PASSWORD,
     },
-    // WhatsApp Cloud API (Meta) — appelé en HTTPS natif (fetch), aucun SDK requis.
+    // WhatsApp Cloud API (Meta) — called over native HTTPS (fetch), no SDK required.
     whatsapp: {
       token:         process.env.WHATSAPP_TOKEN,
       phoneNumberId: process.env.WHATSAPP_PHONE_ID,
       apiVersion:    process.env.WHATSAPP_API_VERSION || 'v21.0',
     },
-    // Tentatives de livraison avant abandon (canaux externes uniquement).
+    // Delivery attempts before giving up (external channels only).
     maxAttempts: parseInt(process.env.NOTIFICATION_MAX_ATTEMPTS, 10) || 3,
   },
 };

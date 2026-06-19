@@ -2,31 +2,31 @@
 
 /**
  * @file public.register.controller.js
- * @description Pré-inscription publique via portail partenaire.
+ * @description Public pre-registration via partner portal.
  *
- * Route : POST /api/public/pre-register
+ * Route: POST /api/public/pre-register
  *
- * Gère deux cas :
- *  - Avec partnerCode  : lead attribué au partenaire (referral_link | qr_code | manual_code)
- *  - Sans partnerCode  : lead direct — campus résolu via campusSlug
+ * Handles two cases:
+ *  - With partnerCode  : lead attributed to the partner (referral_link | qr_code | manual_code)
+ *  - Without partnerCode : direct lead — campus resolved via campusSlug
  *
- * Anti-fraude :
- *  1. HONEYPOT      → silent 200, aucune écriture DB
- *  2. SELF_REFERRAL → 422 (partenaire se pré-inscrit avec son propre code)
- *  3. DÉDUPLICATION (même email ou téléphone sur le même campus) → mise à jour
- *     silencieuse du lead existant (spec §4.1 / §9.2), attribution first-touch.
- *  4. IP_BURST (>5 leads de même IP hash en <10 min) → lead créé, flag ajouté
+ * Anti-fraud:
+ *  1. HONEYPOT      → silent 200, no DB write
+ *  2. SELF_REFERRAL → 422 (partner pre-registers with their own code)
+ *  3. DEDUPLICATION (same email or phone on the same campus) → silent
+ *     update of the existing lead (spec §4.1 / §9.2), first-touch attribution.
+ *  4. IP_BURST (>5 leads from the same IP hash in <10 min) → lead created, flag added
  *
- * Payload attendu (spec §3.3) :
+ * Expected payload (spec §3.3):
  *  firstName, lastName, email (required)
  *  phone, programInterest, partnerCode, campusSlug (optional)
  *  source: 'referral_link' | 'qr_code' | 'manual_code' | 'direct'
  *  utmParams: { utm_source, utm_medium, utm_campaign }
- *  honeypot: '' (doit être vide)
+ *  honeypot: '' (must be empty)
  */
 
-const partnerService = require('../../../partner').service; // façade module partner (§3)
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const partnerService = require('../../../partner').service; // partner module facade (§3)
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
 const {
@@ -37,7 +37,7 @@ const {
   sendNotFound,
 } = require('../../../../shared/utils/response-helpers');
 
-// Même règle de validation que le modèle Partner — cohérence ERP.
+// Same validation rule as the Partner model — ERP consistency.
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
 const publicPreRegister = asyncHandler(async (req, res) => {
@@ -54,7 +54,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, 'Pre-registration received.');
   }
 
-  // Validation champs obligatoires
+  // Required field validation
   if (!firstName?.trim()) return sendError(res, 400, 'firstName is required.');
   if (!lastName?.trim())  return sendError(res, 400, 'lastName is required.');
   if (!email?.trim())     return sendError(res, 400, 'email is required.');
@@ -70,7 +70,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   let resolvedCode = null;
 
   if (partnerCode?.trim()) {
-    // ── Flux partenaire ──────────────────────────────────────────────────
+    // ── Partner flow ─────────────────────────────────────────────────────
     partner = await partnerService.findActivePartnerByCode(partnerCode);
 
     if (!partner) {
@@ -85,7 +85,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
       return sendError(res, 422, 'Self-referral is not allowed.');
     }
   } else {
-    // ── Flux direct — résolution via campusSlug ─────────────────────────
+    // ── Direct flow — resolution via campusSlug ─────────────────────────
     if (!campusSlug?.trim()) {
       return sendError(res, 400, 'campusSlug is required for direct registrations.');
     }
@@ -102,8 +102,8 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   const normalizedPhone = phone?.trim() || null;
   const detectedSource  = source || (resolvedCode ? 'referral_link' : 'direct');
 
-  // 3 + 4. DÉDUPLICATION silencieuse (first-touch) puis création avec
-  // détection IP_BURST — logique métier portée par le module partner.
+  // 3 + 4. Silent DEDUPLICATION (first-touch) then creation with
+  // IP_BURST detection — business logic carried by the partner module.
   const { leadId, status, created } = await partnerService.upsertPreRegistrationLead({
     campusId,
     partner,

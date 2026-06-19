@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * @file finance.routes.js — routes du suivi paiement étudiant (montées sur /api/finance).
+ * @file finance.routes.js — student payment tracking routes (mounted on /api/finance).
  *
- * /my/ledger          → l'étudiant consulte son propre relevé.
- * /fees, /fees/:id…   → gestion (ADMIN / DIRECTOR / CAMPUS_MANAGER).
- * /students/:id/ledger→ relevé d'un étudiant (gestion).
+ * /my/ledger          → the student views their own ledger.
+ * /fees, /fees/:id…   → management (ADMIN / DIRECTOR / CAMPUS_MANAGER).
+ * /students/:id/ledger→ a student's ledger (management).
  */
 
 const express = require('express');
@@ -19,60 +19,60 @@ const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 
 router.use(authenticate);
 
-// ── Étudiant : son relevé (avant /fees pour éviter toute collision) ───────────
+// ── Student: their ledger (before /fees to avoid any collision) ───────────────
 /**
  * @route GET /api/finance/my/ledger
- * @desc  Relevé (dettes + paiements + totaux) de l'étudiant courant
+ * @desc  Ledger (debts + payments + totals) of the current student
  * @access STUDENT
  */
 router.get('/my/ledger', authorize(['STUDENT']), apiLimiter, ctrl.getMyLedger);
 
-// ── Gestion des dettes ────────────────────────────────────────────────────────
+// ── Debt management ───────────────────────────────────────────────────────────
 /**
  * @route POST /api/finance/fees
- * @desc  Crée une dette pour un étudiant (notifie le solde en in-app)
+ * @desc  Creates a debt for a student (notifies the balance in-app)
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.post('/fees', authorize(MGMT_ROLES), apiLimiter, ctrl.createFee);
 
 /**
  * @route GET /api/finance/fees
- * @desc  Liste paginée des dettes (filtres status/student/academicYear), scopée campus
+ * @desc  Paginated list of debts (filters status/student/academicYear), campus-scoped
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.get('/fees', authorize(MGMT_ROLES), apiLimiter, ctrl.listFees);
 
 /**
  * @route GET /api/finance/fees/:id
- * @desc  Une dette et ses paiements
+ * @desc  A debt and its payments
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.get('/fees/:id', authorize(MGMT_ROLES), apiLimiter, ctrl.getFee);
 
 /**
  * @route POST /api/finance/fees/:id/payments
- * @desc  Impute un acompte sur une dette
+ * @desc  Applies a payment to a debt
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.post('/fees/:id/payments', authorize(MGMT_ROLES), apiLimiter, ctrl.recordPayment);
 
 /**
  * @route POST /api/finance/fees/:id/remind
- * @desc  (Ré)envoie un rappel de solde à l'étudiant
+ * @desc  (Re)sends a balance reminder to the student
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.post('/fees/:id/remind', authorize(MGMT_ROLES), apiLimiter, ctrl.remindBalance);
 
 /**
  * @route DELETE /api/finance/fees/:id
- * @desc  Soft-delete d'une dette
+ * @desc  Soft-delete of a debt
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.delete('/fees/:id', authorize(MGMT_ROLES), apiLimiter, ctrl.deleteFee);
 
 /**
  * @route GET /api/finance/students/:studentId/ledger
- * @desc  Relevé d'un étudiant donné (scopé campus)
+ * @desc  Ledger of a given student (campus-scoped)
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.get('/students/:studentId/ledger', authorize(MGMT_ROLES), apiLimiter, ctrl.getStudentLedger);

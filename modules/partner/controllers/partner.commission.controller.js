@@ -2,7 +2,7 @@
 
 /**
  * @file partner.commission.controller.js
- * @description Gestion des commissions partenaires.
+ * @description Partner commission management.
  *
  * Routes:
  *  GET    /api/partners/commissions                  → listCommissions
@@ -14,18 +14,18 @@
  *  GET    /api/partners/commission-config            → getCommissionConfig
  *  PUT    /api/partners/commission-config            → updateCommissionConfig
  *
- * Invariants :
- * • Toute commission requiert validation humaine en P2 (zéro auto-validation).
- * • paymentChannel obligatoire au marquage 'paid'.
- * • Les partenaires (role PARTNER) voient uniquement leurs propres commissions.
- * • CommissionConfig est embarqué dans Campus model — accès via Campus.
+ * Invariants:
+ * • Every commission requires explicit human validation in P2 (zero auto-validation).
+ * • paymentChannel is mandatory when marking as 'paid'.
+ * • Partners (role PARTNER) can only see their own commissions.
+ * • CommissionConfig is embedded in the Campus model — accessed via Campus.
  */
 
 const mongoose = require('mongoose');
 
 const partnerRepo = require('../partner.repository');
-// Require paresseux vers la façade campus (hub) : la config de commission est
-// embarquée dans le model Campus — voir campus.repository.
+// Lazy require toward the campus facade (hub): the commission config is
+// embedded in the Campus model — see campus.repository.
 const campusService = () => require('../../campus').service;
 
 const {
@@ -90,7 +90,7 @@ const listCommissions = asyncHandler(async (req, res) => {
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
   const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
 
-  // summaryFilter : même scope sans filtre status pour KPIs cohérents
+  // summaryFilter: same scope without status filter for consistent KPIs
   const summaryFilter = { ...filter };
   delete summaryFilter.status;
 
@@ -129,7 +129,7 @@ const validateCommission = asyncHandler(async (req, res) => {
     validatedAt: new Date(),
   });
 
-  // TODO P2: Notifier partenaire (WhatsApp + in-app) — commission validée
+  // TODO P2: Notify partner (WhatsApp + in-app) — commission validated
 
   return sendSuccess(res, 200, 'Commission validated.', updated);
 });
@@ -167,7 +167,7 @@ const markPaid = asyncHandler(async (req, res) => {
     paidBy:         req.user.id,
   });
 
-  // TODO P2: Notifier partenaire (WhatsApp + in-app + générer PDF reçu via puppeteer-core)
+  // TODO P2: Notify partner (WhatsApp + in-app + generate PDF receipt via puppeteer-core)
 
   return sendSuccess(res, 200, 'Commission marked as paid.', updated);
 });
@@ -370,7 +370,7 @@ const downloadReceipt = asyncHandler(async (req, res) => {
 
   if (!commission) return sendNotFound(res, 'Commission receipt');
 
-  // TODO P2: Générer PDF reçu via puppeteer-core (même pattern que academic-pdf.service.js)
+  // TODO P2: Generate PDF receipt via puppeteer-core (same pattern as academic-pdf.service.js)
   return sendError(res, 501, 'PDF receipt generation not yet implemented in this build.');
 });
 

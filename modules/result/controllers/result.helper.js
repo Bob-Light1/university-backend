@@ -2,18 +2,18 @@
 
 /**
  * @file result.helpers.js
- * @description Helpers partagés et validation commune pour les controllers results.
+ * @description Shared helpers and common validation for the results controllers.
  *
- *  Ce fichier est importé par :
+ *  This file is imported by :
  *  • result.crud.controller.js
  *  • result.workflow.controller.js
  *  • result.analytics.controller.js
  *
- *  Il centralise :
- *  • Les guards de rôle (isGlobalRole, isManagerRole)
- *  • La résolution du campus depuis req
- *  • La validation des champs communs (ID, enums, academicYear)
- *  • Les helpers de pagination
+ *  It centralizes :
+ *  • Role guards (isGlobalRole, isManagerRole)
+ *  • Campus resolution from req
+ *  • Validation of common fields (ID, enums, academicYear)
+ *  • Pagination helpers
  */
 
 const mongoose = require('mongoose');
@@ -21,15 +21,15 @@ const { buildCampusFilter, isValidObjectId } = require('../../../shared/utils/va
 const { sendError, sendForbidden } = require('../../../shared/utils/response-helpers');
 const { RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
 
-// ─── GUARDS DE RÔLE ───────────────────────────────────────────────────────────
+// ─── ROLE GUARDS ──────────────────────────────────────────────────────────────
 
-/** true pour ADMIN et DIRECTOR — accès cross-campus et override des verrous */
+/** true for ADMIN and DIRECTOR — cross-campus access and lock override */
 const isGlobalRole  = (role) => role === 'ADMIN' || role === 'DIRECTOR';
 
-/** true pour ADMIN, DIRECTOR et CAMPUS_MANAGER */
+/** true for ADMIN, DIRECTOR and CAMPUS_MANAGER */
 const isManagerRole = (role) => isGlobalRole(role) || role === 'CAMPUS_MANAGER';
 
-// ─── RÉSOLUTION DU CAMPUS ─────────────────────────────────────────────────────
+// ─── CAMPUS RESOLUTION ────────────────────────────────────────────────────────
 
 /**
  * Returns the schoolCampus MongoDB filter to be applied on every Result query.
@@ -63,13 +63,13 @@ const getCampusFilter = (req, res) => {
 };
 
 /**
- * Résout le campusId effectif depuis req.user + body optionnel.
- * ADMIN/DIRECTOR peuvent spécifier un campus externe ; les autres sont limités
- * à leur propre campus.
+ * Resolves the effective campusId from req.user + optional body.
+ * ADMIN/DIRECTOR can specify an external campus ; others are limited
+ * to their own campus.
  *
  * @param {Object} req
- * @param {string} [campusFromBody] - Valeur optionnelle venue du body
- * @returns {string|null}  campusId résolu, ou null si absent
+ * @param {string} [campusFromBody] - Optional value coming from the body
+ * @returns {string|null}  resolved campusId, or null if absent
  */
 const resolveCampusId = (req, campusFromBody) => {
   const { role, campusId: userCampusId } = req.user;
@@ -78,11 +78,11 @@ const resolveCampusId = (req, campusFromBody) => {
     : userCampusId || null;
 };
 
-// ─── VALIDATION COMMUNE ───────────────────────────────────────────────────────
+// ─── COMMON VALIDATION ────────────────────────────────────────────────────────
 
 /**
- * Valide les champs contextuels communs à toutes les créations de résultats.
- * Retourne null si tout est valide, ou une chaîne d'erreur.
+ * Validates the contextual fields common to all result creations.
+ * Returns null if everything is valid, or an error string.
  *
  * @param {Object} fields - { evaluationType, semester, academicYear, score, maxScore }
  * @returns {string|null}
@@ -102,8 +102,8 @@ const validateResultContext = ({ evaluationType, semester, academicYear, score, 
 };
 
 /**
- * Valide les ObjectId obligatoires d'un résultat.
- * Retourne null si tous sont valides, ou une chaîne d'erreur.
+ * Validates the required ObjectId of a result.
+ * Returns null if all are valid, or an error string.
  *
  * @param {Object} ids - { student, classId, subject, teacher }
  * @returns {string|null}
@@ -117,12 +117,12 @@ const validateResultIds = ({ student, classId, subject, teacher }) => {
 };
 
 /**
- * Vérifie qu'une transition d'état est autorisée.
+ * Checks that a state transition is allowed.
  *
- * Transitions valides :
- *  DRAFT      → SUBMITTED  (enseignant)
+ * Valid transitions :
+ *  DRAFT      → SUBMITTED  (teacher)
  *  SUBMITTED  → PUBLISHED  (manager)
- *  SUBMITTED  → DRAFT      (renvoi en correction par manager)
+ *  SUBMITTED  → DRAFT      (sent back for correction by manager)
  *  PUBLISHED  → ARCHIVED   (manager)
  *
  * @param {string} from
@@ -139,12 +139,12 @@ const isValidTransition = (from, to) => {
   return (allowed[from] || []).includes(to);
 };
 
-// ─── HELPERS DE PAGINATION ────────────────────────────────────────────────────
+// ─── PAGINATION HELPERS ───────────────────────────────────────────────────────
 
 /**
- * Parse un paramètre de query en entier positif avec fallback.
- * @param {*}      val       - Valeur brute (string de query)
- * @param {number} fallback  - Valeur par défaut
+ * Parses a query parameter into a positive integer with fallback.
+ * @param {*}      val       - Raw value (query string)
+ * @param {number} fallback  - Default value
  * @returns {number}
  */
 const parsePositiveInt = (val, fallback) => {
@@ -155,7 +155,7 @@ const parsePositiveInt = (val, fallback) => {
 // ─── EXPORTS ──────────────────────────────────────────────────────────────────
 
 module.exports = {
-  // Guards de rôle
+  // Role guards
   isGlobalRole,
   isManagerRole,
   // Campus

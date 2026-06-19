@@ -2,17 +2,17 @@
 
 /**
  * @file publicPortal.middleware.js
- * @description Middleware dédié aux endpoints /api/public/*.
+ * @description Middleware dedicated to /api/public/* endpoints.
  *
- * Responsabilités :
- *  1. Vérifie le header X-Portal-Key (identifie le portail comme source connue)
- *  2. Hache l'IP en SHA-256 et l'attache à req.ipHash (jamais l'IP brute en DB)
+ * Responsibilities:
+ *  1. Verifies the X-Portal-Key header (identifies the portal as a known source)
+ *  2. Hashes the IP in SHA-256 and attaches it to req.ipHash (never the raw IP in DB)
  *
- * Ce middleware doit être monté AVANT les middlewares d'authentification JWT
- * puisque ces routes sont publiques (pas de JWT requis).
+ * This middleware must be mounted BEFORE JWT authentication middlewares
+ * since these routes are public (no JWT required).
  *
- * Limitation connue : X-Portal-Key visible dans le JS navigateur.
- * Protection réelle = CORS restreint + rate limiting côté ERP.
+ * Known limitation: X-Portal-Key is visible in browser JS.
+ * Real protection = restricted CORS + rate limiting on the ERP side.
  */
 
 const crypto = require('crypto');
@@ -20,7 +20,7 @@ const { sendError } = require('../../../shared/utils/response-helpers');
 
 const hashIp = (ip) => crypto.createHash('sha256').update(ip || '').digest('hex');
 
-// Comparaison à temps constant — évite les attaques temporelles sur la clé.
+// Constant-time comparison — prevents timing attacks on the key.
 const safeEqual = (a, b) => {
   const bufA = Buffer.from(String(a));
   const bufB = Buffer.from(String(b));
@@ -31,7 +31,7 @@ const safeEqual = (a, b) => {
 const publicPortalMiddleware = (req, res, next) => {
   const expectedKey = process.env.PORTAL_API_KEY;
 
-  // Fail-closed : si la clé n'est pas configurée côté ERP, on refuse tout.
+  // Fail-closed: if the key is not configured on the ERP side, deny everything.
   if (!expectedKey) {
     return sendError(res, 503, 'Public portal is not configured.');
   }
@@ -42,7 +42,7 @@ const publicPortalMiddleware = (req, res, next) => {
     return sendError(res, 401, 'Missing or invalid portal key.');
   }
 
-  // Hache l'IP — les contrôleurs lisent req.ipHash, jamais req.ip directement
+  // Hash the IP — controllers read req.ipHash, never req.ip directly
   const rawIp  = req.ip || req.connection?.remoteAddress || '';
   req.ipHash   = hashIp(rawIp);
 

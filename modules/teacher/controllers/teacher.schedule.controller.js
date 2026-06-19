@@ -4,7 +4,7 @@
  * @file teacher.schedule.controller.js
  * @description Express controller for teacher-facing schedule operations.
  * 
- *  Routes attendues :
+ *  Expected routes:
  *  ─────────────────────────────────────────────────────────────────
  *  GET    /api/schedules/teacher/me                        → getMyTeacherCalendar
  *  GET    /api/schedules/teacher/:id                       → getTeacherSessionById
@@ -22,7 +22,7 @@
 
 const mongoose        = require('mongoose');
 const teacherRepo     = require('../teacher.repository');
-const studentService  = require('../../student').service; // façade module student (§3)
+const studentService  = require('../../student').service; // student module facade (§3)
 const { SCHEDULE_STATUS, SEMESTER } = require('../../../shared/utils/schedule.base');
 
 const {
@@ -35,7 +35,7 @@ const {
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
 // ─────────────────────────────────────────────
-// HELPERS INTERNES
+// INTERNAL HELPERS
 // ─────────────────────────────────────────────
 
 const parsePositiveInt = (val, fallback) => {
@@ -43,7 +43,7 @@ const parsePositiveInt = (val, fallback) => {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-/** Filtre campus selon le rôle JWT */
+/** Campus filter based on the JWT role */
 const buildCampusFilter = (req) => {
   const { role, campusId } = req.user;
   if (['ADMIN', 'DIRECTOR'].includes(role)) {
@@ -52,7 +52,7 @@ const buildCampusFilter = (req) => {
   return { schoolCampus: campusId };
 };
 
-/** Calcule le label de semaine ISO : "YYYY-WXX" */
+/** Computes the ISO week label: "YYYY-WXX" */
 const toISOWeekLabel = (date) => {
   const d    = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
   const day  = d.getUTCDay() || 7;
@@ -62,7 +62,7 @@ const toISOWeekLabel = (date) => {
   return `${d.getUTCFullYear()}-W${String(weekNum).padStart(2, '0')}`;
 };
 
-/** Stub de notification pour le workflow de report */
+/** Notification stub for the postponement workflow */
 const dispatchWorkflowNotification = async (eventType, payload) => {
   try {
     console.info(`[PostponementWorkflow] ${eventType}`, payload);
@@ -73,13 +73,13 @@ const dispatchWorkflowNotification = async (eventType, payload) => {
 };
 
 // ─────────────────────────────────────────────
-// CALENDRIER ENSEIGNANT
+// TEACHER CALENDAR
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/teacher/me
- * Emploi du temps de l'enseignant connecté + charge hebdomadaire.
- * Query : from?, to?, sessionType?, includeAllStatuses?
+ * Schedule of the logged-in teacher + weekly workload.
+ * Query: from?, to?, sessionType?, includeAllStatuses?
  */
 const getMyTeacherCalendar = asyncHandler(async (req, res) => {
   const {
@@ -135,8 +135,8 @@ const getMyTeacherCalendar = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/schedules/teacher/:id
- * Détails d'une séance (avec équipement salle).
- * Un enseignant ne peut accéder qu'à ses propres séances.
+ * Details of a session (with room equipment).
+ * A teacher can only access their own sessions.
  */
 const getTeacherSessionById = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -157,12 +157,12 @@ const getTeacherSessionById = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// ROLL-CALL (APPEL)
+// ROLL-CALL
 // ─────────────────────────────────────────────
 
 /**
  * PATCH /api/schedules/teacher/:id/rollcall/open
- * Ouvre l'appel pour une séance.
+ * Opens the roll-call for a session.
  */
 const openRollCall = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -185,7 +185,7 @@ const openRollCall = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Roll-call is already open.');
   }
 
-  // Autoriser l'ouverture 30 min avant le début de la séance
+  // Allow opening 30 min before the session start time
   const BUFFER_MS = 30 * 60 * 1000;
   if (new Date() < new Date(session.startTime.getTime() - BUFFER_MS)) {
     return sendError(
@@ -204,8 +204,8 @@ const openRollCall = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/schedules/teacher/:id/rollcall/submit
- * Verrouille l'appel avec les comptages.
- * Body : { present, absent, late }
+ * Locks the roll-call with the counts.
+ * Body: { present, absent, late }
  */
 const submitRollCall = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -240,7 +240,7 @@ const submitRollCall = asyncHandler(async (req, res) => {
   session.rollCall.totalLate    = Number(late);
   await teacherRepo.saveScheduleDoc(session);
 
-  // Synchronisation du résumé dans StudentSchedule (fire-and-forget)
+  // Sync the summary into StudentSchedule (fire-and-forget)
   if (session.studentScheduleRef) {
     const total = Number(present) + Number(absent) + Number(late);
     studentService.updateAttendanceSummary(session.studentScheduleRef, {
@@ -261,13 +261,13 @@ const submitRollCall = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// WORKFLOW DE REPORT
+// POSTPONEMENT WORKFLOW
 // ─────────────────────────────────────────────
 
 /**
  * POST /api/schedules/teacher/:id/postpone
- * L'enseignant soumet une demande de report.
- * Body : { reason (min 10 chars), proposedStart?, proposedEnd? }
+ * The teacher submits a postponement request.
+ * Body: { reason (min 10 chars), proposedStart?, proposedEnd? }
  */
 const requestPostponement = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -323,8 +323,8 @@ const requestPostponement = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/schedules/teacher/admin/postpone/:requestId/review
- * Le Campus Manager approuve ou rejette une demande de report.
- * Body : { status: 'APPROVED' | 'REJECTED', reviewNote? }
+ * The Campus Manager approves or rejects a postponement request.
+ * Body: { status: 'APPROVED' | 'REJECTED', reviewNote? }
  */
 const reviewPostponement = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
@@ -380,8 +380,8 @@ const reviewPostponement = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/schedules/teacher/admin/postponements
- * Liste toutes les demandes de report filtrées par statut pour le campus.
- * Query : status (PENDING|APPROVED|REJECTED, default PENDING), page, limit
+ * Lists all postponement requests filtered by status for the campus.
+ * Query: status (PENDING|APPROVED|REJECTED, default PENDING), page, limit
  */
 const getPendingPostponements = asyncHandler(async (req, res) => {
   const {
@@ -444,13 +444,13 @@ const getPendingPostponements = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// DISPONIBILITÉS
+// AVAILABILITY
 // ─────────────────────────────────────────────
 
 /**
  * PUT /api/schedules/teacher/availability
- * Soumet ou remplace toutes les préférences de disponibilité (idempotent).
- * Body : { slots: AvailabilitySlot[], academicYear?, semester? }
+ * Submits or replaces all availability preferences (idempotent).
+ * Body: { slots: AvailabilitySlot[], academicYear?, semester? }
  */
 const upsertAvailability = asyncHandler(async (req, res) => {
   const { slots = [], academicYear, semester } = req.body;
@@ -476,7 +476,7 @@ const upsertAvailability = asyncHandler(async (req, res) => {
     }
   }
 
-  // Document profil de disponibilité : pas de studentScheduleRef et pas de sessionType
+  // Availability profile document: no studentScheduleRef and no sessionType
   let profileDoc = await teacherRepo.findAvailabilityProfileForWrite(teacherId);
 
   const now = new Date();
@@ -502,7 +502,7 @@ const upsertAvailability = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/schedules/teacher/availability
- * Retourne les créneaux de disponibilité de l'enseignant connecté.
+ * Returns the availability slots of the logged-in teacher.
  */
 const getMyAvailability = asyncHandler(async (req, res) => {
   // Cast to ObjectId — req.user.id is a string from the JWT payload
@@ -519,13 +519,13 @@ const getMyAvailability = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// CHARGE HORAIRE (WORKLOAD)
+// WORKLOAD
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/teacher/me/workload
- * Résumé de charge horaire de l'enseignant connecté.
- * Query : periodType (WEEKLY|MONTHLY), periodLabel?
+ * Workload summary of the logged-in teacher.
+ * Query: periodType (WEEKLY|MONTHLY), periodLabel?
  */
 const getMyWorkloadSummary = asyncHandler(async (req, res) => {
   // Cast to ObjectId — req.user.id is a string from the JWT payload
@@ -550,8 +550,8 @@ const getMyWorkloadSummary = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/schedules/teacher/:id/students
- * Liste des étudiants d'une séance (pour l'interface d'appel).
- * Retourne les classes et l'effectif attendu depuis la StudentSchedule miroir.
+ * List of students for a session (for the roll-call interface).
+ * Returns the classes and expected headcount from the mirror StudentSchedule.
  */
 const getStudentRoster = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -581,13 +581,13 @@ const getStudentRoster = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────
-// ENDPOINTS ADMIN
+// ADMIN ENDPOINTS
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/teacher/admin/:teacherId/sessions
- * Toutes les séances d'un enseignant (vue admin).
- * Query : from, to, status?, page, limit, includeAllStatuses
+ * All sessions of a teacher (admin view).
+ * Query: from, to, status?, page, limit, includeAllStatuses
  */
 const getTeacherSessionsAdmin = asyncHandler(async (req, res) => {
   const { teacherId } = req.params;
@@ -643,8 +643,8 @@ const getTeacherSessionsAdmin = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/schedules/teacher/admin/workload
- * Rapport de charge horaire agrégé pour tous les enseignants (paie).
- * Query : periodType, periodLabel, campusId?, department?
+ * Aggregated workload report for all teachers (payroll).
+ * Query: periodType, periodLabel, campusId?, department?
  */
 const getAllTeachersWorkload = asyncHandler(async (req, res) => {
   const { periodType = 'MONTHLY', periodLabel, department } = req.query;
@@ -680,7 +680,7 @@ const getAllTeachersWorkload = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────
 
 module.exports = {
-  // Enseignant
+  // Teacher
   getMyTeacherCalendar,
   getTeacherSessionById,
   openRollCall,

@@ -1,16 +1,16 @@
 /**
  * @file index.js — FAÇADE du module document
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3.
+ * The module's only public entry point — see MODULAR_MONOLITH_MIGRATION.md §3.
  *
- * GED : documents, versions, partages, templates, audit, rétention,
- * génération PDF/QR. Monté sur /api/documents.
+ * DMS: documents, versions, shares, templates, audit, retention,
+ * PDF/QR generation. Mounted on /api/documents.
  */
 
 const routes  = require('./document.routes');
 const service = require('./document.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/documents', routes)
+  routes,   // mounted by server.js :  app.use('/api/documents', routes)
   service,  // { runRetentionJob, shutdownPool }
-  // PAS de model exporté. PAS de controller exporté.
+  // NO model exported. NO controller exported.
 };

@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * @file inapp.channel.js — canal de notification in-app.
+ * @file inapp.channel.js — in-app notification channel.
  *
- * La « livraison » in-app, c'est la persistance : la ligne Notification EST le
- * message dans la boîte de réception. Il n'y a donc aucun appel externe — le
- * canal est toujours « configuré » et l'envoi réussit dès que la ligne existe.
+ * In-app « delivery » is persistence: the Notification row IS the message in
+ * the inbox. There is therefore no external call — the channel is always
+ * « configured » and the send succeeds as soon as the row exists.
  */
 
 const isConfigured = () => true;
 
-// Le document est déjà créé par le service ; rien à transmettre.
+// The document is already created by the service; nothing to send.
 const send = async () => ({ ok: true });
 
 module.exports = { name: 'inapp', isConfigured, send };

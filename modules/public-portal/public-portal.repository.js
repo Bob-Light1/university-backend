@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * @file public-portal.repository.js — couche d'accès aux données du module public-portal.
+ * @file public-portal.repository.js — data access layer for the public-portal module.
  *
- * SEUL fichier autorisé à toucher les 7 models possédés :
+ * The ONLY file allowed to touch the 7 owned models:
  *   - CompetitionPrize (competition.prize.model)
  *   - ContactMessage   (contact.message.model)
  *   - CoursePreview    (course.preview.model)
@@ -12,27 +12,27 @@
  *   - QuizSession      (quiz.session.model)
  *   - Testimonial      (testimonial.model)
  *
- * Consommateurs : controllers publics (quiz/leaderboard/témoignages/faq/cours/
- * contact/compétition), back-office portal-admin (factory de contenu générique +
- * competition.admin), cron de clôture mensuelle et service de notification des
- * gagnants. Tous passent exclusivement par lui.
+ * Consumers: public controllers (quiz/leaderboard/testimonials/faq/courses/
+ * contact/competition), portal-admin back-office (generic content factory +
+ * competition.admin), the monthly closing cron and the winner notification
+ * service. They all go exclusively through it.
  *
- * Conventions :
- *   - Lectures → objets simples (`.lean()`) ; les formes de requête (select,
- *     sort, $sample/$project) vivent ICI.
- *   - Écritures à hook (validations de schéma, génération de période/score) via
- *     create() ou load→mutate→save (findXxxForWrite + saveXxxDoc).
- *   - Les filtres d'isolation campus / périmètre et les `$in` castés en ObjectId
- *     sont construits par l'appelant et passés tels quels.
- *   - La factory de contenu admin (Testimonial/FaqEntry/CoursePreview partagent
- *     la même forme) consomme une *content-repo* liée au model via
- *     `contentRepo(name)` — la factory ne touche plus aucun model directement.
+ * Conventions:
+ *   - Reads → plain objects (`.lean()`); query shapes (select,
+ *     sort, $sample/$project) live HERE.
+ *   - Hooked writes (schema validations, period/score generation) via
+ *     create() or load→mutate→save (findXxxForWrite + saveXxxDoc).
+ *   - Campus isolation / scope filters and the `$in` values cast to ObjectId
+ *     are built by the caller and passed through as-is.
+ *   - The admin content factory (Testimonial/FaqEntry/CoursePreview share
+ *     the same shape) consumes a *content-repo* bound to the model via
+ *     `contentRepo(name)` — the factory no longer touches any model directly.
  *
- * Exceptions assumées (restent hors repo) :
- *   - Cast/validation d'ObjectId (mongoose.Types.ObjectId) : dans les controllers
- *     qui construisent les filtres.
- *   - Logique métier (calcul de score, classement, période courante, anonymisation
- *     des gagnants, envoi email/SMS) : reste dans controllers / cron / notification.
+ * Accepted exceptions (stay outside the repo):
+ *   - ObjectId cast/validation (mongoose.Types.ObjectId): in the controllers
+ *     that build the filters.
+ *   - Business logic (score computation, ranking, current period, winner
+ *     anonymization, email/SMS sending): stays in controllers / cron / notification.
  */
 
 const CompetitionPrize = require('./models/competition.prize.model');
@@ -44,22 +44,22 @@ const QuizSession      = require('./models/quiz.session.model');
 const Testimonial      = require('./models/testimonial.model');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CONTENU GÉNÉRIQUE ADMIN (Testimonial / FaqEntry / CoursePreview)
+// GENERIC ADMIN CONTENT (Testimonial / FaqEntry / CoursePreview)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Tri commun des ressources de contenu (ordre manuel puis récence). */
+/** Common sort for content resources (manual order then recency). */
 const CONTENT_SORT = { order: 1, createdAt: -1 };
 
 /**
- * Construit une content-repo liée à un model donné — six opérations CRUD
- * consommées par la factory `makeContentController`. La factory n'a ainsi jamais
- * de référence directe à un model.
+ * Builds a content-repo bound to a given model — six CRUD operations
+ * consumed by the `makeContentController` factory. The factory thus never
+ * has a direct reference to a model.
  */
 const makeContentRepo = (Model) => ({
-  /** Crée une ressource de contenu (déclenche la validation de schéma). */
+  /** Creates a content resource (triggers schema validation). */
   create: (doc) => Model.create(doc),
 
-  /** Liste paginée + compteur, tri contenu. Renvoie { data, total }. */
+  /** Paginated list + count, content sort. Returns { data, total }. */
   paginate: async (filter, { skip, limit }) => {
     const [data, total] = await Promise.all([
       Model.find(filter).sort(CONTENT_SORT).skip(skip).limit(limit).lean(),
@@ -68,16 +68,16 @@ const makeContentRepo = (Model) => ({
     return { data, total };
   },
 
-  /** Lecture lean scopée (getOne). */
+  /** Scoped lean read (getOne). */
   findOneLean: (filter) => Model.findOne(filter).lean(),
 
-  /** Doc non-lean scopé pour écriture (update / togglePublish). */
+  /** Scoped non-lean doc for writing (update / togglePublish). */
   findOneForWrite: (filter) => Model.findOne(filter),
 
-  /** Persiste un doc de contenu (déclenche les hooks de save). */
+  /** Persists a content doc (triggers the save hooks). */
   save: (doc) => doc.save(),
 
-  /** Suppression scopée (remove). */
+  /** Scoped deletion (remove). */
   findOneAndDelete: (filter) => Model.findOneAndDelete(filter),
 });
 
@@ -87,7 +87,7 @@ const CONTENT_REPOS = {
   CoursePreview: makeContentRepo(CoursePreview),
 };
 
-/** Renvoie la content-repo liée au model nommé (consommée par les routes admin). */
+/** Returns the content-repo bound to the named model (consumed by the admin routes). */
 const contentRepo = (name) => {
   const r = CONTENT_REPOS[name];
   if (!r) throw new Error(`Unknown public-portal content model: ${name}`);
@@ -95,10 +95,10 @@ const contentRepo = (name) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LECTURES PUBLIQUES DE CONTENU (sélections restreintes au portail)
+// PUBLIC CONTENT READS (selections restricted to the portal)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Témoignages publiés d'un campus (filtre fourni), tri contenu, lean. */
+/** Published testimonials for a campus (filter provided), content sort, lean. */
 const listPublicTestimonials = (filter, limit) =>
   Testimonial.find(filter)
     .sort(CONTENT_SORT)
@@ -106,14 +106,14 @@ const listPublicTestimonials = (filter, limit) =>
     .select('firstName city graduationYear program quote photoUrl employer')
     .lean();
 
-/** Entrées FAQ publiées d'un campus (filtre fourni), tri contenu, lean. */
+/** Published FAQ entries for a campus (filter provided), content sort, lean. */
 const listPublicFaq = (filter) =>
   FaqEntry.find(filter)
     .sort(CONTENT_SORT)
     .select('question answer category')
     .lean();
 
-/** Aperçus de cours publiés d'un campus (filtre fourni), tri contenu, lean. */
+/** Published course previews for a campus (filter provided), content sort, lean. */
 const listPublicCoursePreviews = (filter) =>
   CoursePreview.find(filter)
     .sort(CONTENT_SORT)
@@ -124,10 +124,10 @@ const listPublicCoursePreviews = (filter) =>
 // COMPETITION PRIZE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée une compétition (unicité campus+période en index). */
+/** Creates a competition (campus+period uniqueness enforced by index). */
 const createCompetition = (doc) => CompetitionPrize.create(doc);
 
-/** Liste paginée des compétitions (filtre fourni), tri période desc → { data, total }. */
+/** Paginated list of competitions (filter provided), period desc sort → { data, total }. */
 const paginateCompetitions = async (filter, { skip, limit }) => {
   const [data, total] = await Promise.all([
     CompetitionPrize.find(filter).sort({ period: -1 }).skip(skip).limit(limit).lean(),
@@ -136,35 +136,35 @@ const paginateCompetitions = async (filter, { skip, limit }) => {
   return { data, total };
 };
 
-/** Compétition scopée, lecture lean (getOne admin). */
+/** Scoped competition, lean read (admin getOne). */
 const findCompetitionLean = (filter) => CompetitionPrize.findOne(filter).lean();
 
-/** Compétition scopée non-lean pour écriture (update / toggleActive). */
+/** Scoped non-lean competition for writing (update / toggleActive). */
 const findCompetitionForWrite = (filter) => CompetitionPrize.findOne(filter);
 
-/** Garde de périmètre avant clôture immédiate (statut seul). */
+/** Scope guard before immediate closing (status only). */
 const findCompetitionScopedStatus = (filter) =>
   CompetitionPrize.findOne(filter).select('_id isActive');
 
-/** Compétition par id, lecture lean (état figé après clôture). */
+/** Competition by id, lean read (state frozen after closing). */
 const findCompetitionByIdLean = (id) => CompetitionPrize.findById(id).lean();
 
-/** Compétition par id non-lean pour écriture (clôture par le cron : winners[]+save). */
+/** Competition by id, non-lean for writing (closed by the cron: winners[]+save). */
 const findCompetitionByIdForWrite = (id) => CompetitionPrize.findById(id);
 
-/** Persiste un doc compétition (winners figés, notifiedAt). */
+/** Persists a competition doc (frozen winners, notifiedAt). */
 const saveCompetitionDoc = (doc) => doc.save();
 
-/** Suppression scopée d'une compétition (remove admin). */
+/** Scoped deletion of a competition (admin remove). */
 const deleteCompetition = (filter) => CompetitionPrize.findOneAndDelete(filter);
 
-/** Compétitions actives dont la période est strictement antérieure (cron, lean). */
+/** Active competitions whose period is strictly earlier (cron, lean). */
 const findActiveCompetitionsBeforePeriod = (period) =>
   CompetitionPrize.find({ isActive: true, period: { $lt: period } })
     .select('_id')
     .lean();
 
-/** Compétition active la plus récente d'un campus (filtre fourni), vue publique. */
+/** Most recent active competition for a campus (filter provided), public view. */
 const findActivePublicCompetition = (filter) =>
   CompetitionPrize.findOne(filter)
     .sort({ period: -1 })
@@ -175,16 +175,16 @@ const findActivePublicCompetition = (filter) =>
 // QUIZ SESSION
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée une session de quiz soumise (validation du score en pre-save). */
+/** Creates a submitted quiz session (score validation in pre-save). */
 const createQuizSession = (payload) => QuizSession.create(payload);
 
-/** Session par token de soumission (anti-double-soumission), lean. */
+/** Session by submission token (anti-double-submission), lean. */
 const findQuizSessionByToken = (sessionToken) =>
   QuizSession.findOne({ sessionToken }).lean();
 
 /**
- * Meilleures sessions complétées d'une période/campus (clôture cron).
- * Tri meilleur score puis plus rapide ; sélection minimale pour figer winners[].
+ * Best completed sessions for a period/campus (cron closing).
+ * Sort by best score then fastest; minimal selection to freeze winners[].
  */
 const findTopQuizSessions = ({ schoolCampus, period }, limit) =>
   QuizSession.find({ schoolCampus, period, completedAt: { $ne: null } })
@@ -194,8 +194,8 @@ const findTopQuizSessions = ({ schoolCampus, period }, limit) =>
     .lean();
 
 /**
- * Classement public d'une période (filtre de périmètre fourni : campus/national +
- * catégorie). Tri meilleur score puis plus rapide ; aucune donnée personnelle.
+ * Public ranking for a period (scope filter provided: campus/national +
+ * category). Sort by best score then fastest; no personal data.
  */
 const findLeaderboardEntries = (filter, limit) =>
   QuizSession.find(filter)
@@ -209,9 +209,9 @@ const findLeaderboardEntries = (filter, limit) =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Échantillon aléatoire de questions publiées (filtre fourni). `$sample` ne
- * respecte pas `select:false` → liste blanche explicite via `$project`
- * (correctIndex et champs internes jamais exposés).
+ * Random sample of published questions (filter provided). `$sample` does not
+ * respect `select:false` → explicit whitelist via `$project`
+ * (correctIndex and internal fields never exposed).
  */
 const sampleQuizQuestions = (matchFilter, size) =>
   QuizQuestion.aggregate([
@@ -221,8 +221,8 @@ const sampleQuizQuestions = (matchFilter, size) =>
   ]);
 
 /**
- * Questions publiées d'un campus pour le calcul de score (filtre fourni avec ids
- * castés). `+correctIndex` force l'inclusion du champ `select:false` côté ERP.
+ * Published questions for a campus used to compute the score (filter provided with
+ * cast ids). `+correctIndex` forces inclusion of the `select:false` field on the ERP side.
  */
 const findPublishedQuestionsWithAnswers = (filter) =>
   QuizQuestion.find(filter).select('+correctIndex').lean();
@@ -231,13 +231,13 @@ const findPublishedQuestionsWithAnswers = (filter) =>
 // CONTACT MESSAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée un message de contact (formulaire public). */
+/** Creates a contact message (public form). */
 const createContactMessage = (payload) => ContactMessage.create(payload);
 
 module.exports = {
-  // Contenu générique admin (factory)
+  // Generic admin content (factory)
   contentRepo,
-  // Lectures publiques de contenu
+  // Public content reads
   listPublicTestimonials,
   listPublicFaq,
   listPublicCoursePreviews,

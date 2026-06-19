@@ -2,16 +2,16 @@
 
 /**
  * @file public.competition.controller.js
- * @description Prix de la compétition mensuelle en cours (spec §4.5 / §7.8).
+ * @description Prizes of the current monthly competition (spec §4.5 / §7.8).
  *
- * Route : GET /api/public/competition/prizes?campusSlug=...
- * Renvoie la compétition active du campus : barème des prix + closingDate (pour le
- * countdown côté portail). Les gagnants (winners) ne sont peuplés qu'après clôture par
- * le cron — exposés sous forme anonymisée (displayName + score + rank uniquement, jamais
- * les références lead/quizSession).
+ * Route: GET /api/public/competition/prizes?campusSlug=...
+ * Returns the campus's active competition: prize tiers + closingDate (for the
+ * portal-side countdown). Winners are only populated after closing by the
+ * cron — exposed in anonymized form (displayName + score + rank only, never
+ * the lead/quizSession references).
  */
 
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 const repo = require('../../public-portal.repository');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
@@ -25,18 +25,18 @@ const getCompetitionPrizes = asyncHandler(async (req, res) => {
 
   if (!campus) return sendNotFound(res, 'Campus');
 
-  // Compétition active la plus récente pour ce campus
+  // Most recent active competition for this campus
   const competition = await repo.findActivePublicCompetition({
     schoolCampus: campus._id,
     isActive:     true,
   });
 
   if (!competition) {
-    // Pas de compétition en cours — réponse vide mais valide (le portail masque la section)
+    // No competition in progress — empty but valid response (the portal hides the section)
     return sendSuccess(res, 200, 'No active competition.', { competition: null });
   }
 
-  // Anonymisation des gagnants — jamais les références internes
+  // Anonymization of winners — never the internal references
   const winners = (competition.winners || []).map((w) => ({
     rank:        w.rank,
     displayName: w.displayName,

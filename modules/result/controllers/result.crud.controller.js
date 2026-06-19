@@ -2,9 +2,9 @@
 
 /**
  * @file result.crud.controller.js
- * @description Opérations CRUD sur les résultats académiques.
+ * @description CRUD operations on academic results.
  *
- *  Endpoints gérés :
+ *  Handled endpoints :
  *  ─────────────────────────────────────────────────────────────────
  *  POST   /api/results                → createResult
  *  POST   /api/results/bulk           → bulkCreateResults
@@ -20,7 +20,7 @@ const { parse: csvParse } = require('csv-parse/sync');
 
 const { RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
 const resultRepo = require('../result.repository');
-const { getClassCampusRef } = require('../../class').service; // façade module class (§3)
+const { getClassCampusRef } = require('../../class').service; // class module facade (§3)
 
 const {
   asyncHandler,
@@ -36,7 +36,7 @@ const {
 const {
   isValidObjectId,
 } = require('../../../shared/utils/validation-helpers');
-// Require paresseux : student.dashboard consomme la façade result (cycle result ↔ student)
+// Lazy require : student.dashboard consumes the result facade (result ↔ student cycle)
 const studentService = () => require('../../student').service;
 const validateStudentBelongsToCampus = (...args) =>
   studentService().validateStudentBelongsToCampus(...args);
@@ -76,17 +76,17 @@ const createResult = asyncHandler(async (req, res) => {
   const resolvedCampus = resolveCampusId(req, campusFromBody);
   if (!resolvedCampus) return sendError(res, 400, 'schoolCampus is required.');
 
-  // Validation des IDs
+  // IDs validation
   const idError = validateResultIds({ student, classId, subject, teacher });
   if (idError) return sendError(res, 400, idError);
 
-  // Validation des champs contextuels
+  // Contextual fields validation
   const ctxError = validateResultContext({ evaluationType, semester, academicYear, score, maxScore });
   if (ctxError) return sendError(res, 400, ctxError);
 
   if (!evaluationTitle?.trim()) return sendError(res, 400, 'evaluationTitle is required.');
 
-  // Campus isolation : l'étudiant appartient-il au campus ?
+  // Campus isolation : does the student belong to the campus ?
   if (!isGlobalRole(req.user.role)) {
     const belongs = await validateStudentBelongsToCampus(student, resolvedCampus);
     if (!belongs) return sendForbidden(res, 'Student does not belong to your campus.');
@@ -123,7 +123,7 @@ const createResult = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/results/bulk
- * Saisie massive pour une classe entière.
+ * Bulk entry for an entire class.
  *
  * Body : {
  *   classId, subjectId, teacherId,
@@ -133,7 +133,7 @@ const createResult = asyncHandler(async (req, res) => {
  *               examAttendance?, strengths?, improvements? }]
  * }
  *
- * Retourne 207 Multi-Status avec le détail des insertions et erreurs.
+ * Returns 207 Multi-Status with the detail of insertions and errors.
  */
 const bulkCreateResults = asyncHandler(async (req, res) => {
   const {
@@ -253,12 +253,12 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/results/upload-csv
- * Import massif via fichier CSV. Colonnes attendues :
+ * Bulk import via CSV file. Expected columns :
  *   studentId, score, coefficient (opt), teacherRemarks (opt),
  *   examAttendance (opt), strengths (opt), improvements (opt)
  *
- * Les paramètres contextuels (classId, subjectId, etc.) sont fournis en form-data
- * comme pour /bulk.
+ * The contextual parameters (classId, subjectId, etc.) are provided in form-data
+ * as for /bulk.
  */
 const uploadResultsCSV = asyncHandler(async (req, res) => {
   if (!req.file) return sendError(res, 400, 'No CSV file uploaded.');
@@ -276,7 +276,7 @@ const uploadResultsCSV = asyncHandler(async (req, res) => {
 
   if (!rows.length) return sendError(res, 400, 'CSV file is empty.');
 
-  // Réutilisation de bulkCreateResults après normalisation des données CSV
+  // Reuse of bulkCreateResults after normalizing the CSV data
   req.body.results = rows.map((row) => ({
     studentId:      row.studentId   || row.student_id,
     score:          Number(row.score),
@@ -294,7 +294,7 @@ const uploadResultsCSV = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/results
- * Liste paginée des résultats avec filtres multidimensionnels.
+ * Paginated list of results with multidimensional filters.
  *
  * Query : classId?, subjectId?, teacherId?, studentId?, status?,
  *         evaluationType?, academicYear?, semester?, examPeriod?,
@@ -323,7 +323,7 @@ const getResults = asyncHandler(async (req, res) => {
   if (semester     && Object.values(SEMESTER).includes(semester))          filter.semester = semester;
   if (examPeriod)   filter.examPeriod = examPeriod;
 
-  // Les STUDENTs ne voient que leurs notes publiées/archivées
+  // STUDENTs only see their published/archived grades
   if (req.user.role === 'STUDENT') {
     filter.student = req.user.id;
     filter.status  = { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] };
@@ -342,7 +342,7 @@ const getResults = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/results/:id
- * Détail complet d'un résultat, avec audit log et feedback pédagogique.
+ * Full detail of a result, with audit log and pedagogical feedback.
  */
 const getResultById = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -382,10 +382,10 @@ const getResultById = asyncHandler(async (req, res) => {
 
 /**
  * PUT /api/results/:id
- * Met à jour un résultat DRAFT (ou SUBMITTED pour les managers).
- * Pour les PUBLISHED/ARCHIVED, utiliser PATCH /audit/:id (ADMIN/DIRECTOR).
+ * Updates a DRAFT result (or SUBMITTED for managers).
+ * For PUBLISHED/ARCHIVED, use PATCH /audit/:id (ADMIN/DIRECTOR).
  *
- * Body : champs partiels parmi les allowed fields.
+ * Body : partial fields among the allowed fields.
  */
 const updateResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -394,7 +394,7 @@ const updateResult = asyncHandler(async (req, res) => {
   const result = await resultRepo.findResultForWrite(id);
   if (!result) return sendNotFound(res, 'Result');
 
-  // Vérification des droits via canModify [S3-1]
+  // Rights check via canModify [S3-1]
   const { ok, reason } = result.canModify(req.user.role, req.user.id);
   if (!ok) return sendError(res, 403, reason);
 
@@ -409,7 +409,7 @@ const updateResult = asyncHandler(async (req, res) => {
     'gradingScale', 'evaluationTitle',
     'examDate', 'examPeriod', 'examAttendance', 'specialCircumstances',
   ];
-  // classManagerRemarks ne peut être modifié que par les managers
+  // classManagerRemarks can only be modified by managers
   if (req.body.classManagerRemarks !== undefined && !isManagerRole(req.user.role)) {
     return sendForbidden(res, 'Only managers can add class manager remarks.');
   }
@@ -418,7 +418,7 @@ const updateResult = asyncHandler(async (req, res) => {
     if (req.body[field] !== undefined) result[field] = req.body[field];
   });
 
-  // Si le manager ajoute classManagerRemarks, on trace qui l'a fait
+  // If the manager adds classManagerRemarks, we track who did it
   if (req.body.classManagerRemarks !== undefined) {
     result.classManager = new mongoose.Types.ObjectId(req.user.id);
   }
@@ -431,7 +431,7 @@ const updateResult = asyncHandler(async (req, res) => {
 
 /**
  * DELETE /api/results/:id
- * Soft-delete. DRAFT uniquement pour TEACHER/CAMPUS_MANAGER.
+ * Soft-delete. DRAFT only for TEACHER/CAMPUS_MANAGER.
  * ADMIN/DIRECTOR peuvent supprimer n'importe quel statut.
  */
 const deleteResult = asyncHandler(async (req, res) => {

@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * @file exam.repository.js — couche d'accès aux données du module exam (SEMS).
+ * @file exam.repository.js — data access layer of the exam module (SEMS).
  *
- * SEUL fichier autorisé à toucher les 7 models possédés :
+ * The ONLY file allowed to touch the 7 owned models:
  *   - ExamSession            (exam.session.model)
  *   - ExamEnrollment         (exam.enrollment.model)
  *   - ExamSubmission         (exam.submission.model)
@@ -13,27 +13,27 @@
  *   - ExamAnalyticsSnapshot  (exam.analytics-snapshot.model)
  *
  * Controllers (session / enrollment / delivery / grading / appeal / certificate /
- * question-bank / analytics), service inter-modules, worker d'analytics, cron
- * anti-triche et helper de synchro d'emploi du temps passent exclusivement par
- * lui — plus aucun de ces fichiers n'importe un model.
+ * question-bank / analytics), the inter-module service, the analytics worker, the
+ * anti-cheat cron and the schedule-sync helper go exclusively through it — none of
+ * these files imports a model anymore.
  *
- * Conventions :
- *   - Lectures de liste → `.lean()` (objets simples). Lectures destinées à être
- *     mutées puis sauvées, ou rendues via `.toObject()`, restent des documents
- *     hydratés (consumeHallTicket, save, virtuals…).
- *   - Écritures à hook (validate/save) via load→mutate→save (saveXxxDoc) ou
- *     opérateurs atomiques (findByIdAndUpdate/$set/$push/$inc, updateMany).
- *   - Les pipelines d'agrégation (overview campus, early-warning, stats par
- *     session) vivent ICI ; l'appelant fournit le `$match` déjà casté en
- *     ObjectId (cf. exam.helper.castForAggregation) ainsi que skip/limit/seuil.
- *   - Les formes de populate (query shape) vivent ICI.
+ * Conventions:
+ *   - List reads → `.lean()` (plain objects). Reads meant to be mutated then saved,
+ *     or rendered via `.toObject()`, stay as hydrated documents
+ *     (consumeHallTicket, save, virtuals…).
+ *   - Hooked writes (validate/save) via load→mutate→save (saveXxxDoc) or
+ *     atomic operators (findByIdAndUpdate/$set/$push/$inc, updateMany).
+ *   - The aggregation pipelines (campus overview, early-warning, per-session
+ *     stats) live HERE; the caller provides the `$match` already cast to
+ *     ObjectId (cf. exam.helper.castForAggregation) as well as skip/limit/threshold.
+ *   - The populate shapes (query shape) live HERE.
  *
- * Exceptions assumées (restent hors repo) :
- *   - Façades inter-modules (subject/class/teacher/student/settings) : appelées
- *     par les controllers, ce n'est pas l'accès persistance du module exam.
- *   - Méthode d'instance consumeHallTicket() : logique de la couche model,
- *     invoquée par le controller sur le doc retourné par le repo.
- *   - Constantes/enums de statut : importées directement par les controllers.
+ * Accepted exceptions (stay outside the repo):
+ *   - Inter-module facades (subject/class/teacher/student/settings): called
+ *     by the controllers, this is not the exam module's persistence access.
+ *   - The consumeHallTicket() instance method: model-layer logic,
+ *     invoked by the controller on the doc returned by the repo.
+ *   - Status constants/enums: imported directly by the controllers.
  */
 
 const mongoose = require('mongoose');
@@ -47,29 +47,29 @@ const QuestionBank          = require('./models/question-bank.model');
 const ExamAnalyticsSnapshot = require('./models/exam.analytics-snapshot.model');
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXAM SESSION — lectures
+// EXAM SESSION — reads
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Document de session par filtre arbitraire (statut/transitions — non lean). */
+/** Session document by arbitrary filter (status/transitions — non lean). */
 const findSessionByFilter = (filter) => ExamSession.findOne(filter);
 
-/** Document de session par id (worker, delivery, appeal — non lean). */
+/** Session document by id (worker, delivery, appeal — non lean). */
 const findSessionById = (id) => ExamSession.findById(id);
 
-/** Session par id, projection `status` seule. */
+/** Session by id, `status` projection only. */
 const findSessionStatusById = (id) => ExamSession.findById(id, 'status');
 
-/** Session par id, projection `endTime` seule (timer serveur). */
+/** Session by id, `endTime` projection only (server timer). */
 const findSessionEndTimeById = (id) => ExamSession.findById(id, 'endTime');
 
-/** Session par id, projection résumé étudiant (vue de copie). */
+/** Session by id, student-summary projection (submission view). */
 const findSessionSummaryById = (id) =>
   ExamSession.findById(id, 'title status maxScore subject startTime endTime');
 
-/** Session par id, version lean (cron anti-triche). */
+/** Session by id, lean version (anti-cheat cron). */
 const findSessionByIdLean = (id) => ExamSession.findById(id).lean();
 
-/** Détail d'une session (vue manager) — non lean (sortie via .toObject()). */
+/** Session detail (manager view) — non lean (output via .toObject()). */
 const findSessionDetailed = (filter) =>
   ExamSession.findOne(filter)
     .populate('subject',      'subject_name subject_code')
@@ -79,7 +79,7 @@ const findSessionDetailed = (filter) =>
     .populate('gradingScale', 'name passMark')
     .populate({ path: 'questions.questionId', select: 'questionText questionType difficulty points' });
 
-/** Session re-lue et populée après update DRAFT (lean). */
+/** Session re-read and populated after a DRAFT update (lean). */
 const findSessionByIdPopulatedLean = (id) =>
   ExamSession.findById(id)
     .populate('subject',      'subject_name subject_code')
@@ -88,13 +88,13 @@ const findSessionByIdPopulatedLean = (id) =>
     .populate('invigilators', 'firstName lastName email')
     .lean();
 
-/** Session populée pour la génération des cartes d'examen (hall tickets). */
+/** Session populated for hall-ticket generation (exam cards). */
 const findSessionForHallTickets = (filter) =>
   ExamSession.findOne(filter)
     .populate('subject', 'subject_name')
     .populate('classes', 'name');
 
-/** Session populée pour l'injection dans les emplois du temps (lean). */
+/** Session populated for injection into timetables (lean). */
 const findSessionForScheduleInjection = (id) =>
   ExamSession.findById(id)
     .populate('subject', 'subject_name subject_code coefficient')
@@ -102,7 +102,7 @@ const findSessionForScheduleInjection = (id) =>
     .populate('classes', 'className name level')
     .lean();
 
-/** Liste paginée des sessions (vue manager). */
+/** Paginated list of sessions (manager view). */
 const paginateSessions = async (match, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     ExamSession.find(match)
@@ -119,7 +119,7 @@ const paginateSessions = async (match, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Liste paginée des sessions d'un campus (façade inter-modules, lean). */
+/** Paginated list of a campus's sessions (inter-module facade, lean). */
 const paginateCampusExaminations = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     ExamSession.find(filter)
@@ -133,46 +133,46 @@ const paginateCampusExaminations = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Sessions populées pour l'export rapport (lean). */
+/** Sessions populated for the report export (lean). */
 const findSessionsForExport = (filter) =>
   ExamSession.find(filter)
     .populate('subject', 'subject_name')
     .populate('classes', 'name')
     .lean();
 
-/** Sessions COMPLETED récentes (cron anti-triche, batch). */
+/** Recently COMPLETED sessions (anti-cheat cron, batch). */
 const findRecentlyCompletedSessions = (since, limit) =>
   ExamSession.find({ status: 'COMPLETED', completedAt: { $gte: since }, isDeleted: false })
     .select('_id')
     .limit(limit)
     .lean();
 
-/** Ids de sessions par filtre (early-warning, isolation année). */
+/** Session ids by filter (early-warning, year isolation). */
 const distinctSessionIds = (filter) => ExamSession.find(filter).distinct('_id');
 
-/** Compte de sessions par filtre. */
+/** Session count by filter. */
 const countExamSessions = (filter) => ExamSession.countDocuments(filter);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EXAM SESSION — écritures
+// EXAM SESSION — writes
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée une session (déclenche les hooks de validation). */
+/** Creates a session (triggers the validation hooks). */
 const createSession = (payload) => ExamSession.create(payload);
 
-/** Met à jour une session DRAFT (avec validateurs). */
+/** Updates a DRAFT session (with validators). */
 const updateSessionById = (id, updates) =>
   ExamSession.findByIdAndUpdate(id, { $set: updates }, { runValidators: true });
 
-/** Soft-delete d'une session DRAFT. */
+/** Soft-delete of a DRAFT session. */
 const softDeleteSession = (id, userId) =>
   ExamSession.findByIdAndUpdate(id, { isDeleted: true, updatedBy: userId });
 
-/** Applique une transition de la machine à états (renvoie le doc à jour). */
+/** Applies a state-machine transition (returns the updated doc). */
 const applySessionTransition = (id, setFields) =>
   ExamSession.findByIdAndUpdate(id, { $set: setFields }, { new: true });
 
-/** Pose un statut brut sur une session (DRAFT→ONGOING au démarrage de copie). */
+/** Sets a raw status on a session (DRAFT→ONGOING when a submission starts). */
 const setSessionStatus = (id, status) =>
   ExamSession.findByIdAndUpdate(id, { status });
 
@@ -180,30 +180,30 @@ const setSessionStatus = (id, status) =>
 // EXAM ENROLLMENT
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Inscription par (session, étudiant) — non lean (mutée puis sauvée). */
+/** Enrollment by (session, student) — non lean (mutated then saved). */
 const findEnrollment = (sessionId, studentId) =>
   ExamEnrollment.findOne({ examSession: sessionId, student: studentId, isDeleted: false });
 
-/** Inscription par id — non lean. */
+/** Enrollment by id — non lean. */
 const findEnrollmentById = (id) => ExamEnrollment.findOne({ _id: id, isDeleted: false });
 
-/** Inscription détaillée (étudiant + session→subject) — vue carte/hall ticket. */
+/** Detailed enrollment (student + session→subject) — card/hall-ticket view. */
 const findEnrollmentDetailed = (id) =>
   ExamEnrollment.findOne({ _id: id, isDeleted: false })
     .populate('student', 'firstName lastName matricule profileImage')
     .populate({ path: 'examSession', populate: { path: 'subject', select: 'subject_name' } });
 
-/** Inscription par carte d'examen (check-in QR) — non lean. */
+/** Enrollment by hall ticket (QR check-in) — non lean. */
 const findEnrollmentByHallTicket = (sessionId, token) =>
   ExamEnrollment.findOne({ examSession: sessionId, hallTicketToken: token, isDeleted: false })
     .populate('student', 'firstName lastName matricule');
 
-/** Inscriptions éligibles d'une session (génération en masse) — non lean. */
+/** Eligible enrollments of a session (bulk generation) — non lean. */
 const findEligibleEnrollments = (sessionId) =>
   ExamEnrollment.find({ examSession: sessionId, isEligible: true, isDeleted: false })
     .populate('student', 'firstName lastName matricule profileImage');
 
-/** Liste paginée des inscriptions (lean). */
+/** Paginated list of enrollments (lean). */
 const paginateEnrollments = async (match, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     ExamEnrollment.find(match)
@@ -217,15 +217,15 @@ const paginateEnrollments = async (match, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Compte des inscriptions d'une session. */
+/** Count of a session's enrollments. */
 const countEnrollmentsForSession = (sessionId) =>
   ExamEnrollment.countDocuments({ examSession: sessionId, isDeleted: false });
 
-/** Compte des absents d'une session (snapshot d'analytics). */
+/** Count of a session's absentees (analytics snapshot). */
 const countAbsentEnrollments = (sessionId) =>
   ExamEnrollment.countDocuments({ examSession: sessionId, attendance: 'ABSENT', isDeleted: false });
 
-/** Inscriptions à venir d'un étudiant (façade dashboard) — lean. */
+/** A student's upcoming enrollments (dashboard facade) — lean. */
 const findUpcomingEnrollmentsForStudent = (studentId) =>
   ExamEnrollment.find({ student: studentId, isEligible: true, isDeleted: false })
     .populate({
@@ -236,18 +236,18 @@ const findUpcomingEnrollmentsForStudent = (studentId) =>
     })
     .lean();
 
-/** Crée une inscription (hooks). */
+/** Creates an enrollment (hooks). */
 const createEnrollment = (payload) => ExamEnrollment.create(payload);
 
-/** Sauve un doc d'inscription (préserve hooks/setters). */
+/** Saves an enrollment doc (preserves hooks/setters). */
 const saveEnrollmentDoc = (doc) => doc.save();
 
-/** Met à jour une inscription (override manager) — renvoie le doc populé. */
+/** Updates an enrollment (manager override) — returns the populated doc. */
 const updateEnrollmentById = (id, updates) =>
   ExamEnrollment.findByIdAndUpdate(id, { $set: updates }, { new: true })
     .populate('student', 'firstName lastName matricule');
 
-/** Soft-delete d'une inscription. */
+/** Soft-delete of an enrollment. */
 const softDeleteEnrollment = (id, userId) =>
   ExamEnrollment.findByIdAndUpdate(id, { isDeleted: true, updatedBy: userId });
 
@@ -255,25 +255,25 @@ const softDeleteEnrollment = (id, userId) =>
 // EXAM SUBMISSION
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Copie d'un étudiant pour une session (idempotence de démarrage) — non lean. */
+/** A student's submission for a session (start idempotency) — non lean. */
 const findSubmissionForStudent = (sessionId, studentId) =>
   ExamSubmission.findOne({ examSession: sessionId, student: studentId, isDeleted: false });
 
-/** Copie par id appartenant à un étudiant — non lean (mutée/.toObject()). */
+/** Submission by id belonging to a student — non lean (mutated/.toObject()). */
 const findSubmissionByIdForStudent = (id, studentId) =>
   ExamSubmission.findOne({ _id: id, student: studentId, isDeleted: false });
 
-/** Copie IN_PROGRESS d'un étudiant (save answer / anti-cheat) — non lean. */
+/** A student's IN_PROGRESS submission (save answer / anti-cheat) — non lean. */
 const findActiveSubmission = (id, studentId) =>
   ExamSubmission.findOne({ _id: id, student: studentId, status: 'IN_PROGRESS', isDeleted: false });
 
-/** Copie par id (vue de copie staff/étudiant) — non lean (.toObject()). */
+/** Submission by id (staff/student submission view) — non lean (.toObject()). */
 const findSubmissionByIdAny = (id) => ExamSubmission.findOne({ _id: id, isDeleted: false });
 
-/** Copie par id, vérifiable pour correction (toute copie non supprimée). */
+/** Submission by id, verifiable for grading (any non-deleted submission). */
 const findSubmissionById = (id) => ExamSubmission.findOne({ _id: id, isDeleted: false });
 
-/** Liste paginée de copies (file de correction) — lean. */
+/** Paginated list of submissions (grading queue) — lean. */
 const paginateSubmissions = async (match, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     ExamSubmission.find(match)
@@ -287,28 +287,28 @@ const paginateSubmissions = async (match, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Copies d'une session pour le snapshot d'analytics — non lean. */
+/** A session's submissions for the analytics snapshot — non lean. */
 const findSubmissionsForSnapshot = (sessionId) =>
   ExamSubmission.find({ examSession: sessionId, status: { $in: ['SUBMITTED', 'GRADED'] }, isDeleted: false })
     .select('answers student');
 
-/** Copies d'une session pour l'analyse anti-triche — lean. */
+/** A session's submissions for anti-cheat analysis — lean. */
 const findSubmissionsForAntiCheat = (sessionId) =>
   ExamSubmission.find({ examSession: sessionId, status: { $in: ['SUBMITTED', 'GRADED'] }, isDeleted: false })
     .select('student answers antiCheatFlags')
     .lean();
 
-/** Crée une copie (hooks). */
+/** Creates a submission (hooks). */
 const createSubmission = (payload) => ExamSubmission.create(payload);
 
-/** Sauve un doc de copie (préserve hooks/setters). */
+/** Saves a submission doc (preserves hooks/setters). */
 const saveSubmissionDoc = (doc) => doc.save();
 
-/** Pose un statut sur une copie. */
+/** Sets a status on a submission. */
 const setSubmissionStatus = (id, status) =>
   ExamSubmission.findByIdAndUpdate(id, { status });
 
-/** Ajoute un flag anti-triche (append-only). */
+/** Adds an anti-cheat flag (append-only). */
 const pushAntiCheatFlag = (id, flag) =>
   ExamSubmission.findByIdAndUpdate(id, { $push: { antiCheatFlags: flag } });
 
@@ -316,10 +316,10 @@ const pushAntiCheatFlag = (id, flag) =>
 // EXAM GRADING
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Correction par id — non lean (mutée/sauvée). */
+/** Grading by id — non lean (mutated/saved). */
 const findGradingById = (id) => ExamGrading.findOne({ _id: id, isDeleted: false });
 
-/** Correction par filtre (isolation campus) — détail populé. */
+/** Grading by filter (campus isolation) — populated detail. */
 const findGradingDetailed = (filter) =>
   ExamGrading.findOne(filter)
     .populate('student',      'firstName lastName matricule')
@@ -328,27 +328,27 @@ const findGradingDetailed = (filter) =>
     .populate('submission',   'answers submittedAt status')
     .populate('examSession',  'title subject maxScore startTime');
 
-/** Correction d'une copie (non supprimée) — pré-existence avant notation. */
+/** Grading of a submission (non-deleted) — pre-existence before scoring. */
 const findGradingBySubmission = (submissionId) =>
   ExamGrading.findOne({ submission: submissionId, isDeleted: false });
 
-/** Correction d'une copie sans filtre isDeleted (auto-grading MCQ idempotent). */
+/** Grading of a submission without the isDeleted filter (idempotent MCQ auto-grading). */
 const findGradingBySubmissionAny = (submissionId) =>
   ExamGrading.findOne({ submission: submissionId });
 
-/** Correction populée pour génération/réémission de certificat — non lean. */
+/** Grading populated for certificate generation/reissue — non lean. */
 const findGradingForCertificate = (id) =>
   ExamGrading.findOne({ _id: id, isDeleted: false })
     .populate('student',     'firstName lastName matricule schoolCampus')
     .populate('examSession', 'title subject academicYear semester examPeriod startTime maxScore');
 
-/** Correction par jeton de certificat (vérification publique). */
+/** Grading by certificate token (public verification). */
 const findGradingByCertificateToken = (token) =>
   ExamGrading.findOne({ certificateToken: token })
     .populate('student',     'firstName lastName matricule')
     .populate('examSession', 'title subject academicYear semester examPeriod startTime');
 
-/** Liste paginée des corrections (lean). */
+/** Paginated list of gradings (lean). */
 const paginateGradings = async (match, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     ExamGrading.find(match)
@@ -365,25 +365,25 @@ const paginateGradings = async (match, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Copies déjà assignées à un correcteur sur une session (file enseignant). */
+/** Submissions already assigned to a grader for a session (teacher queue). */
 const distinctGradedSubmissions = (sessionId, graderId) =>
   ExamGrading.find({ examSession: sessionId, grader: graderId }).distinct('submission');
 
-/** Corrections publiées d'une session pour le snapshot d'analytics — non lean. */
+/** Published gradings for a session used in the analytics snapshot — non-lean. */
 const findPublishedGradingsForSnapshot = (sessionId) =>
   ExamGrading.find({ examSession: sessionId, status: 'PUBLISHED', isDeleted: false })
     .select('normalizedScore student examSession schoolCampus');
 
-/** Crée une correction (hooks : normalizedScore, needsMediation…). */
+/** Creates a grading (hooks: normalizedScore, needsMediation…). */
 const createGrading = (payload) => ExamGrading.create(payload);
 
 /** Sauve un doc de correction (certificateToken…). */
 const saveGradingDoc = (doc) => doc.save();
 
 /**
- * Met à jour une correction par id. `opts` est passé tel quel à
- * findByIdAndUpdate (les appelants choisissent new/runValidators selon le cas ;
- * la propagation de score d'appel passe `{}`, sans validateurs).
+ * Updates a grading by id. `opts` is passed as-is to findByIdAndUpdate
+ * (callers choose new/runValidators depending on the case;
+ * appeal score propagation passes `{}`, without validators).
  */
 const updateGradingById = (id, setFields, opts = {}) =>
   ExamGrading.findByIdAndUpdate(id, { $set: setFields }, opts);
@@ -396,9 +396,9 @@ const publishSessionGradings = (sessionId, setFields) =>
   );
 
 /**
- * Destinataires d'une publication à venir : { student, schoolCampus } des
- * corrections encore publiables (mêmes critères que publishSessionGradings).
- * À appeler AVANT la publication pour notifier les étudiants concernés.
+ * Recipients of an upcoming publication: { student, schoolCampus } from
+ * gradings still eligible for publishing (same criteria as publishSessionGradings).
+ * Must be called BEFORE publishing to notify the affected students.
  */
 const findSessionGradingRecipients = (sessionId) =>
   ExamGrading.find(
@@ -406,7 +406,7 @@ const findSessionGradingRecipients = (sessionId) =>
     'student schoolCampus'
   ).lean();
 
-/** Nombre de copies en attente pour un correcteur (façade dashboard). */
+/** Number of pending submissions for a grader (dashboard facade). */
 const countPendingGradingForGrader = (graderId) =>
   ExamGrading.countDocuments({
     grader:    new mongoose.Types.ObjectId(graderId),
@@ -418,14 +418,14 @@ const countPendingGradingForGrader = (graderId) =>
 // EXAM APPEAL
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Recours par (correction, étudiant) — anti-doublon. */
+/** Appeal by (grading, student) — duplicate guard. */
 const findAppealByGradingAndStudent = (gradingId, studentId) =>
   ExamAppeal.findOne({ grading: gradingId, student: studentId, isDeleted: false });
 
 /** Recours par filtre (isolation campus) — non lean (mutation review). */
 const findAppealByFilter = (filter) => ExamAppeal.findOne(filter);
 
-/** Liste paginée des recours (lean). */
+/** Paginated list of appeals (lean). */
 const paginateAppeals = async (match, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     ExamAppeal.find(match)
@@ -441,17 +441,17 @@ const paginateAppeals = async (match, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Crée un recours (hooks). */
+/** Creates an appeal (hooks). */
 const createAppeal = (payload) => ExamAppeal.create(payload);
 
 /** Sauve un doc de recours (auto-reject deadline). */
 const saveAppealDoc = (doc) => doc.save();
 
-/** Met à jour un recours (renvoie le doc à jour). */
+/** Updates an appeal (returns the updated doc). */
 const updateAppealById = (id, setFields) =>
   ExamAppeal.findByIdAndUpdate(id, { $set: setFields }, { new: true });
 
-/** Met à jour un recours et renvoie le doc populé (résolution). */
+/** Updates an appeal and returns the populated doc (resolution). */
 const updateAppealByIdPopulated = (id, setFields) =>
   ExamAppeal.findByIdAndUpdate(id, { $set: setFields }, { new: true })
     .populate('student', 'firstName lastName')
@@ -464,7 +464,7 @@ const updateAppealByIdPopulated = (id, setFields) =>
 /** Question par filtre (isolation campus) — non lean. */
 const findQuestionByFilter = (filter) => QuestionBank.findOne(filter);
 
-/** Question détaillée (subject/course/createdBy populés). */
+/** Detailed question (subject/course/createdBy populated). */
 const findQuestionDetailed = (filter) =>
   QuestionBank.findOne(filter)
     .populate('subject',   'subject_name subject_code')
@@ -478,7 +478,7 @@ const findQuestionStats = (filter) =>
     'questionText usageCount lastUsedAt difficultyIndex discriminationIdx bloomLevel difficulty'
   );
 
-/** Liste paginée des questions (lean). */
+/** Paginated list of questions (lean). */
 const paginateQuestions = async (match, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     QuestionBank.find(match)
@@ -494,7 +494,7 @@ const paginateQuestions = async (match, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Questions servies à un candidat (passation) — non lean (.toObject()). */
+/** Questions served to a candidate (delivery) — non-lean (.toObject()). */
 const findQuestionsForDelivery = (ids) =>
   QuestionBank.find({ _id: { $in: ids } })
     .select('questionText questionType options points difficulty bloomLevel language translations');
@@ -503,13 +503,13 @@ const findQuestionsForDelivery = (ids) =>
 const findMcqQuestionsByIds = (ids, select) =>
   QuestionBank.find({ _id: { $in: ids }, questionType: 'MCQ' }).select(select);
 
-/** Crée une question (hooks). */
+/** Creates a question (hooks). */
 const createQuestion = (payload) => QuestionBank.create(payload);
 
 /** Import en masse de questions (laisse passer les doublons). */
 const insertManyQuestions = (docs) => QuestionBank.insertMany(docs, { ordered: false });
 
-/** Met à jour une question (avec validateurs). */
+/** Updates a question (with validators). */
 const updateQuestionById = (id, updates) =>
   QuestionBank.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true });
 
@@ -517,14 +517,14 @@ const updateQuestionById = (id, updates) =>
 const softDeleteQuestion = (id, userId) =>
   QuestionBank.findByIdAndUpdate(id, { isDeleted: true, updatedBy: userId });
 
-/** Incrémente l'usage des questions sélectionnées dans une session. */
+/** Increments usage count for questions selected in a session. */
 const incrementQuestionUsage = (ids) =>
   QuestionBank.updateMany(
     { _id: { $in: ids } },
     { $inc: { usageCount: 1 }, $set: { lastUsedAt: new Date() } }
   );
 
-/** Pose les indices psychométriques calculés sur une question (snapshot). */
+/** Sets the computed psychometric indices on a question (snapshot). */
 const setQuestionPsychometrics = (id, { difficultyIndex, discriminationIdx }) =>
   QuestionBank.findByIdAndUpdate(id, { $set: { difficultyIndex, discriminationIdx } });
 
@@ -536,7 +536,7 @@ const setQuestionPsychometrics = (id, { difficultyIndex, discriminationIdx }) =>
 const findSnapshotBySession = (sessionId) =>
   ExamAnalyticsSnapshot.findOne({ examSession: sessionId });
 
-/** Snapshot d'une session, populé (vue détaillée). */
+/** Session snapshot, populated (detailed view). */
 const findSnapshotBySessionPopulated = (sessionId) =>
   ExamAnalyticsSnapshot.findOne({ examSession: sessionId })
     .populate('examSession', 'title startTime endTime academicYear semester examPeriod');
@@ -557,10 +557,10 @@ const upsertAnalyticsSnapshot = (sessionId, fields) =>
   );
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AGRÉGATS — l'appelant fournit le $match déjà casté en ObjectId
+// AGGREGATES — the caller provides the $match already cast to ObjectId
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Stats globales des corrections publiées d'un campus (overview). */
+/** Global published grading stats for a campus (overview). */
 const aggregateCampusGradingStats = (match) =>
   ExamGrading.aggregate([
     { $match: match },
@@ -632,7 +632,7 @@ const aggregateEarlyWarning = (match, { skip, limit, threshold }) =>
     },
   ]);
 
-/** Stats des corrections publiées agrégées par session (export rapport). */
+/** Published grading stats aggregated per session (report export). */
 const aggregateSessionGradingStats = (sessionIds) =>
   ExamGrading.aggregate([
     { $match: { examSession: { $in: sessionIds }, status: 'PUBLISHED', isDeleted: false } },
@@ -666,7 +666,7 @@ module.exports = {
   findRecentlyCompletedSessions,
   distinctSessionIds,
   countExamSessions,
-  // ExamSession — écritures
+  // ExamSession — writes
   createSession,
   updateSessionById,
   softDeleteSession,
@@ -742,7 +742,7 @@ module.exports = {
   findSnapshotsBySessionIds,
   countAnalyticsSnapshots,
   upsertAnalyticsSnapshot,
-  // Agrégats
+  // Aggregates
   aggregateCampusGradingStats,
   aggregateEarlyWarning,
   aggregateSessionGradingStats,

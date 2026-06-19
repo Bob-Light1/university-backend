@@ -1,10 +1,10 @@
 'use strict';
 
 /**
- * Smokes d'intégration via Supertest sur l'app Express importée (app.js).
- * AUCUNE base de données : on vérifie le câblage routing + middlewares d'auth,
- * pas la logique métier. Les routes protégées doivent rejeter (401) AVANT de
- * toucher la DB ; /api/health rapporte 'disconnected' faute de connexion.
+ * Integration smoke tests via Supertest against the imported Express app (app.js).
+ * NO database: we verify the routing wiring + auth middlewares,
+ * not the business logic. Protected routes must reject (401) BEFORE
+ * touching the DB; /api/health reports 'disconnected' for lack of a connection.
  */
 
 const request = require('supertest');

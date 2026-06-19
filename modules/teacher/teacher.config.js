@@ -1,10 +1,10 @@
-const Teacher    = require('./models/teacher.model'); // exception assumée : Model du GenericEntityController
+const Teacher    = require('./models/teacher.model'); // accepted exception: Model of the GenericEntityController
 const teacherRepo = require('./teacher.repository');
-const classService = require('../class').service; // façade module class (§3)
-const subjectService = require('../subject').service; // façade module subject (§3)
+const classService = require('../class').service; // class module facade (§3)
+const subjectService = require('../subject').service; // subject module facade (§3)
 const mongoose   = require('mongoose');
-const { getDepartmentCampusRef } = require('../department').service; // façade module department (§3)
-// campus.service en require PARESSEUX (campus est un hub qui requiert teacher → cycle)
+const { getDepartmentCampusRef } = require('../department').service; // department module facade (§3)
+// campus.service required LAZILY (campus is a hub that requires teacher → cycle)
 const campusService = () => require('../campus').service;
 
 /**
@@ -24,10 +24,10 @@ const campusService = () => require('../campus').service;
  *
  * Campus isolation note
  * ──────────────────────
- * L'appartenance campus des `classes[]` et `subjects[]` assignés est validée
- * par customValidation ci-dessous (via les façades class/subject), PAS par un
- * hook de schéma : un model ne doit pas lire d'autres collections. Les hooks
- * afterCreate/afterUpdate gardent la synchro Class.teachers[]/classManager.
+ * Campus membership of the assigned `classes[]` and `subjects[]` is validated
+ * by customValidation below (via the class/subject facades), NOT by a schema
+ * hook: a model must not read other collections. The afterCreate/afterUpdate
+ * hooks keep the Class.teachers[]/classManager synchronisation.
  */
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -117,8 +117,8 @@ const teacherConfig = {
 
   /**
    * Validates department, assigned classes/subjects (campus isolation) and
-   * matricule before creation or update. Remplace l'ancien hook pre-validate
-   * du model Teacher (sortie de la logique cross-entité hors du schéma).
+   * matricule before creation or update. Replaces the former pre-validate hook
+   * of the Teacher model (moving the cross-entity logic out of the schema).
    */
   customValidation: async (fields, campusId, session) => {
     try {
@@ -156,8 +156,8 @@ const teacherConfig = {
         }
       }
 
-      // Validate assigned subjects belong to this campus (ex-hook pre-validate).
-      // Tolérant : un subject sans schoolCampus passe (comportement historique).
+      // Validate assigned subjects belong to this campus (former pre-validate hook).
+      // Tolerant: a subject without schoolCampus passes (historical behavior).
       if (Array.isArray(fields.subjects) && fields.subjects.length > 0) {
         const subjectRefs = await subjectService.getSubjectsCampusRefs(fields.subjects, { session });
         if (subjectRefs.some(s => s.schoolCampus && s.schoolCampus.toString() !== campusId.toString())) {
@@ -269,8 +269,8 @@ const teacherConfig = {
     const classIds   = (teacher.classes || []).map((id) => id.toString());
     const managerOf  = fields.classManagerOf || null;
 
-    // Notification de bienvenue (in-app + email inerte sans SMTP). Indépendante
-    // de la synchro de classes ci-dessous : fire-and-forget, n'échoue jamais.
+    // Welcome notification (in-app + email, inert without SMTP). Independent
+    // of the class synchronisation below: fire-and-forget, never fails.
     require('../notification').service.notify({
       recipient: {
         id:       teacher._id,
@@ -344,8 +344,8 @@ const teacherConfig = {
         }
       }
 
-      // Validate updated classes belong to this campus (ferme l'angle mort update :
-      // findByIdAndUpdate ne déclenche aucun hook document — cf. retrait du pre-validate).
+      // Validate updated classes belong to this campus (closes the update blind spot:
+      // findByIdAndUpdate triggers no document hook — cf. removal of the pre-validate).
       if (Array.isArray(updates.classes) && updates.classes.length > 0) {
         const classRefs = await classService.getClassesCampusRefs(updates.classes);
         if (classRefs.length !== updates.classes.length) {
@@ -356,7 +356,7 @@ const teacherConfig = {
         }
       }
 
-      // Validate updated subjects belong to this campus (tolérant : subject sans campus passe)
+      // Validate updated subjects belong to this campus (tolerant: subject without campus passes)
       if (Array.isArray(updates.subjects) && updates.subjects.length > 0) {
         const subjectRefs = await subjectService.getSubjectsCampusRefs(updates.subjects);
         if (subjectRefs.some(s => s.schoolCampus && s.schoolCampus.toString() !== teacher.schoolCampus.toString())) {

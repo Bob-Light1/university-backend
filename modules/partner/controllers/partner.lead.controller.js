@@ -27,7 +27,7 @@ const crypto   = require('crypto');
 const mongoose = require('mongoose');
 
 const partnerRepo = require('../partner.repository');
-// Require paresseux vers la façade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require toward the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const getCampusCommissionConfig = (...args) => require('../../campus').service.getCampusCommissionConfig(...args);
 
 const {
@@ -77,11 +77,11 @@ const VALID_TRANSITIONS = {
  * Lit commissionConfig du partenaire (override) ou du campus (défaut).
  */
 const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
-  // Vérifier qu'aucune commission n'existe déjà pour ce lead
+  // Check that no commission already exists for this lead
   const existing = await partnerRepo.findCommissionByLead(lead._id);
   if (existing) return existing;
 
-  // Config de commission : priorité partner override → campus config
+  // Commission config: partner override takes priority → campus config
   let config = partner.commissionConfig?.ruleType
     ? partner.commissionConfig
     : null;
@@ -94,7 +94,7 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
   }
 
   if (!config || !config.ruleType) {
-    // Pas de config — créer une commission à 0 en pending pour validation manuelle
+    // No config — create a commission at 0 in pending for manual review
     return partnerRepo.createCommission({
       schoolCampus:  lead.schoolCampus,
       partner:       partner._id,
@@ -184,12 +184,12 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     utm_source, utm_medium, utm_campaign,
   } = req.body;
 
-  // Alias de compatibilité — le portail public envoie `partnerCode` / `website`,
-  // l'ancien contrat utilisait `referralCode` / `_hp`. On accepte les deux.
+  // Compatibility alias — the public portal sends `partnerCode` / `website`,
+  // the old contract used `referralCode` / `_hp`. Both are accepted.
   const referralCode = req.body.referralCode ?? req.body.partnerCode;
   const honeypot     = req.body._hp ?? req.body.website;
 
-  // 1. HONEYPOT — silent discard, aucune écriture DB
+  // 1. HONEYPOT — silent discard, no DB write
   if (honeypot) {
     return sendSuccess(res, 200, 'Pre-registration received.');
   }
@@ -203,19 +203,19 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   const normalizedEmail = email.toLowerCase().trim();
   const normalizedCode  = referralCode.toUpperCase().trim();
 
-  // Résoudre le partenaire depuis le code
+  // Resolve the partner from the code
   const partner = await partnerRepo.findActivePartnerForPreRegister(normalizedCode);
 
   if (!partner) return sendError(res, 404, 'Invalid or inactive referral code.');
 
   const campusId = partner.schoolCampus;
 
-  // 2. SELF_REFERRAL — le partenaire se pré-inscrit lui-même
+  // 2. SELF_REFERRAL — the partner pre-registers themselves
   if (normalizedEmail === partner.email?.toLowerCase()) {
     return sendError(res, 422, 'Self-referral is not allowed.');
   }
 
-  // 3. DUPLICATE_LEAD — même email OU même téléphone sur le même campus
+  // 3. DUPLICATE_LEAD — same email OR same phone on the same campus
   const dupOr = [{ email: normalizedEmail }];
   if (phone?.trim()) dupOr.push({ phone: phone.trim() });
 
@@ -224,7 +224,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     return sendError(res, 409, 'A registration with this email or phone already exists for this campus.');
   }
 
-  // 4. IP_BURST — >5 leads depuis le même IP hash en 1 heure
+  // 4. IP_BURST — >5 leads from the same IP hash within 1 hour
   const rawIp  = req.ip || req.connection?.remoteAddress || '';
   const ipHash = hashIp(rawIp);
   const fraudFlags = [];
@@ -236,7 +236,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     fraudFlags.push('IP_BURST');
   }
 
-  // Détecter source depuis le contexte de la requête
+  // Detect source from the request context
   const detectedSource = source || (req.query.ref ? 'referral_link' : 'manual_code');
 
   const lead = await partnerRepo.createLead({
@@ -259,7 +259,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     fraudFlags,
   });
 
-  // Mettre à jour lastActivityAt du partenaire (fire-and-forget)
+  // Update partner's lastActivityAt (fire-and-forget)
   partnerRepo.touchActivity(partner._id).catch(() => {});
 
   // TODO P2: Notifier Campus Manager (WhatsApp + in-app) — nouveau lead
@@ -367,14 +367,14 @@ const updateLeadStatus = asyncHandler(async (req, res) => {
 
   const currentStatus = lead.status;
 
-  // Vérifier transition valide
+  // Verify valid transition
   const allowed = VALID_TRANSITIONS[currentStatus];
   if (!allowed) return sendError(res, 400, `Status '${currentStatus}' is terminal.`);
   if (!allowed.includes(newStatus)) {
     return sendError(res, 400, `Invalid transition: '${currentStatus}' → '${newStatus}'. Allowed: [${allowed.join(', ')}].`);
   }
 
-  // Mise à jour statut + historisation
+  // Status update + history recording
   const updatedLead = await partnerRepo.applyLeadStatus(leadId, campusFilter, newStatus, {
     status:    newStatus,
     changedBy: req.user.id,
@@ -382,7 +382,7 @@ const updateLeadStatus = asyncHandler(async (req, res) => {
     note:      note?.trim() || null,
   });
 
-  // Si enrolled → déclencher le moteur de commission
+  // If enrolled → trigger the commission engine
   let commission = null;
   if (newStatus === 'enrolled') {
     const partner = await partnerRepo.findPartnerForCommission(updatedLead.partner);
@@ -391,7 +391,7 @@ const updateLeadStatus = asyncHandler(async (req, res) => {
     }
     // TODO P2: Notifier Partner (WhatsApp + in-app) — lead converti, commission pending
   } else {
-    // TODO P2: Notifier Partner (WhatsApp + in-app) — statut avancé
+    // TODO P2: Notify Partner (WhatsApp + in-app) — status advanced
   }
 
   return sendSuccess(res, 200, `Lead status updated to '${newStatus}'.`, {
@@ -411,7 +411,7 @@ const deleteLead = asyncHandler(async (req, res) => {
 
   if (!lead) return sendNotFound(res, 'Lead');
 
-  // Bloqué si une commission est liée
+  // Blocked if a commission is linked
   if (lead.commissionId) {
     return sendForbidden(res, 'Cannot delete a lead with an associated commission.');
   }

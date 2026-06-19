@@ -23,7 +23,7 @@ const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
 const mentorRepo = require('../mentor.repository');
-const studentService = require('../../student').service; // façade module student (§3)
+const studentService = require('../../student').service; // student module facade (§3)
 const profileSvc = require('../../../shared/services/profile.service');
 const {
   sendSuccess,
@@ -161,7 +161,7 @@ const createMentor = async (req, res) => {
 
     const mentor = await mentorRepo.create(body);
 
-    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget.
+    // Welcome notification (in-app + inert email without SMTP). Fire-and-forget.
     require('../../notification').service.notify({
       recipient: {
         id:       mentor._id,

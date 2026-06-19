@@ -1,18 +1,18 @@
 /**
- * @file index.js — FAÇADE du module public-portal
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3 et §9.
+ * @file index.js — FACADE of the public-portal module
+ * Sole public entry point of the module — see MODULAR_MONOLITH_MIGRATION.md §3 and §9.
  *
- * Couvre le portail public marketing (quiz, FAQ, témoignages, compétitions,
- * contact, aperçus de cours) ET son back-office portal-admin (même domaine,
- * mêmes models). Le business partenaire (partner.model, leads, commissions,
- * applications) reste dans le module `partner` — voir §9.
+ * Covers the public marketing portal (quiz, FAQ, testimonials, competitions,
+ * contact, course previews) AND its portal-admin back-office (same domain,
+ * same models). The partner business (partner.model, leads, commissions,
+ * applications) stays in the `partner` module — see §9.
  */
 
 const routes  = require('./public-portal.routes');
 const service = require('./public-portal.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api', routes) → /api/public/* + /api/portal-admin/*
+  routes,   // mounted by server.js:  app.use('/api', routes) → /api/public/* + /api/portal-admin/*
   service,  // { runCompetitionClosingJob }
-  // PAS de model exporté. PAS de controller exporté.
+  // NO model exported. NO controller exported.
 };

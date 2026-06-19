@@ -39,7 +39,7 @@ const partnerCommissionSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // ── RÉFÉRENCES ────────────────────────────────────────────────────────
+    // ── REFERENCES ────────────────────────────────────────────────────────
     partner: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Partner',
@@ -68,7 +68,7 @@ const partnerCommissionSchema = new mongoose.Schema(
       default:   'XAF',
     },
 
-    // Copie immuable de la règle au moment du calcul
+    // Immutable snapshot of the rule at calculation time
     ruleSnapshot: {
       type:     RuleSnapshotSchema,
       required: [true, 'Rule snapshot is required'],
@@ -118,7 +118,7 @@ const partnerCommissionSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ── PAIEMENT (traçabilité) ────────────────────────────────────────────
+    // ── PAYMENT (traceability) ────────────────────────────────────────────
     paidBy: {
       type:    String,
       default: null,
@@ -168,7 +168,7 @@ const partnerCommissionSchema = new mongoose.Schema(
 // Un lead → une seule commission maximum
 partnerCommissionSchema.index({ lead: 1 }, { unique: true });
 
-// Requêtes par partenaire et campus
+// Queries by partner and campus
 partnerCommissionSchema.index({ partner: 1, status: 1 });
 partnerCommissionSchema.index({ schoolCampus: 1, status: 1 });
 partnerCommissionSchema.index({ status: 1, createdAt: -1 });

@@ -1,7 +1,7 @@
 const departmentRepo = require('../department.repository');
 const departmentConfig = require('../department.config');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
-// Require paresseux : teacher.config consomme la façade department (cycle department ↔ teacher).
+// Lazy require: teacher.config consumes the department facade (department ↔ teacher cycle).
 const countTeachersInDepartment = (...args) =>
   require('../../teacher').service.countActiveInDepartment(...args);
 
@@ -211,7 +211,7 @@ const archiveDepartment = async (req, res) => {
       }
     }
 
-    // Warn if teachers are still assigned (via la façade teacher).
+    // Warn if teachers are still assigned (via the teacher facade).
     const teacherCount = await countTeachersInDepartment(id);
     if (teacherCount > 0) {
       return sendError(

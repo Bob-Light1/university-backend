@@ -7,7 +7,7 @@ const routes  = require('./admin.routes');
 const service = require('./admin.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/admin', admin.routes)
-  service,  // API inter-modules (vide pour l'instant — voir admin.service.js)
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js :  app.use('/api/admin', admin.routes)
+  service,  // inter-module API (empty for now — see admin.service.js)
+  // NO model exported. NO controller exported.
 };

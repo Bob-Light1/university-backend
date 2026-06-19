@@ -1,7 +1,7 @@
-const Student = require('./models/student.model'); // exception assumée : Model du GenericEntityController
+const Student = require('./models/student.model'); // intentional exception: Model from the GenericEntityController
 const studentRepo = require('./student.repository');
-const { getClassCampusRefForValidation } = require('../class').service; // façade module class (§3)
-// campus.service en require PARESSEUX (campus est un hub qui requiert student → cycle)
+const { getClassCampusRefForValidation } = require('../class').service; // class module facade (§3)
+// campus.service via LAZY require (campus is a hub that requires student → cycle)
 const campusService = () => require('../campus').service;
 const mongoose = require('mongoose');
 
@@ -161,9 +161,9 @@ const studentConfig = {
    * After create hook - Post-creation actions
    */
    afterCreate: async (student) => {
-    // Notification de bienvenue : in-app + email (ce dernier inerte → skipped
-    // tant que le SMTP n'est pas configuré). Fire-and-forget : n'impacte jamais
-    // la création du compte (le contrôleur générique l'exécute déjà hors transaction).
+    // Welcome notification: in-app + email (the latter inert → skipped
+    // as long as SMTP is not configured). Fire-and-forget: never impacts
+    // account creation (the generic controller already runs it outside the transaction).
     require('../notification').service.notify({
       recipient: {
         id:       student._id,
@@ -200,9 +200,9 @@ const studentConfig = {
         }
       }
 
-      // Validate class change belongs to this campus (ferme l'angle mort update :
-      // le campus est immuable ici, mais studentClass peut changer — findByIdAndUpdate
-      // ne déclenche aucun hook document, donc la règle doit être vérifiée ICI).
+      // Validate class change belongs to this campus (closes the update blind spot:
+      // the campus is immutable here, but studentClass can change — findByIdAndUpdate
+      // triggers no document hook, so the rule must be checked HERE).
       if (updates.studentClass &&
           updates.studentClass.toString() !== (student.studentClass?.toString() ?? '')) {
         if (!mongoose.Types.ObjectId.isValid(updates.studentClass)) {

@@ -45,7 +45,7 @@ const teacherAttendanceSchema = new mongoose.Schema(
       index:    true,
     },
 
-    /** Séance planifiée (TeacherSchedule) */
+    /** Planned session (TeacherSchedule) */
     schedule: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'TeacherSchedule',
@@ -61,14 +61,14 @@ const teacherAttendanceSchema = new mongoose.Schema(
       index:    true,
     },
 
-    /** Matière (dénormalisé) */
+    /** Subject (denormalized) */
     subject: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Subject',
       required: [true, 'Subject is required'],
     },
 
-    /** Classe concernée (dénormalisé) */
+    /** Relevant class (denormalized) */
     class: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Class',
@@ -76,9 +76,9 @@ const teacherAttendanceSchema = new mongoose.Schema(
     },
 
     /**
-     * Campus Manager qui a enregistré la présence.
-     * Le Campus Manager peut être un Teacher avec le rôle CAMPUS_MANAGER
-     * dans le JWT (req.user.role === 'CAMPUS_MANAGER').
+     * Campus Manager who recorded the attendance.
+     * The Campus Manager can be a Teacher with the CAMPUS_MANAGER role
+     * in the JWT (req.user.role === 'CAMPUS_MANAGER').
      */
     recordedBy: {
       type:     mongoose.Schema.Types.ObjectId,
@@ -86,8 +86,8 @@ const teacherAttendanceSchema = new mongoose.Schema(
       required: [true, 'Recorder is required'],
     },
 
-    // ── STATUT DE PRÉSENCE ───────────────────
-    /** false = absent (défaut), true = présent */
+    // ── ATTENDANCE STATUS ───────────────────
+    /** false = absent (default), true = present */
     status: {
       type:    Boolean,
       default: false,
@@ -105,7 +105,7 @@ const teacherAttendanceSchema = new mongoose.Schema(
     sessionStartTime: { type: String },
     sessionEndTime:   { type: String },
 
-    // ── PÉRIODE ACADÉMIQUE ───────────────────
+    // ── ACADEMIC PERIOD ───────────────────
     academicYear: {
       type:     String,
       required: [true, 'Academic year is required'],
@@ -151,13 +151,13 @@ const teacherAttendanceSchema = new mongoose.Schema(
     justifiedAt:  { type: Date },
 
     // ── PAIE ────────────────────────────────
-    /** Durée de la séance en minutes (calculée automatiquement) */
+    /** Session duration in minutes (computed automatically) */
     sessionDuration: { type: Number },
     isPaid:      { type: Boolean, default: false, index: true },
     paymentRef:  { type: String },
     paidAt:      { type: Date },
 
-    // ── ENSEIGNANT REMPLAÇANT ────────────────
+    // ── REPLACEMENT TEACHER ────────────────
     hasReplacement:      { type: Boolean, default: false },
     replacementTeacher:  { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher' },
     replacementNotes:    {
@@ -165,7 +165,7 @@ const teacherAttendanceSchema = new mongoose.Schema(
       maxlength: [300, 'Replacement notes must not exceed 300 characters'],
     },
 
-    // ── MÉTADONNÉES ─────────────────────────
+    // ── METADATA ─────────────────────────
     remarks: {
       type:      String,
       maxlength: [500, 'Remarks must not exceed 500 characters'],
@@ -188,7 +188,7 @@ const teacherAttendanceSchema = new mongoose.Schema(
 // INDEXES
 // ─────────────────────────────────────────────
 
-/** Un seul enregistrement par enseignant, par séance, par date */
+/** A single record per teacher, per session, per date */
 teacherAttendanceSchema.index(
   { teacher: 1, schedule: 1, attendanceDate: 1 },
   { unique: true }
@@ -281,7 +281,7 @@ teacherAttendanceSchema.methods.toggleStatus = async function (newStatus, userId
 };
 
 /**
- * Marque la séance comme payée.
+ * Marks the session as paid.
  * @param {string} paymentRef
  */
 teacherAttendanceSchema.methods.markAsPaid = async function (paymentRef) {
@@ -316,7 +316,7 @@ teacherAttendanceSchema.statics.lockDailyAttendance = async function (
 };
 
 /**
- * Statistiques de présence pour un enseignant.
+ * Attendance statistics for a teacher.
  */
 teacherAttendanceSchema.statics.getTeacherStats = async function (
   teacherId,
@@ -382,7 +382,7 @@ teacherAttendanceSchema.statics.getTeacherStats = async function (
 };
 
 /**
- * Statistiques de présence par campus.
+ * Attendance statistics by campus.
  */
 teacherAttendanceSchema.statics.getCampusStats = async function (
   campusId,

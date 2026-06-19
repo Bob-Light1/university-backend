@@ -18,8 +18,8 @@
  *   Any mismatch returns null, which the caller must treat as a 400/403 error.
  */
 
-// Façades propriétaires, en require paresseux (cycles student ↔ teacher via
-// teacher.dashboard ; subject/class résolus par leur module).
+// Owning-module facades, lazily required (student ↔ teacher cycles via
+// teacher.dashboard; subject/class resolved by their own module).
 const teacherService    = () => require('../teacher').service;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -144,8 +144,8 @@ const resolveSessionParticipants = async ({ subjectId, teacherId, classIds }, ca
 
 /**
  * Upserts the TeacherSchedule mirror document for a given StudentSchedule.
- * Délégué au module teacher (propriétaire de TeacherSchedule) — non-fatal,
- * ne rejette jamais.
+ * Delegated to the teacher module (owner of TeacherSchedule) — non-fatal,
+ * never rejects.
  *
  * @param {Object} ss      - Lean or Mongoose StudentSchedule document (.toObject())
  * @param {string} actorId - req.user.id of the person triggering the change

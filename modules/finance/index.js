@@ -1,16 +1,16 @@
 /**
- * @file index.js — FAÇADE du module finance
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3.
+ * @file index.js — FACADE of the finance module
+ * Sole public entry point of the module — see MODULAR_MONOLITH_MIGRATION.md §3.
  *
- * Routes : suivi paiement étudiant (dettes + acomptes), montées sur /api/finance.
- * Service : API inter-modules (compteur dashboard campus, suivi paiement, cron overdue).
+ * Routes: student payment tracking (debts + payments), mounted on /api/finance.
+ * Service: inter-module API (campus dashboard counter, payment tracking, overdue cron).
  */
 
 const routes  = require('./finance.routes');
 const service = require('./finance.service');
 
 module.exports = {
-  routes,       // monté par app.js sur /api/finance
-  service,      // API inter-modules : require('../finance').service.<fn>
-  // PAS de model exporté. PAS de controller exporté.
+  routes,       // mounted by app.js on /api/finance
+  service,      // inter-module API: require('../finance').service.<fn>
+  // NO model exported. NO controller exported.
 };

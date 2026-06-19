@@ -2,14 +2,14 @@
 /**
  * seed-quiz-questions.js
  *
- * Insère des questions de quiz pour tous les campus (ou un campus précis).
- * Les questions sont publiées (isPublished: true) et prêtes pour le portail.
+ * Inserts quiz questions for all campuses (or a specific campus).
+ * The questions are published (isPublished: true) and ready for the portal.
  *
- * Usage :
- *   node scripts/seed-quiz-questions.js                          → tous les campus
- *   node scripts/seed-quiz-questions.js --slug=campus-bafoussam  → un seul campus
- *   node scripts/seed-quiz-questions.js --dry-run               → aperçu sans insertion
- *   node scripts/seed-quiz-questions.js --clear                 → supprime et réinsère
+ * Usage:
+ *   node scripts/seed-quiz-questions.js                          → all campuses
+ *   node scripts/seed-quiz-questions.js --slug=campus-bafoussam  → a single campus
+ *   node scripts/seed-quiz-questions.js --dry-run               → preview without inserting
+ *   node scripts/seed-quiz-questions.js --clear                 → delete and reinsert
  */
 
 'use strict';
@@ -24,12 +24,12 @@ const CLEAR    = process.argv.includes('--clear');
 const SLUG_ARG = process.argv.find(a => a.startsWith('--slug='))?.split('=')[1];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BANQUE DE QUESTIONS (fr)
-// Structure : { category, text, options: [A,B,C,D], correctIndex (0-3), difficulty, lang }
+// QUESTION BANK (fr)
+// Structure: { category, text, options: [A,B,C,D], correctIndex (0-3), difficulty, lang }
 // ─────────────────────────────────────────────────────────────────────────────
 const QUESTIONS = [
 
-  // ── DÉVELOPPEMENT WEB ────────────────────────────────────────────────────
+  // ── WEB DEVELOPMENT ────────────────────────────────────────────────────
   {
     category: 'web', difficulty: 'easy', lang: 'fr',
     text: 'Que signifie l\'acronyme HTML ?',
@@ -101,7 +101,7 @@ const QUESTIONS = [
     correctIndex: 2,
   },
 
-  // ── COMPTABILITÉ ─────────────────────────────────────────────────────────
+  // ── ACCOUNTING ─────────────────────────────────────────────────────────
   {
     category: 'accounting', difficulty: 'easy', lang: 'fr',
     text: 'Que représente le bilan comptable ?',
@@ -203,7 +203,7 @@ const QUESTIONS = [
     correctIndex: 1,
   },
 
-  // ── MARKETING DIGITAL ────────────────────────────────────────────────────
+  // ── DIGITAL MARKETING ────────────────────────────────────────────────────
   {
     category: 'marketing', difficulty: 'easy', lang: 'fr',
     text: 'Que signifie SEO ?',
@@ -290,7 +290,7 @@ const QUESTIONS = [
     correctIndex: 1,
   },
 
-  // ── CULTURE GÉNÉRALE ─────────────────────────────────────────────────────
+  // ── GENERAL KNOWLEDGE ─────────────────────────────────────────────────────
   {
     category: 'general', difficulty: 'easy', lang: 'fr',
     text: 'Quelle est la capitale du Cameroun ?',

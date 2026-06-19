@@ -7,7 +7,7 @@ const routes  = require('./settings.routes');
 const service = require('./settings.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/settings', settings.routes)
-  service,  // API inter-modules    :  require('../settings').service.SUPPORTED_TIMEZONES
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js :  app.use('/api/settings', settings.routes)
+  service,  // inter-module API     :  require('../settings').service.SUPPORTED_TIMEZONES
+  // NO model exported. NO controller exported.
 };

@@ -16,35 +16,35 @@ const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 router.use(authenticate);
 
 // ========================================
-// USER INBOX  (/my/* avant /:id pour éviter la collision de paramètre)
+// USER INBOX  (/my/* before /:id to avoid the parameter collision)
 // ========================================
 
 /**
  * @route   GET /api/notifications/my
- * @desc    Boîte de réception in-app du destinataire courant
- * @access  Tous rôles authentifiés
+ * @desc    Current recipient's in-app inbox
+ * @access  All authenticated roles
  * @query   page, limit, unreadOnly=true
  */
 router.get('/my', authorize(ALL_ROLES), apiLimiter, ctrl.getMyInbox);
 
 /**
  * @route   GET /api/notifications/my/unread-count
- * @desc    Compteur de badge (notifications in-app non lues)
- * @access  Tous rôles authentifiés
+ * @desc    Badge counter (unread in-app notifications)
+ * @access  All authenticated roles
  */
 router.get('/my/unread-count', authorize(ALL_ROLES), apiLimiter, ctrl.getUnreadCount);
 
 /**
  * @route   PATCH /api/notifications/my/read-all
- * @desc    Marquer toutes les notifications in-app comme lues
- * @access  Tous rôles authentifiés
+ * @desc    Mark all in-app notifications as read
+ * @access  All authenticated roles
  */
 router.patch('/my/read-all', authorize(ALL_ROLES), apiLimiter, ctrl.markAllAsRead);
 
 /**
  * @route   PATCH /api/notifications/:id/read
- * @desc    Marquer une notification in-app comme lue
- * @access  Tous rôles authentifiés (uniquement les siennes — anti-IDOR côté service)
+ * @desc    Mark an in-app notification as read
+ * @access  All authenticated roles (only their own — anti-IDOR on the service side)
  */
 router.patch('/:id/read', authorize(ALL_ROLES), apiLimiter, ctrl.markAsRead);
 
@@ -54,7 +54,7 @@ router.patch('/:id/read', authorize(ALL_ROLES), apiLimiter, ctrl.markAsRead);
 
 /**
  * @route   GET /api/notifications
- * @desc    Journal des envois (filtrable), isolé par campus
+ * @desc    Delivery log (filterable), isolated by campus
  * @access  ADMIN | DIRECTOR | CAMPUS_MANAGER
  * @query   page, limit, channel, status, recipientId, search, campusId (ADMIN/DIRECTOR only)
  */
@@ -62,7 +62,7 @@ router.get('/', authorize(MGMT_ROLES), apiLimiter, ctrl.getLog);
 
 /**
  * @route   POST /api/notifications/:id/retry
- * @desc    Rejouer manuellement un envoi externe en échec
+ * @desc    Manually replay a failed external delivery
  * @access  ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.post('/:id/retry', authorize(MGMT_ROLES), apiLimiter, ctrl.retry);

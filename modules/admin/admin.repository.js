@@ -22,14 +22,14 @@ const count = () => Admin.countDocuments();
 const findByEmailWithPassword = (email) =>
   Admin.findOne({ email }).select('+password').lean();
 
-/** Recherche par email (contrôle d'unicité). */
+/** Search by email (uniqueness check). */
 const findByEmail = (email) => Admin.findOne({ email }).lean();
 
-/** Met à jour lastLogin (fire-and-forget — renvoie la promesse). */
+/** Updates lastLogin (fire-and-forget — returns the promise). */
 const touchLastLogin = (id) =>
   Admin.updateOne({ _id: id }, { $set: { lastLogin: new Date() } });
 
-/** Crée un compte admin. @returns {Promise<Document>} (pour toObject côté controller) */
+/** Creates an admin account. @returns {Promise<Document>} (for toObject on the controller side) */
 const create = (data) => Admin.create(data);
 
 /** Profil par id (sans mot de passe). */
@@ -38,7 +38,7 @@ const findByIdLean = (id) => Admin.findById(id).lean();
 /** Profil par id, AVEC le hash (changement de mot de passe). */
 const findByIdWithPassword = (id) => Admin.findById(id).select('+password').lean();
 
-/** Met à jour le mot de passe (déjà hashé). */
+/** Updates the password (already hashed). */
 const updatePassword = (id, hashedPassword) =>
   Admin.findByIdAndUpdate(id, { password: hashedPassword });
 

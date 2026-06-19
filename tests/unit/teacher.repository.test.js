@@ -32,7 +32,7 @@ const buildModelMock = () => {
   Model.countDocuments = jest.fn(() => makeQuery());
   Model.aggregate = jest.fn(() => Promise.resolve([]));
   Model.create = jest.fn((d) => Promise.resolve({ _id: 'created', ...d }));
-  // statiques métier (logique de la couche model invoquée par le repo)
+  // business statics (model-layer logic invoked by the repo)
   Model.detectTeacherConflicts = jest.fn(() => Promise.resolve({ hasConflict: false, conflicts: [] }));
   Model.getTeacherCalendar = jest.fn(() => Promise.resolve([{ _id: 'sess1' }]));
   Model.getWorkloadSummary = jest.fn(() => Promise.resolve({ scheduledHours: 10 }));

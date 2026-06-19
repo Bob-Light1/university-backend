@@ -4,12 +4,12 @@ const mongoose = require('mongoose');
 const { computeStatus, STATUSES } = require('../fee-status');
 
 /**
- * StudentFee — une dette/obligation de paiement d'un étudiant (scolarité,
- * inscription, certification…). Le suivi du paiement (acomptes successifs)
- * se fait via le model FeePayment, qui alimente `amountPaid` ici.
+ * StudentFee — a student's debt/payment obligation (tuition,
+ * enrollment, certification…). Payment tracking (successive installments)
+ * is done via the FeePayment model, which feeds `amountPaid` here.
  *
- * `status` est dérivé (jamais saisi librement) — voir fee-status.js. Le champ
- * reste persisté pour permettre filtres et index efficaces côté liste.
+ * `status` is derived (never freely entered) — see fee-status.js. The field
+ * stays persisted to allow efficient filters and indexes on the list side.
  */
 const studentFeeSchema = new mongoose.Schema(
   {
@@ -27,7 +27,7 @@ const studentFeeSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Libellé lisible, ex: « Scolarité 2025-2026 », « Frais d'inscription ».
+    // Human-readable label, e.g. « Tuition 2025-2026 », « Enrollment fees ».
     label: {
       type: String,
       required: [true, 'label is required'],
@@ -48,7 +48,7 @@ const studentFeeSchema = new mongoose.Schema(
       min: [0, 'amountDue cannot be negative'],
     },
 
-    // Cumul des FeePayment rattachés — maintenu par le service (jamais saisi).
+    // Running total of attached FeePayments — maintained by the service (never entered).
     amountPaid: {
       type: Number,
       default: 0,
@@ -97,18 +97,18 @@ const studentFeeSchema = new mongoose.Schema(
   }
 );
 
-// Solde restant à régler (jamais négatif).
+// Remaining balance to settle (never negative).
 studentFeeSchema.virtual('balance').get(function () {
   return Math.max(0, (this.amountDue || 0) - (this.amountPaid || 0));
 });
 
-// Statut dérivé recalculé à chaque sauvegarde (création + acompte).
+// Derived status recalculated on every save (creation + payment).
 studentFeeSchema.pre('save', function (next) {
   this.status = computeStatus(this);
   next();
 });
 
-// Liste/dashboard : retrouver vite les dettes ouvertes d'un campus.
+// List/dashboard: quickly find a campus's open debts.
 studentFeeSchema.index({ schoolCampus: 1, status: 1 });
 
 module.exports = mongoose.model('StudentFee', studentFeeSchema);

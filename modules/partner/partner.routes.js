@@ -2,12 +2,12 @@
 
 /**
  * @file partner.router.js
- * @description Routes du module Partner.
+ * @description Routes for the Partner module.
  *
- * Base path   : /api/partners  (enregistré dans server.js)
- * Base public : /api/partners/public (pas d'authentification)
+ * Base path   : /api/partners  (registered in server.js)
+ * Base public : /api/partners/public (no authentication)
  *
- * Isolation campus : campusId JAMAIS dans l'URL — toujours depuis JWT.
+ * Campus isolation: campusId NEVER in the URL — always from the JWT.
  */
 
 const express = require('express');
@@ -24,26 +24,26 @@ const commissionCtrl = require('./controllers/partner.commission.controller');
 
 const router = express.Router();
 
-// Rate limiter dédié pré-inscription : 10 req/h/IP (spec v2.0 §3.6)
+// Rate limiter dedicated to pre-registration: 10 req/h/IP (spec v2.0 §3.6)
 const preRegisterLimiter = createCustomLimiter(60, 10, 'Too many pre-registration attempts. Please try again in 1 hour.');
 
 const MGR_ROLES    = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 const PARTNER_ROLE = ['PARTNER'];
 
-// ── PUBLIC ROUTES (pas d'authentification) ───────────────────────────────────
+// ── PUBLIC ROUTES (no authentication) ───────────────────────────────────
 
 router.post('/auth/login',           loginLimiter,     authCtrl.login);
 router.post('/auth/forgot-password', strictLimiter,    authCtrl.forgotPassword);
 router.post('/auth/reset-password/:token',             authCtrl.resetPassword);
 
-// Pré-inscription prospect
+// Prospect pre-registration
 router.post('/public/pre-register', preRegisterLimiter, leadCtrl.publicPreRegister);
 
-// Résolution du partnerCode → branding campus
+// Resolve partnerCode → campus branding
 router.get('/public/resolve/:code', leadCtrl.resolveCode);
 
 // ── PARTNER PORTAL ROUTES ─────────────────────────────────────────────────────
-// Toutes ces routes requièrent un JWT valide avec role PARTNER
+// All these routes require a valid JWT with role PARTNER
 
 router.get(
   '/me',
@@ -132,7 +132,7 @@ router.get(
 );
 
 // ── CAMPUS MANAGER — LEADS ────────────────────────────────────────────────────
-// Déclarées AVANT /:id pour éviter que Express ne matche /leads contre /:id.
+// Declared BEFORE /:id to prevent Express from matching /leads against /:id.
 
 router.get(
   '/leads/export',
@@ -170,7 +170,7 @@ router.delete(
 );
 
 // ── CAMPUS MANAGER — COMMISSIONS ──────────────────────────────────────────────
-// Déclarées AVANT /:id pour la même raison.
+// Declared BEFORE /:id for the same reason.
 
 router.get(
   '/commissions/export',
@@ -228,7 +228,7 @@ router.put(
   commissionCtrl.updateCommissionConfig
 );
 
-// ── ROUTES PAR :id — à déclarer EN DERNIER pour ne pas masquer les routes nommées ──
+// ── :id ROUTES — declare LAST so they don't mask the named routes ──
 
 router.get(
   '/:id',

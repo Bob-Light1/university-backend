@@ -413,9 +413,9 @@ describe('exam — agrégats (non-régression)', () => {
     const [pipeline] = ExamGrading.aggregate.mock.calls[0];
     expect(pipeline[0]).toEqual({ $match: match });
     expect(pipeline[1].$group._id).toBe('$student');
-    // dropoutRiskScore plafonné à 100 (échec*60 + (10-min(avg,10))*4)
+    // dropoutRiskScore capped at 100 (failure*60 + (10-min(avg,10))*4)
     expect(pipeline[2].$addFields.dropoutRiskScore.$min[0]).toBe(100);
-    // seuil appliqué après calcul
+    // threshold applied after computation
     const thresholdStage = pipeline.find((s) => s.$match && s.$match.dropoutRiskScore);
     expect(thresholdStage.$match.dropoutRiskScore).toEqual({ $gte: 50 });
     expect(pipeline).toContainEqual({ $sort: { dropoutRiskScore: -1 } });

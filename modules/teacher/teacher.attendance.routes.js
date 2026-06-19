@@ -37,13 +37,13 @@ router.use(authenticate);
 router.use(apiLimiter);
 
 // ─────────────────────────────────────────────
-// ANALYTICS ADMIN (déclarées avant /:teacherId et /:attendanceId)
+// ANALYTICS ADMIN (declared before /:teacherId and /:attendanceId)
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/attendance/teacher/campus/overview
- * Vue d'ensemble paginée des présences enseignants sur le campus.
- * Query : from, to, teacherId?, status (true|false), isPaid, page, limit
+ * Paginated overview of teacher attendance on the campus.
+ * Query: from, to, teacherId?, status (true|false), isPaid, page, limit
  */
 router.get(
   '/campus/overview',
@@ -53,8 +53,8 @@ router.get(
 
 /**
  * GET /api/attendance/teacher/campus/stats
- * Vue agrégée des présences enseignants (totaux, taux) pour le campus.
- * Query : date?, period (day|month|year)
+ * Aggregated view of teacher attendance (totals, rates) for the campus.
+ * Query: date?, period (day|month|year)
  */
 router.get(
   '/campus/stats',
@@ -64,8 +64,8 @@ router.get(
 
 /**
  * GET /api/attendance/teacher/campus/payroll
- * Rapport de paie : heures délivrées par enseignant.
- * Query : month (1–12, requis), year (requis), isPaid (true|false|all)
+ * Payroll report: hours delivered per teacher.
+ * Query: month (1–12, required), year (required), isPaid (true|false|all)
  */
 router.get(
   '/campus/payroll',
@@ -74,14 +74,14 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// ADMINISTRATIVE — lock-daily (avant /:attendanceId)
+// ADMINISTRATIVE — lock-daily (before /:attendanceId)
 // ─────────────────────────────────────────────
 
 /**
  * PATCH /api/attendance/teacher/lock-daily
- * Verrouille toutes les présences enseignants d'une date sur le campus.
- * Body : { date? } – défaut : aujourd'hui
- * Réservé au CAMPUS_MANAGER uniquement.
+ * Locks all teacher attendance for a given date on the campus.
+ * Body: { date? } – default: today
+ * Restricted to CAMPUS_MANAGER only.
  */
 router.patch(
   '/lock-daily',
@@ -90,13 +90,13 @@ router.patch(
 );
 
 // ─────────────────────────────────────────────
-// SELF-SERVICE ENSEIGNANT
+// TEACHER SELF-SERVICE
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/attendance/teacher/me
- * Historique de présence de l'enseignant connecté.
- * Query : academicYear (requis), semester (requis), from?, to?
+ * Attendance history of the logged-in teacher.
+ * Query: academicYear (required), semester (required), from?, to?
  */
 router.get(
   '/me',
@@ -106,8 +106,8 @@ router.get(
 
 /**
  * GET /api/attendance/teacher/me/stats
- * Statistiques de présence de l'enseignant connecté.
- * Query : academicYear (requis), semester (requis), period (all|month|week)
+ * Attendance statistics of the logged-in teacher.
+ * Query: academicYear (required), semester (required), period (all|month|week)
  */
 router.get(
   '/me/stats',
@@ -116,15 +116,15 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// ROUTES AU NIVEAU DE LA SÉANCE
-// Seul le CAMPUS_MANAGER peut enregistrer la présence d'un enseignant.
+// SESSION-LEVEL ROUTES
+// Only the CAMPUS_MANAGER can record a teacher's attendance.
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/attendance/teacher/sessions/pending
- * Sessions sans enregistrement de présence pour un enseignant à une date.
- * Query : teacherId (requis), date (requis, YYYY-MM-DD)
- * Doit être déclaré AVANT /sessions/:scheduleId pour éviter le shadowing.
+ * Sessions without an attendance record for a teacher on a given date.
+ * Query: teacherId (required), date (required, YYYY-MM-DD)
+ * Must be declared BEFORE /sessions/:scheduleId to avoid shadowing.
  */
 router.get(
   '/sessions/pending',
@@ -134,11 +134,11 @@ router.get(
 
 /**
  * POST /api/attendance/teacher/sessions/:scheduleId/init
- * Crée ou met à jour l'enregistrement de présence enseignant pour une séance.
- * Body : { teacherId, classId, subjectId, attendanceDate,
+ * Creates or updates the teacher attendance record for a session.
+ * Body: { teacherId, classId, subjectId, attendanceDate,
  *           academicYear, semester, sessionStartTime?, sessionEndTime?,
  *           status?, isLate?, lateMinutes?, remarks? }
- * Réservé au CAMPUS_MANAGER uniquement.
+ * Restricted to CAMPUS_MANAGER only.
  */
 router.post(
   '/sessions/:scheduleId/init',
@@ -148,8 +148,8 @@ router.post(
 
 /**
  * GET /api/attendance/teacher/sessions/:scheduleId
- * Enregistrement(s) de présence enseignant pour une séance.
- * Query : date?
+ * Teacher attendance record(s) for a session.
+ * Query: date?
  */
 router.get(
   '/sessions/:scheduleId',
@@ -158,14 +158,14 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// ROUTES SUR UN ENREGISTREMENT INDIVIDUEL
+// ROUTES ON AN INDIVIDUAL RECORD
 // ─────────────────────────────────────────────
 
 /**
  * PATCH /api/attendance/teacher/:attendanceId/toggle
- * Marque un enseignant comme présent ou absent.
- * Body : { status: boolean }
- * Réservé au CAMPUS_MANAGER uniquement.
+ * Marks a teacher as present or absent.
+ * Body: { status: boolean }
+ * Restricted to CAMPUS_MANAGER only.
  */
 router.patch(
   '/:attendanceId/toggle',
@@ -175,9 +175,9 @@ router.patch(
 
 /**
  * PATCH /api/attendance/teacher/:attendanceId/justify
- * Ajoute une justification pour une absence enseignant.
- * Body : { justification (string), justificationDocument? (URL) }
- * Réservé au CAMPUS_MANAGER uniquement.
+ * Adds a justification for a teacher absence.
+ * Body: { justification (string), justificationDocument? (URL) }
+ * Restricted to CAMPUS_MANAGER only.
  */
 router.patch(
   '/:attendanceId/justify',
@@ -187,9 +187,9 @@ router.patch(
 
 /**
  * PATCH /api/attendance/teacher/:attendanceId/replacement
- * Affecte un enseignant remplaçant pour une session manquée.
- * Body : { replacementTeacherId, replacementNotes? }
- * Réservé au CAMPUS_MANAGER uniquement.
+ * Assigns a replacement teacher for a missed session.
+ * Body: { replacementTeacherId, replacementNotes? }
+ * Restricted to CAMPUS_MANAGER only.
  */
 router.patch(
   '/:attendanceId/replacement',
@@ -199,9 +199,9 @@ router.patch(
 
 /**
  * PATCH /api/attendance/teacher/:attendanceId/pay
- * Marque une séance comme payée.
- * Body : { paymentRef (string) }
- * Accessible aux 3 rôles de gestion (paiement = validation financière).
+ * Marks a session as paid.
+ * Body: { paymentRef (string) }
+ * Accessible to the 3 management roles (payment = financial validation).
  */
 router.patch(
   '/:attendanceId/pay',
@@ -210,13 +210,13 @@ router.patch(
 );
 
 // ─────────────────────────────────────────────
-// STATS PAR ENSEIGNANT (après /me et /campus)
+// STATS PER TEACHER (after /me and /campus)
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/attendance/teacher/:teacherId/stats
- * Statistiques de présence pour un enseignant spécifique.
- * Query : academicYear (requis), semester (requis), period (all|month|week)
+ * Attendance statistics for a specific teacher.
+ * Query: academicYear (required), semester (required), period (all|month|week)
  */
 router.get(
   '/:teacherId/stats',

@@ -2,7 +2,7 @@
 
 /**
  * @file result.model.js  (v2)
- * @description Modèle Mongoose pour la gestion des notes et résultats académiques.
+ * @description Mongoose model for managing grades and academic results.
  */
 
 const mongoose = require('mongoose');
@@ -18,11 +18,11 @@ const RESULT_STATUS = Object.freeze({
 });
 
 const EVALUATION_TYPE = Object.freeze({
-  CC:        'CC',         // Contrôle Continu
-  EXAM:      'EXAM',       // Examen Final
-  RETAKE:    'RETAKE',     // Rattrapage
-  PROJECT:   'PROJECT',    // Projet / Mémoire
-  PRACTICAL: 'PRACTICAL',  // TP noté
+  CC:        'CC',         // Continuous Assessment
+  EXAM:      'EXAM',       // Final Exam
+  RETAKE:    'RETAKE',     // Retake
+  PROJECT:   'PROJECT',    // Project / Thesis
+  PRACTICAL: 'PRACTICAL',  // Graded lab work
 });
 
 const SEMESTER = Object.freeze({
@@ -32,8 +32,8 @@ const SEMESTER = Object.freeze({
 });
 
 /**
- * [resultAjout] Période d'examen dans le calendrier académique.
- * Complète evaluationTitle (plus descriptif) avec une catégorie normalisée.
+ * [resultAjout] Exam period in the academic calendar.
+ * Complements evaluationTitle (more descriptive) with a normalized category.
  */
 const EXAM_PERIOD = Object.freeze({
   MIDTERM:    'Midterm',
@@ -47,17 +47,17 @@ const EXAM_PERIOD = Object.freeze({
 // ─── AUDIT ENTRY SUB-SCHEMA ───────────────────────────────────────────────────
 
 /**
- * Entrée d'audit pour toute modification post-publication.
- * Append-only — jamais supprimé, jamais modifié.
+ * Audit entry for any post-publication modification.
+ * Append-only — never deleted, never modified.
  */
 const AuditEntrySchema = new mongoose.Schema(
   {
     modifiedBy: { type: String, required: true },   // req.user.id
     modifiedAt: { type: Date,   default: Date.now },
-    field:      { type: String, required: true },   // champ modifié
+    field:      { type: String, required: true },   // modified field
     oldValue:   { type: mongoose.Schema.Types.Mixed },
     newValue:   { type: mongoose.Schema.Types.Mixed },
-    /** Motif obligatoire — minimum 10 caractères */
+    /** Required reason — minimum 10 characters */
     reason:     { type: String, required: true, trim: true, minlength: 10 },
     ipAddress:  { type: String },
   },
@@ -67,8 +67,8 @@ const AuditEntrySchema = new mongoose.Schema(
 // ─── GRADE BAND SNAPSHOT SUB-SCHEMA ──────────────────────────────────────────
 
 /**
- * Snapshot dénormalisé de la tranche de mention au moment de la publication.
- * Garantit que les changements futurs de barème n'affectent pas les anciens résultats.
+ * Denormalized snapshot of the grade band at publication time.
+ * Ensures that future grading scale changes do not affect old results.
  */
 const GradeBandSnapshotSchema = new mongoose.Schema(
   {
@@ -86,9 +86,9 @@ const GradeBandSnapshotSchema = new mongoose.Schema(
 
 const ResultSchema = new mongoose.Schema(
   {
-    // ── RÉFÉRENCE LISIBLE ─────────────────────
+    // ── READABLE REFERENCE ────────────────────
     /**
-     * Atomique — pas de doublon même sous forte concurrence.
+     * Atomic — no duplicate even under heavy concurrency.
      * Format : "RES-2025-00042"
      */
     reference: { type: String, unique: true, index: true },
@@ -101,7 +101,7 @@ const ResultSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // ── CONTEXTE ACADÉMIQUE ──────────────────
+    // ── ACADEMIC CONTEXT ─────────────────────
     academicYear: {
       type:     String,
       required: [true, 'Academic year is required'],
@@ -121,7 +121,7 @@ const ResultSchema = new mongoose.Schema(
       index:    true,
     },
     /**
-     * Titre discriminant pour différencier plusieurs CC dans le même semestre.
+     * Discriminating title to distinguish several CC in the same semester.
      * Ex. "Contrôle n°1", "Examen de Janvier", "Projet Groupe A".
      */
     evaluationTitle: {
@@ -131,26 +131,26 @@ const ResultSchema = new mongoose.Schema(
       maxlength: [200, 'Evaluation title must not exceed 200 characters'],
     },
 
-    // ── [resultAjout] CONTEXTE D'EXAMEN ──────
+    // ── [resultAjout] EXAM CONTEXT ───────────
     /**
-     * Date à laquelle l'évaluation a eu lieu.
-     * Différent de createdAt (date de saisie) et publishedAt (date de publication).
+     * Date on which the evaluation took place.
+     * Different from createdAt (entry date) and publishedAt (publication date).
      */
     examDate: {
       type:  Date,
       index: true,
     },
     /**
-     * Période académique normalisée dans le calendrier.
-     * Complète evaluationTitle avec une catégorie standard.
+     * Normalized academic period in the calendar.
+     * Complements evaluationTitle with a standard category.
      */
     examPeriod: {
       type: String,
       enum: Object.values(EXAM_PERIOD),
     },
-    /** Semaine de l'examen dans l'année académique (1–52) */
+    /** Week of the exam in the academic year (1–52) */
     examWeek: { type: Number, min: 1, max: 52 },
-    /** Mois de l'examen */
+    /** Month of the exam */
     examMonth: {
       type: String,
       enum: [
@@ -159,8 +159,8 @@ const ResultSchema = new mongoose.Schema(
       ],
     },
     /**
-     * [resultAjout] Présence de l'étudiant pendant l'évaluation.
-     * 'absent' → score doit être 0, 'excused' → pas compté dans la moyenne.
+     * [resultAjout] Student attendance during the evaluation.
+     * 'absent' → score must be 0, 'excused' → not counted in the average.
      */
     examAttendance: {
       type:    String,
@@ -168,7 +168,7 @@ const ResultSchema = new mongoose.Schema(
       default: 'present',
     },
     /**
-     * Circonstances particulières (ex. justificatif médical d'absence).
+     * Special circumstances (ex. medical justification for absence).
      */
     specialCircumstances: {
       type:      String,
@@ -183,7 +183,7 @@ const ResultSchema = new mongoose.Schema(
       required: [true, 'Student is required'],
       index:    true,
     },
-    /** Classe au moment de la notation (pour bulletins et filtres) */
+    /** Class at grading time (for transcripts and filters) */
     class: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Class',
@@ -196,7 +196,7 @@ const ResultSchema = new mongoose.Schema(
       required: [true, 'Subject is required'],
       index:    true,
     },
-    /** Enseignant ayant saisi et/ou corrigé la note */
+    /** Teacher who entered and/or graded the score */
     teacher: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Teacher',
@@ -205,21 +205,21 @@ const ResultSchema = new mongoose.Schema(
     },
 
     // ── NOTATION ─────────────────────────────
-    /** Note brute saisie par l'enseignant */
+    /** Raw score entered by the teacher */
     score: {
       type:     Number,
       required: [true, 'Score is required'],
       min:      [0, 'Score cannot be negative'],
     },
-    /** Note maximale de cette évaluation (snapshot au moment de la saisie) */
+    /** Max score of this evaluation (snapshot at entry time) */
     maxScore: {
       type:     Number,
       required: [true, 'Max score is required'],
       min:      [1, 'Max score must be at least 1'],
     },
     /**
-     * Poids de cette évaluation dans la moyenne de la matière.
-     * Ex. CC = 0.4, Examen Final = 0.6. Défaut = 1 (poids égaux).
+     * Weight of this evaluation in the subject average.
+     * Ex. CC = 0.4, Final Exam = 0.6. Default = 1 (equal weights).
      */
     coefficient: {
       type:    Number,
@@ -228,28 +228,28 @@ const ResultSchema = new mongoose.Schema(
     },
 
     /**
-     * Note normalisée sur 20 (calculée automatiquement en pre-save).
-     * Permet les comparaisons cross-barèmes et le calcul de moyenne générale.
-     * Arrondi à 2 décimales via toFixed pour éviter les flottants parasites.
+     * Score normalized to 20 (computed automatically in pre-save).
+     * Enables cross-scale comparisons and the general average computation.
+     * Rounded to 2 decimals via toFixed to avoid spurious floats.
      */
     normalizedScore: { type: Number },
 
     /**
-     * Snapshot dénormalisé de la tranche de mention (calculé à la publication).
-     * Insensible aux changements ultérieurs du barème.
+     * Denormalized snapshot of the grade band (computed at publication).
+     * Insensitive to subsequent grading scale changes.
      */
     gradeBand: { type: GradeBandSnapshotSchema, default: null },
 
-    /** Référence au barème utilisé pour ce résultat */
+    /** Reference to the grading scale used for this result */
     gradingScale: {
       type: mongoose.Schema.Types.ObjectId,
       ref:  'GradingScale',
     },
 
-    // ── [resultAjout] FEEDBACK PÉDAGOGIQUE ───
+    // ── [resultAjout] PEDAGOGICAL FEEDBACK ───
     /**
-     * Appréciation de l'enseignant (renommé depuis 'comment' — plus explicite).
-     * Visible sur le bulletin.
+     * Teacher's appreciation (renamed from 'comment' — more explicit).
+     * Visible on the transcript.
      */
     teacherRemarks: {
       type:      String,
@@ -257,21 +257,21 @@ const ResultSchema = new mongoose.Schema(
       maxlength: [1000, 'Teacher remarks must not exceed 1000 characters'],
     },
     /**
-     * Observations du chef de classe / gestionnaire pédagogique.
-     * Ajoutées lors de la validation.
+     * Observations of the class head / pedagogical manager.
+     * Added during validation.
      */
     classManagerRemarks: {
       type:      String,
       trim:      true,
       maxlength: [1000, 'Class manager remarks must not exceed 1000 characters'],
     },
-    /** Enseignant/manager ayant ajouté classManagerRemarks */
+    /** Teacher/manager who added classManagerRemarks */
     classManager: {
       type: mongoose.Schema.Types.ObjectId,
       ref:  'Teacher',
     },
     /**
-     * Points forts de l'étudiant dans cette évaluation.
+     * Student's strengths in this evaluation.
      * Ex. "Bonne maîtrise des algorithmes de tri."
      */
     strengths: {
@@ -280,7 +280,7 @@ const ResultSchema = new mongoose.Schema(
       maxlength: [500, 'Strengths must not exceed 500 characters'],
     },
     /**
-     * Axes d'amélioration suggérés.
+     * Suggested areas for improvement.
      * Ex. "Doit retravailler la gestion des pointeurs."
      */
     improvements: {
@@ -289,7 +289,7 @@ const ResultSchema = new mongoose.Schema(
       maxlength: [500, 'Improvements must not exceed 500 characters'],
     },
 
-    // ── WORKFLOW D'ÉTAT ───────────────────────
+    // ── STATE WORKFLOW ────────────────────────
     status: {
       type:    String,
       enum:    { values: Object.values(RESULT_STATUS), message: '{VALUE} is not a valid status' },
@@ -303,40 +303,40 @@ const ResultSchema = new mongoose.Schema(
     archivedAt:  { type: Date },
     archivedBy:  { type: String },   // req.user.id
 
-    // ── VERROUILLAGE DE PÉRIODE ───────────────
+    // ── PERIOD LOCKING ────────────────────────
     /**
-     * true quand le semestre est clos (lockSemester).
-     * Empêche toute modification sans override ADMIN.
+     * true when the semester is closed (lockSemester).
+     * Prevents any modification without ADMIN override.
      */
     periodLocked: { type: Boolean, default: false },
 
-    // ── RATTRAPAGE ────────────────────────────
+    // ── RETAKE ────────────────────────────────
     /**
-     * Si ce résultat est un RETAKE, référence vers la note originale (EXAM échoué).
-     * Utilisé pour éviter de compter la matière deux fois dans la moyenne.
-     * La liaison est garantie via transaction dans publishResult (RETAKE).
+     * If this result is a RETAKE, reference to the original grade (failed EXAM).
+     * Used to avoid counting the subject twice in the average.
+     * The link is guaranteed via transaction in publishResult (RETAKE).
      */
     retakeOf: {
       type: mongoose.Schema.Types.ObjectId,
       ref:  'Result',
     },
     /**
-     * true si normalizedScore < passMark → étudiant éligible au rattrapage.
-     * Calculé automatiquement en pre-save si gradingScale est renseigné.
+     * true if normalizedScore < passMark → student eligible for retake.
+     * Computed automatically in pre-save if gradingScale is set.
      */
     isRetakeEligible: { type: Boolean, default: false },
 
     // ── AUDIT LOG ─────────────────────────────
     /**
-     * Toutes les modifications post-publication sont tracées ici.
-     * Append-only — jamais supprimé, jamais modifié.
+     * All post-publication modifications are tracked here.
+     * Append-only — never deleted, never modified.
      */
     auditLog: { type: [AuditEntrySchema], default: [] },
 
-    // ── TOKEN DE VÉRIFICATION (QR Code) ──────
+    // ── VERIFICATION TOKEN (QR Code) ─────────
     /**
-     * UUID généré à la première publication.
-     * Permet la vérification d'authenticité sans authentification.
+     * UUID generated at first publication.
+     * Enables authenticity verification without authentication.
      * Endpoint : GET /api/results/verify/:token
      */
     verificationToken: {
@@ -346,11 +346,11 @@ const ResultSchema = new mongoose.Schema(
       index:  true,
     },
 
-    // ── SCORE DE RISQUE DE DÉCROCHAGE ─────────
+    // ── DROPOUT RISK SCORE ────────────────────
     /**
-     * 0–100, calculé de façon asynchrone après chaque publication.
-     * 0 = aucun risque, 100 = décrochage très probable.
-     * Algorithme : régression linéaire sur les 10 dernières notes.
+     * 0–100, computed asynchronously after each publication.
+     * 0 = no risk, 100 = dropout very likely.
+     * Algorithm : linear regression on the last 10 grades.
      */
     dropoutRiskScore: { type: Number, min: 0, max: 100, default: null },
 
@@ -370,8 +370,8 @@ const ResultSchema = new mongoose.Schema(
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
 
 /**
- * Unicité : un étudiant ne peut avoir qu'une note par évaluation/titre/matière/semestre.
- * partial filter exclut les enregistrements soft-deleted.
+ * Uniqueness : a student can only have one grade per evaluation/title/subject/semester.
+ * partial filter excludes soft-deleted records.
  */
 ResultSchema.index(
   { student: 1, subject: 1, evaluationType: 1, evaluationTitle: 1, academicYear: 1, semester: 1 },
@@ -381,12 +381,12 @@ ResultSchema.index(
     partialFilterExpression: { isDeleted: false },
   }
 );
-/** Feuille de classe */
+/** Class sheet */
 ResultSchema.index(
   { class: 1, subject: 1, academicYear: 1, semester: 1, status: 1 },
   { name: 'idx_class_subject_results' }
 );
-/** Bulletin étudiant */
+/** Student transcript */
 ResultSchema.index(
   { student: 1, academicYear: 1, semester: 1, status: 1 },
   { name: 'idx_student_transcript' }
@@ -396,17 +396,17 @@ ResultSchema.index(
   { schoolCampus: 1, academicYear: 1, semester: 1, status: 1 },
   { name: 'idx_campus_analytics' }
 );
-/** File d'attente de rattrapage */
+/** Retake queue */
 ResultSchema.index(
   { class: 1, isRetakeEligible: 1, status: 1 },
   { name: 'idx_retake_queue' }
 );
-/** Vue enseignant */
+/** Teacher view */
 ResultSchema.index(
   { teacher: 1, academicYear: 1, semester: 1, status: 1 },
   { name: 'idx_teacher_results' }
 );
-/** Requêtes par date d'examen */
+/** Queries by exam date */
 ResultSchema.index(
   { schoolCampus: 1, examDate: -1 },
   { name: 'idx_exam_date' }
@@ -414,21 +414,21 @@ ResultSchema.index(
 
 // ─── VIRTUALS ─────────────────────────────────────────────────────────────────
 
-/** Pourcentage brut (0–100) */
+/** Raw percentage (0–100) */
 ResultSchema.virtual('percentage').get(function () {
   if (!this.maxScore) return null;
   return parseFloat(((this.score / this.maxScore) * 100).toFixed(2));
 });
 
-/** Note sur 20 affichée */
+/** Displayed score out of 20 */
 ResultSchema.virtual('scoreOn20').get(function () {
   if (!this.maxScore) return null;
   return parseFloat(((this.score / this.maxScore) * 20).toFixed(2));
 });
 
 /**
- * [resultAjout] Score pondéré pour le calcul de moyenne avec coefficient.
- * Équivalent de (percentage × weight) / 100 dans le modèle d'origine.
+ * [resultAjout] Weighted score for the average computation with coefficient.
+ * Equivalent of (percentage × weight) / 100 in the original model.
  */
 ResultSchema.virtual('weightedNormalizedScore').get(function () {
   if (!this.maxScore || !this.coefficient) return null;
@@ -440,24 +440,24 @@ ResultSchema.virtual('weightedNormalizedScore').get(function () {
 ResultSchema.pre('save', async function () {
   try {
 
-    // ── 1. [S2-2] Référence unique atomique ──────────────────────────────────
+    // ── 1. [S2-2] Atomic unique reference ─────────────────────────────────────
     if (!this.reference) {
-      // nextResultRef utilise findOneAndUpdate + $inc → atomique sous concurrence
+      // nextResultRef uses findOneAndUpdate + $inc → atomic under concurrency
       this.reference = await nextResultRef(new Date().getFullYear());
     }
 
-    // ── 2. Note normalisée sur 20 ─────────────────────────────────────────────
+    // ── 2. Score normalized to 20 ─────────────────────────────────────────────
     if (this.score != null && this.maxScore) {
       this.normalizedScore = parseFloat(((this.score / this.maxScore) * 20).toFixed(2));
     }
 
-    // ── 3. Résolution gradeBand + isRetakeEligible depuis GradingScale ────────
+    // ── 3. gradeBand + isRetakeEligible resolution from GradingScale ──────────
     if (this.gradingScale && (this.isNew || this.isModified('score'))) {
       try {
         const { GradingScale } = require('./grading-scale.model');
         const scale = await GradingScale.findById(this.gradingScale).lean();
         if (scale) {
-          // Convertit le score vers l'échelle du barème avant résolution
+          // Converts the score to the grading scale before resolution
           const scoreInScale = parseFloat(
             ((this.score / this.maxScore) * scale.maxScore).toFixed(4)
           );
@@ -475,12 +475,12 @@ ResultSchema.pre('save', async function () {
           this.isRetakeEligible = scoreInScale < scale.passMark;
         }
       } catch (_err) {
-        // GradingScale optionnel — ne bloque pas la sauvegarde
+        // GradingScale optional — does not block the save
         console.warn('[Result pre-save] Could not resolve GradingScale:', _err.message);
       }
     }
 
-    // ── 4. Token de vérification (QR Code) — généré à la première publication ─
+    // ── 4. Verification token (QR Code) — generated at first publication ─────
     if (this.isModified('status') && this.status === RESULT_STATUS.PUBLISHED && !this.verificationToken) {
       const { randomUUID } = require('crypto');
       this.verificationToken = randomUUID();
@@ -491,9 +491,9 @@ ResultSchema.pre('save', async function () {
       this.archivedAt = new Date();
     }
 
-    // ── 5. Cohérence examAttendance / score ───────────────────────────────────
+    // ── 5. examAttendance / score consistency ─────────────────────────────────
     if (this.examAttendance === 'absent' && this.score !== 0) {
-      // Correction automatique — un étudiant absent a 0
+      // Automatic correction — an absent student gets 0
       console.warn(`[Result pre-save] Student absent but score=${this.score}. Forcing score=0.`);
       this.score           = 0;
       this.normalizedScore = 0;
@@ -507,16 +507,16 @@ ResultSchema.pre('save', async function () {
 // ─── INSTANCE METHODS ─────────────────────────────────────────────────────────
 
 /**
- * Vérifie si ce résultat peut être modifié par un utilisateur avec ce rôle.
+ * Checks whether this result can be modified by a user with this role.
  *
- * Règles :
- *  • DRAFT     → modifiable par l'enseignant propriétaire et les managers
- *  • SUBMITTED → modifiable uniquement par les managers
- *  • PUBLISHED / ARCHIVED → nécessite un ADMIN/DIRECTOR via auditCorrection
- *  • periodLocked → bloque tout sauf ADMIN/DIRECTOR
+ * Rules :
+ *  • DRAFT     → modifiable by the owning teacher and managers
+ *  • SUBMITTED → modifiable only by managers
+ *  • PUBLISHED / ARCHIVED → requires an ADMIN/DIRECTOR via auditCorrection
+ *  • periodLocked → blocks everything except ADMIN/DIRECTOR
  *
  * @param {string} role    - req.user.role
- * @param {string} userId  - req.user.id (pour vérifier la propriété TEACHER)
+ * @param {string} userId  - req.user.id (to verify TEACHER ownership)
  * @returns {{ ok: boolean, reason: string|null }}
  */
 ResultSchema.methods.canModify = function (role, userId) {
@@ -548,7 +548,7 @@ ResultSchema.methods.canModify = function (role, userId) {
     return { ok: true, reason: null };
   }
 
-  // DRAFT → enseignant propriétaire ou manager
+  // DRAFT → owning teacher or manager
   if (this.status === RESULT_STATUS.DRAFT) {
     if (isManager) return { ok: true, reason: null };
     if (this.teacher.toString() === userId) return { ok: true, reason: null };
@@ -559,15 +559,15 @@ ResultSchema.methods.canModify = function (role, userId) {
 };
 
 /**
- * Enregistre une entrée dans l'audit log.
- * À appeler AVANT de modifier la valeur du champ concerné.
+ * Records an entry in the audit log.
+ * Must be called BEFORE modifying the value of the concerned field.
  *
- * @param {string} field     - Nom du champ modifié
- * @param {*}      oldValue  - Ancienne valeur
- * @param {*}      newValue  - Nouvelle valeur
- * @param {string} reason    - Motif (min 10 caractères)
+ * @param {string} field     - Name of the modified field
+ * @param {*}      oldValue  - Old value
+ * @param {*}      newValue  - New value
+ * @param {string} reason    - Reason (min 10 characters)
  * @param {string} userId    - req.user.id
- * @param {string} [ip]      - IP de la requête
+ * @param {string} [ip]      - Request IP
  */
 ResultSchema.methods.addAuditEntry = function (field, oldValue, newValue, reason, userId, ip) {
   this.auditLog.push({
@@ -582,25 +582,25 @@ ResultSchema.methods.addAuditEntry = function (field, oldValue, newValue, reason
 };
 
 /**
- * [resultAjout] Retourne la couleur d'affichage basée sur la note sur 20.
- * Utilisé par le frontend pour le dashboard étudiant.
+ * [resultAjout] Returns the display color based on the score out of 20.
+ * Used by the frontend for the student dashboard.
  *
  * @returns {'#ef4444'|'#f97316'|'#3b82f6'|'#10b981'}
  */
 ResultSchema.methods.getScoreColor = function () {
   const s = this.normalizedScore ?? 0;
-  if (s < 7)  return '#ef4444';   // Rouge — en grande difficulté
-  if (s < 10) return '#f97316';   // Orange — en échec
-  if (s < 14) return '#3b82f6';   // Bleu — passable à assez bien
-  return '#10b981';               // Vert — bien à excellent
+  if (s < 7)  return '#ef4444';   // Red — in serious difficulty
+  if (s < 10) return '#f97316';   // Orange — failing
+  if (s < 14) return '#3b82f6';   // Blue — passable to fairly good
+  return '#10b981';               // Green — good to excellent
 };
 
 // ─── STATIC METHODS ───────────────────────────────────────────────────────────
 
 /**
- * Calcule la moyenne pondérée d'un étudiant pour une matière/semestre.
- * Utilise normalizedScore (sur 20) et coefficient de chaque évaluation.
- * [resultAjout] Exclut les absents (examAttendance: 'excused') du calcul.
+ * Computes a student's weighted average for a subject/semester.
+ * Uses normalizedScore (out of 20) and coefficient of each evaluation.
+ * [resultAjout] Excludes absentees (examAttendance: 'excused') from the computation.
  *
  * @returns {Promise<{average: number|null, totalWeight: number, count: number}>}
  */
@@ -615,7 +615,7 @@ ResultSchema.statics.computeSubjectAverage = async function (
     status:         RESULT_STATUS.PUBLISHED,
     isDeleted:      false,
     retakeOf:       null,
-    examAttendance: { $ne: 'excused' },   // Les absences excusées ne comptent pas
+    examAttendance: { $ne: 'excused' },   // Excused absences do not count
   }).select('score maxScore coefficient').lean();
 
   if (!results.length) return { average: null, totalWeight: 0, count: 0 };
@@ -638,13 +638,13 @@ ResultSchema.statics.computeSubjectAverage = async function (
 };
 
 /**
- * Calcule la moyenne générale d'un étudiant pour un semestre.
- * Agrégation avec $lookup sur subjects pour récupérer les coefficients.
+ * Computes a student's general average for a semester.
+ * Aggregation with $lookup on subjects to retrieve the coefficients.
  *
- * Performance : tous les index nécessaires sont déclarés (idx_student_transcript).
- * Pour les bulletins définitifs, le résultat est stocké dans FinalTranscript
- * (final-transcript.model.js) à la clôture du semestre pour éviter de
- * recalculer sur une collection massive.
+ * Performance : all the necessary indexes are declared (idx_student_transcript).
+ * For final transcripts, the result is stored in FinalTranscript
+ * (final-transcript.model.js) at semester close to avoid
+ * recomputing on a massive collection.
  *
  * @returns {Promise<{generalAverage: number|null, subjects: Array}>}
  */
@@ -713,10 +713,10 @@ ResultSchema.statics.computeGeneralAverage = async function (
 };
 
 /**
- * Distribution statistique des notes pour une évaluation (classe entière).
- * Utilisé par l'enseignant pour visualiser sa classe avant soumission.
+ * Statistical distribution of grades for an evaluation (entire class).
+ * Used by the teacher to visualize their class before submission.
  *
- * [resultAjout] Seuls les étudiants présents sont comptés dans la distribution.
+ * [resultAjout] Only present students are counted in the distribution.
  */
 ResultSchema.statics.getClassDistribution = async function (
   classId, subjectId, evaluationTitle, academicYear, semester
@@ -745,12 +745,12 @@ ResultSchema.statics.getClassDistribution = async function (
   const stdDev  = Math.sqrt(normed.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n);
   const passing = normed.filter((s) => s >= 10).length;
 
-  // Histogramme par tranche de 2 points (/20)
+  // Histogram by 2-point band (/20)
   const distribution = Array.from({ length: 10 }, (_, i) => ({
     range: `${i * 2}–${i * 2 + 2}`,
     count: i < 9
       ? normed.filter((s) => s >= i * 2 && s < i * 2 + 2).length
-      : normed.filter((s) => s >= 18 && s <= 20).length,  // dernier bucket inclut 20
+      : normed.filter((s) => s >= 18 && s <= 20).length,  // last bucket includes 20
   }));
 
   return {
@@ -765,10 +765,10 @@ ResultSchema.statics.getClassDistribution = async function (
 };
 
 /**
- * Score de risque de décrochage (0–100) basé sur la tendance des notes.
- * Algorithme : régression linéaire sur les 10 dernières notes publiées.
+ * Dropout risk score (0–100) based on the grade trend.
+ * Algorithm : linear regression on the last 10 published grades.
  *
- * @returns {Promise<number>}  0 = aucun risque, 100 = risque maximal
+ * @returns {Promise<number>}  0 = no risk, 100 = maximal risk
  */
 ResultSchema.statics.computeDropoutRisk = async function (studentId, campusId) {
   const recent = await this.find({

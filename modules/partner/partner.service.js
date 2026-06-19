@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * @file partner.service.js — API inter-modules du domaine partner.
+ * @file partner.service.js — inter-module API of the partner domain.
  *
- * Consommateur unique : public-portal (pré-inscription, opt-in alerte,
- * candidatures partenaire, contacts gagnants de compétition).
+ * Single consumer: public-portal (pre-registration, alert opt-in,
+ * partner applications, competition winner contacts).
  *
- * Toute la persistance passe par partner.repository (étape 0 pré-Postgres) :
- * ce fichier ne porte que l'orchestration métier (déduplication first-touch,
- * détection IP_BURST, transitions de revue), jamais d'accès model direct.
+ * All persistence goes through partner.repository (step 0 pre-Postgres):
+ * this file only carries business orchestration (first-touch deduplication,
+ * IP_BURST detection, review transitions), never direct model access.
  */
 
 const partnerRepo = require('./partner.repository');
@@ -16,7 +16,7 @@ const partnerRepo = require('./partner.repository');
 // ── Partner ───────────────────────────────────────────────────────────────────
 
 /**
- * Partenaire ACTIF correspondant à un code de parrainage (insensible à la casse).
+ * ACTIVE partner matching a referral code (case-insensitive).
  * @param {string} code
  * @returns {Promise<{_id, email, schoolCampus, partnerCode}|null>} lean
  */
@@ -25,14 +25,14 @@ const findActivePartnerByCode = (code) => partnerRepo.findActivePartnerByCode(co
 // ── Leads ─────────────────────────────────────────────────────────────────────
 
 /**
- * Pré-inscription portail : déduplication silencieuse (même email OU téléphone
- * sur le même campus, spec §4.1/§9.2, attribution first-touch conservée),
- * sinon création avec détection IP_BURST (>5 leads même IP hash en <10 min).
- * Met à jour lastActivityAt du partenaire à la création d'un lead attribué.
+ * Portal pre-registration: silent deduplication (same email OR phone
+ * on the same campus, spec §4.1/§9.2, first-touch attribution preserved),
+ * otherwise creation with IP_BURST detection (>5 leads same IP hash in <10 min).
+ * Updates the partner's lastActivityAt when an attributed lead is created.
  *
- * @param {Object} p — champs déjà normalisés par l'appelant
+ * @param {Object} p — fields already normalized by the caller
  * @param {ObjectId} p.campusId
- * @param {{_id}|null} p.partner — partenaire résolu (ou null pour un lead direct)
+ * @param {{_id}|null} p.partner — resolved partner (or null for a direct lead)
  * @param {string|null} p.partnerCode
  * @param {string} p.firstName, p.lastName, p.email
  * @param {string|null} p.phone, p.programInterest, p.city, p.country
@@ -60,7 +60,7 @@ const upsertPreRegistrationLead = async ({
     if (city)    set.city    = city;
     if (country) set.country = country;
 
-    // First-touch : on ne réattribue jamais un lead déjà rattaché à un partenaire.
+    // First-touch: we never re-attribute a lead already linked to a partner.
     if (partner?._id && !existingLead.partner) {
       set.partner     = partner._id;
       set.partnerCode = partnerCode;
@@ -109,10 +109,10 @@ const upsertPreRegistrationLead = async ({
     partnerRepo.touchActivity(partner._id).catch(() => {});
   }
 
-  // Alerte anti-fraude au gestionnaire du campus (compte Campus) si rafale d'IP.
-  // In-app + email (ce dernier inerte sans SMTP) ; fire-and-forget, n'impacte
-  // jamais la pré-inscription. Contact résolu via la façade campus, en chaîne
-  // pour ne pas bloquer la réponse au lead.
+  // Anti-fraud alert to the campus manager (Campus account) on IP burst.
+  // In-app + email (the latter inert without SMTP); fire-and-forget, never
+  // impacts pre-registration. Contact resolved via the campus facade, chained
+  // so as not to block the response to the lead.
   if (fraudFlags.includes('IP_BURST')) {
     require('../campus').service.getCampusNotificationContact(campusId)
       .then((contact) => require('../notification').service.notify({
@@ -135,9 +135,9 @@ const upsertPreRegistrationLead = async ({
 };
 
 /**
- * Opt-in alerte de session (spec §4.13) : lead existant (par email puis
- * téléphone sur le campus) → notifyNextBatch=true ; sinon lead minimal créé.
- * @param {Object} p — champs déjà normalisés par l'appelant
+ * Session alert opt-in (spec §4.13): existing lead (by email then
+ * phone on the campus) → notifyNextBatch=true; otherwise a minimal lead is created.
+ * @param {Object} p — fields already normalized by the caller
  * @param {ObjectId} p.campusId
  * @param {string|null} p.email, p.phone, p.programInterest
  * @param {string} p.ipAddressHash
@@ -180,17 +180,17 @@ const registerSessionAlert = async ({ campusId, email, phone, programInterest, i
 };
 
 /**
- * Coordonnées d'un lead pour notification (gagnants de compétition).
+ * Contact details of a lead for notification (competition winners).
  * @param {ObjectId|string} leadId
  * @returns {Promise<{firstName, email, phone}|null>} lean
  */
 const getLeadContact = (leadId) => partnerRepo.getLeadContact(leadId);
 
-// ── Applications (candidatures partenaire, spec §4.9) ─────────────────────────
+// ── Applications (partner applications, spec §4.9) ─────────────────────────
 
 /**
- * Dépôt public d'une candidature partenaire.
- * @param {Object} data — champs validés/normalisés par l'appelant
+ * Public submission of a partner application.
+ * @param {Object} data — fields validated/normalized by the caller
  * @returns {Promise<{applicationId}>}
  */
 const createApplication = async (data) => {
@@ -199,9 +199,9 @@ const createApplication = async (data) => {
 };
 
 /**
- * Liste paginée des candidatures (back-office), honeypot exclu.
+ * Paginated list of applications (back-office), honeypot excluded.
  * @param {Object} p
- * @param {Object} p.campusFilter — filtre de scoping campus (déjà construit)
+ * @param {Object} p.campusFilter — campus scoping filter (already built)
  * @param {string} [p.status] — 'pending' | 'approved' | 'rejected'
  * @param {number} [p.page=1], [p.limit=20]
  * @returns {Promise<{data: Object[], total: number}>}
@@ -215,16 +215,16 @@ const listApplications = async ({ campusFilter = {}, status, page = 1, limit = 2
 };
 
 /**
- * Candidature par id, dans le périmètre campus de l'appelant.
+ * Application by id, within the caller's campus scope.
  * @returns {Promise<Object|null>} lean
  */
 const getApplicationById = (id, campusFilter = {}) =>
   partnerRepo.findApplicationScoped(id, campusFilter);
 
 /**
- * Revue d'une candidature (approve/reject). L'approbation ne crée PAS de
- * Partner — l'admin le fait manuellement ; on ne fait que poser status +
- * référence partnerId.
+ * Review of an application (approve/reject). Approval does NOT create a
+ * Partner — the admin does it manually; we only set status +
+ * partnerId reference.
  * @returns {Promise<{result: 'NOT_FOUND'|'CONFLICT'|'OK', application?: Object}>}
  */
 const reviewApplication = async ({ id, campusFilter = {}, status, reviewNote, partnerId, reviewerId }) => {
@@ -241,8 +241,8 @@ const reviewApplication = async ({ id, campusFilter = {}, status, reviewNote, pa
 };
 
 /**
- * Suppression d'une candidature dans le périmètre campus de l'appelant.
- * @returns {Promise<boolean>} true si supprimée
+ * Deletion of an application within the caller's campus scope.
+ * @returns {Promise<boolean>} true if deleted
  */
 const deleteApplication = (id, campusFilter = {}) =>
   partnerRepo.deleteApplicationScoped(id, campusFilter);

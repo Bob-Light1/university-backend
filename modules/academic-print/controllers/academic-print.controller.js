@@ -26,9 +26,9 @@ const crypto = require('crypto');
 const { asyncHandler, sendSuccess, sendError, sendPaginated } = require('../../../shared/utils/response-helpers');
 const { generateAcademicPdf, savePrintPdf, readPrintPdf }    = require('../academic-pdf.service');
 
-const studentService  = require('../../student').service; // façade module student (§3)
-const { getClassName, getClassNameInCampus } = require('../../class').service; // façade module class (§3)
-const resultService   = require('../../result').service; // façade module result (§3)
+const studentService  = require('../../student').service; // student module facade (§3)
+const { getClassName, getClassNameInCampus } = require('../../class').service; // class module facade (§3)
+const resultService   = require('../../result').service; // result module facade (§3)
 
 // ── In-process job store ──────────────────────────────────────────────────────
 // Structure: Map<jobId, JobRecord>

@@ -89,7 +89,7 @@ describe('analytics', () => {
     await repo.aggregateStatusBreakdown({ schoolCampus: '507f1f77bcf86cd799439011' });
     const pipeline = Parent.aggregate.mock.calls[0][0];
     expect(pipeline[0].$match.status).toEqual({ $ne: 'archived' });
-    // schoolCampus casté en ObjectId (objet, pas string)
+    // schoolCampus cast to ObjectId (object, not string)
     expect(typeof pipeline[0].$match.schoolCampus).toBe('object');
     expect(String(pipeline[0].$match.schoolCampus)).toBe('507f1f77bcf86cd799439011');
   });

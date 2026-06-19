@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * @file templates/index.js — renderer des templates de notification.
+ * @file templates/index.js — notification template renderer.
  *
- * Le CONTENU vit désormais dans le catalogue i18n central
- * (`shared/i18n/catalogs/notifications.js`) ; ce fichier ne fait plus que le
- * résoudre par canal/locale et l'interpoler. Les primitives (`pick`,
- * `interpolate`) et la liste des langues viennent de `shared/i18n`.
+ * The CONTENT now lives in the central i18n catalog
+ * (`shared/i18n/catalogs/notifications.js`); this file only resolves it
+ * by channel/locale and interpolates it. The primitives (`pick`,
+ * `interpolate`) and the list of languages come from `shared/i18n`.
  *
- * Le template `generic` est court-circuité : il laisse passer un contenu déjà
- * rédigé par l'appelant (`data.subject` / `data.body`) — utile pour les
- * diffusions ad hoc, donc absent du catalogue.
+ * The `generic` template is short-circuited: it passes through content already
+ * written by the caller (`data.subject` / `data.body`) — useful for ad hoc
+ * broadcasts, hence absent from the catalog.
  */
 
 const { pick, interpolate, DEFAULT_LOCALE } = require('../../../shared/i18n');
@@ -19,9 +19,9 @@ const catalog = require('../../../shared/i18n/catalogs/notifications');
 const GENERIC = 'generic';
 
 /**
- * Rend le contenu d'un template pour un canal donné.
+ * Renders the content of a template for a given channel.
  * @returns {{subject: string|null, body: string}}
- * @throws si le template ou le canal est inconnu.
+ * @throws if the template or the channel is unknown.
  */
 function render(template, channel, data = {}, locale = DEFAULT_LOCALE) {
   if (template === GENERIC) {

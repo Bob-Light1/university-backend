@@ -1,20 +1,20 @@
 'use strict';
 
 /**
- * @file shared/i18n/catalogs/notifications.js — catalogue des messages de notification.
+ * @file shared/i18n/catalogs/notifications.js — notification message catalog.
  *
- * Structure : template → canal → partie ('subject' | 'body') → dictionnaire { lang: texte }.
+ * Structure: template → channel → part ('subject' | 'body') → dictionary { lang: text }.
  *   - inapp / email → subject + body
- *   - whatsapp      → body uniquement
+ *   - whatsapp      → body only
  *
- * Les variables entre accolades ({name}, {count}, {amount}, {currency}, {dueDate})
- * sont interpolées au rendu. Le repli de langue (→ en) est assuré par `pick`
- * dans shared/i18n/index.js — chaque feuille N'A PAS à fournir les 10 langues,
- * mais on les fournit toutes ici pour une couverture complète.
+ * Variables in braces ({name}, {count}, {amount}, {currency}, {dueDate})
+ * are interpolated at render time. Language fallback (→ en) is handled by `pick`
+ * in shared/i18n/index.js — each leaf does NOT have to provide all 10 languages,
+ * but we provide them all here for complete coverage.
  *
- * Langues : en, fr, es, ar, zh-CN, de, pt, it, ru, ja.
- * Le template `generic` (contenu fourni par l'appelant) n'apparaît pas ici :
- * il est court-circuité par le renderer.
+ * Languages: en, fr, es, ar, zh-CN, de, pt, it, ru, ja.
+ * The `generic` template (content supplied by the caller) does not appear here:
+ * it is short-circuited by the renderer.
  */
 
 module.exports = {

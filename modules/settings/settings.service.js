@@ -5,8 +5,8 @@
 
 const SUPPORTED_TIMEZONES = require('./models/timezone-whitelist');
 const settingsRepo        = require('./settings.repository');
-// Require paresseux : campus.controller consomme settings.getLoginPrefs
-// (settings est dans la cloture statique de campus → cycle si require statique).
+// Lazy require: campus.controller consumes settings.getLoginPrefs
+// (settings is in the static closure of campus → cycle if static require).
 const getCampusDefaults = (...args) => require('../campus').service.getCampusDefaults(...args);
 
 const MODEL_MAP = {
@@ -25,7 +25,7 @@ const MODEL_MAP = {
  * Lazy-upsert UserPreferences at login time.
  * Returns { preferredLanguage, timezone } to include in the login response.
  * Never throws — falls back to safe defaults so login is never blocked.
- * Consommé par les 8 controllers d'authentification (admin, staff, teacher,
+ * Consumed by the 8 authentication controllers (admin, staff, teacher,
  * student, mentor, parent, partner, campus).
  */
 async function getLoginPrefs(userId, role, campusId = null) {
@@ -61,8 +61,8 @@ async function getLoginPrefs(userId, role, campusId = null) {
 
 /**
  * Langue préférée d'un utilisateur ('en' par défaut).
- * Le JWT ne transporte jamais preferredLanguage — consommé par exam.delivery
- * pour traduire les questions à la volée.
+ * The JWT never carries preferredLanguage — consumed by exam.delivery
+ * to translate questions on the fly.
  * @param {ObjectId|string} userId
  * @returns {Promise<string>}
  */
@@ -73,8 +73,8 @@ const getPreferredLanguage = async (userId) => {
 
 /**
  * Langues préférées d'un lot d'utilisateurs, en une requête.
- * Consommé par les émetteurs de notification multi-destinataires (exam.graded)
- * pour traduire chaque notif sans N requêtes.
+ * Consumed by multi-recipient notification emitters (exam.graded)
+ * to translate each notification without N queries.
  * @param {Array<ObjectId|string>} userIds
  * @returns {Promise<Map<string,string>>} userId (string) → langue ('en' si absent)
  */
@@ -84,8 +84,8 @@ const getPreferredLanguages = async (userIds) => {
 };
 
 module.exports = {
-  // Liste blanche des timezones supportées (consommée par campus.controller
-  // pour valider PATCH /api/campus/:id/defaults).
+  // Whitelist of supported timezones (consumed by campus.controller
+  // to validate PATCH /api/campus/:id/defaults).
   SUPPORTED_TIMEZONES,
   getPreferredLanguage,
   getPreferredLanguages,

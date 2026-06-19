@@ -3,14 +3,13 @@
 /**
  * @file campus.repository.js — couche de persistance du domaine campus.
  *
- * SEUL fichier du module autorisé à interroger le model Campus directement
- * (controller + service inter-modules). Étape 0 de la préparation Postgres — voir
+ * Only file in the module allowed to query the Campus model directly
+ * (controller + inter-module service). Step 0 of the Postgres migration preparation — see
  * POSTGRES_MIGRATION_ASSESSMENT.md §7.
  *
- * NB : campus.config fournit encore Model: Campus au GenericEntityController
- * partagé (couche partagée opérant sur un Model, hors périmètre du repository par
- * module). Le model n'a pas de hook pre/post (seulement des méthodes d'instance
- * canAddX et la statique findActive).
+ * NB: campus.config still provides Model: Campus to the shared GenericEntityController
+ * (shared layer operating on a Model, outside the per-module repository scope).
+ * The model has no pre/post hooks (only canAddX instance methods and the findActive static).
  */
 
 const Campus = require('./campus.model');
@@ -18,22 +17,22 @@ const { escapeRegex } = require('../../shared/utils/validation-helpers');
 
 // ── Controller ────────────────────────────────────────────────────────────────
 
-/** Crée un campus. @returns {Promise<Document>} (passé à GenericEntityController.afterCreate) */
+/** Creates a campus. @returns {Promise<Document>} (passed to GenericEntityController.afterCreate) */
 const create = (data) => Campus.create(data);
 
-/** Recherche par email (contrôle d'unicité à la création). */
+/** Looks up by email (uniqueness check at creation). */
 const findByEmail = (email) => Campus.findOne({ email }).lean();
 
 /** Recherche par email AVEC le hash (login). */
 const findByEmailWithPassword = (email) =>
   Campus.findOne({ email }).select('+password').lean();
 
-/** Met à jour lastLogin (fire-and-forget). */
+/** Updates lastLogin (fire-and-forget). */
 const touchLastLogin = (id) =>
   Campus.updateOne({ _id: id }, { $set: { lastLogin: new Date() } });
 
 /**
- * Liste paginée (sans mot de passe). Filtres status/city/recherche.
+ * Paginated list (without password). Filters: status/city/search.
  * @returns {Promise<{data, total}>}
  */
 const paginate = async ({ status, city, search, skip, limit }) => {
@@ -58,11 +57,11 @@ const findByIdSafe = (id) => Campus.findById(id).select('-password').lean();
 /** Lecture avec le hash (changement de mot de passe). */
 const findByIdWithPassword = (id) => Campus.findById(id).select('+password').lean();
 
-/** Met à jour le mot de passe (déjà hashé). */
+/** Updates the password (already hashed). */
 const updatePassword = (id, hashedPassword) =>
   Campus.findByIdAndUpdate(id, { password: hashedPassword });
 
-/** Met à jour les préférences par défaut et renvoie la projection associée. */
+/** Updates the default preferences and returns the associated projection. */
 const updateDefaults = (id, update) =>
   Campus.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true })
     .select('defaultLanguage defaultTimezone defaultGradeFormat campus_name').lean();
@@ -81,18 +80,18 @@ const getCampusStorageInfo = (campusId) =>
 const getCampusDefaults = (campusId) =>
   Campus.findById(campusId).select('defaultLanguage defaultTimezone defaultGradeFormat').lean();
 
-/** Coordonnées de notification du compte campus (email/téléphone/langue). */
+/** Notification contact details for the campus account (email/phone/language). */
 const getCampusNotificationContact = (campusId) =>
   Campus.findById(campusId).select('email manager_phone defaultLanguage').lean();
 
 /**
- * Numéro/préfixe du campus (génération de matricule student, en session de
- * transaction). `opts.session` propagé pour participer à la transaction appelante.
+ * Campus number/prefix (used for student ID generation, within a transaction
+ * session). `opts.session` is propagated to participate in the calling transaction.
  */
 const getCampusNumber = (campusId, { session } = {}) =>
   Campus.findById(campusId).select('campus_number').session(session ?? null).lean();
 
-/** Document Mongoose complet (méthodes d'instance — ex. campus.canAddClass()). */
+/** Full Mongoose document (instance methods — e.g. campus.canAddClass()). */
 const getCampusDocById = (campusId) => Campus.findById(campusId);
 
 const getCampusCommissionConfig = (campusId) =>
@@ -103,7 +102,7 @@ const getCampusCommissionConfigWithName = (campusId) =>
   Campus.findById(campusId).select('commissionConfig campus_name').lean();
 
 /**
- * Met à jour la config de commission embarquée (back-office partner.commission).
+ * Updates the embedded commission config (back-office partner.commission).
  * @param {Object} cfg — { ruleType, fixedAmount, percentage, defaultCurrency, updatedBy }
  */
 const setCampusCommissionConfig = (campusId, cfg) =>

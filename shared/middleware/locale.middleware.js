@@ -29,7 +29,7 @@ function parse(header) {
     .sort((a, b) => b.q - a.q);
 
   for (const { tag } of tags) {
-    // normalize() gère « fr-FR » → « fr » et toute variante « zh-* » → « zh-CN ».
+    // normalize() handles « fr-FR » → « fr » and any « zh-* » variant → « zh-CN ».
     const code = normalize(tag);
     if (code) return code;
   }

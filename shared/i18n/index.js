@@ -1,20 +1,20 @@
 'use strict';
 
 /**
- * @file shared/i18n/index.js — primitives i18n partagées + API publique.
+ * @file shared/i18n/index.js — shared i18n primitives + public API.
  *
- * Point d'entrée unique : require('../../shared/i18n').
- * Fournit le repli de locale (`pick`), l'interpolation de variables
- * (`interpolate`), et un résolveur de catalogue (`t`). Les catalogues de
- * messages vivent dans `./catalogs/*` ; chaque domaine y dépose le sien.
+ * Single entry point: require('../../shared/i18n').
+ * Provides locale fallback (`pick`), variable interpolation
+ * (`interpolate`), and a catalog resolver (`t`). Message catalogs
+ * live in `./catalogs/*`; each domain drops its own there.
  */
 
 const { SUPPORTED_LANGUAGES, DEFAULT_LOCALE, RTL_LANGUAGES, isSupported, normalize } = require('./languages');
 
 /**
- * Choisit la chaîne localisée d'un dictionnaire { en, fr, ... }.
- * Repli en cascade : locale demandée → anglais → première valeur dispo → ''.
- * @param {Object|string} dict  dictionnaire de traductions, ou chaîne brute
+ * Picks the localized string from a dictionary { en, fr, ... }.
+ * Cascading fallback: requested locale → English → first available value → ''.
+ * @param {Object|string} dict  translation dictionary, or raw string
  * @param {string} locale
  * @returns {string}
  */
@@ -25,7 +25,7 @@ function pick(dict, locale = DEFAULT_LOCALE) {
   return dict ?? '';
 }
 
-// Interpolation minimale : « Bonjour {name} » + { name: 'Alice' } → « Bonjour Alice ».
+// Minimal interpolation: « Bonjour {name} » + { name: 'Alice' } → « Bonjour Alice ».
 function interpolate(str, data = {}) {
   return String(str).replace(/\{(\w+)\}/g, (_, key) =>
     data[key] !== undefined && data[key] !== null ? String(data[key]) : ''
@@ -33,11 +33,11 @@ function interpolate(str, data = {}) {
 }
 
 /**
- * Résout une entrée de catalogue par chemin pointé, localise et interpole.
- * @param {Object} catalog  arbre de dictionnaires { en, fr, ... } en feuilles
- * @param {string} path     ex. 'account.welcome.email.subject'
+ * Resolves a catalog entry by dotted path, localizes and interpolates.
+ * @param {Object} catalog  tree of dictionaries { en, fr, ... } at the leaves
+ * @param {string} path     e.g. 'account.welcome.email.subject'
  * @param {string} locale
- * @param {Object} [data]   variables d'interpolation
+ * @param {Object} [data]   interpolation variables
  * @returns {string}
  */
 function t(catalog, path, locale = DEFAULT_LOCALE, data = {}) {

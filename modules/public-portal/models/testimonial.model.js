@@ -2,11 +2,11 @@
 
 /**
  * @file testimonial.model.js
- * @description Témoignages d'anciens apprenants — preuve sociale du portail public.
+ * @description Alumni testimonials — social proof for the public portal.
  *
- * Campus isolation : schoolCampus obligatoire sur chaque document.
- * Citation bilingue (quote.fr / quote.en) — le portail choisit la langue d'affichage.
- * Seuls les documents isPublished:true sont exposés via l'endpoint public.
+ * Campus isolation: schoolCampus required on every document.
+ * Bilingual quote (quote.fr / quote.en) — the portal picks the display language.
+ * Only isPublished:true documents are exposed via the public endpoint.
  */
 
 const mongoose = require('mongoose');
@@ -39,14 +39,14 @@ const testimonialSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Formation suivie par l'ancien apprenant
+    // Program attended by the alumni
     program: {
       type: String,
       trim: true,
       default: null,
     },
 
-    // Citation bilingue — au moins fr requis
+    // Bilingual quote — at least fr required
     quote: {
       fr: {
         type:     String,
@@ -62,14 +62,14 @@ const testimonialSchema = new mongoose.Schema(
       },
     },
 
-    // URL photo — consentement requis avant publication
+    // Photo URL — consent required before publishing
     photoUrl: {
       type: String,
       trim: true,
       default: null,
     },
 
-    // Employeur actuel — optionnel (renforce le message d'employabilité)
+    // Current employer — optional (reinforces the employability message)
     employer: {
       type: String,
       trim: true,
@@ -82,7 +82,7 @@ const testimonialSchema = new mongoose.Schema(
       index:   true,
     },
 
-    // Ordre d'affichage croissant
+    // Ascending display order
     order: {
       type:    Number,
       default: 0,

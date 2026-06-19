@@ -9,9 +9,9 @@
  *  PATCH  /api/subject/:id/link-course   → linkSubjectCourse
  *  DELETE /api/subject/:id/link-course   → unlinkSubjectCourse
  *
- *  Déplacé depuis course.resources.controller (chantier 20b) : ces handlers
- *  mutent le Subject (courseRef) — domaine subject. La validation côté course
- *  (APPROVED + dernière version) passe par la façade du module course.
+ *  Moved from course.resources.controller (task 20b): these handlers
+ *  mutate the Subject (courseRef) — subject domain. Course-side validation
+ *  (APPROVED + latest version) goes through the course module facade.
  *
  *  Security notes:
  *  • linkSubjectCourse enforces: course must be APPROVED + isLatestVersion.
@@ -27,8 +27,8 @@
  */
 
 const subjectRepo   = require('../subject.repository');
-const { getClassForCourseLink } = require('../../class').service; // façade module class (§3)
-const courseService = require('../../course').service; // façade module course (§3)
+const { getClassForCourseLink } = require('../../class').service; // facade module class (§3)
+const courseService = require('../../course').service; // facade module course (§3)
 
 const {
   asyncHandler,
@@ -80,7 +80,7 @@ const linkSubjectCourse = asyncHandler(async (req, res) => {
     }
   }
 
-  // Validate the Course: must be APPROVED and latest version (façade course)
+  // Validate the Course: must be APPROVED and latest version (course facade)
   const course = await courseService.getApprovedCourseForLinking(courseId);
 
   if (!course) {

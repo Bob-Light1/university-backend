@@ -1,33 +1,33 @@
 'use strict';
 
 /**
- * @file course.service.js — API inter-modules du domaine course.
+ * @file course.service.js — cross-module API of the course domain.
  *
- * Consommateurs :
- *   - staff, mentor : listApprovedCourses (catalogues lecture seule)
- *   - document : isTeacherOfAnyCourse (contrôle d'accès aux documents liés)
- *   - subject : getApprovedCourseForLinking (lien Subject → Course)
+ * Consumers:
+ *   - staff, mentor: listApprovedCourses (read-only catalogues)
+ *   - document: isTeacherOfAnyCourse (access control for linked documents)
+ *   - subject: getApprovedCourseForLinking (Subject → Course link)
  *
- * Toute la persistance passe par course.repository (étape 0 pré-Postgres).
+ * All persistence goes through course.repository (step 0, pre-Postgres).
  */
 
 const courseRepo = require('./course.repository');
 
 /**
- * Catalogue paginé des cours APPROVED (dernière version, non archivés).
+ * Paginated catalogue of APPROVED courses (latest version, not archived).
  * @returns {Promise<{docs: Object[], total: number}>}
  */
 const listApprovedCourses = (params) => courseRepo.listApproved(params);
 
 /**
- * Vrai si l'enseignant est assigné à au moins un des cours donnés.
+ * True if the teacher is assigned to at least one of the given courses.
  * @returns {Promise<boolean>}
  */
 const isTeacherOfAnyCourse = (courseIds, teacherId) =>
   courseRepo.teacherOwnsAnyCourse(courseIds, teacherId);
 
 /**
- * Cours éligible au lien Subject → Course (level populé).
+ * Course eligible for the Subject → Course link (level populated).
  * @returns {Promise<Object|null>}
  */
 const getApprovedCourseForLinking = (courseId) => courseRepo.findApprovedForLinking(courseId);

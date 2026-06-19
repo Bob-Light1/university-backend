@@ -46,13 +46,13 @@ const {
 
 // ─────────────────────────────────────────────
 // MIDDLEWARE GLOBAL
-// Toutes les routes d'attendance requièrent une authentification.
+// All attendance routes require authentication.
 // ─────────────────────────────────────────────
 router.use(authenticate);
 router.use(apiLimiter);
 
 // ─────────────────────────────────────────────
-// SELF-SERVICE ÉTUDIANT
+// STUDENT SELF-SERVICE
 // ─────────────────────────────────────────────
 
 /**
@@ -78,7 +78,7 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// ROUTES AU NIVEAU DE LA SÉANCE (TEACHER / CAMPUS_MANAGER)
+// SESSION-LEVEL ROUTES (TEACHER / CAMPUS_MANAGER)
 // ─────────────────────────────────────────────
 
 /**

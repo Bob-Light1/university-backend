@@ -9,8 +9,8 @@
  *  POST   /api/courses/:id/resources              → addResource
  *  DELETE /api/courses/:id/resources/:resourceId  → removeResource
  *
- *  (Le lien Subject→Course a été déplacé vers
- *  modules/subject/controllers/subject.course-link.controller.js — chantier 20b.)
+ *  (The Subject→Course link has been moved to
+ *  modules/subject/controllers/subject.course-link.controller.js — workstream 20b.)
  *
  *  Security notes:
  *  • CAMPUS_MANAGER may only add resources — `addedBy` is always forced to

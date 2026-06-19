@@ -2,14 +2,14 @@
 
 /**
  * @file public.faq.controller.js
- * @description FAQ publiée pour un campus (spec §4.11 / §7.6).
+ * @description Published FAQ for a campus (spec §4.11 / §7.6).
  *
- * Route : GET /api/public/faq?campusSlug=...
- * Renvoie les entrées isPublished, triées par order. Contenu bilingue ({fr, en})
- * transmis tel quel — le portail choisit la langue et met en cache 24h.
+ * Route: GET /api/public/faq?campusSlug=...
+ * Returns the isPublished entries, sorted by order. Bilingual content ({fr, en})
+ * passed through as-is — the portal chooses the language and caches for 24h.
  */
 
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 const repo = require('../../public-portal.repository');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');

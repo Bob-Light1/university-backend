@@ -225,7 +225,7 @@ exports.updateSubject = async (req, res) => {
       }
     }
 
-    // Build the set of fields actually provided (sémantique "update partiel").
+    // Build the set of fields actually provided (partial update semantics).
     const fields = {};
     if (subject_name) fields.subject_name = subject_name.trim();
     if (subject_code) fields.subject_code = subject_code.toUpperCase().trim();

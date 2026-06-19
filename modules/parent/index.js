@@ -7,7 +7,7 @@ const routes  = require('./parent.routes');
 const service = require('./parent.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/parents', parent.routes)
-  service,  // API inter-modules (vide pour l'instant — voir parent.service.js)
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js :  app.use('/api/parents', parent.routes)
+  service,  // inter-module API (empty for now — see parent.service.js)
+  // NO model exported. NO controller exported.
 };

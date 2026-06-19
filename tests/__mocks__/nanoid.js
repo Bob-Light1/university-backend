@@ -1,8 +1,8 @@
 /**
- * Stub CommonJS de nanoid (v5 = ESM pur, incompatible avec le require de Jest).
- * Suffisant pour le harnais : aucune suite n'exerce la génération d'ID réelle.
- * Si un test doit un jour valider un format de référence, le remplacer par un
- * vrai générateur ou passer à un transform babel.
+ * CommonJS stub for nanoid (v5 = pure ESM, incompatible with Jest's require).
+ * Sufficient for the harness: no suite exercises real ID generation.
+ * If a test ever needs to validate a reference format, replace it with a
+ * real generator or switch to a babel transform.
  */
 const nanoid = (size = 21) => 'a'.repeat(size);
 const customAlphabet = (_alphabet, size = 21) => () => 'a'.repeat(size);

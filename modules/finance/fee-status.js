@@ -1,29 +1,29 @@
 'use strict';
 
 /**
- * @file fee-status.js — règle pure de calcul du statut d'une dette étudiant.
+ * @file fee-status.js — pure rule for computing a student debt's status.
  *
- * Isolée (sans DB ni Mongoose) pour être partagée par le model (pre-save) ET
- * le service, et testée unitairement sans monter de base.
+ * Isolated (no DB, no Mongoose) so it can be shared by the model (pre-save) AND
+ * the service, and unit-tested without spinning up a database.
  *
- * Précédence : cancelled > paid > overdue > partial > pending.
- *   - cancelled : figé par l'opérateur, jamais recalculé.
- *   - paid      : montant réglé ≥ montant dû.
- *   - overdue   : solde restant > 0 ET échéance dépassée.
- *   - partial   : un acompte a été versé mais le solde n'est pas couvert.
- *   - pending   : rien versé, pas encore échu.
+ * Precedence: cancelled > paid > overdue > partial > pending.
+ *   - cancelled : frozen by the operator, never recalculated.
+ *   - paid      : amount paid ≥ amount due.
+ *   - overdue   : remaining balance > 0 AND due date passed.
+ *   - partial   : a payment was made but the balance is not covered.
+ *   - pending   : nothing paid, not yet due.
  */
 
 const STATUSES = ['pending', 'partial', 'paid', 'overdue', 'cancelled'];
 
 /**
  * @param {Object} fee
- * @param {number} fee.amountDue   montant total dû
- * @param {number} fee.amountPaid  montant déjà réglé
- * @param {Date|string|null} [fee.dueDate] échéance (optionnelle)
- * @param {string} [fee.status]    statut courant (pour préserver 'cancelled')
- * @param {Date}   [now]           injectable pour les tests
- * @returns {string} l'un de STATUSES
+ * @param {number} fee.amountDue   total amount due
+ * @param {number} fee.amountPaid  amount already paid
+ * @param {Date|string|null} [fee.dueDate] due date (optional)
+ * @param {string} [fee.status]    current status (to preserve 'cancelled')
+ * @param {Date}   [now]           injectable for tests
+ * @returns {string} one of STATUSES
  */
 function computeStatus({ amountDue, amountPaid = 0, dueDate = null, status = null } = {}, now = new Date()) {
   if (status === 'cancelled') return 'cancelled';
@@ -32,7 +32,7 @@ function computeStatus({ amountDue, amountPaid = 0, dueDate = null, status = nul
   const paid = Number(amountPaid) || 0;
 
   if (paid >= due && due > 0) return 'paid';
-  if (due === 0) return 'paid'; // dette à 0 → considérée soldée
+  if (due === 0) return 'paid'; // zero debt → considered settled
 
   const isOverdue = dueDate && new Date(dueDate).getTime() < now.getTime();
   if (isOverdue) return 'overdue';

@@ -1,29 +1,29 @@
 'use strict';
 
 /**
- * @file teacher.service.js — API inter-modules du domaine teacher.
+ * @file teacher.service.js — Cross-module API of the teacher domain.
  *
- * Exposé :
- *   - validateTeacherBelongsToCampus : garde d'isolation multi-tenant
+ * Exposed:
+ *   - validateTeacherBelongsToCampus : multi-tenant isolation guard
  *     (class.controller, teacher.attendance.controller).
- *   - countTeachersOnCampus          : garde campus en masse (gaet).
- *   - countActiveTeachers            : stats dashboards (campus, staff.readonly).
- *   - listTeachersForStaff           : listing portail staff (staff.readonly).
- *   - listTeachersForCampusDashboard : listing dashboard campus (campus.controller).
- *   - getTeacherForPayslip           : génération de fiche de paie (document.template).
- *   - getTeacherCampusRef            : validation cross-campus (exam.session).
- *   - resolveTeacherForSchedule      : forme dénormalisée teacher{} des emplois
- *     du temps (student.schedule.helpers).
- *   - syncTeacherScheduleMirror      : upsert du miroir TeacherSchedule d'une
- *     session StudentSchedule (student.schedule.helpers).
- *   - listTeacherSchedulesForStaff   : planning du portail staff (staff.readonly).
- *   - detectTeacherConflicts         : détection de double réservation
+ *   - countTeachersOnCampus          : bulk campus guard (gaet).
+ *   - countActiveTeachers            : dashboard stats (campus, staff.readonly).
+ *   - listTeachersForStaff           : staff portal listing (staff.readonly).
+ *   - listTeachersForCampusDashboard : campus dashboard listing (campus.controller).
+ *   - getTeacherForPayslip           : payslip generation (document.template).
+ *   - getTeacherCampusRef            : cross-campus validation (exam.session).
+ *   - resolveTeacherForSchedule      : denormalized teacher{} shape for schedules
+ *     (student.schedule.helpers).
+ *   - syncTeacherScheduleMirror      : upsert of the TeacherSchedule mirror of a
+ *     StudentSchedule session (student.schedule.helpers).
+ *   - listTeacherSchedulesForStaff   : staff portal planning (staff.readonly).
+ *   - detectTeacherConflicts         : double-booking detection
  *     (student.schedule.controller).
- *   - upsert/updateTeacherScheduleByReference : miroir des sessions d'examen
+ *   - upsert/updateTeacherScheduleByReference : mirror of exam sessions
  *     (exam.schedule.helper).
  *
- * Toute la persistance passe par teacher.repository (étape 0 pré-Postgres) ;
- * le service conserve l'API inter-modules et la construction des filtres métier.
+ * All persistence goes through teacher.repository (step 0, pre-Postgres);
+ * the service keeps the cross-module API and the building of business filters.
  */
 
 const mongoose = require('mongoose');
@@ -83,8 +83,8 @@ const countActiveInDepartment = (departmentId) =>
   teacherRepo.countActiveInDepartment(departmentId);
 
 /**
- * Listing paginé des teachers pour le portail staff (classes + subjects
- * peuplés, tri alphabétique). `search` doit déjà être échappé par l'appelant.
+ * Paginated listing of teachers for the staff portal (populated classes +
+ * subjects, alphabetical sort). `search` must already be escaped by the caller.
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listTeachersForStaff = ({ campusId, status, search, page = 1, limit = 20 }) => {
@@ -104,8 +104,8 @@ const listTeachersForStaff = ({ campusId, status, search, page = 1, limit = 20 }
 };
 
 /**
- * Listing paginé des teachers pour le dashboard campus (tri par date de
- * création desc, sans populate). `search` doit déjà être échappé.
+ * Paginated listing of teachers for the campus dashboard (sorted by creation
+ * date desc, without populate). `search` must already be escaped.
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listTeachersForCampusDashboard = ({ campusId, status, search, page = 1, limit = 20 }) => {
@@ -228,7 +228,7 @@ const syncTeacherScheduleMirror = async (ss, actorId) => {
 };
 
 /**
- * Planning paginé du portail staff (subject/classes/teacher peuplés).
+ * Paginated planning for the staff portal (populated subject/classes/teacher).
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listTeacherSchedulesForStaff = ({ campusId, status, from, to, page = 1, limit = 20 }) => {
@@ -249,7 +249,7 @@ const listTeacherSchedulesForStaff = ({ campusId, status, from, to, page = 1, li
 };
 
 /**
- * Détection de double réservation d'un teacher (statique du model).
+ * Double-booking detection for a teacher (model static).
  * @param {{teacherId, startTime, endTime, excludeId?}} params
  * @returns {Promise<{hasConflict: boolean, conflicts: Array}>}
  */
@@ -257,15 +257,15 @@ const detectTeacherConflicts = (params) =>
   teacherRepo.detectTeacherConflicts(params);
 
 /**
- * Upsert d'une entrée TeacherSchedule par référence (miroir des sessions
- * d'examen — références EXAM-TS-*).
+ * Upsert of a TeacherSchedule entry by reference (mirror of exam sessions
+ * — EXAM-TS-* references).
  */
 const upsertTeacherScheduleByReference = (reference, fields) =>
   teacherRepo.upsertTeacherScheduleByReference(reference, fields);
 
 /**
- * Mise à jour d'une entrée TeacherSchedule par référence (statut/horaires
- * d'une session d'examen annulée/reportée).
+ * Update of a TeacherSchedule entry by reference (status/times
+ * of a cancelled/postponed exam session).
  */
 const updateTeacherScheduleByReference = (reference, fields) =>
   teacherRepo.updateTeacherScheduleByReference(reference, fields);

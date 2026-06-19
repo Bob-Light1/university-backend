@@ -1,7 +1,7 @@
 /**
- * Setup Jest — exécuté avant chaque fichier de test.
- * Fournit des variables d'environnement neutres pour que le chargement des
- * modules (et de app.js) ne dépende pas d'un vrai .env ni d'une base de données.
+ * Jest setup — run before each test file.
+ * Provides neutral environment variables so that loading the modules
+ * (and app.js) does not depend on a real .env or a database.
  */
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-jwt-secret';

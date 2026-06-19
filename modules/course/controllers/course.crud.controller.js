@@ -24,7 +24,7 @@
 
 const { APPROVAL_STATUS } = require('../course.model');
 const courseRepo = require('../course.repository');
-// Requires paresseux : subject.course-link consomme la façade course (cycle course ↔ subject)
+// Lazy requires: subject.course-link consumes the course facade (course ↔ subject cycle)
 const subjectService = () => require('../../subject').service;
 
 const {

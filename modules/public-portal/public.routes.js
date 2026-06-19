@@ -2,15 +2,15 @@
 
 /**
  * @file public.router.js
- * @description Routes publiques du portail de pré-inscription.
+ * @description Public routes of the pre-registration portal.
  *
- * Base path : /api/public  (monté dans server.js AVANT les middlewares JWT)
+ * Base path: /api/public  (mounted in server.js BEFORE the JWT middlewares)
  *
- * Toutes les routes passent par publicPortalMiddleware qui :
- *  1. Vérifie le header X-Portal-Key
- *  2. Hache l'IP (req.ipHash) — jamais l'IP brute en DB
+ * All routes go through publicPortalMiddleware which:
+ *  1. Checks the X-Portal-Key header
+ *  2. Hashes the IP (req.ipHash) — never the raw IP in DB
  *
- * Rate limiting spécifique pré-inscription : 10 req/h/IP (createCustomLimiter).
+ * Pre-registration-specific rate limiting: 10 req/h/IP (createCustomLimiter).
  */
 
 const express = require('express');
@@ -33,10 +33,10 @@ const alertCtrl               = require('./controllers/public/public.alert.contr
 
 const router = express.Router();
 
-// Toutes les routes /api/public/* passent par ce middleware
+// All /api/public/* routes go through this middleware
 router.use(publicPortalMiddleware);
 
-// Rate limiter dédié pré-inscription : 10 req/h/IP (spec §5.5)
+// Dedicated pre-registration rate limiter: 10 req/h/IP (spec §5.5)
 const preRegisterLimiter = createCustomLimiter(
   60,
   10,
@@ -51,11 +51,11 @@ router.get('/campus-info', campusCtrl.getCampusInfo);
 // GET /api/public/campuses — public campus list for the selection page
 router.get('/campuses', campusCtrl.listCampuses);
 
-// ── PRÉ-INSCRIPTION ───────────────────────────────────────────────────────────
+// ── PRE-REGISTRATION ──────────────────────────────────────────────────────────
 // POST /api/public/pre-register
 router.post('/pre-register', preRegisterLimiter, registerCtrl.publicPreRegister);
 
-// ── FORMATIONS ────────────────────────────────────────────────────────────────
+// ── PROGRAMS ──────────────────────────────────────────────────────────────────
 // GET /api/public/programs?campusSlug=...
 router.get('/programs', programsCtrl.getPrograms);
 
@@ -65,23 +65,23 @@ router.get('/programs', programsCtrl.getPrograms);
 router.get('/quiz',        quizCtrl.getQuizQuestions);
 router.post('/quiz/submit', quizCtrl.submitQuiz);
 
-// ── CLASSEMENT ────────────────────────────────────────────────────────────────
+// ── LEADERBOARD ───────────────────────────────────────────────────────────────
 // GET /api/public/leaderboard?campusSlug=...&period=YYYY-MM&category=...&scope=campus
 router.get('/leaderboard', leaderboardCtrl.getLeaderboard);
 
-// ── TÉMOIGNAGES (Phase 2) ─────────────────────────────────────────────────────
+// ── TESTIMONIALS (Phase 2) ────────────────────────────────────────────────────
 // GET /api/public/testimonials?campusSlug=...&limit=6
 router.get('/testimonials', testimonialsCtrl.getTestimonials);
 
-// ── FAQ (Phase 2 — cache 24h côté portail) ────────────────────────────────────
+// ── FAQ (Phase 2 — 24h cache on the portal side) ──────────────────────────────
 // GET /api/public/faq?campusSlug=...
 router.get('/faq', faqCtrl.getFaq);
 
-// ── COMPÉTITION (Phase 2) ─────────────────────────────────────────────────────
+// ── COMPETITION (Phase 2) ─────────────────────────────────────────────────────
 // GET /api/public/competition/prizes?campusSlug=...
 router.get('/competition/prizes', competitionCtrl.getCompetitionPrizes);
 
-// ── APERÇUS DE COURS (Phase 2) ────────────────────────────────────────────────
+// ── COURSE PREVIEWS (Phase 2) ─────────────────────────────────────────────────
 // GET /api/public/course-previews?campusSlug=...&program=...
 router.get('/course-previews', coursesCtrl.getCoursePreviews);
 
@@ -94,7 +94,7 @@ const contactLimiter = createCustomLimiter(
 );
 router.post('/contact', contactLimiter, contactCtrl.submitContact);
 
-// ── CANDIDATURE PARTENAIRE (Phase 3) ──────────────────────────────────────────
+// ── PARTNER APPLICATION (Phase 3) ─────────────────────────────────────────────
 // POST /api/public/partner-application
 const partnerApplicationLimiter = createCustomLimiter(
   60,

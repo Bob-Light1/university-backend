@@ -2,30 +2,30 @@
 
 /**
  * @file final-transcript.model.js
- * @description Relevé de notes définitif stocké à la clôture du semestre.
+ * @description Final grade report stored at semester close.
  *
  *  Motivation [S2-1] :
  *  ─────────────────────────────────────────────────────────────────
- *  L'agrégation `computeGeneralAverage` sur la collection `results` peut
- *  devenir coûteuse quand la base contient des centaines de milliers de notes.
+ *  The `computeGeneralAverage` aggregation on the `results` collection can
+ *  become expensive when the database holds hundreds of thousands of scores.
  *
- *  Solution : à la clôture du semestre (lockSemester), le controller génère
- *  un FinalTranscript par étudiant. Ce document contient toutes les moyennes
- *  précalculées. Les bulletins PDF et les requêtes de consultation l'utilisent
- *  directement, sans recalculer sur la collection massive.
+ *  Solution: at semester close (lockSemester), the controller generates
+ *  one FinalTranscript per student. This document contains all pre-computed
+ *  averages. PDF transcripts and read queries use it directly, without
+ *  re-aggregating over the large collection.
  *
- *  Alignements foruni :
- *  ─────────────────────
- *  • schoolCampus → isolation multi-tenant
+ *  Project field alignment:
+ *  ─────────────────────────
+ *  • schoolCampus → multi-tenant isolation
  *  • student      → ref 'Student'
  *  • class        → ref 'Class'
- *  • generatedBy  → String (req.user.id) — cohérent avec le reste du projet
+ *  • generatedBy  → String (req.user.id) — consistent with the rest of the project
  *
- *  Cycle de vie :
+ *  Lifecycle:
  *  ─────────────────
- *  1. DRAFT     → créé automatiquement à la clôture (lockSemester)
- *  2. VALIDATED → validé par le Campus Manager (signature numérique parent)
- *  3. SEALED    → scellé définitivement (plus aucune modification possible)
+ *  1. DRAFT     → created automatically at close (lockSemester)
+ *  2. VALIDATED → validated by the Campus Manager (parent digital signature)
+ *  3. SEALED    → permanently sealed (no further modification possible)
  */
 
 const mongoose = require('mongoose');
@@ -33,14 +33,14 @@ const mongoose = require('mongoose');
 // ─── TRANSCRIPT STATUS ────────────────────────────────────────────────────────
 
 const TRANSCRIPT_STATUS = Object.freeze({
-  DRAFT:     'DRAFT',      // Généré automatiquement, en attente de validation
-  VALIDATED: 'VALIDATED',  // Validé par Campus Manager
-  SEALED:    'SEALED',     // Scellé définitivement
+  DRAFT:     'DRAFT',      // Auto-generated, awaiting validation
+  VALIDATED: 'VALIDATED',  // Validated by Campus Manager
+  SEALED:    'SEALED',     // Permanently sealed
 });
 
 // ─── SUB-SCHEMAS ──────────────────────────────────────────────────────────────
 
-/** Snapshot d'une évaluation individuelle dans le bulletin */
+/** Snapshot of an individual evaluation in the transcript */
 const EvaluationSnapshotSchema = new mongoose.Schema(
   {
     evaluationType:  { type: String },
@@ -63,16 +63,16 @@ const EvaluationSnapshotSchema = new mongoose.Schema(
   { _id: false }
 );
 
-/** Moyenne d'une matière pour ce semestre */
+/** Average for a subject over this semester */
 const SubjectAverageSchema = new mongoose.Schema(
   {
     subject:      { type: mongoose.Schema.Types.ObjectId, ref: 'Subject' },
     subjectName:  { type: String },
     subjectCode:  { type: String },
     coefficient:  { type: Number },
-    /** Moyenne pondérée sur 20 pour cette matière */
+    /** Weighted average out of 20 for this subject */
     average:      { type: Number },
-    /** true si average ≥ passMark du barème */
+    /** true if average ≥ passMark of the grading scale */
     isPassing:    { type: Boolean },
     gradeBand:    {
       label:       { type: String },
@@ -82,20 +82,20 @@ const SubjectAverageSchema = new mongoose.Schema(
       ectsCredits: { type: Number },
     },
     evaluations:  { type: [EvaluationSnapshotSchema], default: [] },
-    /** Appréciation du chef de classe pour cette matière */
+    /** Class manager's remarks for this subject */
     classManagerRemarks: { type: String },
   },
   { _id: false }
 );
 
 /**
- * Signature numérique du parent (accusé de réception du bulletin).
- * [Spec] Les parents peuvent signer numériquement le bulletin en fin de semestre.
+ * Parent's digital signature (acknowledgement of receipt of the transcript).
+ * [Spec] Parents can digitally sign the transcript at semester end.
  */
 const ParentSignatureSchema = new mongoose.Schema(
   {
     signedAt:  { type: Date },
-    signedBy:  { type: String },   // ex. identifiant parent ou email
+    signedBy:  { type: String },   // e.g. parent identifier or email
     ipAddress: { type: String },
     method:    { type: String, enum: ['click', 'otp', 'biometric'], default: 'click' },
   },
@@ -139,31 +139,31 @@ const FinalTranscriptSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // ── MOYENNES PRÉCALCULÉES ─────────────────
-    /** Détail par matière avec évaluations individuelles */
+    // ── PRE-COMPUTED AVERAGES ─────────────────
+    /** Per-subject breakdown with individual evaluations */
     subjects:       { type: [SubjectAverageSchema], default: [] },
-    /** Moyenne générale pondérée sur 20 */
+    /** Weighted general average out of 20 */
     generalAverage: { type: Number },
-    /** Rang dans la classe (calculé à la génération) */
+    /** Class rank (computed at generation time) */
     classRank:      { type: Number, min: 1 },
     /** Effectif de la classe au moment du calcul */
     classTotal:     { type: Number, min: 1 },
 
-    // ── DÉCISION PÉDAGOGIQUE ──────────────────
+    // ── ACADEMIC DECISION ─────────────────────
     /**
-     * Décision de passage ou d'orientation.
-     * Ex. "Admis en classe supérieure", "Redoublement", "Passage conditionnel".
+     * Promotion or orientation decision.
+     * E.g. "Admitted to next year", "Repeat year", "Conditional promotion".
      */
     decision:          { type: String, trim: true, maxlength: 200 },
     /**
-     * Appréciation générale du conseil de classe.
+     * General appreciation from the class council.
      */
     generalAppreciation: { type: String, trim: true, maxlength: 1000 },
 
     // ── TOKEN QR CODE ─────────────────────────
     /**
-     * UUID pour la vérification d'authenticité du bulletin PDF.
-     * Endpoint public : GET /api/results/verify-transcript/:token
+     * UUID for PDF transcript authenticity verification.
+     * Public endpoint: GET /api/results/verify-transcript/:token
      */
     verificationToken: {
       type:   String,
@@ -172,7 +172,7 @@ const FinalTranscriptSchema = new mongoose.Schema(
       index:  true,
     },
 
-    // ── WORKFLOW D'ÉTAT ───────────────────────
+    // ── STATE WORKFLOW ────────────────────────
     status: {
       type:    String,
       enum:    Object.values(TRANSCRIPT_STATUS),
@@ -188,7 +188,7 @@ const FinalTranscriptSchema = new mongoose.Schema(
     parentSignature: { type: ParentSignatureSchema, default: null },
 
     // ── AUDIT ─────────────────────────────────
-    generatedBy:     { type: String },   // req.user.id (manager qui a lancé lockSemester)
+    generatedBy:     { type: String },   // req.user.id (manager who triggered lockSemester)
     generatedAt:     { type: Date, default: Date.now },
   },
   {
@@ -201,12 +201,12 @@ const FinalTranscriptSchema = new mongoose.Schema(
 
 // ─── INDEXES ──────────────────────────────────────────────────────────────────
 
-/** Un seul bulletin par étudiant / semestre / année */
+/** One transcript per student / semester / academic year */
 FinalTranscriptSchema.index(
   { student: 1, academicYear: 1, semester: 1 },
   { unique: true, name: 'idx_unique_transcript' }
 );
-/** Requêtes par campus + semestre */
+/** Queries by campus + semester */
 FinalTranscriptSchema.index(
   { schoolCampus: 1, academicYear: 1, semester: 1, status: 1 },
   { name: 'idx_campus_transcripts' }
@@ -229,7 +229,7 @@ FinalTranscriptSchema.pre('save', function (next) {
 // ─── INSTANCE METHODS ─────────────────────────────────────────────────────────
 
 /**
- * Génère et attache le token de vérification QR Code.
+ * Generates and attaches the QR Code verification token.
  * @returns {Promise<FinalTranscript>}
  */
 FinalTranscriptSchema.methods.generateVerificationToken = async function () {
@@ -242,10 +242,10 @@ FinalTranscriptSchema.methods.generateVerificationToken = async function () {
 };
 
 /**
- * Enregistre la signature numérique du parent.
+ * Records the parent's digital signature.
  *
- * @param {string} signedBy   - Identifiant du parent (email ou ID)
- * @param {string} ipAddress  - IP de la requête
+ * @param {string} signedBy   - Parent identifier (email or ID)
+ * @param {string} ipAddress  - Request IP address
  * @param {string} [method]   - 'click' | 'otp' | 'biometric'
  * @returns {Promise<FinalTranscript>}
  */
@@ -264,9 +264,9 @@ FinalTranscriptSchema.methods.signByParent = async function (signedBy, ipAddress
 // ─── STATIC METHODS ───────────────────────────────────────────────────────────
 
 /**
- * Génère un FinalTranscript pour un étudiant à partir des résultats publiés.
- * Appelé depuis lockSemester dans le controller workflow.
- * Utilise les résultats sans retakeOf=null pour éviter les doublons.
+ * Generates a FinalTranscript for a student from their published results.
+ * Called from lockSemester in the workflow controller.
+ * Uses results with retakeOf=null to exclude replaced original scores.
  *
  * @param {Object} opts
  * @param {ObjectId} opts.studentId
@@ -282,7 +282,7 @@ FinalTranscriptSchema.statics.generateForStudent = async function ({
 }) {
   const { Result, RESULT_STATUS } = require('./result.model');
 
-  // Agrégation identique à computeGeneralAverage mais plus complète
+  // Same aggregation as computeGeneralAverage but more complete
   const pipeline = [
     {
       $match: {
@@ -291,7 +291,7 @@ FinalTranscriptSchema.statics.generateForStudent = async function ({
         semester,
         status:         RESULT_STATUS.PUBLISHED,
         isDeleted:      false,
-        retakeOf:       null,   // [S3-2] Exclut les notes originales remplacées
+        retakeOf:       null,   // [S3-2] Excludes original scores replaced by a retake
         examAttendance: { $ne: 'excused' },
       },
     },
@@ -338,7 +338,7 @@ FinalTranscriptSchema.statics.generateForStudent = async function ({
 
   const subjectResults = await Result.aggregate(pipeline);
 
-  // Calcul de la moyenne générale
+  // Compute general average
   let wSum = 0, wTotal = 0;
   for (const s of subjectResults) {
     wSum   += (s.average || 0) * (s.coefficient || 1);
@@ -346,7 +346,7 @@ FinalTranscriptSchema.statics.generateForStudent = async function ({
   }
   const generalAverage = wTotal > 0 ? parseFloat((wSum / wTotal).toFixed(2)) : null;
 
-  // Upsert : crée ou met à jour le bulletin existant
+  // Upsert: create or update the existing transcript
   const transcript = await this.findOneAndUpdate(
     { student: studentId, academicYear, semester },
     {

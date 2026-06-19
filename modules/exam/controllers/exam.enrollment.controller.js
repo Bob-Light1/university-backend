@@ -19,7 +19,7 @@
 const { v4: uuidv4 } = require('uuid');
 
 const repo               = require('../exam.repository');
-// Require paresseux : student.dashboard consomme la façade exam (cycle exam ↔ student)
+// Lazy require: student.dashboard consumes the exam facade (cycle exam ↔ student)
 const studentService     = () => require('../../student').service;
 const {
   sendSuccess,

@@ -9,7 +9,7 @@ const routes  = require('./class.routes');
 const service = require('./class.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/class', routes)
-  service,  // API inter-modules (vide pour l'instant — voir class.service.js)
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js :  app.use('/api/class', routes)
+  service,  // inter-module API (empty for now — see class.service.js)
+  // NO model exported. NO controller exported.
 };

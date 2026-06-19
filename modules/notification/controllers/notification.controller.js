@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * @file notification.controller.js — couche HTTP du socle notifications.
+ * @file notification.controller.js — HTTP layer of the notifications core.
  *
- * Deux surfaces :
- *   - boîte de réception in-app du destinataire courant (req.user) ;
- *   - journal admin (lecture + retry manuel d'un envoi externe).
+ * Two surfaces:
+ *   - current recipient's in-app inbox (req.user);
+ *   - admin log (read + manual retry of an external delivery).
  *
- * Aucune requête Mongoose ici — tout passe par notification.service.
+ * No Mongoose query here — everything goes through notification.service.
  */
 
 const service = require('../notification.service');
 const { buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 
-// ── Boîte de réception (tous rôles authentifiés) ──────────────────────────────
+// ── Inbox (all authenticated roles) ──────────────────────────────
 
 const getMyInbox = async (req, res) => {
   try {
@@ -55,7 +55,7 @@ const markAllAsRead = async (req, res) => {
   }
 };
 
-// ── Journal admin ─────────────────────────────────────────────────────────────
+// ── Admin log ─────────────────────────────────────────────────────────────
 
 const getLog = async (req, res) => {
   try {
@@ -68,7 +68,7 @@ const getLog = async (req, res) => {
     });
     return res.status(200).json({ success: true, data, total, page, limit });
   } catch (err) {
-    // buildCampusFilter lève en cas de breach d'isolation → 403
+    // buildCampusFilter throws on an isolation breach → 403
     if (/Campus isolation breach/.test(err.message)) {
       return res.status(403).json({ success: false, message: err.message });
     }

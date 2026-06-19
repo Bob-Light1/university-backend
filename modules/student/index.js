@@ -1,16 +1,16 @@
 /**
- * @file index.js — FAÇADE du module student
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3.
+ * @file index.js — FACADE of the student module
+ * The module's only public entry point — see MODULAR_MONOLITH_MIGRATION.md §3.
  *
- * Étudiants : CRUD/profil/dashboard, emplois du temps, présences.
- * Router composite — voir student.routes.js.
+ * Students: CRUD/profile/dashboard, schedules, attendance.
+ * Composite router — see student.routes.js.
  */
 
 const routes  = require('./student.routes');
 const service = require('./student.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api', routes) → /api/students + /api/schedules/student + /api/attendance/student
-  service,  // API inter-modules (vide pour l'instant — voir student.service.js)
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js:  app.use('/api', routes) → /api/students + /api/schedules/student + /api/attendance/student
+  service,  // inter-module API (empty for now — see student.service.js)
+  // NO model exported. NO controller exported.
 };

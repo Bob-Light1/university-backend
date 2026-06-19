@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * Couche repository — module campus (R2, le hub). Model Campus mocké (sans DB).
+ * Repository layer — campus module (R2, the hub). Campus model mocked (no DB).
  */
 
 jest.mock('../../modules/campus/campus.model', () => {

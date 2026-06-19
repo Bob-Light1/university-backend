@@ -176,10 +176,10 @@ const updatePartner = asyncHandler(async (req, res) => {
     'tier', 'status', 'convention', 'commissionConfig',
     'institutionType', 'commercialType', 'channelType',
   ];
-  // Champs que le partenaire peut modifier (via son propre profil — pas utilisé ici)
-  // Ici : seuls les rôles gestionnaires appellent ce contrôleur
+  // Fields the partner can edit (via their own profile — not used here)
+  // Here: only manager roles call this controller
 
-  // Champs protégés — jamais mis à jour ici
+  // Protected fields — never updated here
   const PROTECTED = ['partnerCode', 'referralLink', 'qrCodeFileName', 'schoolCampus', 'createdBy', 'password'];
 
   const updates = {};
@@ -191,7 +191,7 @@ const updatePartner = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'No updatable fields provided.');
   }
 
-  // Vérifier email uniqueness si l'email est changé
+  // Check email uniqueness if the email is changed
   if (updates.email) {
     updates.email = updates.email.toLowerCase().trim();
     const taken = await partnerRepo.findPartnerByEmailExcluding(updates.email, id);
@@ -333,14 +333,14 @@ const downloadKit = asyncHandler(async (req, res) => {
   }
 
   if (type === 'message') {
-    // Modèle de message WhatsApp pré-composé
+    // Pre-composed WhatsApp message template
     const campusName = 'Notre Campus'; // TODO: populate campus name
     const message = `Bonjour ! Je m'appelle ${partner.firstName} ${partner.lastName} et je vous invite à vous pré-inscrire à ${campusName}.\n\nUtilisez mon lien : ${partner.referralLink}\n\nOu mon code : ${partner.partnerCode}`;
     return sendSuccess(res, 200, 'Message template retrieved.', { message });
   }
 
   if (type === 'pdf') {
-    // TODO P2: Générer le flyer PDF via puppeteer-core (même pattern que academic-pdf.service.js)
+    // TODO P2: Generate the PDF flyer via puppeteer-core (same pattern as academic-pdf.service.js)
     return sendError(res, 501, 'PDF flyer generation not yet implemented in this build.');
   }
 

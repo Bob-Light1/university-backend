@@ -19,7 +19,7 @@ const { escapeRegex }  = require('../../shared/utils/validation-helpers');
 
 // ── Constructeurs de filtres internes ─────────────────────────────────────────
 
-// Portée admin : tout (ADMIN/DIRECTOR) ou campus propre, hors supprimés.
+// Admin scope: all (ADMIN/DIRECTOR) or own campus, excluding deleted.
 const adminScope = ({ isGlobalRole, campusId, requestedCampusId }) => {
   const filter = { deletedAt: null };
   if (!isGlobalRole) filter.schoolCampus = campusId;
@@ -27,7 +27,7 @@ const adminScope = ({ isGlobalRole, campusId, requestedCampusId }) => {
   return filter;
 };
 
-// Portée « visible par l'utilisateur » : publié, non expiré, ciblant son rôle.
+// User-visible scope: published, not expired, targeting their role.
 const visibleScope = (campusId, role) => ({
   schoolCampus: campusId,
   status:       'published',
@@ -67,7 +67,7 @@ const paginateForAdmin = async ({
   return { data, total };
 };
 
-/** Lecture d'une annonce dans la portée admin. */
+/** Read an announcement within the admin scope. */
 const findForAdmin = ({ id, isGlobalRole, campusId }) =>
   Announcement.findOne({ _id: id, ...adminScope({ isGlobalRole, campusId }) }).lean();
 
@@ -84,9 +84,9 @@ const applyUpdate = async ({ id, isGlobalRole, campusId }, fields) => {
   return doc;
 };
 
-// ── USER (annonces visibles + accusés de lecture) ──────────────────────────────
+// ── USER (visible announcements + read receipts) ──────────────────────────────
 
-/** Reçus de lecture d'un utilisateur sur un campus (ids d'annonces lues). */
+/** Read receipts for a user on a campus (ids of read announcements). */
 const listReadAnnouncementIds = async (userId, campusId) => {
   const receipts = await UserNotification.find({ userId, schoolCampus: campusId })
     .select('announcement').lean();
@@ -124,11 +124,11 @@ const listVisibleIds = async ({ campusId, role }) => {
 const countReadAmong = (userId, announcementIds) =>
   UserNotification.countDocuments({ userId, announcement: { $in: announcementIds } });
 
-/** Vérifie qu'une annonce est visible par l'utilisateur (existence). */
+/** Checks that an announcement is visible to the user (existence). */
 const findVisibleById = ({ id, campusId, role }) =>
   Announcement.findOne({ _id: id, ...visibleScope(campusId, role) }).lean();
 
-/** Crée le reçu de lecture s'il n'existe pas (idempotent). */
+/** Creates the read receipt if it does not exist (idempotent). */
 const upsertReadReceipt = ({ userId, announcementId, campusId }) =>
   UserNotification.updateOne(
     { userId, announcement: announcementId },
@@ -165,7 +165,7 @@ const markAllVisibleRead = async ({ userId, campusId, role }) => {
 
 // ── CRON ────────────────────────────────────────────────────────────────────
 
-/** Archive les annonces publiées expirées. @returns {Promise<number>} modifiées */
+/** Archives expired published announcements. @returns {Promise<number>} modified */
 const archiveExpired = async (now) => {
   const r = await Announcement.updateMany(
     { status: 'published', deletedAt: null, expiresAt: { $ne: null, $lte: now } },
@@ -174,7 +174,7 @@ const archiveExpired = async (now) => {
   return r.modifiedCount || 0;
 };
 
-/** Dé-épingle les annonces dont pinnedUntil est passé. @returns {Promise<number>} modifiées */
+/** Unpins announcements whose pinnedUntil date has passed. @returns {Promise<number>} modified */
 const unpinExpired = async (now) => {
   const r = await Announcement.updateMany(
     { pinned: true, deletedAt: null, pinnedUntil: { $ne: null, $lte: now } },

@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * @file finance.controller.js — couche HTTP du suivi paiement étudiant.
+ * @file finance.controller.js — HTTP layer of student payment tracking.
  *
- * Surfaces :
- *   - gestion (MGMT) : créer une dette, lister, consulter, imputer un acompte,
- *     relancer, supprimer, relevé d'un étudiant ;
- *   - étudiant : son propre relevé.
+ * Surfaces:
+ *   - management (MGMT): create a debt, list, view, apply a payment,
+ *     send a reminder, delete, a student's ledger;
+ *   - student: their own ledger.
  *
- * Aucune requête Mongoose ici — tout passe par finance.service. Le scoping
- * campus est dérivé du JWT via buildCampusFilter (anti-fuite inter-campus).
+ * No Mongoose query here — everything goes through finance.service. Campus
+ * scoping is derived from the JWT via buildCampusFilter (anti cross-campus leak).
  */
 
 const service = require('../finance.service');
@@ -26,7 +26,7 @@ const { isValidObjectId, buildCampusFilter } = require('../../../shared/utils/va
 
 const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];
 
-/** Dérive le scope { schoolCampus? } depuis le JWT ; 403 si isolation impossible. */
+/** Derives the scope { schoolCampus? } from the JWT; 403 if isolation is impossible. */
 function scopeFor(req, res) {
   try {
     return buildCampusFilter(req.user, req.query.campusId);
@@ -36,7 +36,7 @@ function scopeFor(req, res) {
   }
 }
 
-// ── Gestion (MGMT) ────────────────────────────────────────────────────────────
+// ── Management (MGMT) ─────────────────────────────────────────────────────────
 
 const createFee = asyncHandler(async (req, res) => {
   const { student, label, amountDue, currency, dueDate, academicYear, notes } = req.body;
@@ -47,7 +47,7 @@ const createFee = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'amountDue must be a number ≥ 0');
   }
 
-  // Campus : imposé par le JWT pour les rôles locaux ; requis dans le body pour les globaux.
+  // Campus: enforced by the JWT for local roles; required in the body for global ones.
   let schoolCampus;
   if (GLOBAL_ROLES.includes(req.user.role)) {
     schoolCampus = req.body.schoolCampus;
@@ -154,7 +154,7 @@ const getStudentLedger = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Student ledger', ledger);
 });
 
-// ── Étudiant : son propre relevé ──────────────────────────────────────────────
+// ── Student: their own ledger ─────────────────────────────────────────────────
 
 const getMyLedger = asyncHandler(async (req, res) => {
   const scope = {};

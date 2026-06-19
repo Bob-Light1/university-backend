@@ -15,7 +15,7 @@
 const Class = require('./class.model');
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
 
-// Presets de populate (champs exacts préservés par handler).
+// Populate presets (exact fields preserved by handler).
 const POP_FULL = (q) => q
   .populate('schoolCampus', 'campus_name')
   .populate('level', 'name description')
@@ -30,17 +30,17 @@ const findDuplicate = ({ schoolCampus, level, className, exceptId }) => {
   return Class.findOne(filter);
 };
 
-/** Crée une classe (Class.create → hook pre-validate). @returns {Promise<Document>} */
+/** Creates a class (Class.create → pre-validate hook). @returns {Promise<Document>} */
 const create = (data) => Class.create(data);
 
-/** Lecture brute (préconditions update/delete/restore). */
+/** Raw read (preconditions for update/delete/restore). */
 const findByIdLean = (id) => Class.findById(id).lean();
 
-/** Réponse standard (campus_name + level + classManager). */
+/** Standard response (campus_name + level + classManager). */
 const findByIdPopulated = (id) =>
   POP_FULL(Class.findById(id)).lean();
 
-/** Vue unitaire détaillée (campus étendu + students). */
+/** Detailed single view (extended campus + students). */
 const findByIdDetailed = (id) =>
   Class.findById(id)
     .populate('schoolCampus', 'campus_name campus_number location')
@@ -49,7 +49,7 @@ const findByIdDetailed = (id) =>
     .populate('students', 'firstName lastName email')
     .lean();
 
-/** Réponse de restauration (campus_name + level seulement). */
+/** Restore response (campus_name + level only). */
 const findByIdForRestore = (id) =>
   Class.findById(id)
     .populate('schoolCampus', 'campus_name')
@@ -93,7 +93,7 @@ const listByCampus = ({ campusId, status, includeArchived, search, level }) => {
     .lean();
 };
 
-/** Classes d'un teacher (classManager OU teachers[]), campus-scopé. */
+/** Classes belonging to a teacher (classManager OR teachers[]), campus-scoped. */
 const listByTeacher = ({ campusFilter, teacherId }) => {
   const filter = {
     ...campusFilter,
@@ -103,7 +103,7 @@ const listByTeacher = ({ campusFilter, teacherId }) => {
   return POP_FULL(Class.find(filter)).sort({ className: 1 }).lean();
 };
 
-/** Applique des champs (load→assign→save, préserve pre-validate). @returns {Promise<Document|null>} */
+/** Applies fields (load→assign→save, preserves pre-validate). @returns {Promise<Document|null>} */
 const applyUpdate = async (id, fields) => {
   const klass = await Class.findById(id);
   if (!klass) return null;
@@ -167,7 +167,7 @@ const getCampusRef = (classId) => Class.findById(classId).select('schoolCampus')
 const getCampusRefForValidation = (classId, { session } = {}) =>
   Class.findById(classId).select('schoolCampus className').session(session).lean();
 
-/** Réfs campus d'un lot de classes (validation batch classes∈campus — teacher.config). */
+/** Campus refs for a batch of classes (batch validation classes∈campus — teacher.config). */
 const getCampusRefsByIds = (classIds, { session } = {}) =>
   Class.find({ _id: { $in: classIds } }).select('schoolCampus').session(session).lean();
 

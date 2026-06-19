@@ -26,9 +26,9 @@ const AttendanceSummarySchema = new mongoose.Schema(
     present:  { type: Number, default: 0 },
     absent:   { type: Number, default: 0 },
     late:     { type: Number, default: 0 },
-    /** 0–100 % mis à jour après chaque saisie de présence */
+    /** 0–100 % updated after each attendance entry */
     rate:     { type: Number, default: null, min: 0, max: 100 },
-    /** Le relevé de présence a-t-il été soumis (verrouillé) ? */
+    /** Has the attendance sheet been submitted (locked)? */
     closed:   { type: Boolean, default: false },
     closedAt: { type: Date },
   },
@@ -42,7 +42,7 @@ const AttendanceSummarySchema = new mongoose.Schema(
 const StudentScheduleSchema = new mongoose.Schema(
   {
     // ── IDENTIFICATION ──────────────────────
-    /** Référence lisible auto-générée (ex. "SS-2025-00042") */
+    /** Auto-generated human-readable reference (e.g. "SS-2025-00042") */
     reference: {
       type:  String,
       unique: true,
@@ -57,18 +57,18 @@ const StudentScheduleSchema = new mongoose.Schema(
       index:   true,
     },
 
-    /** Document de récurrence maître (si occurrence matérialisée) */
+    /** Master recurrence document (if materialized occurrence) */
     isOccurrence:  { type: Boolean, default: false },
     masterSession: {
       type:    mongoose.Schema.Types.ObjectId,
       ref:     'StudentSchedule',
       default: null,
     },
-    /** Heure de début originale avant un report (UTC) */
+    /** Original start time before a postponement (UTC) */
     originalStart: { type: Date },
 
     // ── CAMPUS ISOLATION ────────────────────
-    /** Obligatoire : cohérent avec student_model, teacher_model, class_model */
+    /** Required: consistent with student_model, teacher_model, class_model */
     schoolCampus: {
       type:     mongoose.Schema.Types.ObjectId,
       ref:      'Campus',
@@ -82,7 +82,7 @@ const StudentScheduleSchema = new mongoose.Schema(
       required: true,
       match:    /^\d{4}-\d{4}$/,  // "2024-2025"
     },
-    /** Cohérent avec studentAttendance.model : 'S1' | 'S2' | 'Annual' */
+    /** Consistent with studentAttendance.model: 'S1' | 'S2' | 'Annual' */
     semester: {
       type:     String,
       required: true,
@@ -108,10 +108,10 @@ const StudentScheduleSchema = new mongoose.Schema(
     },
 
     // ── TEMPORAL ────────────────────────────
-    /** Toutes les dates en UTC ; conversion TZ côté client. */
+    /** All dates in UTC; TZ conversion on the client side. */
     startTime:       { type: Date, required: true, index: true },
     endTime:         { type: Date, required: true },
-    /** Dénormalisé pour les agrégations rapides */
+    /** Denormalized for fast aggregations */
     durationMinutes: { type: Number },
 
     // ── RECURRENCE ──────────────────────────
@@ -119,8 +119,8 @@ const StudentScheduleSchema = new mongoose.Schema(
 
     // ── PARTICIPANTS ────────────────────────
     /**
-     * Enseignant assigné — ref 'Teacher' (teacher_model.js du projet).
-     * On dénormalise firstName/lastName/email pour éviter les joins fréquents.
+     * Assigned teacher — ref 'Teacher' (teacher_model.js).
+     * firstName/lastName/email are denormalized to avoid frequent joins.
      */
     teacher: {
       teacherId: { type: mongoose.Schema.Types.ObjectId, ref: 'Teacher', required: true },
@@ -130,9 +130,9 @@ const StudentScheduleSchema = new mongoose.Schema(
     },
 
     /**
-     * Classes participantes — ref 'Class' (class_model.js du projet).
-     * Une session peut accueillir plusieurs classes fusionnées (TD regroupés).
-     * La Class contient déjà la liste des étudiants (students[]).
+     * Participating classes — ref 'Class' (class_model.js).
+     * A session can host several merged classes (grouped labs).
+     * Class already contains the student list (students[]).
      */
     classes: [
       {
@@ -142,15 +142,15 @@ const StudentScheduleSchema = new mongoose.Schema(
       },
     ],
 
-    /** Effectif total attendu (somme des inscrits dans les classes) */
+    /** Total expected headcount (sum of enrollees across classes) */
     expectedAttendees: { type: Number },
 
     // ── LOCATION ────────────────────────────
     /**
-     * [A] isVirtual découple la modalité du type pédagogique.
-     *     true  → session en ligne  (virtualMeeting requis, room optionnel)
-     *     false → session en présentiel (room requis)
-     *     Cohérent avec schedule.base.js décision [A] et VirtualMeetingSchema.
+     * [A] isVirtual decouples delivery mode from pedagogical type.
+     *     true  → online session  (virtualMeeting required, room optional)
+     *     false → in-person session (room required)
+     *     Consistent with schedule.base.js decision [A] and VirtualMeetingSchema.
      */
     isVirtual:      { type: Boolean, default: false },
     room:           { type: RoomSchema },
@@ -162,7 +162,7 @@ const StudentScheduleSchema = new mongoose.Schema(
     materials:   [CourseMaterialSchema],
 
     // ── ATTENDANCE SUMMARY ──────────────────
-    /** Résumé dénormalisé mis à jour par le contrôleur d'attendance */
+    /** Denormalized summary updated by the attendance controller */
     attendance: { type: AttendanceSummarySchema, default: () => ({}) },
 
     // ── POSTPONEMENT WORKFLOW ───────────────
@@ -190,12 +190,12 @@ const StudentScheduleSchema = new mongoose.Schema(
 // COMPOUND INDEXES — conflict detection & queries
 // ─────────────────────────────────────────────
 
-/** Empêche le double-booking d'une classe sur le même créneau */
+/** Prevents double-booking a class on the same time slot */
 StudentScheduleSchema.index(
   { 'classes.classId': 1, startTime: 1, endTime: 1, status: 1 },
   { name: 'idx_class_time_conflict' }
 );
-/** Empêche le double-booking d'une salle */
+/** Prevents double-booking a room */
 StudentScheduleSchema.index(
   { 'room.code': 1, schoolCampus: 1, startTime: 1, endTime: 1, status: 1 },
   { name: 'idx_room_time_conflict' }
@@ -239,20 +239,20 @@ StudentScheduleSchema.virtual('isLive').get(function () {
 
 StudentScheduleSchema.pre('save', async function (next) {
   try {
-    // Calcul automatique de la durée
+    // Automatic duration calculation
     if (this.startTime && this.endTime) {
       this.durationMinutes = Math.round(
         (this.endTime - this.startTime) / 60000
       );
     }
 
-    // Auto-génération de la référence unique
+    // Auto-generate the unique reference
     if (!this.reference) {
       const count = await mongoose.model('StudentSchedule').countDocuments();
       this.reference = `SS-${new Date().getFullYear()}-${String(count + 1).padStart(5, '0')}`;
     }
 
-    // Horodatage de publication
+    // Publication timestamp
     if (
       this.isModified('status') &&
       this.status === SCHEDULE_STATUS.PUBLISHED &&
@@ -269,7 +269,7 @@ StudentScheduleSchema.pre('save', async function (next) {
 // INSTANCE METHODS
 // ─────────────────────────────────────────────
 
-/** Indique si la session est visible par les étudiants */
+/** Returns whether the session is visible to students */
 StudentScheduleSchema.methods.isVisibleToStudents = function () {
   return (
     this.status === SCHEDULE_STATUS.PUBLISHED &&
@@ -279,8 +279,8 @@ StudentScheduleSchema.methods.isVisibleToStudents = function () {
 };
 
 /**
- * Annule la session et enregistre qui l'a fait.
- * @param {ObjectId} userId  – ID de l'enseignant ou du gestionnaire
+ * Cancels the session and records who did it.
+ * @param {ObjectId} userId  – teacher or manager ID
  * @param {string}   reason
  */
 StudentScheduleSchema.methods.cancel = function (userId, reason = '') {
@@ -295,8 +295,8 @@ StudentScheduleSchema.methods.cancel = function (userId, reason = '') {
 // ─────────────────────────────────────────────
 
 /**
- * Détecte les conflits de planning pour un créneau proposé.
- * Vérifie : classe déjà occupée ET/OU salle déjà réservée.
+ * Detects scheduling conflicts for a proposed time slot.
+ * Checks: class already occupied AND/OR room already booked.
  *
  * @param {Object}     params
  * @param {Date}       params.startTime
@@ -304,7 +304,7 @@ StudentScheduleSchema.methods.cancel = function (userId, reason = '') {
  * @param {ObjectId}   params.schoolCampus
  * @param {string}     [params.roomCode]
  * @param {ObjectId[]} [params.classIds]
- * @param {ObjectId}   [params.excludeId]    – exclure la session en cours d'update
+ * @param {ObjectId}   [params.excludeId]    – exclude the session currently being updated
  * @returns {Promise<{hasConflict: boolean, conflicts: Object[]}>}
  */
 StudentScheduleSchema.statics.detectConflicts = async function ({
@@ -339,9 +339,9 @@ StudentScheduleSchema.statics.detectConflicts = async function ({
 };
 
 /**
- * Récupère le calendrier personnel d'un étudiant.
+ * Fetches the personal calendar for a student.
  *
- * @param {ObjectId}   classId   – classe de l'étudiant (studentClass)
+ * @param {ObjectId}   classId   – student's class (studentClass)
  * @param {ObjectId}   campusId
  * @param {Date}       from
  * @param {Date}       to

@@ -2,9 +2,9 @@
 
 /**
  * @file result.analytics.controller.js
- * @description Analyses, rapports et consultation des résultats académiques.
+ * @description Analyses, reports and consultation of academic results.
  *
- *  Endpoints gérés :
+ *  Handled endpoints :
  *  ─────────────────────────────────────────────────────────────────
  *  GET  /api/results/transcript/:studentId   → getTranscript
  *  GET  /api/results/statistics/:classId     → getClassStatistics
@@ -27,7 +27,7 @@ const { RESULT_STATUS, SEMESTER }  = require('../models/result.model');
 const { GRADING_SYSTEM }           = require('../models/grading-scale.model');
 const { TRANSCRIPT_STATUS }        = require('../models/final-transcript.model');
 const resultRepo = require('../result.repository');
-// Require paresseux : student.dashboard consomme la façade result (cycle result ↔ student)
+// Lazy require : student.dashboard consumes the result facade (result ↔ student cycle)
 const getStudentProfileRef = (...args) =>
   require('../../student').service.getStudentProfileRef(...args);
 
@@ -49,14 +49,14 @@ const {
   resolveCampusId,
 } = require('./result.helper');
 
-// ─── TRANSCRIPT (calculé à la volée) ─────────────────────────────────────────
+// ─── TRANSCRIPT (computed on the fly) ────────────────────────────────────────
 
 /**
  * GET /api/results/transcript/:studentId
- * Relevé de notes complet d'un étudiant, calculé à la volée.
- * Pour les bulletins officiels post-clôture, utiliser getFinalTranscript.
+ * Complete transcript of a student, computed on the fly.
+ * For official post-lock transcripts, use getFinalTranscript.
  *
- * Query : academicYear? (filtre par année)
+ * Query : academicYear? (filter by year)
  */
 const getTranscript = asyncHandler(async (req, res) => {
   const { studentId } = req.params;
@@ -64,7 +64,7 @@ const getTranscript = asyncHandler(async (req, res) => {
 
   if (!isValidObjectId(studentId)) return sendError(res, 400, 'Invalid student ID.');
 
-  // Un STUDENT ne peut voir que son propre relevé
+  // A STUDENT can only see their own transcript
   if (req.user.role === 'STUDENT' && studentId !== req.user.id)
     return sendForbidden(res, 'Access denied.');
 
@@ -84,7 +84,7 @@ const getTranscript = asyncHandler(async (req, res) => {
   };
   if (academicYear) matchFilter.academicYear = academicYear;
 
-  // Agrégation (groupe par année/semestre/matière) — pipeline porté par le repo.
+  // Aggregation (group by year/semester/subject) — pipeline carried by the repo.
   const semesters = await resultRepo.aggregateStudentTranscript(matchFilter);
 
   const enriched = semesters.map((sem) => {
@@ -114,12 +114,12 @@ const getTranscript = asyncHandler(async (req, res) => {
   });
 });
 
-// ─── STATISTIQUES DE CLASSE ───────────────────────────────────────────────────
+// ─── CLASS STATISTICS ─────────────────────────────────────────────────────────
 
 /**
  * GET /api/results/statistics/:classId
- * Distribution statistique d'une évaluation (moyenne, écart-type, histogramme).
- * Utilisé par l'enseignant pour visualiser sa classe avant soumission.
+ * Statistical distribution of an evaluation (mean, standard deviation, histogram).
+ * Used by the teacher to visualize their class before submission.
  *
  * Query : subjectId, evaluationTitle, academicYear, semester
  */
@@ -140,13 +140,13 @@ const getClassStatistics = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Class statistics fetched.', stats);
 });
 
-// ─── LISTE DE RATTRAPAGE ──────────────────────────────────────────────────────
+// ─── RETAKE LIST ──────────────────────────────────────────────────────────────
 
 /**
  * GET /api/results/retake-list/:classId
- * Liste des étudiants éligibles au rattrapage, groupés par étudiant.
+ * List of students eligible for retake, grouped by student.
  *
- * Query : subjectId? (filtre par matière), academicYear, semester
+ * Query : subjectId? (filter by subject), academicYear, semester
  */
 const getRetakeList = asyncHandler(async (req, res) => {
   const { classId } = req.params;
@@ -175,7 +175,7 @@ const getRetakeList = asyncHandler(async (req, res) => {
 
   const retakes = await resultRepo.listRetakeResults(filter);
 
-  // Grouper par étudiant
+  // Group by student
   const byStudent = {};
   for (const r of retakes) {
     const sid = r.student._id.toString();
@@ -202,8 +202,8 @@ const getRetakeList = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/results/campus/overview
- * Vue analytique globale : taux de réussite, distribution par statut,
- * étudiants à risque, éligibles au rattrapage.
+ * Global analytics view : pass rate, distribution by status,
+ * at-risk students, retake-eligible.
  *
  * Query : academicYear?, semester?, campusId? (ADMIN/DIRECTOR)
  */
@@ -232,13 +232,13 @@ const getCampusOverview = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Campus overview fetched.', overview);
 });
 
-// ─── VÉRIFICATION QR CODE (PUBLIC) ───────────────────────────────────────────
+// ─── QR CODE VERIFICATION (PUBLIC) ───────────────────────────────────────────
 
 /**
  * GET /api/results/verify/:token
- * Endpoint PUBLIC (sans authentification).
- * Valide l'authenticité d'un bulletin via le token QR Code.
- * Ne retourne que les informations non-sensibles.
+ * PUBLIC endpoint (without authentication).
+ * Validates the authenticity of a transcript via the QR Code token.
+ * Only returns non-sensitive information.
  */
 const verifyResult = asyncHandler(async (req, res) => {
   const { token } = req.params;
@@ -269,7 +269,7 @@ const verifyResult = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/results/final-transcripts/:studentId
- * Récupère le bulletin définitif stocké (généré lors de lockSemester).
+ * Retrieves the stored final transcript (generated during lockSemester).
  *
  * Query : academicYear, semester
  */
@@ -320,7 +320,7 @@ const validateTranscript = asyncHandler(async (req, res) => {
   if (decision)             transcript.decision             = decision;
   if (generalAppreciation)  transcript.generalAppreciation  = generalAppreciation;
 
-  // Génération du token QR si absent
+  // QR token generation if absent
   if (!transcript.verificationToken) {
     const { randomUUID } = require('crypto');
     transcript.verificationToken = randomUUID();
@@ -332,11 +332,11 @@ const validateTranscript = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/results/final-transcripts/:id/sign
- * Signature numérique du bulletin par le parent.
- * Endpoint accessible sans authentification enseignant/manager
- * (le parent s'identifie avec signedBy + OTP optionnel).
+ * Digital signature of the transcript by the parent.
+ * Endpoint accessible without teacher/manager authentication
+ * (the parent identifies with signedBy + optional OTP).
  *
- * Body : { signedBy (email ou ID parent), method? ('click'|'otp'|'biometric') }
+ * Body : { signedBy (email or parent ID), method? ('click'|'otp'|'biometric') }
  */
 const signTranscript = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -359,11 +359,11 @@ const signTranscript = asyncHandler(async (req, res) => {
   }
 });
 
-// ─── BARÈMES DE NOTATION ──────────────────────────────────────────────────────
+// ─── GRADING SCALES ───────────────────────────────────────────────────────────
 
 /**
  * GET /api/results/grading-scales
- * Liste les barèmes actifs du campus courant.
+ * Lists the active grading scales of the current campus.
  */
 const listGradingScales = asyncHandler(async (req, res) => {
   const campusFilter = getCampusFilter(req, res);
@@ -376,8 +376,8 @@ const listGradingScales = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/results/grading-scales
- * Crée un nouveau barème de notation pour le campus.
- * [S1-1] La validation des bands (overlap, tri) est gérée en pre-save.
+ * Creates a new grading scale for the campus.
+ * [S1-1] The bands validation (overlap, sort) is handled in pre-save.
  *
  * Body : { name, description?, system, maxScore, passMark, bands[], isDefault? }
  */
@@ -411,7 +411,7 @@ const createGradingScale = asyncHandler(async (req, res) => {
     });
     return sendCreated(res, 'Grading scale created.', scale);
   } catch (err) {
-    // Erreur pre-save (overlap, bornes invalides) — retournée comme 400
+    // Pre-save error (overlap, invalid bounds) — returned as 400
     if (err.message && !err.code) return sendError(res, 400, err.message);
     throw err;
   }
@@ -419,8 +419,8 @@ const createGradingScale = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/results/grading-scales/:id
- * Met à jour un barème existant.
- * [S1-1] La validation des bands est gérée en pre-save.
+ * Updates an existing grading scale.
+ * [S1-1] The bands validation is handled in pre-save.
  */
 const updateGradingScale = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -461,9 +461,9 @@ module.exports = {
   getClassStatistics,
   getRetakeList,
   getCampusOverview,
-  // Vérification publique
+  // Public verification
   verifyResult,
-  // Barèmes
+  // Grading scales
   listGradingScales,
   createGradingScale,
   updateGradingScale,

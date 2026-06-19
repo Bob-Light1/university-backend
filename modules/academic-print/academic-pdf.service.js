@@ -54,7 +54,7 @@ const getCampusBranding = async (campusId) => {
   const cached = brandingCache.get(key);
   if (cached && (Date.now() - cached.cachedAt) < CACHE_TTL_MS) return cached;
 
-  const { getCampusForPdf } = require('../campus').service; // façade module campus (§3)
+  const { getCampusForPdf } = require('../campus').service; // campus module facade (§3)
   const campus = await getCampusForPdf(campusId);
 
   if (!campus) throw Object.assign(new Error('Campus not found'), { statusCode: 404 });

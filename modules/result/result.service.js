@@ -1,18 +1,18 @@
 'use strict';
 
 /**
- * @file result.service.js — API inter-modules du domaine result.
+ * @file result.service.js — inter-module API of the result domain.
  *
- * Consommateurs :
- *   - staff : countPublishedResults, listCampusResults
- *   - mentor : countPublishedResults, getRecentResultsForStudents, listCampusResults
- *   - student : getRecentResultsForStudent (dashboard)
- *   - parent : listStudentPublishedResults, listStudentResultComments,
+ * Consumers:
+ *   - staff: countPublishedResults, listCampusResults
+ *   - mentor: countPublishedResults, getRecentResultsForStudents, listCampusResults
+ *   - student: getRecentResultsForStudent (dashboard)
+ *   - parent: listStudentPublishedResults, listStudentResultComments,
  *     getRecentResultsForChild, listStudentTranscripts, signTranscriptByParent
- *   - academic-print : getTranscriptForPrint
+ *   - academic-print: getTranscriptForPrint
  *
- * Toute la persistance passe par result.repository (étape 0 pré-Postgres) ;
- * le service conserve l'API inter-modules et la construction des filtres métier.
+ * All persistence goes through result.repository (step 0 pre-Postgres);
+ * the service keeps the inter-module API and the building of business filters.
  */
 
 const resultRepo = require('./result.repository');
@@ -20,9 +20,9 @@ const resultRepo = require('./result.repository');
 // ── Results : compteurs ───────────────────────────────────────────────────────
 
 /**
- * Nombre de résultats PUBLISHED d'un campus (option : restreints à des étudiants).
- * `withDeleted` préserve une incohérence historique : le dashboard mentor ne
- * filtrait pas isDeleted, contrairement au dashboard staff.
+ * Number of PUBLISHED results of a campus (option: restricted to some students).
+ * `withDeleted` preserves a historical inconsistency: the mentor dashboard did not
+ * filter isDeleted, unlike the staff dashboard.
  * @param {Object} p
  * @param {ObjectId|string} p.campusId
  * @param {Array} [p.studentIds]
@@ -36,16 +36,16 @@ const countPublishedResults = ({ campusId, studentIds, withDeleted = false }) =>
   return resultRepo.countResults(filter);
 };
 
-// ── Results : listes paginées ─────────────────────────────────────────────────
+// ── Results: paginated lists ─────────────────────────────────────────────────
 
 /**
- * Liste paginée des résultats PUBLISHED d'un campus (staff/mentor readonly).
- * Tri createdAt desc, populates student/subject/class.
- * `withDeleted` : même incohérence historique que countPublishedResults
- * (mentor ne filtrait pas isDeleted).
+ * Paginated list of a campus's PUBLISHED results (staff/mentor readonly).
+ * Sorted createdAt desc, populates student/subject/class.
+ * `withDeleted`: same historical inconsistency as countPublishedResults
+ * (mentor did not filter isDeleted).
  * @param {Object} p
  * @param {ObjectId|string} p.campusId
- * @param {Array} [p.studentIds] — périmètre mentor
+ * @param {Array} [p.studentIds] — mentor scope
  * @param {ObjectId|string} [p.studentId], [p.subjectId], [p.classId]
  * @param {string} [p.academicYear], [p.semester], [p.evaluationType], [p.examPeriod]
  * @param {number} [p.page=1], [p.limit=20]
@@ -73,8 +73,8 @@ const listCampusResults = async ({
 };
 
 /**
- * Résultats PUBLISHED d'un étudiant pour le portail parent (paginé).
- * Tri examDate/publishedAt desc, virtuals inclus, champs d'audit exclus.
+ * A student's PUBLISHED results for the parent portal (paginated).
+ * Sorted examDate/publishedAt desc, virtuals included, audit fields excluded.
  * @returns {Promise<{results: Object[], total: number}>}
  */
 const listStudentPublishedResults = async ({
@@ -95,8 +95,8 @@ const listStudentPublishedResults = async ({
 };
 
 /**
- * Commentaires pédagogiques (remarques/forces/axes) des résultats PUBLISHED
- * d'un étudiant — portail parent, paginé.
+ * Educational comments (remarks/strengths/areas) of a student's PUBLISHED
+ * results — parent portal, paginated.
  * @returns {Promise<{comments: Object[], total: number}>}
  */
 const listStudentResultComments = async ({
@@ -122,9 +122,9 @@ const listStudentResultComments = async ({
   return resultRepo.paginateStudentResultComments(filter, { skip: skipN, limit: Number(limit) });
 };
 
-// ── Results : derniers résultats (dashboards) ─────────────────────────────────
+// ── Results: latest results (dashboards) ─────────────────────────────────
 
-/** Dashboard étudiant : 5 derniers résultats PUBLISHED (scores inclus). */
+/** Student dashboard: 5 latest PUBLISHED results (scores included). */
 const getRecentResultsForStudent = (studentId, campusId, limit = 5) =>
   resultRepo.findRecentResultsForStudent({
     student:      studentId,
@@ -133,7 +133,7 @@ const getRecentResultsForStudent = (studentId, campusId, limit = 5) =>
     isDeleted:    false,
   }, limit);
 
-/** Dashboard parent : 5 derniers résultats PUBLISHED d'un enfant. */
+/** Parent dashboard: 5 latest PUBLISHED results of a child. */
 const getRecentResultsForChild = (studentId, campusId, limit = 5) =>
   resultRepo.findRecentResultsForChild({
     student:      studentId,
@@ -142,8 +142,8 @@ const getRecentResultsForChild = (studentId, campusId, limit = 5) =>
     isDeleted:    false,
   }, limit);
 
-/** Dashboard mentor : 5 derniers résultats PUBLISHED de ses étudiants.
- *  (incohérence historique préservée : pas de filtre isDeleted). */
+/** Mentor dashboard: 5 latest PUBLISHED results of its students.
+ *  (historical inconsistency preserved: no isDeleted filter). */
 const getRecentResultsForStudents = (studentIds, campusId, limit = 5) =>
   resultRepo.findRecentResultsForStudents({
     student:      { $in: studentIds },
@@ -154,8 +154,8 @@ const getRecentResultsForStudents = (studentIds, campusId, limit = 5) =>
 // ── Transcripts ───────────────────────────────────────────────────────────────
 
 /**
- * Bulletins VALIDATED/SEALED d'un étudiant (portail parent).
- * @returns {Promise<Object[]>} lean (virtuals inclus)
+ * A student's VALIDATED/SEALED transcripts (parent portal).
+ * @returns {Promise<Object[]>} lean (virtuals included)
  */
 const listStudentTranscripts = ({ studentId, campusId, academicYear, semester }) => {
   const filter = {
@@ -170,9 +170,9 @@ const listStudentTranscripts = ({ studentId, campusId, academicYear, semester })
 };
 
 /**
- * Accusé de lecture parent sur un bulletin. signByParent lève une erreur
- * (avec statusCode) si déjà signé ou statut invalide — propagée à l'appelant.
- * @returns {Promise<{transcriptId, parentSignature}|null>} null si introuvable
+ * Parent read receipt on a transcript. signByParent throws an error
+ * (with statusCode) if already signed or status invalid — propagated to the caller.
+ * @returns {Promise<{transcriptId, parentSignature}|null>} null if not found
  */
 const signTranscriptByParent = async ({ transcriptId, studentId, campusId, parentId, ip, method = 'click' }) => {
   const transcript = await resultRepo.findTranscriptForSignature({ transcriptId, studentId, campusId });
@@ -183,7 +183,7 @@ const signTranscriptByParent = async ({ transcriptId, studentId, campusId, paren
 };
 
 /**
- * Bulletin d'un étudiant pour impression PDF (academic-print).
+ * A student's transcript for PDF printing (academic-print).
  * @returns {Promise<Object|null>} lean
  */
 const getTranscriptForPrint = ({ studentId, campusId, academicYear, semester }) =>

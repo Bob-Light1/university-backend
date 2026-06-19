@@ -7,7 +7,7 @@ const routes  = require('./announcement.routes');
 const service = require('./announcement.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/announcements', announcement.routes)
-  service,  // API inter-modules    :  require('../announcement').service.runExpiryJob()
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js :  app.use('/api/announcements', announcement.routes)
+  service,  // inter-module API     :  require('../announcement').service.runExpiryJob()
+  // NO model exported. NO controller exported.
 };

@@ -14,11 +14,11 @@
  *  PUT   /api/partners/me/password          → changeMyPassword (PARTNER)
  *  POST  /api/partners/me/profile-image     → uploadProfileImage (PARTNER)
  *
- * Invariants :
- * • campusId toujours depuis JWT — jamais depuis URL params.
- * • QR code : généré côté serveur, stocké dans uploads/{campusId}/partners/qr/.
- * • Password : bcrypt 12 rounds via pre-save hook (register) ou manuel (changeMyPassword).
- * • JWT payload : { id, role:'PARTNER', campusId, partnerCode, partnerType }
+ * Invariants:
+ * • campusId always from the JWT — never from URL params.
+ * • QR code: generated server-side, stored in uploads/{campusId}/partners/qr/.
+ * • Password: bcrypt 12 rounds via pre-save hook (register) or manually (changeMyPassword).
+ * • JWT payload: { id, role:'PARTNER', campusId, partnerCode, partnerType }
  */
 
 const bcrypt  = require('bcrypt');
@@ -60,16 +60,16 @@ const buildPartnerResponse = (partner) => {
   const obj = partner.toObject ? partner.toObject({ virtuals: true }) : { ...partner };
   delete obj.password;
   delete obj.__v;
-  // Le champ `role` du modèle vaut null par défaut ; on force 'PARTNER' pour que
-  // le front-end (ProtectedRoute) résolve correctement les autorisations.
+  // The model's `role` field defaults to null; we force 'PARTNER' so that
+  // the front-end (ProtectedRoute) resolves the authorizations correctly.
   obj.role = 'PARTNER';
   return obj;
 };
 
 /**
- * Génère le QR PNG pour le referralLink d'un partenaire.
- * Stocké sous uploads/{campusId}/partners/qr/qr_{partnerCode}.png
- * Retourne le nom du fichier.
+ * Generates the QR PNG for a partner's referralLink.
+ * Stored under uploads/{campusId}/partners/qr/qr_{partnerCode}.png
+ * Returns the file name.
  */
 const generatePartnerQR = async (referralLink, campusId, partnerCode) => {
   const qrDir = path.join(UPLOAD_BASE, campusId.toString(), 'partners', 'qr');
@@ -95,8 +95,8 @@ const isGlobalRole = (role) => role === 'ADMIN' || role === 'DIRECTOR';
 // ── REGISTER ──────────────────────────────────────────────────────────────────
 
 /**
- * Crée un nouveau compte partenaire et génère partnerCode + QR.
- * Appelé par CAMPUS_MANAGER / ADMIN / DIRECTOR.
+ * Creates a new partner account and generates partnerCode + QR.
+ * Called by CAMPUS_MANAGER / ADMIN / DIRECTOR.
  *
  * @route  POST /api/partners/auth/register
  * @access CAMPUS_MANAGER, ADMIN, DIRECTOR
@@ -111,11 +111,11 @@ const register = async (req, res) => {
       partnerType, institutionType, commercialType, channelType,
       tier, contacts, convention, commissionConfig, socialLinks,
       subjectId, country,
-      // ADMIN/DIRECTOR peuvent cibler un campus précis
+      // ADMIN/DIRECTOR can target a specific campus
       schoolCampus: bodyCampusId,
     } = req.body;
 
-    // Validation champs obligatoires
+    // Validate required fields
     if (!firstName?.trim()) return sendError(res, 400, 'firstName is required.');
     if (!lastName?.trim())  return sendError(res, 400, 'lastName is required.');
     if (!email?.trim())     return sendError(res, 400, 'email is required.');
@@ -124,7 +124,7 @@ const register = async (req, res) => {
     if (!pwCheck.valid)     return sendError(res, 400, pwCheck.errors[0]);
     if (!partnerType)       return sendError(res, 400, 'partnerType is required.');
 
-    // Résolution du campus
+    // Resolve the campus
     let campusId;
     if (isGlobalRole(req.user.role)) {
       if (!bodyCampusId) return sendError(res, 400, 'schoolCampus is required for ADMIN/DIRECTOR.');
@@ -135,11 +135,11 @@ const register = async (req, res) => {
       campusId = new mongoose.Types.ObjectId(req.user.campusId);
     }
 
-    // Unicité email
+    // Email uniqueness
     const existing = await partnerRepo.findPartnerByEmail(email.toLowerCase().trim());
     if (existing) return sendError(res, 409, 'A partner with this email already exists.');
 
-    // Génération partnerCode
+    // Generate partnerCode
     const year = new Date().getFullYear();
     const partnerCode = await partnerRepo.generatePartnerCode(
       lastName.trim(),
@@ -152,7 +152,7 @@ const register = async (req, res) => {
     const referralLink    = `${FRONTEND_URL}/register?ref=${partnerCode}`;
     const qrCodeFileName  = await generatePartnerQR(referralLink, campusId, partnerCode);
 
-    // Création du partenaire (le pre-save hook hash le password)
+    // Create the partner (the pre-save hook hashes the password)
     const partner = await partnerRepo.createPartner({
       schoolCampus:     campusId,
       firstName:        firstName.trim(),
@@ -199,7 +199,7 @@ const register = async (req, res) => {
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 
 /**
- * Connexion partenaire — retourne un JWT.
+ * Partner login — returns a JWT.
  *
  * @route  POST /api/partners/auth/login
  * @access PUBLIC
@@ -244,9 +244,9 @@ const login = async (req, res) => {
 // ── FORGOT PASSWORD ───────────────────────────────────────────────────────────
 
 /**
- * Génère un token signé de réinitialisation de mot de passe (1h).
- * En P2 : lien retourné dans la réponse + dispatch WhatsApp (stub).
- * En P3 : WhatsApp réel via provider sélectionné.
+ * Generates a signed password-reset token (1h).
+ * In P2: link returned in the response + WhatsApp dispatch (stub).
+ * In P3: real WhatsApp via the selected provider.
  *
  * @route  POST /api/partners/auth/forgot-password
  * @access PUBLIC
@@ -260,12 +260,12 @@ const forgotPassword = async (req, res) => {
 
     const partner = await partnerRepo.findPartnerByEmailWithPasswordLean(email.toLowerCase().trim());
 
-    // Toujours répondre 200 pour ne pas révéler si l'email existe
+    // Always respond 200 so as not to reveal whether the email exists
     if (!partner) {
       return sendSuccess(res, 200, 'If this email is registered, a reset link has been sent.');
     }
 
-    // Le hash du password actuel sert de nonce — invalide le token dès le changement de mdp
+    // The current password hash acts as a nonce — invalidates the token as soon as the password changes
     const resetToken = jwt.sign(
       { id: partner._id.toString(), purpose: 'pwd-reset', nonce: partner.password?.slice(-8) },
       JWT_SECRET,
@@ -274,11 +274,11 @@ const forgotPassword = async (req, res) => {
 
     const resetLink = `${FRONTEND_URL}/partner/reset-password?token=${resetToken}`;
 
-    // TODO P2: Envoyer resetLink via WhatsApp Business API (provider à sélectionner)
+    // TODO P2: Send resetLink via WhatsApp Business API (provider to be selected)
     console.info(`[PARTNER RESET] Reset link for ${partner.email}: ${resetLink}`);
 
     return sendSuccess(res, 200, 'If this email is registered, a reset link has been sent.', {
-      // Exposé uniquement en développement
+      // Exposed only in development
       ...(process.env.NODE_ENV !== 'production' && { resetLink }),
     });
 
@@ -291,7 +291,7 @@ const forgotPassword = async (req, res) => {
 // ── RESET PASSWORD ────────────────────────────────────────────────────────────
 
 /**
- * Valide le token signé et met à jour le mot de passe.
+ * Validates the signed token and updates the password.
  *
  * @route  POST /api/partners/auth/reset-password/:token
  * @access PUBLIC
@@ -319,7 +319,7 @@ const resetPassword = async (req, res) => {
     const partner = await partnerRepo.findPartnerByIdWithPassword(decoded.id);
     if (!partner) return sendError(res, 404, 'Partner not found.');
 
-    // Vérifier que le nonce correspond — invalide si le mot de passe a déjà été changé
+    // Verify the nonce matches — invalid if the password has already been changed
     if (partner.password?.slice(-8) !== decoded.nonce) {
       return sendError(res, 400, 'Reset token has already been used.');
     }
@@ -364,9 +364,9 @@ const getMe = async (req, res) => {
 // ── UPDATE OWN PROFILE ────────────────────────────────────────────────────────
 
 /**
- * Mise à jour des champs éditables par le partenaire lui-même.
- * Champs autorisés : bio, phone, socialLinks, contacts, organization.
- * Champs protégés (partnerCode, schoolCampus, etc.) : ignorés silencieusement.
+ * Updates the fields editable by the partner themselves.
+ * Allowed fields: bio, phone, socialLinks, contacts, organization.
+ * Protected fields (partnerCode, schoolCampus, etc.): silently ignored.
  *
  * @route  PUT /api/partners/me/profile
  * @access PARTNER
@@ -434,7 +434,7 @@ const changeMyPassword = async (req, res) => {
     const isMatch = await partner.comparePassword(currentPassword);
     if (!isMatch) return sendError(res, 401, 'Current password is incorrect.');
 
-    // Hash manuellement pour contourner le pre-save hook (évite double-hash)
+    // Hash manually to bypass the pre-save hook (avoids double-hashing)
     const salt   = await bcrypt.genSalt(SALT_ROUNDS);
     const hashed = await bcrypt.hash(newPassword, salt);
 
@@ -451,7 +451,7 @@ const changeMyPassword = async (req, res) => {
 // ── UPLOAD PROFILE IMAGE ──────────────────────────────────────────────────────
 
 /**
- * Stocke l'URL Cloudinary renvoyée après upload direct.
+ * Stores the Cloudinary URL returned after direct upload.
  * Body: { profileImageUrl: string }
  *
  * @route  POST /api/partners/me/profile-image

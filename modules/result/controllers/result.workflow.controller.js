@@ -2,9 +2,9 @@
 
 /**
  * @file result.workflow.controller.js
- * @description Gestion du workflow d'état des résultats académiques.
+ * @description Management of the state workflow of academic results.
  *
- *  Endpoints gérés :
+ *  Handled endpoints :
  *  ─────────────────────────────────────────────────────────────────
  *  POST   /api/results/:id/submit         → submitResult
  *  POST   /api/results/submit-batch       → submitBatch
@@ -14,20 +14,20 @@
  *  PATCH  /api/results/lock-semester      → lockSemester
  *  PATCH  /api/results/audit/:id          → auditCorrection
  *
- *  Règles de transition :
+ *  Transition rules :
  *  ─────────────────────────────────────────────────────────────────
- *  DRAFT      → SUBMITTED  (enseignant propriétaire ou manager)
+ *  DRAFT      → SUBMITTED  (owning teacher or manager)
  *  SUBMITTED  → PUBLISHED  (CAMPUS_MANAGER, ADMIN, DIRECTOR)
- *  SUBMITTED  → DRAFT      (renvoi en correction par manager)
+ *  SUBMITTED  → DRAFT      (sent back for correction by manager)
  *  PUBLISHED  → ARCHIVED   (CAMPUS_MANAGER, ADMIN, DIRECTOR)
- *  PUBLISHED  → correction (ADMIN/DIRECTOR uniquement via /audit/:id)
+ *  PUBLISHED  → correction (ADMIN/DIRECTOR only via /audit/:id)
  *
- *  Transaction MongoDB pour la publication des RETAKE :
+ *  MongoDB transaction for RETAKE publication :
  *  ─────────────────────────────────────────────────────────────────
- *  Lors de la publication d'un RETAKE, une session Mongoose garantit
- *  atomiquement que la note originale est bien exclue de la moyenne
- *  (retakeOf est renseigné sur la note originale → retakeOf: null
- *  dans computeGeneralAverage exclut les doublons).
+ *  When publishing a RETAKE, a Mongoose session atomically guarantees
+ *  that the original grade is properly excluded from the average
+ *  (retakeOf is set on the original grade → retakeOf: null
+ *  in computeGeneralAverage excludes the duplicates).
  */
 
 const { randomUUID } = require('crypto');
@@ -37,14 +37,14 @@ const resultRepo = require('../result.repository');
 const notification = require('../../notification').service;
 
 /**
- * Notifie un étudiant (in-app) qu'un résultat vient d'être publié.
- * Fire-and-forget : un échec de notification ne doit jamais bloquer la
- * publication (même contrat que le calcul du risque de décrochage ci-dessous).
+ * Notifies a student (in-app) that a result has just been published.
+ * Fire-and-forget : a notification failure must never block the
+ * publication (same contract as the dropout risk computation below).
  */
 const notifyResultPublished = async (studentId, campusId) => {
   try {
-    // Contact + langue résolus via les façades (le socle ne touche aucun model).
-    // La langue vient de UserPreferences (source unique), pas du model Student.
+    // Contact + language resolved via the facades (the core touches no model).
+    // The language comes from UserPreferences (single source), not the Student model.
     const [contact, locale] = await Promise.all([
       require('../../student').service.getStudentContact(studentId),
       require('../../settings').service.getPreferredLanguage(studentId),
@@ -113,7 +113,7 @@ const submitResult = asyncHandler(async (req, res) => {
 
 /**
  * POST /api/results/submit-batch
- * Soumet en lot tous les DRAFT d'une évaluation → SUBMITTED.
+ * Submits in batch all DRAFT of an evaluation → SUBMITTED.
  *
  * Body : { classId, subjectId, evaluationTitle, academicYear, semester }
  */
@@ -157,13 +157,13 @@ const submitBatch = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/results/:id/publish
- * Publie un résultat SUBMITTED → PUBLISHED.
- * Déclenche le calcul asynchrone du risque de décrochage.
+ * Publishes a result SUBMITTED → PUBLISHED.
+ * Triggers the asynchronous dropout risk computation.
  *
- * [S3-2] Si le résultat est un RETAKE, une transaction garantit que
- * la note originale (retakeOf) est bien exclue de la moyenne générale
- * par le filtre retakeOf: null dans computeGeneralAverage.
- * Le lien retakeOf doit avoir été renseigné à la création du RETAKE.
+ * [S3-2] If the result is a RETAKE, a transaction guarantees that
+ * the original grade (retakeOf) is properly excluded from the general average
+ * by the retakeOf: null filter in computeGeneralAverage.
+ * The retakeOf link must have been set at the RETAKE creation.
  */
 const publishResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
@@ -183,26 +183,26 @@ const publishResult = asyncHandler(async (req, res) => {
     return sendError(res, 400,
       `Result must be SUBMITTED before publishing. Current status: ${resultDoc.status}`);
 
-  // ── [S3-2] Transaction pour les RETAKE ───────────────────────────────────
+  // ── [S3-2] Transaction for RETAKE ────────────────────────────────────────
   if (resultDoc.evaluationType === 'RETAKE' && resultDoc.retakeOf) {
     const session = await resultRepo.startSession();
     try {
       await session.withTransaction(async () => {
-        // 1. Publier le RETAKE
+        // 1. Publish the RETAKE
         resultDoc.status            = RESULT_STATUS.PUBLISHED;
         resultDoc.publishedAt       = new Date();
         resultDoc.publishedBy       = req.user.id;
         resultDoc.verificationToken = randomUUID();
         await resultRepo.saveResultDoc(resultDoc, { session });
 
-        // 2. S'assurer que la note originale a bien retakeOf renseigné
-        //    (normalement fait à la création, mais on le vérifie ici)
+        // 2. Ensure the original grade has retakeOf properly set
+        //    (normally done at creation, but we verify it here)
         const original = await resultRepo.findResultById(resultDoc.retakeOf, { session });
         if (original && !original.retakeOf) {
-          // La note originale est correctement liée — elle sera exclue de
-          // computeGeneralAverage via le filtre retakeOf: null
-          // Aucune modification nécessaire si retakeOf est null sur l'original
-          // (c'est le RETAKE qui porte retakeOf, pas l'original)
+          // The original grade is correctly linked — it will be excluded from
+          // computeGeneralAverage via the retakeOf: null filter
+          // No modification needed if retakeOf is null on the original
+          // (it is the RETAKE that carries retakeOf, not the original)
         }
       });
       session.endSession();
@@ -219,12 +219,12 @@ const publishResult = asyncHandler(async (req, res) => {
     await resultRepo.saveResultDoc(resultDoc);
   }
 
-  // Calcul asynchrone du risque de décrochage (fire-and-forget)
+  // Asynchronous dropout risk computation (fire-and-forget)
   resultRepo.computeDropoutRisk(resultDoc.student, resultDoc.schoolCampus)
     .then((risk) => resultRepo.setDropoutRiskScore(resultDoc._id, risk))
     .catch((err) => console.error('[DropoutRisk] computation failed:', err.message));
 
-  // Notification in-app à l'étudiant (fire-and-forget)
+  // In-app notification to the student (fire-and-forget)
   notifyResultPublished(resultDoc.student, resultDoc.schoolCampus);
 
   return sendSuccess(res, 200, 'Result published. Student can now view this result.', resultDoc);
@@ -234,8 +234,8 @@ const publishResult = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/results/publish-batch
- * Publie en lot tous les SUBMITTED d'une évaluation → PUBLISHED.
- * Chaque résultat reçoit un verificationToken unique.
+ * Publishes in batch all SUBMITTED of an evaluation → PUBLISHED.
+ * Each result receives a unique verificationToken.
  *
  * Body : { classId, subjectId, evaluationTitle, academicYear, semester }
  */
@@ -261,7 +261,7 @@ const publishBatch = asyncHandler(async (req, res) => {
     ...campusFilter,
   };
 
-  // On doit itérer pour déclencher pre-save (verificationToken + gradeBand)
+  // We must iterate to trigger pre-save (verificationToken + gradeBand)
   const toPublish = await resultRepo.findResultsForWrite(filter);
   const now = new Date();
 
@@ -281,7 +281,7 @@ const publishBatch = asyncHandler(async (req, res) => {
     resultRepo.computeDropoutRisk(r.student, r.schoolCampus)
       .then((risk) => resultRepo.setDropoutRiskScore(r._id, risk))
       .catch((err) => console.error('[DropoutRisk] batch computation failed:', err.message));
-    // Une seule notification in-app par étudiant (évite le spam multi-matières)
+    // A single in-app notification per student (avoids multi-subject spam)
     notifyResultPublished(r.student, r.schoolCampus);
   }
 
@@ -324,9 +324,9 @@ const archiveResult = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/results/lock-semester
- * Clôture un semestre :
- *   1. Verrouille tous les résultats PUBLISHED et ARCHIVED (periodLocked = true)
- *   2. Génère un FinalTranscript par étudiant [S2-1]
+ * Closes a semester :
+ *   1. Locks all PUBLISHED and ARCHIVED results (periodLocked = true)
+ *   2. Generates one FinalTranscript per student [S2-1]
  *
  * Body : { academicYear, semester, schoolCampus? }
  */
@@ -349,17 +349,17 @@ const lockSemester = asyncHandler(async (req, res) => {
     ...campusFilter,
   };
 
-  // ── 1. Verrouillage des résultats ─────────────────────────────────────────
+  // ── 1. Locking of results ─────────────────────────────────────────────────
   const { modifiedCount } = await resultRepo.updateManyResults(
     lockMatch,
     { $set: { periodLocked: true } }
   );
 
-  // ── 2. [S2-1] Génération des FinalTranscripts ─────────────────────────────
-  // Une seule agrégation : étudiants distincts avec classId et campusId
+  // ── 2. [S2-1] Generation of FinalTranscripts ──────────────────────────────
+  // A single aggregation : distinct students with classId and campusId
   const studentDetails = await resultRepo.aggregateDistinctStudentsForLock(lockMatch);
 
-  // Génération en parallèle (limité à 10 simultanés pour éviter les timeouts)
+  // Parallel generation (limited to 10 concurrent to avoid timeouts)
   const BATCH = 10;
   let transcriptsGenerated = 0;
   let transcriptErrors     = 0;
@@ -402,10 +402,10 @@ const lockSemester = asyncHandler(async (req, res) => {
 
 /**
  * PATCH /api/results/audit/:id
- * Correction post-publication. Réservée ADMIN/DIRECTOR.
- * Toute modification est tracée dans auditLog[] (append-only).
+ * Post-publication correction. Reserved for ADMIN/DIRECTOR.
+ * Every modification is tracked in auditLog[] (append-only).
  *
- * Body : { score?, teacherRemarks?, reason (min 10 chars, obligatoire) }
+ * Body : { score?, teacherRemarks?, reason (min 10 chars, required) }
  */
 const auditCorrection = asyncHandler(async (req, res) => {
   const { id } = req.params;

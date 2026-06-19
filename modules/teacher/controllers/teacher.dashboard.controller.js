@@ -20,8 +20,8 @@
 const mongoose = require('mongoose');
 
 const teacherRepo    = require('../teacher.repository');
-const studentService = require('../../student').service; // façade module student (§3)
-const examService    = require('../../exam').service; // façade module exam (§3)
+const studentService = require('../../student').service; // student module facade (§3)
+const examService    = require('../../exam').service; // exam module facade (§3)
 const {
   sendSuccess,
   sendError,

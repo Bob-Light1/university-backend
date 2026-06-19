@@ -26,10 +26,10 @@ const { AUDIT_ACTION }     = require('../models/document.audit.model');
 const documentService      = require('../services/document.service');
 const { validateContentBlocks, validateTemplateData } = require('../services/document.validation.service');
 
-const { getStudentForDocument, listClassStudentsForList } = require('../../student').service; // façade module student (§3)
-const { getTeacherForPayslip } = require('../../teacher').service; // façade module teacher (§3)
-const { getClassForDocumentList } = require('../../class').service; // façade module class (§3)
-// Require paresseux : document est dans la cloture statique de campus (via staff)
+const { getStudentForDocument, listClassStudentsForList } = require('../../student').service; // student module facade (§3)
+const { getTeacherForPayslip } = require('../../teacher').service; // teacher module facade (§3)
+const { getClassForDocumentList } = require('../../class').service; // class module facade (§3)
+// Lazy require: document is in the static closure of campus (via staff)
 const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const {
@@ -332,7 +332,7 @@ const generateClassList = asyncHandler(async (req, res) => {
 
   if (!classDoc) return sendNotFound(res, 'Class');
 
-  // Roster depuis la source de vérité (Student.studentClass), pas Class.students[].
+  // Roster from the source of truth (Student.studentClass), not Class.students[].
   const students = await listClassStudentsForList(classDoc._id, req.campusId);
 
   const campus = await getCampusName(req.campusId);

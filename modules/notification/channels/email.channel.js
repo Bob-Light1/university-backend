@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * @file email.channel.js — canal email (SMTP via nodemailer).
+ * @file email.channel.js — email channel (SMTP via nodemailer).
  *
- * INERTE par défaut : si la config SMTP est absente OU si `nodemailer` n'est pas
- * installé, `isConfigured()` renvoie false et le service marque l'envoi `skipped`
- * (jamais d'erreur). Aucun appel réseau n'est tenté en dev / CI / tests.
+ * INERT by default: if the SMTP config is absent OR if `nodemailer` is not
+ * installed, `isConfigured()` returns false and the service marks the send `skipped`
+ * (never an error). No network call is attempted in dev / CI / tests.
  *
- * Le transporteur est créé paresseusement et mis en cache.
+ * The transporter is created lazily and cached.
  */
 
 const config = require('../../../shared/configs/general.config');
 
-// nodemailer est optionnel : on le charge paresseusement pour ne pas casser
-// l'app si la dépendance n'est pas installée (canal simplement inactif).
+// nodemailer is optional: we load it lazily so as not to break the app if the
+// dependency is not installed (the channel is simply inactive).
 let nodemailer = null;
 try {
   nodemailer = require('nodemailer');
@@ -43,7 +43,7 @@ function getTransporter() {
 /**
  * @param {{to: string, subject: string, body: string}} message
  * @returns {Promise<{ok: boolean}>}
- * @throws en cas d'échec SMTP (le service décide du retry).
+ * @throws on SMTP failure (the service decides on the retry).
  */
 const send = async ({ to, subject, body }) => {
   if (!to) throw new Error('Email channel: missing recipient address');
@@ -54,7 +54,7 @@ const send = async ({ to, subject, body }) => {
   return { ok: true };
 };
 
-// Réinitialise le cache du transporteur (utile aux tests).
+// Resets the transporter cache (useful for tests).
 const _reset = () => { transporter = null; };
 
 module.exports = { name: 'email', isConfigured, send, _reset };

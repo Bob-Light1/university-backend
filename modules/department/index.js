@@ -1,15 +1,15 @@
 /**
  * @file index.js — FAÇADE du module department
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3.
+ * Single public entry point for the module — see MODULAR_MONOLITH_MIGRATION.md §3.
  *
- * Départements académiques. Monté sur /api/department.
+ * Academic departments. Mounted on /api/department.
  */
 
 const routes  = require('./department.routes');
 const service = require('./department.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/department', routes)
-  service,  // API inter-modules (vide pour l'instant — voir department.service.js)
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js: app.use('/api/department', routes)
+  service,  // inter-module API (empty for now — see department.service.js)
+  // No model exported. No controller exported.
 };

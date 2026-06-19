@@ -1,29 +1,29 @@
 'use strict';
 
 /**
- * @file teacher.repository.js — couche d'accès aux données du module teacher.
+ * @file teacher.repository.js — data access layer for the teacher module.
  *
- * SEUL fichier autorisé à toucher les 3 models possédés :
+ * ONLY file allowed to touch the 3 owned models:
  *   - Teacher            (teacher.model)
  *   - TeacherSchedule    (teacher.schedule.model)
  *   - TeacherAttendance  (teacher.attend.model)
  *
- * Controllers, service inter-modules et config (hors `Model:` du
- * GenericEntityController) passent exclusivement par lui. Lectures `.lean()`
- * (ou `.lean({ virtuals: true })` là où la sortie historique exposait des
- * virtuals) ; écritures à hook via load→mutate→save, sinon opérateurs
- * atomiques. Les pipelines d'agrégation vivent ici ; l'appelant fournit le
- * `$match` déjà casté en ObjectId. Les filtres d'isolation campus sont
- * construits par l'appelant et passés tels quels.
+ * Controllers, the cross-module service and config (apart from the
+ * GenericEntityController's `Model:`) go through it exclusively. Reads use
+ * `.lean()` (or `.lean({ virtuals: true })` where the historical output
+ * exposed virtuals); hooked writes via load→mutate→save, otherwise atomic
+ * operators. Aggregation pipelines live here; the caller provides the
+ * `$match` already cast to ObjectId. Campus isolation filters are built by
+ * the caller and passed through as-is.
  *
- * Exceptions assumées (restent hors repo) :
- *   - GenericEntityController / GenericBulkController : opèrent sur le Model
- *     fourni par teacher.config.js / teacher.controller (`Model: Teacher`).
- *   - shared/services/profile.service : opère sur le Model passé par
+ * Accepted exceptions (stay outside the repo):
+ *   - GenericEntityController / GenericBulkController: operate on the Model
+ *     provided by teacher.config.js / teacher.controller (`Model: Teacher`).
+ *   - shared/services/profile.service: operates on the Model passed by
  *     teacher.profile.controller.
- *   - Statiques/méthodes d'instance des models (getTeacherStats, toggleStatus,
- *     detectTeacherConflicts, getTeacherCalendar…) : logique métier de la
- *     couche model, invoquée ICI.
+ *   - Model statics/instance methods (getTeacherStats, toggleStatus,
+ *     detectTeacherConflicts, getTeacherCalendar…): business logic of the
+ *     model layer, invoked HERE.
  */
 
 const Teacher           = require('./models/teacher.model');
@@ -33,18 +33,18 @@ const TeacherAttendance = require('./models/teacher.attend.model');
 const SAFE_STAFF = '-password -__v -contractSnapshot';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEACHER — lectures de référence (service inter-modules)
+// TEACHER — reference reads (cross-module service)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Rattachement campus d'un teacher (validation multi-tenant / cross-campus). */
+/** Campus attachment of a teacher (multi-tenant / cross-campus validation). */
 const getTeacherCampusRef = (teacherId) =>
   Teacher.findById(teacherId).select('schoolCampus').lean();
 
-/** Compte les teachers d'un campus parmi une liste d'ids. */
+/** Counts the teachers of a campus among a list of ids. */
 const countTeachersByIdsOnCampus = (teacherIds, campusId) =>
   Teacher.countDocuments({ _id: { $in: teacherIds }, schoolCampus: campusId });
 
-/** Compte les teachers non archivés d'un campus (borne createdAt optionnelle). */
+/** Counts the non-archived teachers of a campus (optional createdAt bound). */
 const countActiveTeachers = (campusId, { createdSince } = {}) =>
   Teacher.countDocuments({
     schoolCampus: campusId,
@@ -52,15 +52,15 @@ const countActiveTeachers = (campusId, { createdSince } = {}) =>
     ...(createdSince ? { createdAt: { $gte: createdSince } } : {}),
   });
 
-/** Compte les teachers non archivés d'un département (garde d'archivage). */
+/** Counts the non-archived teachers of a department (archival guard). */
 const countActiveInDepartment = (departmentId) =>
   Teacher.countDocuments({ department: departmentId, status: { $ne: 'archived' } });
 
-/** Teacher complet (lean) d'un campus — fiche de paie. */
+/** Full teacher (lean) of a campus — payslip. */
 const getTeacherForPayslip = (teacherId, campusId) =>
   Teacher.findOne({ _id: teacherId, schoolCampus: campusId }).lean();
 
-/** Référence dénormalisable d'un teacher actif d'un campus (forme teacher{}). */
+/** Denormalizable reference of an active teacher of a campus (teacher{} shape). */
 const findActiveTeacherRef = (teacherId, campusId) =>
   Teacher.findOne({
     _id:          teacherId,
@@ -71,10 +71,10 @@ const findActiveTeacherRef = (teacherId, campusId) =>
     .lean();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEACHER — listings paginés (service inter-modules)
+// TEACHER — paginated listings (cross-module service)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Listing staff : classes + subjects peuplés, tri alphabétique, virtuals. */
+/** Staff listing: classes + subjects populated, alphabetical sort, virtuals. */
 const paginateStaffTeachers = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     Teacher.find(filter)
@@ -88,7 +88,7 @@ const paginateStaffTeachers = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Listing dashboard campus : tri par date de création desc, sans populate. */
+/** Campus dashboard listing: sort by creation date desc, no populate. */
 const paginateCampusDashboardTeachers = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     Teacher.find(filter)
@@ -101,10 +101,10 @@ const paginateCampusDashboardTeachers = async (filter, { skip, limit }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEACHER — écritures & accès controller (auth / suppression)
+// TEACHER — writes & controller access (auth / deletion)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Doc teacher pour login (mot de passe + department/subjects/campus peuplés). */
+/** Teacher doc for login (password + department/subjects/campus populated). */
 const findTeacherForLogin = (query) =>
   Teacher.findOne(query)
     .select('+password')
@@ -112,41 +112,41 @@ const findTeacherForLogin = (query) =>
     .populate('subjects',     'subject_name')
     .populate('schoolCampus', 'campus_name');
 
-/** MAJ atomique de lastLogin (n'exécute pas les hooks de save). */
+/** Atomic update of lastLogin (does not run save hooks). */
 const touchLastLogin = (id) =>
   Teacher.updateOne({ _id: id }, { $set: { lastLogin: new Date() } });
 
-/** Doc teacher avec mot de passe (changement de mot de passe). */
+/** Teacher doc with password (password change). */
 const findTeacherByIdWithPassword = (id) =>
   Teacher.findById(id).select('+password');
 
-/** Doc teacher complet par id (suppression définitive : besoin de profileImage). */
+/** Full teacher doc by id (permanent deletion: needs profileImage). */
 const findTeacherDocById = (id) => Teacher.findById(id);
 
-/** Persiste un doc teacher (déclenche pre('validate')/pre('save')). */
+/** Persists a teacher doc (triggers pre('validate')/pre('save')). */
 const saveTeacherDoc = (doc) => doc.save();
 
-/** Suppression définitive d'un teacher. */
+/** Permanent deletion of a teacher. */
 const deleteTeacherById = (id) => Teacher.findByIdAndDelete(id);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEACHER — accès config GenericEntityController (session-aware)
+// TEACHER — GenericEntityController config access (session-aware)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Unicité matricule dans un campus (validation de création, en session). */
+/** Matricule uniqueness within a campus (creation validation, in session). */
 const findTeacherByMatriculeInCampus = (matricule, campusId, { session } = {}) =>
   Teacher.findOne({ matricule, schoolCampus: campusId })
     .select('_id')
     .session(session ?? null)
     .lean();
 
-/** Unicité matricule hors d'un id (validation de mise à jour). */
+/** Matricule uniqueness excluding an id (update validation). */
 const findTeacherByMatriculeExcluding = (matricule, campusId, excludeId) =>
   Teacher.findOne({ matricule, schoolCampus: campusId, _id: { $ne: excludeId } })
     .select('_id')
     .lean();
 
-/** Compteur de teachers d'un campus (génération de matricule, en session). */
+/** Teacher count of a campus (matricule generation, in session). */
 const countTeachersInCampus = (campusId, { session } = {}) =>
   Teacher.countDocuments({ schoolCampus: campusId }).session(session ?? null);
 
@@ -154,7 +154,7 @@ const countTeachersInCampus = (campusId, { session } = {}) =>
 // TEACHER — dashboard self-service
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Profil d'en-tête du dashboard (subjects/classes/department/campus peuplés). */
+/** Dashboard header profile (subjects/classes/department/campus populated). */
 const findTeacherDashboardProfile = (teacherId) =>
   Teacher.findById(teacherId)
     .populate('subjects',     'subject_name subject_code')
@@ -167,12 +167,12 @@ const findTeacherDashboardProfile = (teacherId) =>
 // TEACHER SCHEDULE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Compteur de sessions TeacherSchedule (génération de référence de miroir). */
+/** Count of TeacherSchedule sessions (mirror reference generation). */
 const countTeacherSchedules = () => TeacherSchedule.countDocuments();
 
 /**
- * Upsert du miroir TeacherSchedule d'une session StudentSchedule (clé :
- * studentScheduleRef). `reference` n'est écrite qu'à la création ($setOnInsert).
+ * Upsert of the TeacherSchedule mirror of a StudentSchedule session (key:
+ * studentScheduleRef). `reference` is only written on creation ($setOnInsert).
  */
 const upsertTeacherScheduleMirror = (studentScheduleRef, setPayload, reference) =>
   TeacherSchedule.findOneAndUpdate(
@@ -181,7 +181,7 @@ const upsertTeacherScheduleMirror = (studentScheduleRef, setPayload, reference) 
     { upsert: true, new: true, setDefaultsOnInsert: true }
   );
 
-/** Upsert d'une entrée TeacherSchedule par référence (miroir examens). */
+/** Upsert of a TeacherSchedule entry by reference (exams mirror). */
 const upsertTeacherScheduleByReference = (reference, fields) =>
   TeacherSchedule.findOneAndUpdate(
     { reference },
@@ -189,15 +189,15 @@ const upsertTeacherScheduleByReference = (reference, fields) =>
     { upsert: true, new: true }
   );
 
-/** MAJ d'une entrée TeacherSchedule par référence. */
+/** Update of a TeacherSchedule entry by reference. */
 const updateTeacherScheduleByReference = (reference, fields) =>
   TeacherSchedule.findOneAndUpdate({ reference }, { $set: fields });
 
-/** Détection de double réservation d'un teacher (statique du model). */
+/** Double-booking detection for a teacher (model static). */
 const detectTeacherConflicts = (params) =>
   TeacherSchedule.detectTeacherConflicts(params);
 
-/** Planning paginé du portail staff (subject/classes/teacher peuplés). */
+/** Paginated staff portal schedule (subject/classes/teacher populated). */
 const paginateStaffTeacherSchedules = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     TeacherSchedule.find(filter)
@@ -212,9 +212,9 @@ const paginateStaffTeacherSchedules = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-// — dashboard (sessions PUBLISHED de l'enseignant) —
+// — dashboard (the teacher's PUBLISHED sessions) —
 
-/** Sessions publiées du jour (tri startTime). */
+/** Published sessions of the day (sorted by startTime). */
 const listTeacherTodaySessions = (teacherId, { gte, lte }) =>
   TeacherSchedule.find({
     'teacher.teacherId': teacherId,
@@ -223,7 +223,7 @@ const listTeacherTodaySessions = (teacherId, { gte, lte }) =>
     startTime: { $gte: gte, $lte: lte },
   }).sort({ startTime: 1 }).lean();
 
-/** Sessions publiées à venir (fenêtre exclusive début, limit). */
+/** Upcoming published sessions (start-exclusive window, limit). */
 const listTeacherUpcomingSessions = (teacherId, { gt, lte, limit }) =>
   TeacherSchedule.find({
     'teacher.teacherId': teacherId,
@@ -232,7 +232,7 @@ const listTeacherUpcomingSessions = (teacherId, { gt, lte, limit }) =>
     startTime: { $gt: gt, $lte: lte },
   }).sort({ startTime: 1 }).limit(limit).lean();
 
-/** Appels en retard : sessions publiées passées non soumises (limit). */
+/** Overdue roll-calls: past published sessions not submitted (limit). */
 const listTeacherPendingRollCalls = (teacherId, { lt, limit }) =>
   TeacherSchedule.find({
     'teacher.teacherId':  teacherId,
@@ -243,8 +243,8 @@ const listTeacherPendingRollCalls = (teacherId, { lt, limit }) =>
   }).sort({ startTime: -1 }).limit(limit).lean();
 
 /**
- * Charge horaire de l'année (agrégat dashboard). `teacherOid` déjà casté par
- * l'appelant.
+ * Yearly workload (dashboard aggregate). `teacherOid` already cast by the
+ * caller.
  */
 const aggregateTeacherWorkload = ({ teacherOid, academicYear }) =>
   TeacherSchedule.aggregate([
@@ -267,34 +267,34 @@ const aggregateTeacherWorkload = ({ teacherOid, academicYear }) =>
     },
   ]);
 
-// — calendrier / workload (statiques du model) —
+// — calendar / workload (model statics) —
 
-/** Calendrier de l'enseignant sur une fenêtre (statique du model). */
+/** Teacher's calendar over a window (model static). */
 const getTeacherCalendar = (teacherId, start, end, opts) =>
   TeacherSchedule.getTeacherCalendar(teacherId, start, end, opts);
 
-/** Résumé de charge horaire (statique du model). */
+/** Workload summary (model static). */
 const getWorkloadSummary = (teacherId, periodLabel, periodType) =>
   TeacherSchedule.getWorkloadSummary(teacherId, periodLabel, periodType);
 
-// — lectures / écritures de sessions (controller) —
+// — session reads / writes (controller) —
 
-/** Détail d'une session non supprimée (lecture, accès enseignant/admin). */
+/** Detail of a non-deleted session (read, teacher/admin access). */
 const findScheduleSessionLean = (id) =>
   TeacherSchedule.findOne({ _id: id, isDeleted: false }).lean();
 
-/** Doc session non supprimée pour écriture (roll-call / report). */
+/** Non-deleted session doc for writing (roll-call / postponement). */
 const findScheduleSessionForWrite = (id) =>
   TeacherSchedule.findOne({ _id: id, isDeleted: false });
 
-/** Doc session portant une demande de report donnée (review). */
+/** Session doc carrying a given postponement request (review). */
 const findScheduleByPostponementRequest = (requestId) =>
   TeacherSchedule.findOne({ 'postponementRequests._id': requestId, isDeleted: false });
 
-/** Persiste un doc session (déclenche pre('save') : référence, durée…). */
+/** Persists a session doc (triggers pre('save'): reference, duration…). */
 const saveScheduleDoc = (doc) => doc.save();
 
-/** Sessions d'un campus portant une demande de report d'un statut donné. */
+/** Sessions of a campus carrying a postponement request of a given status. */
 const listSchedulesWithPostponements = (campusFilter, status) =>
   TeacherSchedule.find({
     ...campusFilter,
@@ -304,7 +304,7 @@ const listSchedulesWithPostponements = (campusFilter, status) =>
     .select('reference teacher subject startTime endTime postponementRequests')
     .lean();
 
-/** Doc profil de disponibilité de l'enseignant (écriture). */
+/** Teacher's availability profile doc (write). */
 const findAvailabilityProfileForWrite = (teacherId) =>
   TeacherSchedule.findOne({
     'teacher.teacherId': teacherId,
@@ -313,7 +313,7 @@ const findAvailabilityProfileForWrite = (teacherId) =>
     isDeleted:           false,
   });
 
-/** Créneaux de disponibilité de l'enseignant (lecture projetée). */
+/** Teacher's availability slots (projected read). */
 const findAvailabilityProfile = (teacherId) =>
   TeacherSchedule.findOne(
     {
@@ -324,10 +324,10 @@ const findAvailabilityProfile = (teacherId) =>
     { availabilitySlots: 1 }
   ).lean();
 
-/** Construit un nouveau doc TeacherSchedule (profil de disponibilité). */
+/** Builds a new TeacherSchedule doc (availability profile). */
 const newTeacherScheduleDoc = (payload) => new TeacherSchedule(payload);
 
-/** Overview paginé des sessions d'un enseignant (admin). Filtre composé amont. */
+/** Paginated overview of a teacher's sessions (admin). Filter composed upstream. */
 const paginateTeacherSessions = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     TeacherSchedule.find(filter)
@@ -338,7 +338,7 @@ const paginateTeacherSessions = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Rapport de charge horaire de tous les enseignants (agrégat, paie). */
+/** Workload report for all teachers (aggregate, payroll). */
 const aggregateAllTeachersWorkload = (matchStage) =>
   TeacherSchedule.aggregate([
     { $match: matchStage },
@@ -391,19 +391,19 @@ const aggregateAllTeachersWorkload = (matchStage) =>
   ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEACHER ATTENDANCE — écritures & lectures (controller)
+// TEACHER ATTENDANCE — writes & reads (controller)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Doc record de présence existant pour une session/date (init : écriture). */
+/** Existing attendance record doc for a session/date (init: write). */
 const findTeacherAttendanceForWrite = (filter) => TeacherAttendance.findOne(filter);
 
-/** Crée un record de présence enseignant. */
+/** Creates a teacher attendance record. */
 const createTeacherAttendance = (payload) => TeacherAttendance.create(payload);
 
-/** Persiste un doc record (déclenche les hooks de save). */
+/** Persists a record doc (triggers save hooks). */
 const saveAttendanceDoc = (doc) => doc.save();
 
-/** Records de présence d'une session (teacher/replacement/class/schedule peuplés). */
+/** Attendance records of a session (teacher/replacement/class/schedule populated). */
 const listSessionAttendanceRecords = (filter) =>
   TeacherAttendance.find(filter)
     .populate('teacher',            'firstName lastName email profileImage employmentType')
@@ -413,14 +413,14 @@ const listSessionAttendanceRecords = (filter) =>
     .sort({ attendanceDate: -1 })
     .lean();
 
-/** Doc record de présence scopé (toggle / justification / replacement / paid). */
+/** Scoped attendance record doc (toggle / justification / replacement / paid). */
 const findAttendanceRecordScoped = (filter) => TeacherAttendance.findOne(filter);
 
-/** Verrouillage quotidien des présences (statique du model). */
+/** Daily attendance lock (model static). */
 const lockDailyTeacherAttendance = (targetDate, campusId) =>
   TeacherAttendance.lockDailyAttendance(targetDate, campusId);
 
-/** Records de présence de l'enseignant connecté (schedule/class peuplés). */
+/** Attendance records of the logged-in teacher (schedule/class populated). */
 const listMyAttendanceRecords = (filter) =>
   TeacherAttendance.find(filter)
     .populate('schedule', 'startTime endTime')
@@ -428,15 +428,15 @@ const listMyAttendanceRecords = (filter) =>
     .sort({ attendanceDate: -1 })
     .lean();
 
-/** Stats de présence d'un enseignant (statique du model). */
+/** Attendance stats of a teacher (model static). */
 const getTeacherAttendanceStats = (teacherId, academicYear, semester, period) =>
   TeacherAttendance.getTeacherStats(teacherId, academicYear, semester, period);
 
-/** Stats de présence d'un campus (statique du model). */
+/** Attendance stats of a campus (model static). */
 const getCampusAttendanceStats = (campusId, date, period) =>
   TeacherAttendance.getCampusStats(campusId, date, period);
 
-/** Rapport de paie (agrégat). L'appelant fournit le $match. */
+/** Payroll report (aggregate). The caller provides the $match. */
 const aggregatePayrollReport = (matchStage) =>
   TeacherAttendance.aggregate([
     { $match: matchStage },
@@ -472,8 +472,8 @@ const aggregatePayrollReport = (matchStage) =>
   ]);
 
 /**
- * Overview de présence d'un campus (paginé + KPIs sur le périmètre complet).
- * `filter` = affichage ; `summaryFilter` = périmètre sans statut.
+ * Attendance overview of a campus (paginated + KPIs over the full scope).
+ * `filter` = display; `summaryFilter` = scope without status.
  */
 const attendanceCampusOverview = async (filter, summaryFilter, { skip, limit }) => {
   const [records, total, presentCount] = await Promise.all([
@@ -490,7 +490,7 @@ const attendanceCampusOverview = async (filter, summaryFilter, { skip, limit }) 
   return { records, total, presentCount };
 };
 
-/** Sessions d'un enseignant sur une journée (pending : sessions non pointées). */
+/** A teacher's sessions over a day (pending: unrecorded sessions). */
 const listTeacherSessionsForPending = ({ teacherId, dayStart, dayEnd, campusFilter }) =>
   TeacherSchedule.find({
     'teacher.teacherId': teacherId,
@@ -499,7 +499,7 @@ const listTeacherSessionsForPending = ({ teacherId, dayStart, dayEnd, campusFilt
     ...campusFilter,
   }).lean();
 
-/** Ids des sessions déjà pointées (pending). */
+/** Ids of sessions already recorded (pending). */
 const findRecordedScheduleIds = ({ teacher, scheduleIds, dayStart, dayEnd }) =>
   TeacherAttendance.find({
     teacher,
@@ -515,10 +515,10 @@ module.exports = {
   countActiveInDepartment,
   getTeacherForPayslip,
   findActiveTeacherRef,
-  // Teacher — listings paginés
+  // Teacher — paginated listings
   paginateStaffTeachers,
   paginateCampusDashboardTeachers,
-  // Teacher — écritures & controller
+  // Teacher — writes & controller
   findTeacherForLogin,
   touchLastLogin,
   findTeacherByIdWithPassword,

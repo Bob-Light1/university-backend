@@ -215,7 +215,7 @@ const updatePassword = async (req, res) => {
       return sendError(res, 400, 'New password must differ from the current password.');
     }
 
-    // Hash le nouveau mot de passe et l'écrit directement (bypass du pre-save).
+    // Hash the new password and write it directly (bypasses pre-save).
     const salt   = await bcrypt.genSalt(SALT_ROUNDS);
     const hashed = await bcrypt.hash(newPassword, salt);
     await parentRepo.updatePassword(parent._id, hashed);

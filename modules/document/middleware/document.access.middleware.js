@@ -18,10 +18,10 @@
  * Role-specific scope enforcement (TEACHER, STUDENT, PARENT) is also applied here.
  */
 
-const mongoose = require('mongoose'); // conservé pour ObjectId.isValid
+const mongoose = require('mongoose'); // kept for ObjectId.isValid
 const repo = require('../document.repository');
-// require paresseux de la façade course (évite tout cycle au chargement :
-// document est chargé très tôt via server.js).
+// Lazy require of the course facade (avoids any cycle at load time:
+// document is loaded very early via server.js).
 const courseService = () => require('../../course').service;
 const { sendError, sendForbidden, sendNotFound } = require('../../../shared/utils/response-helpers');
 const { RESTRICTED_DOCUMENT_TYPES, DOCUMENT_STATUS } = require('../models/document.model');

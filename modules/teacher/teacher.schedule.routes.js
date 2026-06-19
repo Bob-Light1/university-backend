@@ -25,7 +25,7 @@ const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { apiLimiter }              = require('../../shared/middleware/rate-limiter');
 
 const {
-  // Enseignant
+  // Teacher
   getMyTeacherCalendar,
   getTeacherSessionById,
   openRollCall,
@@ -49,13 +49,13 @@ router.use(authenticate);
 router.use(apiLimiter);
 
 // ─────────────────────────────────────────────
-// ANALYTICS ADMIN (avant /:id)
+// ANALYTICS ADMIN (before /:id)
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/teacher/admin/workload
- * Rapport de charge horaire global pour la paie.
- * Query : periodType (WEEKLY|MONTHLY), periodLabel, campusId?, department?
+ * Global workload report for payroll.
+ * Query: periodType (WEEKLY|MONTHLY), periodLabel, campusId?, department?
  */
 router.get(
   '/admin/workload',
@@ -65,8 +65,8 @@ router.get(
 
 /**
  * GET /api/schedules/teacher/admin/postponements
- * Liste les demandes de report pour le campus (filtrées par statut).
- * Query : status (PENDING|APPROVED|REJECTED), page, limit
+ * Lists postponement requests for the campus (filtered by status).
+ * Query: status (PENDING|APPROVED|REJECTED), page, limit
  */
 router.get(
   '/admin/postponements',
@@ -76,8 +76,8 @@ router.get(
 
 /**
  * GET /api/schedules/teacher/admin/:teacherId/sessions
- * Toutes les séances d'un enseignant spécifique (vue admin).
- * Query : from, to, status?, page, limit, includeAllStatuses
+ * All sessions of a specific teacher (admin view).
+ * Query: from, to, status?, page, limit, includeAllStatuses
  */
 router.get(
   '/admin/:teacherId/sessions',
@@ -87,8 +87,8 @@ router.get(
 
 /**
  * PATCH /api/schedules/teacher/admin/postpone/:requestId/review
- * Le Campus Manager approuve ou rejette une demande de report.
- * Body : { status: 'APPROVED' | 'REJECTED', reviewNote? }
+ * The Campus Manager approves or rejects a postponement request.
+ * Body: { status: 'APPROVED' | 'REJECTED', reviewNote? }
  */
 router.patch(
   '/admin/postpone/:requestId/review',
@@ -97,13 +97,13 @@ router.patch(
 );
 
 // ─────────────────────────────────────────────
-// SELF-SERVICE ENSEIGNANT — CALENDRIER
+// TEACHER SELF-SERVICE — CALENDAR
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/teacher/me
- * Emploi du temps de l'enseignant connecté + charge hebdomadaire.
- * Query : from?, to?, sessionType?, includeAllStatuses?
+ * Schedule of the logged-in teacher + weekly workload.
+ * Query: from?, to?, sessionType?, includeAllStatuses?
  */
 router.get(
   '/me',
@@ -113,8 +113,8 @@ router.get(
 
 /**
  * GET /api/schedules/teacher/me/workload
- * Résumé de charge horaire (heures planifiées vs délivrées).
- * Query : periodType (WEEKLY|MONTHLY), periodLabel?
+ * Workload summary (planned vs. delivered hours).
+ * Query: periodType (WEEKLY|MONTHLY), periodLabel?
  */
 router.get(
   '/me/workload',
@@ -123,12 +123,12 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// SELF-SERVICE ENSEIGNANT — DISPONIBILITÉS
+// TEACHER SELF-SERVICE — AVAILABILITY
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/teacher/availability
- * Retourne les créneaux de disponibilité de l'enseignant connecté.
+ * Returns the availability slots of the logged-in teacher.
  */
 router.get(
   '/availability',
@@ -138,8 +138,8 @@ router.get(
 
 /**
  * PUT /api/schedules/teacher/availability
- * Soumet ou remplace toutes les préférences de disponibilité (idempotent).
- * Body : { slots: [{ day, startHour, endHour, isAvailable, reason? }],
+ * Submits or replaces all availability preferences (idempotent).
+ * Body: { slots: [{ day, startHour, endHour, isAvailable, reason? }],
  *           academicYear?, semester? }
  */
 router.put(
@@ -149,12 +149,12 @@ router.put(
 );
 
 // ─────────────────────────────────────────────
-// APPEL (roll-call) — lié à une séance
+// ROLL-CALL — tied to a session
 // ─────────────────────────────────────────────
 
 /**
  * PATCH /api/schedules/teacher/:id/rollcall/open
- * Ouvre l'appel pour une séance.
+ * Opens the roll-call for a session.
  */
 router.patch(
   '/:id/rollcall/open',
@@ -164,8 +164,8 @@ router.patch(
 
 /**
  * PATCH /api/schedules/teacher/:id/rollcall/submit
- * Verrouille l'appel avec les comptages de présence.
- * Body : { present, absent, late }
+ * Locks the roll-call with the attendance counts.
+ * Body: { present, absent, late }
  */
 router.patch(
   '/:id/rollcall/submit',
@@ -175,7 +175,7 @@ router.patch(
 
 /**
  * GET /api/schedules/teacher/:id/students
- * Retourne la liste des étudiants pour une séance (interface d'appel).
+ * Returns the list of students for a session (roll-call interface).
  */
 router.get(
   '/:id/students',
@@ -184,13 +184,13 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// DEMANDE DE REPORT (enseignant)
+// POSTPONEMENT REQUEST (teacher)
 // ─────────────────────────────────────────────
 
 /**
  * POST /api/schedules/teacher/:id/postpone
- * L'enseignant soumet une demande de report.
- * Body : { reason (min 10 chars), proposedStart?, proposedEnd? }
+ * The teacher submits a postponement request.
+ * Body: { reason (min 10 chars), proposedStart?, proposedEnd? }
  */
 router.post(
   '/:id/postpone',
@@ -199,14 +199,14 @@ router.post(
 );
 
 // ─────────────────────────────────────────────
-// LECTURE UNIQUE — séance (après les routes nommées)
+// SINGLE READ — session (after the named routes)
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/teacher/:id
- * Détails d'une séance avec équipement salle.
- * Un enseignant ne peut accéder qu'à ses propres séances ;
- * les admins voient tout (contrôle dans le controller).
+ * Details of a session with room equipment.
+ * A teacher can only access their own sessions;
+ * admins see everything (checked in the controller).
  */
 router.get(
   '/:id',

@@ -2,10 +2,10 @@
 
 /**
  * @file quiz.question.model.js
- * @description Questions du quiz public de pré-inscription.
+ * @description Questions for the public pre-registration quiz.
  *
- * Invariant de sécurité : correctIndex est select:false — jamais exposé au portail.
- * Campus isolation : schoolCampus obligatoire sur chaque document.
+ * Security invariant: correctIndex is select:false — never exposed to the portal.
+ * Campus isolation: schoolCampus required on every document.
  */
 
 const mongoose = require('mongoose');
@@ -24,7 +24,7 @@ const quizQuestionSchema = new mongoose.Schema(
       required: [true, 'Category is required'],
       trim:     true,
       lowercase: true,
-      // Exemples : 'web', 'accounting', 'marketing', 'general'
+      // Examples: 'web', 'accounting', 'marketing', 'general'
     },
 
     text: {
@@ -34,7 +34,7 @@ const quizQuestionSchema = new mongoose.Schema(
       maxlength: [500, 'Question text must not exceed 500 characters'],
     },
 
-    // 4 options (A, B, C, D) — ordre fixe
+    // 4 options (A, B, C, D) — fixed order
     options: {
       type:     [String],
       required: true,
@@ -44,7 +44,7 @@ const quizQuestionSchema = new mongoose.Schema(
       },
     },
 
-    // Index (0–3) de la bonne réponse — JAMAIS exposé au portail
+    // Index (0–3) of the correct answer — NEVER exposed to the portal
     correctIndex: {
       type:     Number,
       required: [true, 'correctIndex is required'],

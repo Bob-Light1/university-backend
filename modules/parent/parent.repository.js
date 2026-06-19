@@ -19,7 +19,7 @@ const RESPONSE_SELECT = '-password -__v';
 const NO_NOTES_SELECT = '-password -__v -notes';
 const NOT_ARCHIVED = { $ne: 'archived' };
 
-// Cast schoolCampus → ObjectId pour les pipelines d'agrégation ($match strict).
+// Cast schoolCampus → ObjectId for aggregation pipelines ($match strict mode).
 const castCampus = (filter) => {
   if (!filter.schoolCampus) return filter;
   return { ...filter, schoolCampus: new mongoose.Types.ObjectId(String(filter.schoolCampus)) };
@@ -55,7 +55,7 @@ const updateProfileImage = (id, url) =>
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
-/** Crée un parent (Parent.create → hooks pre-save/validate). @returns {Promise<Document>} */
+/** Creates a parent (Parent.create → pre-save/validate hooks). @returns {Promise<Document>} */
 const create = (data) => Parent.create(data);
 
 const findByIdForResponse = (id) =>
@@ -112,7 +112,7 @@ const setStatusScoped = (id, campusFilter, status) =>
     { new: true },
   ).select(NO_NOTES_SELECT).lean({ virtuals: true });
 
-/** Parent actif dans la portée (préconditions : _id, schoolCampus). */
+/** Active parent within the scope (preconditions: _id, schoolCampus). */
 const findActiveScoped = (id, campusFilter) =>
   Parent.findOne({ _id: id, ...campusFilter, status: NOT_ARCHIVED }).lean();
 

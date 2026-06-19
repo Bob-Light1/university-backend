@@ -14,7 +14,7 @@
 
 const mongoose     = require('mongoose');
 const studentRepo  = require('../student.repository');
-const classService = require('../../class').service; // façade module class (§3)
+const classService = require('../../class').service; // class module facade (§3)
 
 const {
   asyncHandler,
@@ -242,7 +242,7 @@ const getMyStats = asyncHandler(async (req, res) => {
   if (!academicYear) return sendError(res, 400, 'academicYear is required.');
   if (!semester)     return sendError(res, 400, 'semester is required.');
 
-  // req.user.id = string ID de l'étudiant (JWT)
+  // req.user.id = student string ID (JWT)
   const stats = await studentRepo.getStudentStats(req.user.id, academicYear, semester, period);
 
   return sendSuccess(res, 200, 'Attendance stats retrieved.', stats);

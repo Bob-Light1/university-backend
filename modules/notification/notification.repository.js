@@ -1,20 +1,20 @@
 'use strict';
 
 /**
- * @file notification.repository.js — couche de persistance du socle notifications.
+ * @file notification.repository.js — persistence layer of the notifications foundation.
  *
- * SEUL fichier du module autorisé à toucher le model Notification. Le service et
- * les controllers passent par lui. Étape 0 Postgres — voir
+ * The ONLY file in the module allowed to touch the Notification model. The service
+ * and the controllers go through it. Postgres step 0 — see
  * POSTGRES_MIGRATION_ASSESSMENT.md §7.
  *
- * Lectures en `.lean()`. Les mises à jour de statut sont des opérateurs atomiques
- * (`updateOne`/`updateMany`) — pas de hook métier sur ce model à préserver.
+ * Reads use `.lean()`. Status updates are atomic operators
+ * (`updateOne`/`updateMany`) — no business hook on this model to preserve.
  */
 
 const Notification    = require('./models/notification.model');
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
 
-// ── Écritures ───────────────────────────────────────────────────────────────
+// ── Writes ────────────────────────────────────────────────────────────────────
 
 const createMany = (rows) => Notification.insertMany(rows);
 
@@ -31,8 +31,8 @@ const markSkipped = (id, reason) =>
   );
 
 /**
- * Marque l'échec d'un envoi : `failed` tant qu'il reste des tentatives sous le
- * plafond, sinon on laisse `failed` (le worker ne le reprendra plus car
+ * Marks a send as failed: `failed` as long as attempts remain under the cap,
+ * otherwise we leave it `failed` (the worker won't pick it up again since
  * attempts >= maxAttempts).
  */
 const markFailed = (id, error) =>
@@ -41,7 +41,7 @@ const markFailed = (id, error) =>
     { $set: { status: 'failed', lastError: String(error).slice(0, 500) }, $inc: { attempts: 1 } }
   );
 
-// ── Boîte de réception in-app ─────────────────────────────────────────────────
+// ── In-app inbox ──────────────────────────────────────────────────────────────
 
 const findInbox = ({ recipientId, unreadOnly, skip = 0, limit = 20 }) => {
   const filter = { recipientId, channel: 'inapp' };
@@ -62,7 +62,7 @@ const countInbox = ({ recipientId, unreadOnly }) => {
 const countUnread = (recipientId) =>
   Notification.countDocuments({ recipientId, channel: 'inapp', readAt: null });
 
-/** Marque lu un message in-app appartenant bien au destinataire (anti-IDOR). */
+/** Marks read an in-app message that does belong to the recipient (anti-IDOR). */
 const markRead = (id, recipientId) =>
   Notification.updateOne(
     { _id: id, recipientId, channel: 'inapp', readAt: null },
@@ -75,12 +75,12 @@ const markAllRead = (recipientId) =>
     { $set: { status: 'read', readAt: new Date() } }
   );
 
-// ── Worker de retry ───────────────────────────────────────────────────────────
+// ── Retry worker ────────────────────────────────────────────────────────────────
 
 /**
- * Envois externes (email/whatsapp) en attente ou en échec récupérable.
- * `pending` = jamais tenté (ex. crash avant flush) ; `failed` avec
- * attempts < maxAttempts = à rejouer.
+ * External sends (email/whatsapp) pending or in recoverable failure.
+ * `pending` = never attempted (e.g. crash before flush); `failed` with
+ * attempts < maxAttempts = to replay.
  */
 const findDeliverable = (limit = 50) =>
   Notification.find({
@@ -94,7 +94,7 @@ const findDeliverable = (limit = 50) =>
 
 const findById = (id) => Notification.findById(id).lean();
 
-// ── Journal admin ─────────────────────────────────────────────────────────────
+// ── Admin log ─────────────────────────────────────────────────────────────────
 
 const paginateLog = async ({ campusFilter = {}, channel, status, recipientId, search, skip = 0, limit = 20 }) => {
   const filter = { ...campusFilter };

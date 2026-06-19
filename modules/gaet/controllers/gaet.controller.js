@@ -61,7 +61,7 @@ const { detectConflicts } = require('../gaet.conflict.service');
 // LOCAL HELPERS
 // ─────────────────────────────────────────────
 
-// Gardes campus en masse, via les façades propriétaires
+// Bulk campus guards, via the owning module facades
 const countSubjectsOnCampus = (...args) =>
   require('../../subject').service.countSubjectsOnCampus(...args);
 const countTeachersOnCampus = (...args) =>

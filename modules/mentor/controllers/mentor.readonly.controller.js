@@ -17,13 +17,13 @@
 
 const mongoose          = require('mongoose');
 const mentorRepo        = require('../mentor.repository');
-const studentService    = require('../../student').service; // façade module student (§3)
-const courseService     = require('../../course').service; // façade module course (§3)
-// NB : l'ancien import `const Result = require('models/result.model')` ne
-// destructurait pas { Result } — Result.find/countDocuments étaient undefined
-// et toutes les routes résultats mentor répondaient 500 (bug latent corrigé
-// par le passage à la façade result).
-const resultService     = require('../../result').service; // façade module result (§3)
+const studentService    = require('../../student').service; // student module facade (§3)
+const courseService     = require('../../course').service; // course module facade (§3)
+// NB: the old import `const Result = require('models/result.model')` did not
+// destructure { Result } — Result.find/countDocuments were undefined
+// and all mentor result routes responded with 500 (latent bug fixed
+// by switching to the result facade).
+const resultService     = require('../../result').service; // result module facade (§3)
 
 const {
   sendSuccess,
@@ -134,8 +134,8 @@ const getMyStudents = async (req, res) => {
 
     const { page = 1, limit = 20, search, status, classId } = req.query;
 
-    // NB : la recherche n'échappait pas la regex (injection possible) — alignée
-    // sur la version échappée, comme le bug #6 (recherche de cours mentor).
+    // NB: the search was not escaping the regex (injection possible) — aligned
+    // with the escaped version, as per bug #6 (mentor course search).
     const { docs, total } = await studentService.listStudentsForMentor({
       studentIds,
       status,
@@ -184,7 +184,7 @@ const getMyResults = async (req, res) => {
       subjectId: subjectId ? toOid(subjectId) : undefined,
       academicYear, semester,
       page, limit,
-      withDeleted: true, // l'ancien filtre mentor n'excluait pas isDeleted
+      withDeleted: true, // the old mentor filter did not exclude isDeleted
     });
 
     return sendPaginated(res, 200, 'Results retrieved.', docs, { total, page: Number(page), limit: Number(limit) });
@@ -259,8 +259,8 @@ const getMyCourses = async (req, res) => {
   try {
     const { page = 1, limit = 20, search } = req.query;
 
-    // NB : la façade course échappe la regex de recherche (l'ancienne version
-    // mentor ne le faisait pas — correction d'un bug latent d'injection regex).
+    // NB: the course facade escapes the search regex (the old mentor version
+    // did not — fixes a latent regex injection bug).
     const { docs, total } = await courseService.listApprovedCourses({ search, page, limit });
 
     return sendPaginated(res, 200, 'Courses retrieved.', docs, { total, page: Number(page), limit: Number(limit) });

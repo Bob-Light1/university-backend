@@ -1,14 +1,14 @@
 'use strict';
 
 /**
- * @file whatsapp.channel.js — canal WhatsApp (Meta Cloud API).
+ * @file whatsapp.channel.js — WhatsApp channel (Meta Cloud API).
  *
- * Appel HTTPS natif (`fetch`, Node 18+) — aucun SDK. INERTE par défaut : sans
- * token ni phoneNumberId, `isConfigured()` renvoie false et le service marque
- * l'envoi `skipped`. Aucun appel réseau en dev / CI / tests.
+ * Native HTTPS call (`fetch`, Node 18+) — no SDK. INERT by default: without a
+ * token or phoneNumberId, `isConfigured()` returns false and the service marks
+ * the send `skipped`. No network call in dev / CI / tests.
  *
- * Envoie un message texte libre (hors fenêtre 24 h, Meta exige un template
- * approuvé ; on couvre ici le cas message-texte, suffisant pour le socle).
+ * Sends a free-form text message (outside the 24h window, Meta requires an
+ * approved template; here we cover the text-message case, enough for the foundation).
  */
 
 const config = require('../../../shared/configs/general.config');
@@ -17,13 +17,13 @@ const wa = () => config.notification.whatsapp;
 
 const isConfigured = () => Boolean(wa().token && wa().phoneNumberId);
 
-// Normalise un numéro en chiffres seulement (Meta attend l'E.164 sans « + »).
+// Normalizes a number to digits only (Meta expects E.164 without the « + »).
 const normalize = (phone) => String(phone || '').replace(/[^\d]/g, '');
 
 /**
  * @param {{to: string, body: string}} message
  * @returns {Promise<{ok: boolean}>}
- * @throws si l'API Meta renvoie une erreur (le service décide du retry).
+ * @throws if the Meta API returns an error (the service decides on the retry).
  */
 const send = async ({ to, body }) => {
   const phone = normalize(to);

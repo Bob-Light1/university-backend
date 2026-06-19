@@ -24,7 +24,7 @@ const bcrypt   = require('bcrypt');
 const mongoose = require('mongoose');
 
 const parentRepo = require('../parent.repository');
-const studentService = require('../../student').service; // façade module student (§3)
+const studentService = require('../../student').service; // student module facade (§3)
 const {
   sendSuccess,
   sendError,

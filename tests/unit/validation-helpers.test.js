@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Tests des fonctions PURES de shared/utils/validation-helpers.
- * Aucune dépendance (ni model, ni DB) — ce sont des gardes de sécurité
- * multi-tenant et de validation d'entrée déplacées ici lors du chantier 20b (C0a).
+ * Tests for the PURE functions of shared/utils/validation-helpers.
+ * No dependency (neither model nor DB) — these are multi-tenant security
+ * and input-validation guards moved here during work item 20b (C0a).
  */
 
 const {

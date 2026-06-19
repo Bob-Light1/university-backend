@@ -2,9 +2,9 @@
 
 /**
  * @file counter.model.js
- * @description Compteur atomique MongoDB pour la génération de références uniques.
+ * @description Atomic MongoDB counter for generating unique references.
  *
- *  Utilisation :
+ *  Usage:
  *  ─────────────────────────
  *  const { nextSequence } = require('./counter.model');
  *  const seq = await nextSequence('result_2025'); // → 1, 2, 3…
@@ -15,14 +15,14 @@ const mongoose = require('mongoose');
 
 const CounterSchema = new mongoose.Schema(
   {
-    /** Identifiant du compteur (ex. "result_2025", "grading_scale_2025") */
+    /** Counter identifier (e.g. "result_2025", "grading_scale_2025") */
     _id: { type: String, required: true },
 
-    /** Valeur courante du compteur — incrémentée atomiquement */
+    /** Current counter value — incremented atomically */
     seq: { type: Number, default: 0 },
   },
   {
-    // Pas de timestamps ici — le compteur est purement technique
+    // No timestamps here — the counter is purely technical
     collection: 'counters',
     versionKey:  false,
   }
@@ -31,11 +31,11 @@ const CounterSchema = new mongoose.Schema(
 const Counter = mongoose.model('Counter', CounterSchema);
 
 /**
- * Incrémente atomiquement le compteur `name` et retourne la nouvelle valeur.
- * Crée le document compteur s'il n'existe pas (upsert: true).
+ * Atomically increments the counter `name` and returns the new value.
+ * Creates the counter document if it does not exist (upsert: true).
  *
- * @param  {string} name  - Identifiant du compteur (ex. "result_2025")
- * @returns {Promise<number>}  Séquence suivante (commence à 1)
+ * @param  {string} name  - Counter identifier (e.g. "result_2025")
+ * @returns {Promise<number>}  Next sequence (starts at 1)
  */
 const nextSequence = async (name) => {
   const doc = await Counter.findOneAndUpdate(
@@ -47,10 +47,10 @@ const nextSequence = async (name) => {
 };
 
 /**
- * Génère une référence lisible unique pour un résultat.
- * Format : "RES-YYYY-NNNNN" (ex. "RES-2025-00042")
+ * Generates a unique human-readable reference for a result.
+ * Format: "RES-YYYY-NNNNN" (e.g. "RES-2025-00042")
  *
- * @param  {number} [year]  - Année (défaut : année courante)
+ * @param  {number} [year]  - Year (default: current year)
  * @returns {Promise<string>}
  */
 const nextResultRef = async (year = new Date().getFullYear()) => {

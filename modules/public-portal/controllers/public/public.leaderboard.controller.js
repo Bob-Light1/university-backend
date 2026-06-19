@@ -2,20 +2,20 @@
 
 /**
  * @file public.leaderboard.controller.js
- * @description Classement mensuel des scores de quiz.
+ * @description Monthly ranking of quiz scores.
  *
- * Route : GET /api/public/leaderboard?campusSlug=...&period=YYYY-MM&category=...&scope=campus|national
+ * Route: GET /api/public/leaderboard?campusSlug=...&period=YYYY-MM&category=...&scope=campus|national
  *
- * Limites :
- *  - scope=campus   → top 50 par campus
- *  - scope=national → top 20 toutes campus confondues
+ * Limits:
+ *  - scope=campus   → top 50 per campus
+ *  - scope=national → top 20 across all campuses
  *
- * Données exposées : displayName, city, country, score, category, period.
- * Aucune donnée personnelle (email, téléphone, IP) n'est exposée.
+ * Data exposed: displayName, city, country, score, category, period.
+ * No personal data (email, phone, IP) is exposed.
  */
 
 const repo = require('../../public-portal.repository');
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
@@ -28,7 +28,7 @@ const getLeaderboard = asyncHandler(async (req, res) => {
     scope = 'campus',
   } = req.query;
 
-  // period par défaut = mois courant
+  // default period = current month
   const now            = new Date();
   const currentPeriod  = period?.match(/^\d{4}-\d{2}$/)
     ? period

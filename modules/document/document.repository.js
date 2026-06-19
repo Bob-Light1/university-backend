@@ -1,38 +1,38 @@
 'use strict';
 
 /**
- * @file document.repository.js — couche d'accès aux données du module document.
+ * @file document.repository.js — data access layer of the document module.
  *
- * SEUL fichier autorisé à toucher les 5 models possédés :
+ * The ONLY file allowed to touch the 5 owned models:
  *   - Document         (document.model)
  *   - DocumentVersion  (document.version.model)
  *   - DocumentAudit    (document.audit.model)
  *   - DocumentTemplate (document.template.model)
  *   - DocumentShare    (document.share.model)
  *
- * Controllers (crud / workflow / template / audit / share / export), service
- * interne, service façade inter-modules, cron de rétention, service PDF et les
- * deux middlewares (campus / access) passent exclusivement par lui.
+ * Controllers (crud / workflow / template / audit / share / export), internal
+ * service, inter-module facade service, retention cron, PDF service and the
+ * two middlewares (campus / access) all go exclusively through it.
  *
- * Conventions (figées par les modules R1→R3) :
- *   - Lectures → objets simples (`.lean()`) ; les formes de requête (select,
- *     populate, sort) vivent ICI.
- *   - Écritures à hook (retention/slug/ref, validations de blocs) via
- *     load→mutate→save (findXxxForWrite + saveXxxDoc) ; sinon opérateurs
- *     atomiques nommés ($inc downloadCount/usageCount, snapshot counters…).
- *   - Transactions : `startSession()` exposé ; les docs/écritures acceptent
- *     `{ session }` et le propagent (`.session()` / option `session`).
- *   - Agrégat de quota stockage : l'appelant (middleware) fournit le `$match`
- *     déjà casté en ObjectId. Les filtres d'isolation campus sont construits par
- *     l'appelant et passés tels quels.
+ * Conventions (locked in by modules R1→R3):
+ *   - Reads → plain objects (`.lean()`); query shapes (select,
+ *     populate, sort) live HERE.
+ *   - Hooked writes (retention/slug/ref, block validations) via
+ *     load→mutate→save (findXxxForWrite + saveXxxDoc); otherwise named
+ *     atomic operators ($inc downloadCount/usageCount, snapshot counters…).
+ *   - Transactions: `startSession()` exposed; docs/writes accept
+ *     `{ session }` and propagate it (`.session()` / `session` option).
+ *   - Storage quota aggregate: the caller (middleware) provides the `$match`
+ *     already cast to ObjectId. Campus isolation filters are built by
+ *     the caller and passed through as-is.
  *
- * Exceptions assumées (restent hors repo) :
- *   - Constantes de domaine (DOCUMENT_STATUS, DOCUMENT_TYPE, AUDIT_ACTION,
- *     RESTRICTED_DOCUMENT_TYPES, RETENTION_POLICY) : importées directement par
- *     les controllers/services — ce sont des enums, pas un accès persistance.
- *   - Logique métier (résolution de rôle→userModel, calcul de rétention,
- *     débounce de snapshot, génération ref/slug) : reste dans les services ;
- *     elle invoque le repo pour la persistance.
+ * Accepted exceptions (stay outside the repo):
+ *   - Domain constants (DOCUMENT_STATUS, DOCUMENT_TYPE, AUDIT_ACTION,
+ *     RESTRICTED_DOCUMENT_TYPES, RETENTION_POLICY): imported directly by
+ *     controllers/services — these are enums, not persistence access.
+ *   - Business logic (role→userModel resolution, retention computation,
+ *     snapshot debounce, ref/slug generation): stays in the services;
+ *     it invokes the repo for persistence.
  */
 
 const mongoose = require('mongoose');
@@ -43,34 +43,34 @@ const DocumentAudit    = require('./models/document.audit.model');
 const DocumentTemplate = require('./models/document.template.model');
 const DocumentShare    = require('./models/document.share.model');
 
-// Champs lourds omis des vues liste (corps riche + HTML brut).
+// Heavy fields omitted from list views (rich body + raw HTML).
 const LIST_SELECT = '-body -rawHtml';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Transactions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Ouvre une session Mongoose (transactions CRUD / workflow / restauration). */
+/** Opens a Mongoose session (CRUD / workflow / restore transactions). */
 const startSession = () => mongoose.startSession();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT — création
+// DOCUMENT — creation
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Crée un (ou des) document(s) — déclenche les hooks de validation/save.
- * Forme tableau + `{ session }` pour la transaction de création/duplication ;
- * renvoie alors le tableau créé (l'appelant déstructure `[doc]`).
+ * Creates one (or several) document(s) — triggers the validation/save hooks.
+ * Array form + `{ session }` for the create/duplicate transaction;
+ * then returns the created array (the caller destructures `[doc]`).
  */
 const createDocuments = (docs, opts) => Document.create(docs, opts);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT — lectures (controllers / service interne)
+// DOCUMENT — reads (controllers / internal service)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Liste paginée + compteur (listDocuments). Filtre et tri composés par
- * l'appelant ; corps/HTML omis du listing.
+ * Paginated list + count (listDocuments). Filter and sort composed by
+ * the caller; body/HTML omitted from the listing.
  */
 const paginateDocuments = async (filter, { skip, limit, sort }) => {
   const [data, total] = await Promise.all([
@@ -81,8 +81,8 @@ const paginateDocuments = async (filter, { skip, limit, sort }) => {
 };
 
 /**
- * Recherche paginée (searchDocuments). `projection` porte le textScore quand le
- * `$text` est actif ; tri composé par l'appelant. Corps/HTML omis.
+ * Paginated search (searchDocuments). `projection` carries the textScore when
+ * `$text` is active; sort composed by the caller. Body/HTML omitted.
  */
 const searchDocuments = async (filter, { skip, limit, sort, projection }) => {
   const [data, total] = await Promise.all([
@@ -92,70 +92,70 @@ const searchDocuments = async (filter, { skip, limit, sort, projection }) => {
   return { data, total };
 };
 
-/** Détail d'un document non supprimé + template peuplé (getDocumentById). */
+/** Detail of a non-deleted document + populated template (getDocumentById). */
 const findDocumentByIdPopulated = (filter) =>
   Document.findOne(filter).populate('templateId', 'name type').lean();
 
-/** Lecture lean par filtre, select optionnel (duplication source / partage). */
+/** Lean read by filter, optional select (duplication source / share). */
 const findDocumentLean = (filter, select) => {
   const q = Document.findOne(filter);
   if (select) q.select(select);
   return q.lean();
 };
 
-/** Lecture lean par id, select fourni (access middleware / export / autolock). */
+/** Lean read by id, select provided (access middleware / export / autolock). */
 const findDocumentByIdLean = (id, select) =>
   Document.findById(id).select(select).lean();
 
-/** Lecture lean d'un lot par filtre, select fourni (bulk export). */
+/** Lean read of a batch by filter, select provided (bulk export). */
 const findDocumentsByFilterLean = (filter, select) =>
   Document.find(filter).select(select).lean();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT — écritures (docs à hook : retention/slug, transitions de statut)
+// DOCUMENT — writes (hooked docs: retention/slug, status transitions)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Doc non-lean par filtre pour écriture, session-aware (update / delete / workflow). */
+/** Non-lean doc by filter for write, session-aware (update / delete / workflow). */
 const findDocumentForWrite = (filter, { session } = {}) =>
   Document.findOne(filter).session(session ?? null);
 
-/** Doc non-lean par id pour écriture, session-aware (lock / unlock / hard-delete). */
+/** Non-lean doc by id for write, session-aware (lock / unlock / hard-delete). */
 const findDocumentByIdForWrite = (id, { session } = {}) =>
   Document.findById(id).session(session ?? null);
 
-/** Persiste un doc document (déclenche les hooks de save). `opts` : { session }. */
+/** Persists a document doc (triggers the save hooks). `opts`: { session }. */
 const saveDocumentDoc = (doc, opts) => doc.save(opts);
 
 /**
- * MAJ générique par id (findByIdAndUpdate). Utilisé pour les écritures à
- * opérateurs ($set d'update, lastAuditEntry, snapshot counters $inc/$push,
- * statut workflow, suppression rétention). `opts` : { new?, session? }.
+ * Generic update by id (findByIdAndUpdate). Used for operator-based writes
+ * ($set on update, lastAuditEntry, snapshot counters $inc/$push,
+ * workflow status, retention deletion). `opts`: { new?, session? }.
  */
 const updateDocumentById = (id, update, opts) =>
   Document.findByIdAndUpdate(id, update, opts);
 
-/** Incrément atomique du compteur de téléchargements (fire-and-forget). */
+/** Atomic increment of the download counter (fire-and-forget). */
 const incrementDownloadCount = (id) =>
   Document.findByIdAndUpdate(id, { $inc: { downloadCount: 1 } });
 
-/** Écrit le nom de fichier du snapshot PDF (cache de rendu). */
+/** Writes the PDF snapshot file name (render cache). */
 const setPdfSnapshot = (id, fileName) =>
   Document.findByIdAndUpdate(id, { pdfSnapshot: fileName });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT — suppression dure (ADMIN/DIRECTOR)
+// DOCUMENT — hard delete (ADMIN/DIRECTOR)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Suppression définitive d'un document, session-aware. */
+/** Permanent deletion of a document, session-aware. */
 const deleteDocumentById = (id, opts) => Document.findByIdAndDelete(id, opts);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT — lectures spécialisées (façade / cron / PDF)
+// DOCUMENT — specialized reads (facade / cron / PDF)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Liste paginée des documents PUBLISHED d'un campus (façade staff, lecture
- * seule) : champs internes omis, tri récent. Renvoie { docs, total }.
+ * Paginated list of a campus's PUBLISHED documents (staff facade, read-only):
+ * internal fields omitted, recent-first sort. Returns { docs, total }.
  */
 const paginatePublishedForCampus = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
@@ -168,27 +168,27 @@ const paginatePublishedForCampus = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Lot de documents dont la rétention a expiré (cron, par batch, lean). */
+/** Batch of documents whose retention has expired (cron, by batch, lean). */
 const findExpiredDocuments = (filter, { skip, limit }) =>
   Document.find(filter)
     .select('_id campusId ref retentionPolicy retentionUntil')
     .skip(skip).limit(limit).lean();
 
-/** Document complet pour rendu PDF (corps + branding + config impression). */
+/** Full document for PDF rendering (body + branding + print config). */
 const findDocumentForPdf = (id) =>
   Document.findById(id)
     .select('ref title body branding printConfig campusId currentVersion pdfSnapshot')
     .lean();
 
-/** Document minimal pour servir/régénérer le cache PDF (getOrGeneratePdf). */
+/** Minimal document to serve/regenerate the PDF cache (getOrGeneratePdf). */
 const findDocumentForPdfCache = (id) =>
   Document.findById(id)
     .select('ref pdfSnapshot currentVersion campusId')
     .lean();
 
 /**
- * Somme des octets des fichiers importés d'un périmètre (quota stockage campus).
- * L'appelant fournit le `$match` déjà casté en ObjectId. Renvoie le tableau brut.
+ * Sum of imported file bytes within a scope (campus storage quota).
+ * The caller provides the `$match` already cast to ObjectId. Returns the raw array.
  */
 const aggregateImportedStorageBytes = (matchStage) =>
   Document.aggregate([
@@ -200,14 +200,14 @@ const aggregateImportedStorageBytes = (matchStage) =>
 // DOCUMENT VERSION
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Dernier snapshot 'auto' du même utilisateur (garde de débounce, lean, session-aware). */
+/** Latest 'auto' snapshot from the same user (debounce guard, lean, session-aware). */
 const findRecentAutoSnapshot = (filter, { session } = {}) =>
   DocumentVersion.findOne(filter).select('_id takenAt').lean().session(session ?? null);
 
-/** Crée un (ou des) snapshot(s) de version. Forme tableau + `{ session }`. */
+/** Creates one (or several) version snapshot(s). Array form + `{ session }`. */
 const createVersions = (docs, opts) => DocumentVersion.create(docs, opts);
 
-/** Liste paginée des versions d'un document (corps omis), tri version desc. */
+/** Paginated list of a document's versions (body omitted), version desc sort. */
 const paginateVersions = async (filter, { skip, limit }) => {
   const [data, total] = await Promise.all([
     DocumentVersion.find(filter).sort({ version: -1 }).skip(skip).limit(limit).select('-body').lean(),
@@ -216,25 +216,25 @@ const paginateVersions = async (filter, { skip, limit }) => {
   return { data, total };
 };
 
-/** Snapshot de version par filtre (getVersion / restoreVersion), lean. */
+/** Version snapshot by filter (getVersion / restoreVersion), lean. */
 const findVersionLean = (filter) => DocumentVersion.findOne(filter).lean();
 
-/** Supprime toutes les versions d'un document (hard-delete), session-aware. */
+/** Deletes all versions of a document (hard-delete), session-aware. */
 const deleteVersionsByDocument = (documentId, opts) =>
   DocumentVersion.deleteMany({ documentId }, opts);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT AUDIT (append-only : jamais supprimé)
+// DOCUMENT AUDIT (append-only: never deleted)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Écrit une (ou des) entrée(s) d'audit. Forme tableau + `{ session }` pour les
- * écritures transactionnelles ; forme objet simple pour le cron.
+ * Writes one (or several) audit entr(y/ies). Array form + `{ session }` for
+ * transactional writes; plain object form for the cron.
  */
 const createAudit = (docs, opts) =>
   (opts === undefined ? DocumentAudit.create(docs) : DocumentAudit.create(docs, opts));
 
-/** Journal d'audit paginé (document seul ou campus entier), tri récent. */
+/** Paginated audit log (single document or whole campus), recent-first sort. */
 const paginateAudits = async (filter, { skip, limit }) => {
   const [data, total] = await Promise.all([
     DocumentAudit.find(filter).sort({ performedAt: -1 }).skip(skip).limit(limit).lean(),
@@ -247,79 +247,79 @@ const paginateAudits = async (filter, { skip, limit }) => {
 // DOCUMENT TEMPLATE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée un template (déclenche la validation des blocs de layout). */
+/** Creates a template (triggers validation of layout blocks). */
 const createTemplate = (payload) => DocumentTemplate.create(payload);
 
-/** Templates actifs visibles (globaux + campus), tri usage décroissant, lean. */
+/** Visible active templates (global + campus), usage desc sort, lean. */
 const listTemplates = (filter) =>
   DocumentTemplate.find(filter).sort({ usageCount: -1, createdAt: -1 }).lean();
 
-/** Template par id, lecture lean (get / preview / génération). */
+/** Template by id, lean read (get / preview / generation). */
 const findTemplateByIdLean = (id) => DocumentTemplate.findById(id).lean();
 
-/** Template par id pour écriture (update / désactivation). */
+/** Template by id for write (update / deactivation). */
 const findTemplateForWrite = (id) => DocumentTemplate.findById(id);
 
-/** Persiste un doc template (déclenche les hooks de save). */
+/** Persists a template doc (triggers the save hooks). */
 const saveTemplateDoc = (doc) => doc.save();
 
-/** Incrément atomique du compteur d'utilisation d'un template (fire-and-forget). */
+/** Atomic increment of a template's usage counter (fire-and-forget). */
 const incrementTemplateUsage = (id) =>
   DocumentTemplate.findByIdAndUpdate(id, { $inc: { usageCount: 1 } });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DOCUMENT SHARE (liens signés expirants)
+// DOCUMENT SHARE (expiring signed links)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée un lien de partage (tokenHash stocké, jamais le token en clair). */
+/** Creates a share link (tokenHash stored, never the plaintext token). */
 const createShare = (payload) => DocumentShare.create(payload);
 
 /**
- * Lien de partage actif par hash de token + document peuplé (accès public).
- * Champs du document limités à ce que sert l'endpoint public.
+ * Active share link by token hash + populated document (public access).
+ * Document fields limited to what the public endpoint serves.
  */
 const findShareByTokenHashPopulated = (tokenHash) =>
   DocumentShare.findOne({ tokenHash, revoked: false })
     .populate('documentId', 'title ref campusId status isOfficial pdfSnapshot currentVersion')
     .lean();
 
-/** Enregistre un accès partagé (compteur + IP), atomique. */
+/** Records a shared access (counter + IP), atomic. */
 const registerShareAccess = (id, ip) =>
   DocumentShare.findByIdAndUpdate(id, {
     $inc:  { downloadCount: 1 },
     $push: { accessedIps: ip },
   });
 
-/** Révoque un lien de partage scopé (revokeShareLink). Renvoie le doc à jour. */
+/** Revokes a scoped share link (revokeShareLink). Returns the updated doc. */
 const revokeShare = (filter, payload) =>
   DocumentShare.findOneAndUpdate(filter, payload, { new: true });
 
-/** Liens de partage actifs d'un document (hash exclu de la réponse), tri récent. */
+/** Active share links of a document (hash excluded from the response), recent-first sort. */
 const listShares = (filter) =>
   DocumentShare.find(filter).select('-tokenHash').sort({ createdAt: -1 }).lean();
 
 module.exports = {
   // Transactions
   startSession,
-  // Document — création
+  // Document — creation
   createDocuments,
-  // Document — lectures
+  // Document — reads
   paginateDocuments,
   searchDocuments,
   findDocumentByIdPopulated,
   findDocumentLean,
   findDocumentByIdLean,
   findDocumentsByFilterLean,
-  // Document — écritures
+  // Document — writes
   findDocumentForWrite,
   findDocumentByIdForWrite,
   saveDocumentDoc,
   updateDocumentById,
   incrementDownloadCount,
   setPdfSnapshot,
-  // Document — suppression dure
+  // Document — hard delete
   deleteDocumentById,
-  // Document — lectures spécialisées
+  // Document — specialized reads
   paginatePublishedForCampus,
   findExpiredDocuments,
   findDocumentForPdf,

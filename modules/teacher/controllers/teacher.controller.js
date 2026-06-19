@@ -2,9 +2,9 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
-const Teacher = require('../models/teacher.model'); // exception assumée : Model du GenericBulkController
+const Teacher = require('../models/teacher.model'); // accepted exception: Model of the GenericBulkController
 const teacherRepo = require('../teacher.repository');
-const departmentService = require('../../department').service; // façade module department (§3)
+const departmentService = require('../../department').service; // department module facade (§3)
 
 const {
   sendSuccess,

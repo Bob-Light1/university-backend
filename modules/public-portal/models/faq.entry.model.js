@@ -2,11 +2,11 @@
 
 /**
  * @file faq.entry.model.js
- * @description Questions fréquentes du portail public — contenu bilingue.
+ * @description Frequently asked questions for the public portal — bilingual content.
  *
- * Campus isolation : schoolCampus obligatoire sur chaque document.
- * question/answer sont bilingues ({fr, en}) — le portail choisit la langue.
- * Mise en cache 24h côté portail (spec §4.11) — peu de mutations attendues.
+ * Campus isolation: schoolCampus required on every document.
+ * question/answer are bilingual ({fr, en}) — the portal picks the language.
+ * Cached 24h on the portal side (spec §4.11) — few mutations expected.
  */
 
 const mongoose = require('mongoose');
@@ -50,7 +50,7 @@ const faqEntrySchema = new mongoose.Schema(
       },
     },
 
-    // Regroupement thématique — ex. 'inscription', 'tarifs', 'formations'
+    // Thematic grouping — e.g. 'enrollment', 'pricing', 'programs'
     category: {
       type:    String,
       trim:    true,

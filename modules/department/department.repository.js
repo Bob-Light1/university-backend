@@ -3,21 +3,21 @@
 /**
  * @file department.repository.js — couche de persistance du domaine department.
  *
- * SEUL fichier du module autorisé à toucher le model Department.
- * Controller et service appellent ce repository.
- * Étape 0 de la préparation Postgres — voir POSTGRES_MIGRATION_ASSESSMENT.md §7.
+ * Only file in the module allowed to touch the Department model.
+ * Controller and service call this repository.
+ * Step 0 of the Postgres migration preparation — see POSTGRES_MIGRATION_ASSESSMENT.md §7.
  */
 
 const Department = require('./department.model');
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
 
-// Sélections de populate réutilisées (préservent les champs exacts d'origine).
+// Reusable populate selections (preserve the exact original fields).
 const POP_CAMPUS_BASIC   = ['schoolCampus', 'campus_name'];
 const POP_CAMPUS_DETAIL  = ['schoolCampus', 'campus_name location'];
 const POP_HEAD_BASIC      = ['headOfDepartment', 'firstName lastName email'];
 const POP_HEAD_DETAIL     = ['headOfDepartment', 'firstName lastName email matricule'];
 
-// ── Contrôles d'unicité ───────────────────────────────────────────────────────
+// ── Uniqueness checks ─────────────────────────────────────────────────────────
 
 const findByNameInCampus = (campusId, name) =>
   Department.findOne({ schoolCampus: campusId, name }).lean();
@@ -33,19 +33,19 @@ const findByCodeInCampusExcept = (campusId, code, exceptId) =>
 
 // ── Lectures ─────────────────────────────────────────────────────────────────
 
-/** Référence minimale (préconditions campus/uniqueness). @returns {Promise<Object|null>} */
+/** Minimal reference (campus/uniqueness preconditions). @returns {Promise<Object|null>} */
 const findByIdLean = (id) => Department.findById(id).lean();
 
-/** Département peuplé (réponse standard : campus_name + chef). */
+/** Populated department (standard response: campus_name + head). */
 const findByIdForResponse = (id) =>
   Department.findById(id).populate(...POP_CAMPUS_BASIC).populate(...POP_HEAD_BASIC).lean();
 
-/** Département peuplé détaillé (vue unitaire : + location, matricule). */
+/** Detailed populated department (single-item view: + location, matricule). */
 const findByIdDetailed = (id) =>
   Department.findById(id).populate(...POP_CAMPUS_DETAIL).populate(...POP_HEAD_DETAIL).lean();
 
 /**
- * Liste paginée pour le controller admin (campus + chef peuplés).
+ * Paginated list for the admin controller (campus + head populated).
  * @param {{ baseFilter: Object, includeArchived?: boolean, status?: string, search?: string, skip: number, limit: number }} p
  * @returns {Promise<{data: Object[], total: number}>}
  */
@@ -68,7 +68,7 @@ const paginate = async ({ baseFilter, includeArchived, status, search, skip, lim
 };
 
 /**
- * Départements d'un campus (API inter-modules — chef peuplé, sans le campus).
+ * Departments for a campus (inter-module API — head populated, without the campus).
  * @returns {Promise<Object[]>}
  */
 const listForCampus = ({ campusId, status, includeArchived = false, search }) => {
@@ -82,20 +82,20 @@ const listForCampus = ({ campusId, status, includeArchived = false, search }) =>
   return Department.find(filter).populate(...POP_HEAD_BASIC).sort({ name: 1 }).lean();
 };
 
-/** Référence campus d'un département ({ _id, name, schoolCampus }). */
+/** Campus reference for a department ({ _id, name, schoolCampus }). */
 const getCampusRef = (id, { session = null } = {}) =>
   Department.findById(id).select('schoolCampus name').session(session).lean();
 
-/** Document Department lié à une session de transaction (GenericBulkController). */
+/** Department document bound to a transaction session (GenericBulkController). */
 const findForBulk = (id, session) => Department.findById(id).session(session);
 
-// ── Écritures ────────────────────────────────────────────────────────────────
+// ── Writes ───────────────────────────────────────────────────────────────────
 
-/** Crée un département. @returns {Promise<Document>} */
+/** Creates a department. @returns {Promise<Document>} */
 const create = (data) => Department.create(data);
 
 /**
- * Met à jour un département et renvoie la version peuplée (basic).
+ * Updates a department and returns the populated version (basic).
  * @returns {Promise<Object|null>}
  */
 const updateById = (id, updates) =>
@@ -103,7 +103,7 @@ const updateById = (id, updates) =>
     .populate(...POP_CAMPUS_BASIC).populate(...POP_HEAD_BASIC).lean();
 
 /**
- * Change le statut (load→save, préserve hooks/validations).
+ * Changes the status (load→save, preserves hooks/validations).
  * @returns {Promise<Document|null>}
  */
 const setStatus = async (id, status) => {

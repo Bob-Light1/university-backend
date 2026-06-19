@@ -2,14 +2,14 @@
 /**
  * seed-competition-prizes.js
  *
- * Crée la compétition mensuelle (barème de prix) pour la période courante 'YYYY-MM',
- * pour tous les campus (ou un précis). closingDate = dernier jour du mois à 23:59 UTC.
+ * Creates the monthly competition (prize scale) for the current period 'YYYY-MM',
+ * for all campuses (or a specific one). closingDate = last day of the month at 23:59 UTC.
  *
- * Usage :
- *   node scripts/seed-competition-prizes.js                       → tous les campus
- *   node scripts/seed-competition-prizes.js --slug=campus-douala  → un seul campus
- *   node scripts/seed-competition-prizes.js --dry-run             → aperçu sans insertion
- *   node scripts/seed-competition-prizes.js --clear               → supprime la période courante et réinsère
+ * Usage:
+ *   node scripts/seed-competition-prizes.js                       → all campuses
+ *   node scripts/seed-competition-prizes.js --slug=campus-douala  → a single campus
+ *   node scripts/seed-competition-prizes.js --dry-run             → preview without inserting
+ *   node scripts/seed-competition-prizes.js --clear               → deletes the current period and re-inserts
  */
 
 'use strict';
@@ -23,12 +23,12 @@ const DRY_RUN  = process.argv.includes('--dry-run');
 const CLEAR    = process.argv.includes('--clear');
 const SLUG_ARG = process.argv.find(a => a.startsWith('--slug='))?.split('=')[1];
 
-// Période courante 'YYYY-MM' + clôture en fin de mois (UTC)
+// Current period 'YYYY-MM' + closing at end of month (UTC)
 const now = new Date();
 const PERIOD = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
 const CLOSING_DATE = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59));
 
-// Barème (spec §4.5) — description bilingue
+// Scale (spec §4.5) — bilingual description
 const PRIZES = [
   {
     rank: 1, value: '-20% + certificat',

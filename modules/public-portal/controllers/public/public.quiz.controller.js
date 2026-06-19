@@ -2,24 +2,24 @@
 
 /**
  * @file public.quiz.controller.js
- * @description Quiz public — récupération des questions et soumission des réponses.
+ * @description Public quiz — fetching questions and submitting answers.
  *
- * Routes :
+ * Routes:
  *  GET  /api/public/quiz?campusSlug=...&category=...&limit=10&lang=fr
  *  POST /api/public/quiz/submit
  *
- * Sécurité :
- *  - correctIndex est select:false — jamais inclus dans les questions envoyées
- *  - Le score est calculé entièrement côté ERP
- *  - Le portail reçoit le score final mais jamais les correctIndex
+ * Security:
+ *  - correctIndex is select:false — never included in the questions sent
+ *  - The score is computed entirely on the ERP side
+ *  - The portal receives the final score but never the correctIndex
  *
- * sessionToken : UUID généré côté portail, transmis dans la soumission.
- * period        : 'YYYY-MM' calculé depuis la date de soumission.
+ * sessionToken: UUID generated on the portal side, passed in the submission.
+ * period       : 'YYYY-MM' computed from the submission date.
  */
 
-const mongoose    = require('mongoose'); // conservé pour le cast/validation d'ObjectId
+const mongoose    = require('mongoose'); // kept for ObjectId cast/validation
 const repo        = require('../../public-portal.repository');
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
@@ -44,9 +44,9 @@ const getQuizQuestions = asyncHandler(async (req, res) => {
 
   const limitNum = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 20);
 
-  // Agrégation $sample pour randomiser. L'agrégation NE respecte PAS select:false,
-  // donc on passe par une liste blanche explicite : correctIndex et tout champ
-  // interne (schoolCampus, isPublished, timestamps) restent côté ERP.
+  // $sample aggregation to randomize. The aggregation does NOT respect select:false,
+  // so we go through an explicit whitelist: correctIndex and every internal
+  // field (schoolCampus, isPublished, timestamps) stay on the ERP side.
   const questions = await repo.sampleQuizQuestions(filter, limitNum);
 
   return sendSuccess(res, 200, 'Quiz questions retrieved.', {
@@ -81,16 +81,16 @@ const submitQuiz = asyncHandler(async (req, res) => {
 
   if (!campus) return sendNotFound(res, 'Campus');
 
-  // Vérifier qu'une session avec ce token n'existe pas déjà (évite double soumission)
+  // Check that no session with this token already exists (prevents double submission)
   const existingSession = await repo.findQuizSessionByToken(sessionToken);
   if (existingSession) {
     return sendError(res, 409, 'This quiz session has already been submitted.');
   }
 
-  // Dédupliquer les réponses par questionId — anti-gaming : empêche qu'une même
-  // question soumise plusieurs fois ne gonfle correctAnswers au-delà du total
-  // (ce qui produisait un score > 100 et un échec de validation Mongoose).
-  const answerMap = new Map(); // questionId → selectedIndex (première occurrence)
+  // Deduplicate answers by questionId — anti-gaming: prevents the same
+  // question submitted several times from inflating correctAnswers beyond the total
+  // (which produced a score > 100 and a Mongoose validation failure).
+  const answerMap = new Map(); // questionId → selectedIndex (first occurrence)
   for (const a of answers) {
     if (a && mongoose.Types.ObjectId.isValid(a.questionId) && !answerMap.has(String(a.questionId))) {
       answerMap.set(String(a.questionId), a.selectedIndex);
@@ -112,7 +112,7 @@ const submitQuiz = asyncHandler(async (req, res) => {
     return sendError(res, 404, 'No valid published questions found for these IDs.');
   }
 
-  // Calculer le score sur les seules questions valides et publiées du campus.
+  // Compute the score on only the valid, published questions of the campus.
   let correctAnswers = 0;
   for (const q of questions) {
     const selectedIndex = answerMap.get(String(q._id));

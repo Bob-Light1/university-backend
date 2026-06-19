@@ -3,28 +3,28 @@
 /**
  * @file campus.service.js — API inter-modules du domaine campus.
  *
- * Exposé :
- *   - getCampusName             : nom du campus (en-têtes de documents).
- *   - getCampusForPdf           : nom + logo + localisation (rendu PDF académique).
- *   - getCampusDefaults         : langue/timezone/format de note par défaut (settings).
- *   - getCampusNumber           : numéro/préfixe (génération de matricule student, en session).
- *   - getCampusDocById          : document Mongoose complet (méthodes d'instance — class.canAddClass).
- *   - getCampusCommissionConfig : config de commission (partner.lead).
- *   - getCampusCommissionConfigWithName : config + nom du campus (partner.commission).
- *   - setCampusCommissionConfig : mise à jour de la config (partner.commission).
- *   - getActiveCampusBySlug     : résolution portail public par slug (status actif).
- *   - getActiveCampusById       : résolution portail public par _id (status actif).
- *   - listActivePublicCampuses  : liste des campus publics (sélecteur de portail).
+ * Exposed:
+ *   - getCampusName             : campus name (document headers).
+ *   - getCampusForPdf           : name + logo + location (academic PDF rendering).
+ *   - getCampusDefaults         : default language/timezone/grade format (settings).
+ *   - getCampusNumber           : number/prefix (student ID generation, in session).
+ *   - getCampusDocById          : full Mongoose document (instance methods — class.canAddClass).
+ *   - getCampusCommissionConfig : commission config (partner.lead).
+ *   - getCampusCommissionConfigWithName : config + campus name (partner.commission).
+ *   - setCampusCommissionConfig : updates the config (partner.commission).
+ *   - getActiveCampusBySlug     : public portal resolution by slug (active status).
+ *   - getActiveCampusById       : public portal resolution by _id (active status).
+ *   - listActivePublicCampuses  : list of public campuses (portal selector).
  *
- * NB : les consommateurs requièrent cette façade en require PARESSEUX
- * (`require('../../campus').service` à l'appel) car le module campus est un hub
- * qui requiert lui-même de nombreux modules (settings, teacher, student, class,
- * finance, department, staff, mentor) — un require statique créerait des cycles.
+ * NB: consumers require this facade via LAZY require
+ * (`require('../../campus').service` at call time) because the campus module is a hub
+ * that itself requires many modules (settings, teacher, student, class,
+ * finance, department, staff, mentor) — a static require would create cycles.
  */
 
 const campusRepo = require('./campus.repository');
 
-// Toute la persistance passe par campus.repository (étape 0 pré-Postgres).
+// All persistence goes through campus.repository (step 0 pre-Postgres).
 const getCampusName             = (campusId) => campusRepo.getCampusName(campusId);
 const getCampusForPdf           = (campusId) => campusRepo.getCampusForPdf(campusId);
 const getCampusStorageInfo      = (campusId) => campusRepo.getCampusStorageInfo(campusId);

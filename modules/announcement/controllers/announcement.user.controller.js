@@ -26,7 +26,7 @@ const getMyAnnouncements = async (req, res) => {
     const safeLimit = Math.min(50, Math.max(1, Number(limit) || 20));
     const skip = (safePage - 1) * safeLimit;
 
-    // Reçus de lecture : nécessaires pour le filtre "non lues" ET le flag isRead.
+    // Read receipts: needed for the "unread" filter AND the isRead flag.
     const readIds = await announcementRepo.listReadAnnouncementIds(userId, campusId);
     const readSet = new Set(readIds.map((id) => id.toString()));
 
@@ -85,7 +85,7 @@ const markAsRead = async (req, res) => {
     if (!isValidObjectId(announcementId)) return sendError(res, 400, 'Invalid announcement ID format.');
     if (!campusId) return sendError(res, 400, 'No campus assigned.');
 
-    // Vérifie que l'annonce est bien visible par cet utilisateur.
+    // Verify that the announcement is visible to this user.
     const announcement = await announcementRepo.findVisibleById({ id: announcementId, campusId, role });
     if (!announcement) return sendNotFound(res, 'Announcement');
 

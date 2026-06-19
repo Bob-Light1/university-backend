@@ -1,12 +1,12 @@
 'use strict';
 
 /**
- * @file teacher.routes.js — Router composite du module teacher.
+ * @file teacher.routes.js — Composite router for the teacher module.
  *
- * Monté dans server.js via  app.use('/api', routes)  → URLs INCHANGÉES :
- *   /api/teachers/*           — CRUD, profil, dashboard
- *   /api/schedules/teacher/*  — emplois du temps enseignants
- *   /api/attendance/teacher/* — présences enseignants
+ * Mounted in server.js via  app.use('/api', routes)  → URLs UNCHANGED:
+ *   /api/teachers/*           — CRUD, profile, dashboard
+ *   /api/schedules/teacher/*  — teacher schedules
+ *   /api/attendance/teacher/* — teacher attendance
  */
 
 const express = require('express');

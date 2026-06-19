@@ -17,13 +17,13 @@ const expenseSchema = new mongoose.Schema(
 
      paidBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin", // comptable / admin
+      ref: "Admin", // accountant / admin
       required: true,
     },
 
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin", // directeur
+      ref: "Admin", // director
     },
 
     // Identification
@@ -45,7 +45,7 @@ const expenseSchema = new mongoose.Schema(
       sparse: true,
     },
 
-    // Montants
+    // Amounts
     amount: {
       type: Number,
       required: true,
@@ -75,7 +75,7 @@ const expenseSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // Statut & contrôle
+    // Status & control
     status: {
       type: String,
       enum: ["pending", "approved", "paid", "rejected"],
@@ -93,14 +93,14 @@ const expenseSchema = new mongoose.Schema(
       enum: ["monthly", "quarterly", "yearly"],
     },
 
-    // Justificatifs
+    // Supporting documents
     attachments: [
       {
-        type: String, // URL facture / reçu
+        type: String, // invoice / receipt URL
       },
     ],
 
-    // Audit & sécurité
+    // Audit & security
     notes: {
       type: String,
       maxlength: 500,

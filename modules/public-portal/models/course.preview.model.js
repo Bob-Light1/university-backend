@@ -2,14 +2,14 @@
 
 /**
  * @file course.preview.model.js
- * @description Aperçus de cours (spec §4.7) — extraits pédagogiques gratuits.
+ * @description Course previews (spec §4.7) — free instructional excerpts.
  *
- * NOTE : ce modèle est un ajout Phase 2 non détaillé dans les chapitres §7-8 de la spec.
- * À faire valider formellement par le responsable projet (note finale du document).
+ * NOTE: this model is a Phase 2 addition not detailed in chapters §7-8 of the spec.
+ * To be formally validated by the project lead (final note of the document).
  *
- * Campus isolation : schoolCampus obligatoire. Contenu bilingue ({fr, en}).
- * Chaque extrait est rattaché à un program et se termine, côté portail, sur un CTA
- * de pré-inscription avec programInterest pré-rempli.
+ * Campus isolation: schoolCampus required. Bilingual content ({fr, en}).
+ * Each excerpt is attached to a program and ends, on the portal side, on a
+ * pre-registration CTA with programInterest pre-filled.
  */
 
 const mongoose = require('mongoose');
@@ -23,7 +23,7 @@ const coursePreviewSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // Formation à laquelle l'extrait est rattaché (alimente programInterest)
+    // Program the excerpt is attached to (feeds programInterest)
     program: {
       type:     String,
       required: [true, 'program is required'],
@@ -45,7 +45,7 @@ const coursePreviewSchema = new mongoose.Schema(
       },
     },
 
-    // Extrait texte de la leçon introductive
+    // Text excerpt of the introductory lesson
     content: {
       fr: {
         type:     String,
@@ -61,7 +61,7 @@ const coursePreviewSchema = new mongoose.Schema(
       },
     },
 
-    // Vidéo courte optionnelle (URL d'intégration)
+    // Optional short video (embed URL)
     videoUrl: {
       type: String,
       trim: true,

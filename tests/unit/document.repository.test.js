@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * Couche repository — module document (R3, cœur académique ; 5 models).
- * Models mockés (sans DB) : Document, DocumentVersion, DocumentAudit,
- * DocumentTemplate, DocumentShare — tous des exports PAR DÉFAUT (constructeurs).
+ * Repository layer — document module (R3, academic core; 5 models).
+ * Models mocked (no DB): Document, DocumentVersion, DocumentAudit,
+ * DocumentTemplate, DocumentShare — all DEFAULT exports (constructors).
  *
- * Le mock de query est chaînable ET thenable : chaque méthode de query
- * (select/sort/skip/limit/populate/session/lean) renvoie la query, et l'attente
- * (`await`) résout `__lean`. C'est nécessaire car le repo enchaîne parfois
- * `.lean().session()` (garde de débounce des snapshots) — l'ordre des maillons
- * ne doit donc pas terminer la chaîne.
+ * The query mock is both chainable AND thenable: each query method
+ * (select/sort/skip/limit/populate/session/lean) returns the query, and awaiting
+ * (`await`) resolves `__lean`. This is necessary because the repo sometimes chains
+ * `.lean().session()` (snapshot debounce guard) — so the order of the links
+ * must not terminate the chain.
  *
- * Accent : formes de requête (select/populate/sort), propagation de session sur
- * les écritures transactionnelles, atomiques ($inc download/usage, $push IP) et
- * non-régression de l'agrégat de quota stockage (pipeline $match casté/$group).
+ * Focus: query shapes (select/populate/sort), session propagation on
+ * transactional writes, atomic ones ($inc download/usage, $push IP) and
+ * non-regression of the storage quota aggregate (cast $match/$group pipeline).
  */
 
 const buildModelMock = () => {

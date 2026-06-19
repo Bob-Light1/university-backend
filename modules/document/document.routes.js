@@ -169,7 +169,7 @@ router.get('/share/:token', shareLimiter, shareCtrl.accessSharedDocument);
 router.get('/verify/:ref', verifyLimiter, async (req, res) => {
   try {
     const Document = require('./models/document.model');
-    const { getCampusName } = require('../campus').service; // façade module campus (§3)
+    const { getCampusName } = require('../campus').service; // campus module facade (§3)
     const { sendSuccess, sendNotFound } = require('../../shared/utils/response-helpers');
 
     const doc = await Document

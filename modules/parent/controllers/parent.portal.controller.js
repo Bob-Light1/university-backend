@@ -24,8 +24,8 @@
 const mongoose = require('mongoose');
 
 const parentRepo          = require('../parent.repository');
-const studentService      = require('../../student').service; // façade module student (§3)
-const resultService       = require('../../result').service; // façade module result (§3)
+const studentService      = require('../../student').service; // student module facade (§3)
+const resultService       = require('../../result').service; // result module facade (§3)
 const {
   sendSuccess,
   sendError,
@@ -211,8 +211,8 @@ const signTranscript = async (req, res) => {
       return sendError(res, 400, 'Invalid transcript ID.');
     }
 
-    // signTranscriptByParent propage l'erreur (statusCode) si déjà signé ou
-    // statut invalide ; null si introuvable.
+    // signTranscriptByParent propagates the error (statusCode) if already signed or
+    // invalid status; null if not found.
     const signed = await resultService.signTranscriptByParent({
       transcriptId,
       studentId,

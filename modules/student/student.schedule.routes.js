@@ -29,7 +29,7 @@ const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { apiLimiter }              = require('../../shared/middleware/rate-limiter');
 
 const {
-  // Étudiant
+  // Student
   getMyCalendar,
   getSessionById,
   exportCalendarICS,
@@ -45,20 +45,20 @@ const {
 } = require('./controllers/student.schedule.controller');
 
 // ─────────────────────────────────────────────
-// MIDDLEWARE GLOBAL
-// Toutes les routes du schedule requièrent une authentification.
+// GLOBAL MIDDLEWARE
+// All schedule routes require authentication.
 // ─────────────────────────────────────────────
 router.use(authenticate);
 router.use(apiLimiter);
 
 // ─────────────────────────────────────────────
-// ANALYTICS ADMIN (déclarées avant /:id)
+// ADMIN ANALYTICS (declared before /:id)
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/student/admin/overview
- * Vue d'ensemble "tour de contrôle" — filtrages multidimensionnels.
- * Query : from, to, status, roomCode, teacherId, classId, page, limit
+ * "Control tower" overview — multidimensional filtering.
+ * Query: from, to, status, roomCode, teacherId, classId, page, limit
  */
 router.get(
   '/admin/overview',
@@ -68,8 +68,8 @@ router.get(
 
 /**
  * GET /api/schedules/student/admin/room-occupancy
- * Rapport d'occupation des salles pour une période.
- * Query : from, to, campusId (ADMIN/DIRECTOR seulement)
+ * Room occupancy report for a period.
+ * Query: from, to, campusId (ADMIN/DIRECTOR only)
  */
 router.get(
   '/admin/room-occupancy',
@@ -78,13 +78,13 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// SELF-SERVICE ÉTUDIANT
+// STUDENT SELF-SERVICE
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/student/me
- * Emploi du temps personnel de l'étudiant connecté.
- * Query : from?, to?, sessionType?
+ * Personal timetable of the authenticated student.
+ * Query: from?, to?, sessionType?
  */
 router.get(
   '/me',
@@ -94,8 +94,8 @@ router.get(
 
 /**
  * GET /api/schedules/student/export/ics
- * Export ICS compatible Google Calendar / Apple / Outlook.
- * Query : from?, to?, tzid? (IANA timezone, défaut UTC)
+ * ICS export compatible with Google Calendar / Apple / Outlook.
+ * Query: from?, to?, tzid? (IANA timezone, default UTC)
  */
 router.get(
   '/export/ics',
@@ -104,13 +104,13 @@ router.get(
 );
 
 // ─────────────────────────────────────────────
-// GESTION DES SESSIONS (ADMIN / CAMPUS_MANAGER)
+// SESSION MANAGEMENT (ADMIN / CAMPUS_MANAGER)
 // ─────────────────────────────────────────────
 
 /**
  * POST /api/schedules/student/admin/sessions
- * Crée une nouvelle séance (statut DRAFT).
- * Body : { subject, sessionType, startTime, endTime, room,
+ * Creates a new session (DRAFT status).
+ * Body: { subject, sessionType, startTime, endTime, room,
  *           classIds, teacher, recurrence?, schoolCampus,
  *           isVirtual?, virtualMeeting?, topic, academicYear, semester }
  */
@@ -122,8 +122,8 @@ router.post(
 
 /**
  * PUT /api/schedules/student/admin/sessions/:id
- * Met à jour une séance existante. Relance la détection de conflits.
- * Body : champs partiels de la session
+ * Updates an existing session. Re-runs conflict detection.
+ * Body: partial session fields
  */
 router.put(
   '/admin/sessions/:id',
@@ -133,7 +133,7 @@ router.put(
 
 /**
  * PATCH /api/schedules/student/admin/sessions/:id/publish
- * Passe une séance DRAFT → PUBLISHED et envoie les notifications.
+ * Moves a session DRAFT → PUBLISHED and sends notifications.
  */
 router.patch(
   '/admin/sessions/:id/publish',
@@ -143,8 +143,8 @@ router.patch(
 
 /**
  * PATCH /api/schedules/student/admin/sessions/:id/cancel
- * Annule une séance et notifie les parties concernées.
- * Body : { reason? }
+ * Cancels a session and notifies the relevant parties.
+ * Body: { reason? }
  */
 router.patch(
   '/admin/sessions/:id/cancel',
@@ -154,7 +154,7 @@ router.patch(
 
 /**
  * DELETE /api/schedules/student/admin/sessions/:id
- * Soft-delete d'une séance (isDeleted = true).
+ * Soft-delete of a session (isDeleted = true).
  */
 router.delete(
   '/admin/sessions/:id',
@@ -163,13 +163,13 @@ router.delete(
 );
 
 // ─────────────────────────────────────────────
-// ROUTES DE LECTURE PARTAGÉES (après les routes nommées)
+// SHARED READ ROUTES (after the named routes)
 // ─────────────────────────────────────────────
 
 /**
  * GET /api/schedules/student/:id/attendance
- * Résumé de présence pour une séance spécifique.
- * Accessible par : STUDENT (sa séance), TEACHER (ses séances), CAMPUS_MANAGER, ADMIN, DIRECTOR
+ * Attendance summary for a specific session.
+ * Accessible by: STUDENT (own session), TEACHER (own sessions), CAMPUS_MANAGER, ADMIN, DIRECTOR
  */
 router.get(
   '/:id/attendance',
@@ -179,7 +179,7 @@ router.get(
 
 /**
  * GET /api/schedules/student/:id
- * Détails d'une séance publiée.
+ * Details of a published session.
  */
 router.get(
   '/:id',

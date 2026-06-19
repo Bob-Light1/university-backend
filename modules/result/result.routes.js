@@ -2,28 +2,28 @@
 
 /**
  * @file result.router.js  (v2)
- * @description Router Express pour la gestion des résultats académiques.
+ * @description Express router for managing academic results.
  *
- *  Enregistrement dans server.js :
+ *  Registration in server.js :
  *    const resultRouter = require('./modules/result').routes;
  *    app.use('/api/results', resultRouter);
  *
- *  Architecture des controllers :
+ *  Controllers architecture :
  *  ─────────────────────────────────────────────────────────────────
- *  result.crud.controller.js      → CRUD + import CSV
- *  result.workflow.controller.js  → workflow d'état + audit
- *  result.analytics.controller.js → transcripts, stats, QR, barèmes
- *  result.helpers.js              → helpers partagés (non-exporté en route)
+ *  result.crud.controller.js      → CRUD + CSV import
+ *  result.workflow.controller.js  → state workflow + audit
+ *  result.analytics.controller.js → transcripts, stats, QR, grading scales
+ *  result.helpers.js              → shared helpers (not exported as a route)
  *
- *  Ordre des routes :
+ *  Route ordering :
  *  ─────────────────────
- *  Les routes nommées spécifiques (/upload-csv, /campus/overview, etc.)
- *  sont déclarées AVANT les routes génériques (/:id) pour éviter les
- *  conflits de matching Express.
+ *  Specific named routes (/upload-csv, /campus/overview, etc.)
+ *  are declared BEFORE generic routes (/:id) to avoid
+ *  Express matching conflicts.
  *
- *  Route publique :
+ *  Public route :
  *  ─────────────────────
- *  GET /api/results/verify/:token → sans authenticate (QR Code bulletins)
+ *  GET /api/results/verify/:token → without authenticate (QR Code transcripts)
  */
 
 const express = require('express');
@@ -33,7 +33,7 @@ const router  = express.Router();
 const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { apiLimiter, uploadLimiter } = require('../../shared/middleware/rate-limiter');
 
-// Multer mémoire — CSV parsé sans stockage disque
+// Multer memory — CSV parsed without disk storage
 const csvUpload = multer({
   storage:  multer.memoryStorage(),
   limits:   { fileSize: 5 * 1024 * 1024 },  // 5 MB
@@ -83,15 +83,15 @@ const {
 
 /**
  * GET /api/results/verify/:token
- * Vérification d'authenticité d'un bulletin via QR Code.
- * Sans authentification — endpoint de confiance zéro.
+ * Authenticity verification of a transcript via QR Code.
+ * Without authentication — zero-trust endpoint.
  */
 router.get('/verify/:token', verifyResult);
 
 /**
  * POST /api/results/final-transcripts/:id/sign
- * Signature numérique du bulletin par le parent.
- * Accessible sans authentification enseignant (le parent s'identifie avec signedBy).
+ * Digital signature of the transcript by the parent.
+ * Accessible without teacher authentication (the parent identifies with signedBy).
  */
 router.post('/final-transcripts/:id/sign', signTranscript);
 
@@ -100,11 +100,11 @@ router.post('/final-transcripts/:id/sign', signTranscript);
 router.use(authenticate);
 router.use(apiLimiter);
 
-// ─── BARÈMES DE NOTATION (avant /:id) ────────────────────────────────────────
+// ─── GRADING SCALES (before /:id) ────────────────────────────────────────────
 
 /**
  * GET /api/results/grading-scales
- * Liste les barèmes actifs du campus.
+ * Lists the active grading scales of the campus.
  */
 router.get(
   '/grading-scales',
@@ -114,7 +114,7 @@ router.get(
 
 /**
  * POST /api/results/grading-scales
- * Crée un nouveau barème.
+ * Creates a new grading scale.
  * Body : { name, system, maxScore, passMark, bands[], isDefault?, description?, schoolCampus? }
  */
 router.post(
@@ -125,7 +125,7 @@ router.post(
 
 /**
  * PATCH /api/results/grading-scales/:id
- * Met à jour un barème existant.
+ * Updates an existing grading scale.
  */
 router.patch(
   '/grading-scales/:id',
@@ -133,11 +133,11 @@ router.patch(
   updateGradingScale
 );
 
-// ─── SAISIE & IMPORT ─────────────────────────────────────────────────────────
+// ─── ENTRY & IMPORT ──────────────────────────────────────────────────────────
 
 /**
  * POST /api/results/bulk
- * Saisie massive pour une classe entière.
+ * Bulk entry for an entire class.
  * Body : { classId, subjectId, teacherId, evaluationType, evaluationTitle,
  *           academicYear, semester, maxScore, results: [...] }
  */
@@ -149,8 +149,8 @@ router.post(
 
 /**
  * POST /api/results/upload-csv
- * Import massif via fichier CSV (form-data : file + contexte).
- * Colonnes CSV : studentId, score, coefficient?, teacherRemarks?,
+ * Bulk import via CSV file (form-data : file + context).
+ * CSV columns : studentId, score, coefficient?, teacherRemarks?,
  *                examAttendance?, strengths?, improvements?
  */
 router.post(
@@ -165,7 +165,7 @@ router.post(
 
 /**
  * POST /api/results/submit-batch
- * Soumet en lot tous les DRAFT d'une évaluation → SUBMITTED.
+ * Submits in batch all DRAFT of an evaluation → SUBMITTED.
  * Body : { classId, subjectId, evaluationTitle, academicYear, semester }
  */
 router.post(
@@ -176,7 +176,7 @@ router.post(
 
 /**
  * PATCH /api/results/publish-batch
- * Publie en lot tous les SUBMITTED → PUBLISHED.
+ * Publishes in batch all SUBMITTED → PUBLISHED.
  * Body : { classId, subjectId, evaluationTitle, academicYear, semester }
  */
 router.patch(
@@ -187,7 +187,7 @@ router.patch(
 
 /**
  * PATCH /api/results/lock-semester
- * Clôture un semestre : verrouillage + génération FinalTranscripts.
+ * Closes a semester : locking + FinalTranscripts generation.
  * Body : { academicYear, semester, schoolCampus? }
  */
 router.patch(
@@ -200,8 +200,8 @@ router.patch(
 
 /**
  * PATCH /api/results/audit/:id
- * Correction post-publication. ADMIN/DIRECTOR uniquement.
- * Body : { score?, teacherRemarks?, reason (min 10 chars, obligatoire) }
+ * Post-publication correction. ADMIN/DIRECTOR only.
+ * Body : { score?, teacherRemarks?, reason (min 10 chars, required) }
  */
 router.patch(
   '/audit/:id',
@@ -209,11 +209,11 @@ router.patch(
   auditCorrection
 );
 
-// ─── ANALYTICS (routes nommées avant /:id) ────────────────────────────────────
+// ─── ANALYTICS (named routes before /:id) ────────────────────────────────────
 
 /**
  * GET /api/results/campus/overview
- * Vue analytique globale du campus.
+ * Global analytics view of the campus.
  * Query : academicYear?, semester?, campusId?
  */
 router.get(
@@ -224,7 +224,7 @@ router.get(
 
 /**
  * GET /api/results/transcript/:studentId
- * Relevé de notes complet d'un étudiant (calculé à la volée).
+ * Complete transcript of a student (computed on the fly).
  * Query : academicYear?
  */
 router.get(
@@ -235,7 +235,7 @@ router.get(
 
 /**
  * GET /api/results/final-transcripts/:studentId
- * Bulletin définitif stocké (généré lors de lockSemester).
+ * Stored final transcript (generated during lockSemester).
  * Query : academicYear, semester
  */
 router.get(
@@ -246,7 +246,7 @@ router.get(
 
 /**
  * POST /api/results/final-transcripts/:id/validate
- * Valide un bulletin définitif DRAFT → VALIDATED (Campus Manager).
+ * Validates a final transcript DRAFT → VALIDATED (Campus Manager).
  * Body : { decision?, generalAppreciation? }
  */
 router.post(
@@ -257,7 +257,7 @@ router.post(
 
 /**
  * GET /api/results/statistics/:classId
- * Distribution statistique d'une évaluation (avant soumission).
+ * Statistical distribution of an evaluation (before submission).
  * Query : subjectId, evaluationTitle, academicYear, semester
  */
 router.get(
@@ -268,7 +268,7 @@ router.get(
 
 /**
  * GET /api/results/retake-list/:classId
- * Liste des étudiants éligibles au rattrapage.
+ * List of students eligible for retake.
  * Query : subjectId?, academicYear, semester
  */
 router.get(
@@ -281,7 +281,7 @@ router.get(
 
 /**
  * GET /api/results
- * Liste paginée avec filtres.
+ * Paginated list with filters.
  * Query : classId?, subjectId?, teacherId?, studentId?, status?,
  *         evaluationType?, academicYear?, semester?, examPeriod?,
  *         campusId?, page, limit
@@ -294,7 +294,7 @@ router.get(
 
 /**
  * POST /api/results
- * Crée un résultat individuel (DRAFT).
+ * Creates an individual result (DRAFT).
  * Body : { student, class, subject, teacher, score, maxScore, coefficient?,
  *           evaluationType, evaluationTitle, academicYear, semester,
  *           examDate?, examPeriod?, examAttendance?,
@@ -309,7 +309,7 @@ router.post(
 
 /**
  * GET /api/results/:id
- * Détail complet avec audit log et feedback pédagogique.
+ * Full detail with audit log and pedagogical feedback.
  */
 router.get(
   '/:id',
@@ -319,8 +319,8 @@ router.get(
 
 /**
  * PUT /api/results/:id
- * Met à jour un résultat DRAFT ou SUBMITTED (avec droits appropriés).
- * Utilise result.canModify(role, userId) [S3-1].
+ * Updates a DRAFT or SUBMITTED result (with appropriate rights).
+ * Uses result.canModify(role, userId) [S3-1].
  */
 router.put(
   '/:id',
@@ -330,7 +330,7 @@ router.put(
 
 /**
  * DELETE /api/results/:id
- * Soft-delete (DRAFT uniquement pour non-admin).
+ * Soft-delete (DRAFT only for non-admin).
  */
 router.delete(
   '/:id',
@@ -342,7 +342,7 @@ router.delete(
 
 /**
  * POST /api/results/:id/submit
- * Soumet un résultat DRAFT → SUBMITTED.
+ * Submits a result DRAFT → SUBMITTED.
  */
 router.post(
   '/:id/submit',
@@ -352,9 +352,9 @@ router.post(
 
 /**
  * PATCH /api/results/:id/publish
- * Publie un résultat SUBMITTED → PUBLISHED.
- * Déclenche calcul du risque de décrochage.
- * [S3-2] Transaction pour les RETAKE.
+ * Publishes a result SUBMITTED → PUBLISHED.
+ * Triggers dropout risk computation.
+ * [S3-2] Transaction for RETAKE.
  */
 router.patch(
   '/:id/publish',
@@ -364,7 +364,7 @@ router.patch(
 
 /**
  * PATCH /api/results/:id/archive
- * Archive un résultat PUBLISHED → ARCHIVED.
+ * Archives a result PUBLISHED → ARCHIVED.
  */
 router.patch(
   '/:id/archive',

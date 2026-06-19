@@ -33,8 +33,8 @@ const {
 const { examAnalyticsWorker } = require('../exam-analytics.worker');
 const notification = require('../../notification').service;
 
-// Notifie un étudiant que sa note d'examen est publiée (in-app, best-effort :
-// n'échoue jamais la publication — même contrat que l'émission result.published).
+// Notifies a student that their exam grade has been published (in-app, best-effort:
+// never fails the publication — same contract as the result.published event).
 const notifyExamGraded = (studentId, campusId, email, locale) =>
   notification.notify({
     recipient: { id: studentId, model: 'Student', campusId, email },
@@ -346,8 +346,8 @@ const publishGrades = async (req, res) => {
     const session = await repo.findSessionByFilter({ _id: sessionId, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
-    // Destinataires capturés AVANT publication (après, le filtre GRADED/MEDIATED
-    // ne les renverrait plus).
+    // Recipients captured BEFORE publishing (afterwards, the GRADED/MEDIATED
+    // filter would no longer return them).
     const recipients = await repo.findSessionGradingRecipients(sessionId);
 
     const result = await repo.publishSessionGradings(sessionId, {
@@ -356,9 +356,9 @@ const publishGrades = async (req, res) => {
 
     examAnalyticsWorker.emit('examAnalytics:compute', sessionId);
 
-    // Une notif (in-app + email) par étudiant dont la note vient d'être publiée.
-    // Emails + langues résolus chacun en un seul appel batch via les façades
-    // (best-effort ; langue depuis UserPreferences, source unique).
+    // One notification (in-app + email) per student whose grade was just published.
+    // Emails + locales each resolved in a single batch call via facades
+    // (best-effort; locale from UserPreferences, single source of truth).
     const studentIds = recipients.map((g) => g.student);
     let emailByStudent = new Map();
     let localeByStudent = new Map();

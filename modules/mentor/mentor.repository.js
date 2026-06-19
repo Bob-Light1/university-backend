@@ -21,17 +21,17 @@ const RESPONSE_SELECT = '-password -__v';
 
 // ── Login ─────────────────────────────────────────────────────────────────────
 
-/** Recherche par email/username AVEC le hash (login). */
+/** Search by email/username WITH the password hash (login). */
 const findByCredential = (query) =>
   Mentor.findOne(query).select('+password').lean({ virtuals: true });
 
-/** Met à jour lastLogin (fire-and-forget). */
+/** Updates lastLogin (fire-and-forget). */
 const touchLastLogin = (id) =>
   Mentor.findByIdAndUpdate(id, { lastLogin: new Date() }).exec();
 
 // ── CRUD (controller) ─────────────────────────────────────────────────────────
 
-/** Crée un mentor (Mentor.create → déclenche le hash pre('save')). @returns {Promise<Document>} */
+/** Creates a mentor (Mentor.create → triggers the pre('save') hash). @returns {Promise<Document>} */
 const create = (data) => Mentor.create(data);
 
 /**
@@ -58,23 +58,23 @@ const paginate = async ({ campusFilter, status, includeArchived, search, skip, l
   return { data, total };
 };
 
-/** Lecture d'un mentor dans la portée (campus_name peuplé). */
+/** Read a mentor within the scope (campus_name populated). */
 const findOneScoped = (scopeFilter) =>
   Mentor.findOne(scopeFilter)
     .select(RESPONSE_SELECT)
     .populate('schoolCampus', 'campus_name')
     .lean({ virtuals: true });
 
-/** Lecture brute dans la portée (préconditions : _id, schoolCampus). */
+/** Raw read within the scope (preconditions: _id, schoolCampus). */
 const findOneScopedLean = (scopeFilter) => Mentor.findOne(scopeFilter).lean();
 
-/** Mentor de l'utilisateur connecté : students/classes/campus (readonly). */
+/** Authenticated mentor's data: students/classes/campus (readonly). */
 const findAssignmentsFor = (id, campusId) =>
   Mentor.findOne({ _id: id, schoolCampus: campusId })
     .select('students classes schoolCampus')
     .lean();
 
-/** Mise à jour scoped (PUT). @returns {Promise<Object|null>} */
+/** Scoped update (PUT). @returns {Promise<Object|null>} */
 const updateScoped = (scopeFilter, body) =>
   Mentor.findOneAndUpdate(scopeFilter, { $set: body }, { new: true, runValidators: true })
     .select(RESPONSE_SELECT).lean({ virtuals: true });
@@ -84,14 +84,14 @@ const setStatusScoped = (scopeFilter, status) =>
   Mentor.findOneAndUpdate(scopeFilter, { $set: { status } }, { new: true })
     .select(RESPONSE_SELECT).lean({ virtuals: true });
 
-/** Met à jour le mot de passe (déjà hashé — bypass pre('save')). */
+/** Updates the password (already hashed — bypasses pre('save')). */
 const updatePassword = (id, hashedPassword) =>
   Mentor.findByIdAndUpdate(id, { password: hashedPassword });
 
-/** Suppression définitive. */
+/** Permanent deletion. */
 const deleteById = (id) => Mentor.findByIdAndDelete(id);
 
-/** Applique l'affectation d'élèves (add/remove/replace), students peuplés. */
+/** Applies the student assignment (add/remove/replace), students populated. */
 const applyStudentAssignment = (id, updateOp) =>
   Mentor.findByIdAndUpdate(id, updateOp, { new: true })
     .select(RESPONSE_SELECT)
@@ -104,7 +104,7 @@ const applyStudentAssignment = (id, updateOp) =>
 const countByCampus = (campusId, status) =>
   Mentor.countDocuments({ schoolCampus: campusId, status });
 
-/** Somme des élèves affectés (dashboard campus). */
+/** Total assigned students (campus dashboard). */
 const aggregateAssignedStudents = (campusOid) =>
   Mentor.aggregate([
     { $match: { schoolCampus: campusOid, status: { $ne: 'archived' } } },

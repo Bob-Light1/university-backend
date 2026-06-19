@@ -19,9 +19,9 @@
  *
  *  Versioning (createNewVersion):
  *  ─────────────────────────────────────────────────────────────────
- *  Clone APPROVED → new DRAFT (version + 1). Les deux écritures (retrait de
- *  l'ancienne latest + insertion) sont enveloppées dans une transaction Mongo,
- *  possédée par course.repository.cloneAsNewVersion.
+ *  Clone APPROVED → new DRAFT (version + 1). Both writes (removal of the
+ *  previous latest + insertion) are wrapped in a Mongo transaction,
+ *  owned by course.repository.cloneAsNewVersion.
  */
 
 const { APPROVAL_STATUS } = require('../course.model');
@@ -174,8 +174,8 @@ const rejectCourse = asyncHandler(async (req, res) => {
  * @body {boolean} [copyResources=true]
  *   When false, the new draft is created without the parent's resources array.
  *
- * Atomicité : la transaction (retrait de l'ancienne latest + insertion) est
- * gérée par course.repository.cloneAsNewVersion.
+ * Atomicity: the transaction (removal of the previous latest + insertion) is
+ * handled by course.repository.cloneAsNewVersion.
  */
 const createNewVersion = asyncHandler(async (req, res) => {
   const { id } = req.params;

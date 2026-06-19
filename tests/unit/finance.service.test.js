@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * Service — suivi paiement étudiant (finance.service).
- * Repository et socle notifications mockés (sans DB). On verrouille
- * l'orchestration : garde-fous d'acompte, totaux du relevé, émission du rappel.
+ * Service — student payment tracking (finance.service).
+ * Repository and notifications base mocked (no DB). We lock down
+ * the orchestration: deposit guardrails, statement totals, reminder dispatch.
  */
 
 jest.mock('../../modules/finance/finance.repository');
@@ -21,11 +21,11 @@ const repo = require('../../modules/finance/finance.repository');
 const { service: notification } = require('../../modules/notification');
 const finance = require('../../modules/finance/finance.service');
 
-// La notif de solde est fire-and-forget + résout d'abord le contact (await) :
-// on laisse vider la file de microtâches avant d'asserter l'appel à notify.
+// The balance notification is fire-and-forget + resolves the contact first (await):
+// we let the microtask queue drain before asserting the call to notify.
 const flush = () => new Promise((resolve) => setImmediate(resolve));
 
-// Fabrique un faux document Mongoose de dette (mutable + save/toObject).
+// Builds a fake Mongoose fee document (mutable + save/toObject).
 function fakeFeeDoc(over = {}) {
   const doc = {
     _id: 'fee-1',

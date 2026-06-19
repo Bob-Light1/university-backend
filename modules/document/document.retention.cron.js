@@ -17,9 +17,9 @@
  */
 
 const repo = require('./document.repository');
-// require paresseux (au moment du job) : academic-print consomme la façade
-// document (generateQrCodeDataUrl) — un require au chargement créerait un
-// cycle document ↔ academic-print et une façade partiellement initialisée.
+// lazy require (at job time): academic-print consumes the document facade
+// (generateQrCodeDataUrl) — a require at load time would create a
+// document ↔ academic-print cycle and a partially initialized facade.
 const cleanupExpiredPrintFiles = (...args) =>
   require('../academic-print').service.cleanupExpiredPrintFiles(...args);
 

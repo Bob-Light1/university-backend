@@ -1,20 +1,20 @@
 'use strict';
 
 /**
- * @file subject.repository.js — couche de persistance du domaine subject.
+ * @file subject.repository.js — persistence layer of the subject domain.
  *
- * SEUL fichier du module autorisé à toucher le model Subject (subject.controller,
- * subject.course-link.controller, subject.service). Étape 0 de la préparation
- * Postgres — voir POSTGRES_MIGRATION_ASSESSMENT.md §7.
+ * The ONLY file in the module allowed to touch the Subject model (subject.controller,
+ * subject.course-link.controller, subject.service). Step 0 of the Postgres
+ * preparation — see POSTGRES_MIGRATION_ASSESSMENT.md §7.
  *
- * Lectures → objets simples (`.lean()`) ; écritures → load→mutate→save (préserve
- * le hook pre('save') et les setters du schéma).
+ * Reads → plain objects (`.lean()`); writes → load→mutate→save (preserves
+ * the pre('save') hook and the schema setters).
  */
 
 const Subject = require('./subject.model');
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
 
-// ── Contrôles d'unicité ───────────────────────────────────────────────────────
+// ── Uniqueness checks ─────────────────────────────────────────────────────────
 
 const findDuplicateCode = (campusId, code) =>
   Subject.findOne({ schoolCampus: campusId, subject_code: code }).lean();
@@ -22,26 +22,26 @@ const findDuplicateCode = (campusId, code) =>
 const findDuplicateCodeExcept = (campusId, code, exceptId) =>
   Subject.findOne({ _id: { $ne: exceptId }, schoolCampus: campusId, subject_code: code }).lean();
 
-// ── Lectures (controller) ─────────────────────────────────────────────────────
+// ── Reads (controller) ────────────────────────────────────────────────────────
 
-/** Référence brute (préconditions : schoolCampus, status, courseRef…). */
+/** Raw reference (preconditions: schoolCampus, status, courseRef…). */
 const findByIdLean = (id) => Subject.findById(id).lean();
 
-/** Réponse standard : campus_name peuplé. */
+/** Standard response: campus_name populated. */
 const findByIdForResponse = (id) =>
   Subject.findById(id).populate('schoolCampus', 'campus_name').lean();
 
-/** Vue unitaire : campus_name + location peuplés. */
+/** Single-item view: campus_name + location populated. */
 const findByIdDetailed = (id) =>
   Subject.findById(id).populate('schoolCampus', 'campus_name location').lean();
 
-/** Réfs campus d'un lot de subjects (validation batch subjects∈campus — teacher.config). */
+/** Campus refs for a batch of subjects (batch validation subjects∈campus — teacher.config). */
 const getCampusRefsByIds = (subjectIds, { session } = {}) =>
   Subject.find({ _id: { $in: subjectIds } }).select('schoolCampus').session(session).lean();
 
 /**
- * Liste paginée (campus + statut/catégorie/recherche), campus_name peuplé,
- * tri par subject_name.
+ * Paginated list (campus + status/category/search), campus_name populated,
+ * sorted by subject_name.
  * @returns {Promise<{data: Object[], total: number}>}
  */
 const paginate = async ({ baseFilter, includeArchived, status, category, search, skip, limit }) => {
@@ -65,12 +65,12 @@ const paginate = async ({ baseFilter, includeArchived, status, category, search,
   return { data, total };
 };
 
-// ── Écritures (load→save) ─────────────────────────────────────────────────────
+// ── Writes (load→save) ────────────────────────────────────────────────────────
 
-/** Crée un subject. @returns {Promise<Document>} */
+/** Creates a subject. @returns {Promise<Document>} */
 const create = (data) => Subject.create(data);
 
-/** Applique les champs fournis (load→assign→save). @returns {Promise<Document|null>} */
+/** Applies the provided fields (load→assign→save). @returns {Promise<Document|null>} */
 const updateById = async (id, fields) => {
   const subject = await Subject.findById(id);
   if (!subject) return null;
@@ -79,7 +79,7 @@ const updateById = async (id, fields) => {
   return subject;
 };
 
-/** Change le statut (active/archived). @returns {Promise<Document|null>} */
+/** Changes the status (active/archived). @returns {Promise<Document|null>} */
 const setStatus = async (id, status) => {
   const subject = await Subject.findById(id);
   if (!subject) return null;
@@ -88,7 +88,7 @@ const setStatus = async (id, status) => {
   return subject;
 };
 
-/** Définit (ou retire avec null) le courseRef. @returns {Promise<Document|null>} */
+/** Sets (or clears with null) the courseRef. @returns {Promise<Document|null>} */
 const setCourseRef = async (id, courseRef) => {
   const subject = await Subject.findById(id);
   if (!subject) return null;
@@ -97,13 +97,13 @@ const setCourseRef = async (id, courseRef) => {
   return subject;
 };
 
-// ── API inter-modules (ancien subject.service) ────────────────────────────────
+// ── Inter-module API (former subject.service) ─────────────────────────────────
 
-/** Compte les subjects d'un campus parmi une liste d'ids. */
+/** Counts the subjects of a campus among a list of ids. */
 const countOnCampus = (subjectIds, campusId) =>
   Subject.countDocuments({ _id: { $in: subjectIds }, schoolCampus: campusId });
 
-/** Subjects d'un campus (department + teachers peuplés). */
+/** Subjects of a campus (department + teachers populated). */
 const listForCampus = ({ campusId, status }) => {
   const filter = { schoolCampus: campusId };
   if (status) filter.status = status;
@@ -114,23 +114,23 @@ const listForCampus = ({ campusId, status }) => {
     .lean();
 };
 
-/** Ids de cours référencés par au moins un subject actif. */
+/** Course ids referenced by at least one active subject. */
 const distinctLinkedCourseRefs = () =>
   Subject.distinct('courseRef', { status: 'active', courseRef: { $ne: null } });
 
-/** Subjects actifs référençant un cours (schoolCampus.name peuplé). */
+/** Active subjects referencing a course (schoolCampus.name populated). */
 const listActiveLinkedToCourse = (courseId) =>
   Subject.find({ courseRef: courseId, status: 'active' })
     .select('schoolCampus subject_name')
     .populate('schoolCampus', 'name')
     .lean();
 
-/** Référence campus d'un subject. */
+/** Campus reference of a subject. */
 const getCampusRef = (subjectId) =>
   Subject.findById(subjectId).select('schoolCampus').lean();
 
 /**
- * Forme dénormalisée subject{} pour les emplois du temps (campus-isolée).
+ * Denormalized subject{} shape for schedules (campus-isolated).
  * @returns {Promise<Object|null>}
  */
 const resolveForSchedule = async (subjectId, campusId) => {

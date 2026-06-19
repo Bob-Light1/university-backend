@@ -308,13 +308,13 @@ teacherSchema.pre('save', function () {
   }
 });
 
-// NOTE — La règle « classes[] et subjects[] doivent appartenir au même campus »
-// ne vit PLUS dans un hook de schéma : un model ne doit pas lire d'autres
-// collections (`mongoose.model('Class'/'Subject')`) — logique cross-entité
-// implicite, non testable, ignorée par findByIdAndUpdate/updateMany. Elle est
-// désormais portée par teacher.config.js → customValidation, via les façades
-// class (getClassesCampusRefs) et subject (getSubjectsCampusRefs).
-// (Même patron que student.model.js.)
+// NOTE — The rule "classes[] and subjects[] must belong to the same campus"
+// NO LONGER lives in a schema hook: a model must not read other
+// collections (`mongoose.model('Class'/'Subject')`) — implicit cross-entity
+// logic, untestable, ignored by findByIdAndUpdate/updateMany. It is
+// now handled by teacher.config.js → customValidation, via the class
+// (getClassesCampusRefs) and subject (getSubjectsCampusRefs) facades.
+// (Same pattern as student.model.js.)
 
 // **METHODS**
 // Check if teacher can login (active status)

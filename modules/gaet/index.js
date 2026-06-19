@@ -7,7 +7,7 @@ const routes  = require('./gaet.routes');
 const service = require('./gaet.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/gaet', gaet.routes)
-  service,  // API inter-modules    :  require('../gaet').service.recoverZombieJobs()
-  // PAS de model exporté. PAS de controller exporté.
+  routes,   // mounted by server.js :  app.use('/api/gaet', gaet.routes)
+  service,  // inter-module API     :  require('../gaet').service.recoverZombieJobs()
+  // NO model exported. NO controller exported.
 };

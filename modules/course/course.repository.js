@@ -1,21 +1,21 @@
 'use strict';
 
 /**
- * @file course.repository.js — couche de persistance du domaine course.
+ * @file course.repository.js — persistence layer of the course domain.
  *
- * SEUL fichier du module autorisé à toucher le model Course (controllers crud/
- * workflow/resources + service). Étape 0 de la préparation Postgres — voir
+ * The ONLY file in the module allowed to touch the Course model (crud/
+ * workflow/resources controllers + service). Step 0 of the Postgres preparation — see
  * POSTGRES_MIGRATION_ASSESSMENT.md §7.
  *
- * Conventions :
- *  - Lectures → objets simples (`.lean({ virtuals: true })` là où les virtuals
- *    totalHours/prerequisiteCount sont attendus).
- *  - Écritures → load→mutate→save : le model a des hooks pre('validate')/pre('save')
- *    (slug, BFS anti-cycle des prérequis, validation MIME des ressources) que
- *    findByIdAndUpdate court-circuiterait.
- *  - La transaction de versioning (startSession/withTransaction) vit ICI.
- *  - Les filtres dynamiques (buildCourseFilter) restent construits par les
- *    controllers via course.helper et passés en paramètre — frontière DAO.
+ * Conventions:
+ *  - Reads → plain objects (`.lean({ virtuals: true })` wherever the
+ *    totalHours/prerequisiteCount virtuals are expected).
+ *  - Writes → load→mutate→save: the model has pre('validate')/pre('save') hooks
+ *    (slug, BFS prerequisite cycle prevention, resource MIME validation) that
+ *    findByIdAndUpdate would bypass.
+ *  - The versioning transaction (startSession/withTransaction) lives HERE.
+ *  - Dynamic filters (buildCourseFilter) remain built by the
+ *    controllers via course.helper and passed as a parameter — DAO boundary.
  */
 
 const mongoose = require('mongoose');
@@ -26,14 +26,14 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const ACTIVE = { $ne: 'archived' };
 
-// ── Lectures ─────────────────────────────────────────────────────────────────
+// ── Reads ─────────────────────────────────────────────────────────────────
 
-/** Nombre de cours actifs parmi une liste d'ids (validation des prérequis). */
+/** Number of active courses among a list of ids (prerequisite validation). */
 const countExistingActive = (ids) =>
   Course.countDocuments({ _id: { $in: ids }, status: ACTIVE });
 
 /**
- * Liste paginée (filtre fourni par le controller), populate LIST, virtuals.
+ * Paginated list (filter provided by the controller), populate LIST, virtuals.
  * @returns {Promise<{data: Object[], total: number}>}
  */
 const paginateList = async ({ filter, sort, skip, limit }) => {
@@ -45,29 +45,29 @@ const paginateList = async ({ filter, sort, skip, limit }) => {
   return { data, total };
 };
 
-/** Détail d'un cours actif (populate DETAIL, virtuals). */
+/** Detail of an active course (populate DETAIL, virtuals). */
 const findActiveByIdDetailed = (id) =>
   Course.findOne({ _id: id, status: ACTIVE }).populate(COURSE_POPULATE.DETAIL).lean({ virtuals: true });
 
-/** Lecture brute d'un cours actif (préconditions : approvalStatus, resources…). */
+/** Raw read of an active course (preconditions: approvalStatus, resources…). */
 const findActiveByIdLean = (id) =>
   Course.findOne({ _id: id, status: ACTIVE }).lean();
 
-/** Dernière version active par code (populate DETAIL, virtuals). */
+/** Latest active version by code (populate DETAIL, virtuals). */
 const findLatestActiveByCode = (code) =>
   Course.findOne({ courseCode: code, isLatestVersion: true, status: ACTIVE })
     .populate(COURSE_POPULATE.DETAIL).lean({ virtuals: true });
 
-/** Code d'un cours actif (résolution de l'historique de versions). */
+/** Code of an active course (version history resolution). */
 const findCodeById = (id) =>
   Course.findOne({ _id: id, status: ACTIVE }).select('courseCode').lean();
 
-/** Dernière version active (lecture brute) — préalable au versioning. */
+/** Latest active version (raw read) — precursor to versioning. */
 const findLatestActiveLean = (id) =>
   Course.findOne({ _id: id, status: ACTIVE, isLatestVersion: true }).lean();
 
 /**
- * Historique de versions paginé (même courseCode), tri version desc.
+ * Paginated version history (same courseCode), sorted by version desc.
  * @returns {Promise<{data: Object[], total: number}>}
  */
 const paginateVersions = async (courseCode, { skip, limit }) => {
@@ -84,14 +84,14 @@ const paginateVersions = async (courseCode, { skip, limit }) => {
   return { data, total };
 };
 
-/** Cours actifs référençant `id` en prérequis (avertissement non bloquant). */
+/** Active courses referencing `id` as a prerequisite (non-blocking warning). */
 const listDependents = (id) =>
   Course.find({ 'prerequisites.course': id, status: ACTIVE })
     .select('courseCode title version approvalStatus').lean();
 
-// ── Écritures (load→mutate→save, hooks préservés) ──────────────────────────────
+// ── Writes (load→mutate→save, hooks preserved) ──────────────────────────────
 
-/** Crée un cours et peuple level + createdBy pour la réponse. @returns {Promise<Document>} */
+/** Creates a course and populates level + createdBy for the response. @returns {Promise<Document>} */
 const create = async (data) => {
   const course = await Course.create(data);
   await course.populate([
@@ -101,7 +101,7 @@ const create = async (data) => {
   return course;
 };
 
-/** Applique des champs à un cours actif, save + populate DETAIL. @returns {Promise<Document|null>} */
+/** Applies fields to an active course, save + populate DETAIL. @returns {Promise<Document|null>} */
 const applyUpdate = async (id, updates) => {
   const course = await Course.findOne({ _id: id, status: ACTIVE });
   if (!course) return null;
@@ -111,7 +111,7 @@ const applyUpdate = async (id, updates) => {
   return course;
 };
 
-/** Soft-delete (archive) d'un cours actif. @returns {Promise<Document|null>} */
+/** Soft-delete (archive) of an active course. @returns {Promise<Document|null>} */
 const archiveById = async (id, { deletedBy }) => {
   const course = await Course.findOne({ _id: id, status: ACTIVE });
   if (!course) return null;
@@ -122,7 +122,7 @@ const archiveById = async (id, { deletedBy }) => {
   return course;
 };
 
-/** Restaure un cours archivé. @returns {Promise<Document|null>} */
+/** Restores an archived course. @returns {Promise<Document|null>} */
 const restoreById = async (id) => {
   const course = await Course.findOne({ _id: id, status: 'archived' });
   if (!course) return null;
@@ -134,7 +134,7 @@ const restoreById = async (id) => {
 };
 
 /**
- * Applique une transition de statut d'approbation + entrée d'historique.
+ * Applies an approval status transition + history entry.
  * @returns {Promise<Document|null>}
  */
 const applyStatusTransition = async (id, { newStatus, historyEntry }) => {
@@ -148,8 +148,8 @@ const applyStatusTransition = async (id, { newStatus, historyEntry }) => {
 };
 
 /**
- * Ajoute une ressource au cours actif (save → déclenche la validation MIME).
- * @returns {Promise<Object|null>} la ressource ajoutée, ou null si cours introuvable
+ * Adds a resource to the active course (save → triggers MIME validation).
+ * @returns {Promise<Object|null>} the added resource, or null if course not found
  */
 const pushResource = async (id, entry) => {
   const course = await Course.findOne({ _id: id, status: ACTIVE });
@@ -160,8 +160,8 @@ const pushResource = async (id, entry) => {
 };
 
 /**
- * Retire une ressource (par sous-doc id) du cours actif.
- * @returns {Promise<boolean|null>} true si retirée, null si cours introuvable
+ * Removes a resource (by sub-doc id) from the active course.
+ * @returns {Promise<boolean|null>} true if removed, null if course not found
  */
 const pullResource = async (id, resourceId) => {
   const course = await Course.findOne({ _id: id, status: ACTIVE });
@@ -172,18 +172,18 @@ const pullResource = async (id, resourceId) => {
 };
 
 /**
- * Clone un cours APPROVED en nouvelle version DRAFT (transaction atomique :
- * retire l'ancienne latest + insère la nouvelle). Possède la session Mongoose.
+ * Clones an APPROVED course into a new DRAFT version (atomic transaction:
+ * removes the old latest + inserts the new one). Owns the Mongoose session.
  * @param {{ original: Object, actorId: string, copyResources: boolean }} p
- * @returns {Promise<Document>} le nouveau cours, populé DETAIL
- * @throws {Error & { statusCode: 409 }} si le statut a changé en concurrence
+ * @returns {Promise<Document>} the new course, populated DETAIL
+ * @throws {Error & { statusCode: 409 }} if the status changed concurrently
  */
 const cloneAsNewVersion = async ({ original, actorId, copyResources }) => {
   const dbSession = await mongoose.startSession();
   let newCourse;
   try {
     await dbSession.withTransaction(async () => {
-      // Re-vérif sous transaction — garde contre un approve/reject concurrent.
+      // Re-check under transaction — guards against a concurrent approve/reject.
       const locked = await Course.findOne(
         { _id: original._id, approvalStatus: APPROVAL_STATUS.APPROVED, isLatestVersion: true },
         null,
@@ -237,9 +237,9 @@ const cloneAsNewVersion = async ({ original, actorId, copyResources }) => {
   return newCourse;
 };
 
-// ── API inter-modules (ancien course.service) ──────────────────────────────────
+// ── Cross-module API (former course.service) ──────────────────────────────────
 
-/** Catalogue paginé des cours APPROVED (staff/mentor). @returns {Promise<{docs, total}>} */
+/** Paginated catalogue of APPROVED courses (staff/mentor). @returns {Promise<{docs, total}>} */
 const listApproved = async ({ search, page = 1, limit = 20 } = {}) => {
   const filter = {
     approvalStatus:  APPROVAL_STATUS.APPROVED,
@@ -260,13 +260,13 @@ const listApproved = async ({ search, page = 1, limit = 20 } = {}) => {
   return { docs, total };
 };
 
-/** Vrai si l'enseignant possède au moins un des cours (contrôle d'accès document). */
+/** True if the teacher owns at least one of the courses (document access control). */
 const teacherOwnsAnyCourse = async (courseIds, teacherId) => {
   const owned = await Course.findOne({ _id: { $in: courseIds }, teacher: teacherId }).select('_id').lean();
   return owned != null;
 };
 
-/** Cours éligible au lien Subject→Course (level populé). */
+/** Course eligible for the Subject→Course link (level populated). */
 const findApprovedForLinking = (courseId) =>
   Course.findOne({
     _id: courseId, status: ACTIVE,

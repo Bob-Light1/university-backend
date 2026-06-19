@@ -2,13 +2,13 @@
 /**
  * seed-faq.js
  *
- * Insère des entrées FAQ publiées (bilingues) pour tous les campus (ou un précis).
+ * Inserts published FAQ entries (bilingual) for all campuses (or a specific one).
  *
- * Usage :
- *   node scripts/seed-faq.js                       → tous les campus
- *   node scripts/seed-faq.js --slug=campus-douala  → un seul campus
- *   node scripts/seed-faq.js --dry-run             → aperçu sans insertion
- *   node scripts/seed-faq.js --clear               → supprime et réinsère
+ * Usage:
+ *   node scripts/seed-faq.js                       → all campuses
+ *   node scripts/seed-faq.js --slug=campus-douala  → a single campus
+ *   node scripts/seed-faq.js --dry-run             → preview without inserting
+ *   node scripts/seed-faq.js --clear               → deletes and re-inserts
  */
 
 'use strict';

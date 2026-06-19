@@ -9,7 +9,7 @@
  * after reviewing; this controller just sets status + partnerId reference.
  */
 
-const partnerService = require('../../../partner').service; // façade module partner (§3)
+const partnerService = require('../../../partner').service; // partner module facade (§3)
 const {
   buildCampusFilter,
   GLOBAL_ROLES,

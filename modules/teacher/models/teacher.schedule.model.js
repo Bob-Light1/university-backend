@@ -5,17 +5,17 @@
  * @description Mongoose model for teacher-facing schedule sessions,
  *              availability, and workload management.
  *
- *  Alignements avec le backend foruni :
+ *  Alignment with the foruni backend:
  *  ──────────────────────────────────────
- *  • Campus isolation : schoolCampus (ObjectId → 'Campus')
- *  • Teacher : ref 'Teacher' (teacher_model.js) — utilise _id du modèle Teacher
- *  • Subject : ref 'Subject' (subject_model.js)
- *  • Semester : 'S1' | 'S2' | 'Annual' (String)
- *  • ContractSnapshot aligné avec teacher_model.employmentType :
+ *  • Campus isolation: schoolCampus (ObjectId → 'Campus')
+ *  • Teacher: ref 'Teacher' (teacher_model.js) — uses _id of the Teacher model
+ *  • Subject: ref 'Subject' (subject_model.js)
+ *  • Semester: 'S1' | 'S2' | 'Annual' (String)
+ *  • ContractSnapshot aligned with teacher_model.employmentType:
  *    'full-time' | 'part-time' | 'contract' | 'temporary'
- *  • Classes : ref 'Class' (class_model.js) et non groups
- *  • studentScheduleRef : lien vers StudentSchedule (même session)
- *  • JWT payload : req.user.id (et non req.user._id)
+ *  • Classes: ref 'Class' (class_model.js) and not groups
+ *  • studentScheduleRef: link to StudentSchedule (same session)
+ *  • JWT payload: req.user.id (and not req.user._id)
  */
 
 const mongoose = require('mongoose');
@@ -35,16 +35,16 @@ const {
 // ─────────────────────────────────────────────
 
 /**
- * Créneau de disponibilité hebdomadaire déclaré par l'enseignant.
- * Utilisé par le Campus Manager lors de la génération des emplois du temps.
+ * Weekly availability slot declared by the teacher.
+ * Used by the Campus Manager when generating schedules.
  */
 const AvailabilitySlotSchema = new mongoose.Schema(
   {
     day:         { type: String, enum: Object.values(WEEKDAY), required: true },
     startHour:   { type: Number, min: 0, max: 23, required: true },  // 0-23
     endHour:     { type: Number, min: 1, max: 24, required: true },  // 1-24
-    isAvailable: { type: Boolean, default: true },   // false = créneau bloqué
-    reason:      { type: String },                   // ex. "Recherche", "Médical"
+    isAvailable: { type: Boolean, default: true },   // false = blocked slot
+    reason:      { type: String },                   // e.g. "Research", "Medical"
     validFrom:   { type: Date },
     validUntil:  { type: Date },
   },
@@ -56,17 +56,17 @@ const AvailabilitySlotSchema = new mongoose.Schema(
 // ─────────────────────────────────────────────
 
 /**
- * Snapshot de charge horaire par semaine/mois pour la paie.
- * Recalculé de façon asynchrone après chaque confirmation/annulation.
+ * Workload snapshot per week/month for payroll.
+ * Recomputed asynchronously after each confirmation/cancellation.
  */
 const WorkloadPeriodSchema = new mongoose.Schema(
   {
     periodType:     { type: String, enum: ['WEEKLY', 'MONTHLY'], required: true },
-    periodLabel:    { type: String, required: true },  // "2024-W42" ou "2024-10"
+    periodLabel:    { type: String, required: true },  // "2024-W42" or "2024-10"
     scheduledHours: { type: Number, default: 0 },
     deliveredHours: { type: Number, default: 0 },
     cancelledHours: { type: Number, default: 0 },
-    /** Quota contractuel au moment du snapshot */
+    /** Contractual quota at the time of the snapshot */
     contractHours:  { type: Number, default: 0 },
     computedAt:     { type: Date, default: Date.now },
   },
@@ -106,7 +106,7 @@ const ContractSnapshotSchema = new mongoose.Schema(
     },
     weeklyHours:   { type: Number },
     semesterHours: { type: Number },
-    /** Taux horaire (XAF par défaut — cohérent avec le pays : Cameroun) */
+    /** Hourly rate (XAF by default — consistent with the country: Cameroon) */
     hourlyRate:    { type: Number },
     currency:      { type: String, default: 'XAF' },
   },
@@ -133,8 +133,8 @@ const TeacherScheduleSchema = new mongoose.Schema(
     },
 
     /**
-     * Référence croisée vers le document StudentSchedule représentant
-     * la même séance. Null pour les entrées de disponibilité pures.
+     * Cross-reference to the StudentSchedule document representing
+     * the same session. Null for pure availability entries.
      */
     studentScheduleRef: {
       type:    mongoose.Schema.Types.ObjectId,
@@ -178,7 +178,7 @@ const TeacherScheduleSchema = new mongoose.Schema(
       firstName:    { type: String },
       lastName:     { type: String },
       email:        { type: String },
-      /** Matricule de l'enseignant (teacher_model.matricule) */
+      /** Teacher's ID number (teacher_model.matricule) */
       matricule:    { type: String },
     },
     contract: { type: ContractSnapshotSchema, default: () => ({}) },
@@ -188,13 +188,13 @@ const TeacherScheduleSchema = new mongoose.Schema(
       type:  String,
       match: /^\d{4}-\d{4}$/,
     },
-    /** Cohérent avec studentAttendance.model : 'S1' | 'S2' | 'Annual' */
+    /** Consistent with studentAttendance.model: 'S1' | 'S2' | 'Annual' */
     semester: {
       type: String,
       enum: Object.values(SEMESTER),
     },
 
-    /** Matière enseignée — ref 'Subject' */
+    /** Subject taught — ref 'Subject' */
     subject: {
       subjectId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Subject' },
       subject_name: { type: String },
@@ -215,8 +215,8 @@ const TeacherScheduleSchema = new mongoose.Schema(
     // ── RECURRENCE ──────────────────────────
     recurrence: { type: RecurrenceSchema, default: () => ({}) },
 
-    // ── CLASSES PARTICIPANTES ────────────────
-    /** Ref 'Class' — cohérent avec class_model.js */
+    // ── PARTICIPATING CLASSES ────────────────
+    /** Ref 'Class' — consistent with class_model.js */
     classes: [
       {
         classId:   { type: mongoose.Schema.Types.ObjectId, ref: 'Class' },
@@ -226,10 +226,10 @@ const TeacherScheduleSchema = new mongoose.Schema(
 
     // ── LOCATION ────────────────────────────
     /**
-     * [A] isVirtual découple la modalité du type pédagogique.
-     *     true  → session en ligne  (virtualMeeting requis, room optionnel)
-     *     false → session en présentiel (room requis)
-     *     Cohérent avec schedule.base.js décision [A] et VirtualMeetingSchema.
+     * [A] isVirtual decouples the modality from the pedagogical type.
+     *     true  → online session  (virtualMeeting required, room optional)
+     *     false → in-person session (room required)
+     *     Consistent with schedule.base.js decision [A] and VirtualMeetingSchema.
      */
     isVirtual:      { type: Boolean, default: false },
     room:           { type: RoomSchema },
@@ -243,9 +243,9 @@ const TeacherScheduleSchema = new mongoose.Schema(
 
     // ── AVAILABILITY SLOTS ───────────────────
     /**
-     * Créneaux de disponibilité déclarés par cet enseignant.
-     * Embarqués ici pour éviter une collection séparée.
-     * Réécrits en totalité à chaque mise à jour des préférences.
+     * Availability slots declared by this teacher.
+     * Embedded here to avoid a separate collection.
+     * Fully rewritten on each preferences update.
      */
     availabilitySlots: [AvailabilitySlotSchema],
 
@@ -274,22 +274,22 @@ const TeacherScheduleSchema = new mongoose.Schema(
 // COMPOUND INDEXES
 // ─────────────────────────────────────────────
 
-/** Détection de conflit enseignant */
+/** Teacher conflict detection */
 TeacherScheduleSchema.index(
   { 'teacher.teacherId': 1, startTime: 1, endTime: 1, status: 1 },
   { name: 'idx_teacher_time_conflict' }
 );
-/** Agenda par enseignant / semestre */
+/** Calendar by teacher / semester */
 TeacherScheduleSchema.index(
   { 'teacher.teacherId': 1, academicYear: 1, semester: 1, startTime: 1 },
   { name: 'idx_teacher_semester_calendar' }
 );
-/** Analytics charge horaire */
+/** Workload analytics */
 TeacherScheduleSchema.index(
   { 'teacher.teacherId': 1, 'workloadSnapshots.periodLabel': 1 },
   { name: 'idx_teacher_workload' }
 );
-/** Tableau de bord appel en attente */
+/** Pending roll-call dashboard */
 TeacherScheduleSchema.index(
   { 'teacher.teacherId': 1, 'rollCall.submitted': 1, startTime: 1 },
   { name: 'idx_rollcall_pending' }
@@ -361,7 +361,7 @@ TeacherScheduleSchema.pre('save', async function () {
 // INSTANCE METHODS
 // ─────────────────────────────────────────────
 
-/** Ouvre l'appel pour cette session */
+/** Opens the roll-call for this session */
 TeacherScheduleSchema.methods.openRollCall = function () {
   if (this.rollCall.submitted) {
     throw new Error('Attendance has already been submitted for this session.');
@@ -372,7 +372,7 @@ TeacherScheduleSchema.methods.openRollCall = function () {
 };
 
 /**
- * Soumet et verrouille l'appel.
+ * Submits and locks the roll-call.
  * @param {{ present: number, absent: number, late: number }} counts
  */
 TeacherScheduleSchema.methods.submitRollCall = function ({
@@ -389,8 +389,8 @@ TeacherScheduleSchema.methods.submitRollCall = function ({
 };
 
 /**
- * Ajoute ou met à jour un créneau de disponibilité.
- * @param {Object} slot – correspond au shape AvailabilitySlotSchema
+ * Adds or updates an availability slot.
+ * @param {Object} slot – matches the AvailabilitySlotSchema shape
  */
 TeacherScheduleSchema.methods.upsertAvailability = function (slot) {
   const existing = this.availabilitySlots.id(slot._id);
@@ -407,7 +407,7 @@ TeacherScheduleSchema.methods.upsertAvailability = function (slot) {
 // ─────────────────────────────────────────────
 
 /**
- * Détecte les conflits de planning sur l'axe enseignant.
+ * Detects scheduling conflicts along the teacher axis.
  *
  * @param {Object}   params
  * @param {ObjectId} params.teacherId
@@ -440,7 +440,7 @@ TeacherScheduleSchema.statics.detectTeacherConflicts = async function ({
 };
 
 /**
- * Retourne le calendrier de l'enseignant pour une plage de dates.
+ * Returns the teacher's calendar for a date range.
  *
  * @param {ObjectId} teacherId
  * @param {Date}     from
@@ -566,7 +566,7 @@ TeacherScheduleSchema.set('toJSON', {
   virtuals: true,
   transform: (_doc, ret) => {
     delete ret.__v;
-    // Données salariales : exposées uniquement via l'endpoint dédié
+    // Salary data: exposed only via the dedicated endpoint
     delete ret.contract;
     return ret;
   },

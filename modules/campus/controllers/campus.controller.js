@@ -10,19 +10,19 @@ const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&'
 
 const campusRepo = require('../campus.repository');
 const { getLoginPrefs } = require('../../settings').service;
-const teacherService = require('../../teacher').service; // façade module teacher (§3)
-const studentService = require('../../student').service; // façade module student (§3)
-const classService = require('../../class').service; // façade module class (§3)
-// Require paresseux : subject.controller consommera la façade campus en C5 (cycle campus ↔ subject)
+const teacherService = require('../../teacher').service; // facade module teacher (§3)
+const studentService = require('../../student').service; // facade module student (§3)
+const classService = require('../../class').service; // facade module class (§3)
+// Lazy require: subject.controller will consume the campus facade in C5 (campus ↔ subject cycle)
 const listCampusSubjects = (...args) =>
   require('../../subject').service.listCampusSubjects(...args);
-const financeService = require('../../finance').service; // façade module finance (§3)
-const departmentService = require('../../department').service; // façade module department (§3)
-const staffService  = require('../../staff').service; // façade module staff (§3)
-const mentorService = require('../../mentor').service; // façade module mentor (§3)
+const financeService = require('../../finance').service; // facade module finance (§3)
+const departmentService = require('../../department').service; // facade module department (§3)
+const staffService  = require('../../staff').service; // facade module staff (§3)
+const mentorService = require('../../mentor').service; // facade module mentor (§3)
 
 const campusConfig = require('../campus.config');
-const studentConfig = require('../../student').service.entityConfig; // façade module student (§3)
+const studentConfig = require('../../student').service.entityConfig; // facade module student (§3)
 const crypto = require('crypto');
 
 const { uploadImage } = require('../../../shared/utils/file-upload');
@@ -851,7 +851,7 @@ const campusController = new CampusController(campusConfig);
 
 // ── PATCH /api/campus/:id/defaults ────────────────────────────────────────────
 const { SUPPORTED_LANGUAGES: SUPPORTED_LANGUAGES_DEF } = require('../../../shared/i18n/languages');
-const SUPPORTED_TIMEZONES_DEF  = require('../../settings').service.SUPPORTED_TIMEZONES; // façade settings (§3)
+const SUPPORTED_TIMEZONES_DEF  = require('../../settings').service.SUPPORTED_TIMEZONES; // facade settings (§3)
 const SUPPORTED_GRADE_FMTS_DEF = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
 
 const updateCampusDefaults = async (req, res) => {

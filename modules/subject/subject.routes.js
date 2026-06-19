@@ -18,8 +18,8 @@ const {
 const router = express.Router();
 
 /**
- * Roles autorisés pour la lecture : ADMIN, DIRECTOR, CAMPUS_MANAGER, TEACHER
- * Roles autorisés pour la modification : ADMIN, DIRECTOR, CAMPUS_MANAGER
+ * Roles allowed to read: ADMIN, DIRECTOR, CAMPUS_MANAGER, TEACHER
+ * Roles allowed to modify: ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 
 const staffRoles = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER'];
@@ -28,50 +28,50 @@ const adminRoles = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 // Apply authentication to all routes
 router.use(authenticate);
 
-// --- ROUTES DE CRÉATION ET LECTURE GÉNÉRALE ---
+// --- CREATION AND GENERAL READ ROUTES ---
 
 /**
  * @route   POST /api/subject
- * @desc    Créer une nouvelle matière
+ * @desc    Create a new subject
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 router.post("/", authorize(adminRoles), createSubject);
 
 /**
  * @route   GET /api/subject
- * @desc    Récupérer toutes les matières
+ * @desc    Retrieve all subjects
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER, TEACHER
  */
 router.get("/", authorize(staffRoles), getSubjects);
 
-// --- ROUTES DE RECHERCHE SPÉCIFIQUE ---
+// --- SPECIFIC LOOKUP ROUTES ---
 
 /**
  * @route   GET /api/subject/:id
- * @desc    Récupérer une matière par son ID unique
+ * @desc    Retrieve a subject by its unique ID
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER, TEACHER
  */
 router.get("/:id", authorize(staffRoles), getSubjectById);
 
-// --- ROUTES DE MODIFICATION ET SUPPRESSION ---
+// --- MODIFICATION AND DELETION ROUTES ---
 
 /**
  * @route   PUT /api/subject/:id
- * @desc    Mettre à jour les informations d'une matière
+ * @desc    Update a subject's information
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 router.put("/:id", authorize(adminRoles), updateSubject);
 
 /**
  * @route   DELETE /api/subject/:id
- * @desc    Archiver une matière (Soft Delete)
+ * @desc    Archive a subject (Soft Delete)
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 router.delete("/:id", authorize(adminRoles), deleteSubject);
 
 /**
  * @route   PATCH /api/subject/:id/restore
- * @desc    Restaurer une matière archivée
+ * @desc    Restore an archived subject
  * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER
  */
 router.patch("/:id/restore", authorize(adminRoles), restoreSubject);

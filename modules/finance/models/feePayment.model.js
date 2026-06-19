@@ -3,10 +3,10 @@
 const mongoose = require('mongoose');
 
 /**
- * FeePayment — un acompte (ligne de paiement) imputé sur une StudentFee.
- * Une dette peut recevoir plusieurs paiements échelonnés ; leur somme alimente
- * `StudentFee.amountPaid`. Les champs student/schoolCampus sont dénormalisés
- * depuis la dette pour permettre des relevés et un scoping campus directs.
+ * FeePayment — an installment (payment line) applied to a StudentFee.
+ * A debt can receive several staggered payments; their sum feeds
+ * `StudentFee.amountPaid`. The student/schoolCampus fields are denormalized
+ * from the debt to allow direct ledgers and campus scoping.
  */
 const feePaymentSchema = new mongoose.Schema(
   {
@@ -49,7 +49,7 @@ const feePaymentSchema = new mongoose.Schema(
       required: [true, 'method is required'],
     },
 
-    // Numéro de reçu — unique s'il est fourni.
+    // Receipt number — unique if provided.
     reference: {
       type: String,
       trim: true,
@@ -79,7 +79,7 @@ const feePaymentSchema = new mongoose.Schema(
   }
 );
 
-// Relevé d'un étudiant trié par date.
+// A student's ledger sorted by date.
 feePaymentSchema.index({ student: 1, paidAt: -1 });
 
 module.exports = mongoose.model('FeePayment', feePaymentSchema);

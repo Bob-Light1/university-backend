@@ -34,7 +34,7 @@
 
 const mongoose        = require('mongoose');
 const studentRepo     = require('../student.repository');
-// Require paresseux : teacher.dashboard consomme des données student (cycle student ↔ teacher)
+// Lazy require: teacher.dashboard consumes student data (student ↔ teacher cycle)
 const detectTeacherConflicts = (...args) =>
   require('../../teacher').service.detectTeacherConflicts(...args);
 
@@ -49,7 +49,7 @@ const {
 
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
-// Helpers du module : résolution des participants + sync TeacherSchedule
+// Module helpers: participant resolution + TeacherSchedule sync
 const {
   resolveSessionParticipants,
   syncTeacherSchedule,

@@ -2,23 +2,23 @@
 
 /**
  * @file public.campus.controller.js
- * @description Résolution campus pour le portail public.
+ * @description Campus resolution for the public portal.
  *
- * Routes :
- *  GET /api/public/campus-info?ref=PARTNER_CODE   → résout via partnerCode
- *  GET /api/public/campus-info?slug=CAMPUS_SLUG   → résout via campusSlug
+ * Routes:
+ *  GET /api/public/campus-info?ref=PARTNER_CODE   → resolves via partnerCode
+ *  GET /api/public/campus-info?slug=CAMPUS_SLUG   → resolves via campusSlug
  *
- * Retourne uniquement les champs publics — aucune donnée sensible exposée.
- * Le campusSlug retourné est utilisé dans tous les appels suivants du portail.
+ * Returns only the public fields — no sensitive data is exposed.
+ * The returned campusSlug is used in all subsequent portal calls.
  */
 
-const partnerService = require('../../../partner').service; // façade module partner (§3)
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const partnerService = require('../../../partner').service; // partner module facade (§3)
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
-// Champs publics renvoyés — liste blanche explicite
+// Public fields returned — explicit whitelist
 const CAMPUS_PUBLIC_FIELDS = 'campus_name campusSlug campus_image location.city location.country programs nextBatchDate defaultLanguage portalStats';
 
 const getCampusInfo = asyncHandler(async (req, res) => {
@@ -32,7 +32,7 @@ const getCampusInfo = asyncHandler(async (req, res) => {
   let partnerCode = null;
 
   if (ref) {
-    // Résolution via partnerCode
+    // Resolution via partnerCode
     const partner = await partnerService.findActivePartnerByCode(ref);
 
     if (!partner) {
@@ -40,11 +40,11 @@ const getCampusInfo = asyncHandler(async (req, res) => {
     }
 
     partnerCode = partner.partnerCode;
-    // Filtre status:active — cohérent avec la résolution par slug ; un campus
-    // archivé ne doit jamais fuiter via un code partenaire encore actif.
+    // status:active filter — consistent with slug resolution; an archived
+    // campus must never leak via a still-active partner code.
     campus = await campusSvc().getActiveCampusById(partner.schoolCampus, CAMPUS_PUBLIC_FIELDS);
   } else {
-    // Résolution via campusSlug
+    // Resolution via campusSlug
     campus = await campusSvc().getActiveCampusBySlug(slug.toLowerCase().trim(), CAMPUS_PUBLIC_FIELDS);
   }
 
@@ -73,9 +73,9 @@ const getCampusInfo = asyncHandler(async (req, res) => {
 /**
  * GET /api/public/campuses
  *
- * Liste les campus publics (actifs et dotés d'un campusSlug). Utilisé par la page
- * de sélection du portail lorsqu'un visiteur arrive sans ?ref ni ?slug et que
- * l'établissement compte plusieurs campus (spec §3.4).
+ * Lists the public campuses (active and with a campusSlug). Used by the portal
+ * selection page when a visitor arrives without ?ref or ?slug and the
+ * institution has several campuses (spec §3.4).
  */
 const listCampuses = asyncHandler(async (req, res) => {
   const campuses = await campusSvc().listActivePublicCampuses(

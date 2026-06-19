@@ -10,7 +10,7 @@ const routes  = require('./academic-print.routes');
 const service = require('./academic-print.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/print', routes)
+  routes,   // mounted by server.js :  app.use('/api/print', routes)
   service,  // { shutdownAcademicPool, cleanupExpiredPrintFiles }
-  // PAS de model exporté. PAS de controller exporté.
+  // NO model exported. NO controller exported.
 };

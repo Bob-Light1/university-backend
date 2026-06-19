@@ -23,7 +23,7 @@ const makeChannel = (over = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
-  // createMany renvoie les lignes enrichies d'un _id (ordre préservé).
+  // createMany returns the rows enriched with an _id (order preserved).
   repo.createMany.mockImplementation((rows) =>
     Promise.resolve(rows.map((r, i) => ({ _id: `n${i}`, ...r })))
   );
@@ -49,11 +49,11 @@ describe('notify', () => {
     const rows = repo.createMany.mock.calls[0][0];
     expect(rows).toHaveLength(2);
     expect(rows.map((r) => r.channel)).toEqual(['inapp', 'email']);
-    expect(rows[0].to).toBeNull();              // inapp : pas de coordonnée
-    expect(rows[1].to).toBe('a@b.c');           // email : adresse du destinataire
+    expect(rows[0].to).toBeNull();              // inapp: no contact address
+    expect(rows[1].to).toBe('a@b.c');           // email: recipient's address
     expect(rows[0].recipientId).toBe('u1');
     expect(rows[0].schoolCampus).toBe('c1');
-    expect(rows[1].locale).toBe('fr');          // locale du destinataire
+    expect(rows[1].locale).toBe('fr');          // recipient's locale
   });
 
   test('canal in-app → marqué sent (persistance = livraison)', async () => {

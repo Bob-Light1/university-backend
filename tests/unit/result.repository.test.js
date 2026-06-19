@@ -34,7 +34,7 @@ const buildModelMock = () => {
   Model.aggregate = jest.fn(() => Promise.resolve([]));
   Model.create = jest.fn((d) => Promise.resolve({ _id: 'created', ...d }));
   Model.insertMany = jest.fn((docs) => Promise.resolve(docs));
-  // statiques métier (logique de la couche model invoquée par le repo)
+  // business statics (model-layer logic invoked by the repo)
   Model.computeDropoutRisk = jest.fn(() => Promise.resolve(42));
   Model.getClassDistribution = jest.fn(() => Promise.resolve({ mean: 12 }));
   Model.generateForStudent = jest.fn(() => Promise.resolve({ _id: 'transcript1' }));
@@ -207,7 +207,7 @@ describe('result — agrégats (non-régression des pipelines)', () => {
     expect(pipeline[0]).toEqual({ $match: match });
     const facet = pipeline[1].$facet;
     expect(Object.keys(facet)).toEqual(['byStatus', 'byEvalType', 'byExamPeriod', 'generalStats']);
-    // generalStats ne compte que PUBLISHED/ARCHIVED non supprimés
+    // generalStats only counts non-deleted PUBLISHED/ARCHIVED
     expect(facet.generalStats[0].$match).toEqual({ status: { $in: ['PUBLISHED', 'ARCHIVED'] }, isDeleted: false });
     const grp = facet.generalStats[1].$group;
     expect(grp.passingCount).toEqual({ $sum: { $cond: [{ $gte: ['$normalizedScore', 10] }, 1, 0] } });

@@ -1,11 +1,11 @@
 'use strict';
 
 /**
- * @file channels/index.js — registre des canaux de notification.
+ * @file channels/index.js — notification channel registry.
  *
- * Chaque canal expose : { name, isConfigured(), send(message) }.
- * Le service interroge `isConfigured()` avant d'envoyer ; un canal non configuré
- * produit un statut `skipped`, jamais une erreur.
+ * Each channel exposes: { name, isConfigured(), send(message) }.
+ * The service queries `isConfigured()` before sending; an unconfigured channel
+ * produces a `skipped` status, never an error.
  */
 
 const inapp    = require('./inapp.channel');

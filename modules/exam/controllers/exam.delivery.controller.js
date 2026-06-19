@@ -14,7 +14,7 @@
  */
 
 const repo              = require('../exam.repository');
-const settingsService   = require('../../settings').service; // façade module settings (§3)
+const settingsService   = require('../../settings').service; // settings module facade (§3)
 const {
   sendSuccess,
   sendError,

@@ -2,14 +2,14 @@
 /**
  * seed-testimonials.js
  *
- * Insère des témoignages publiés pour tous les campus (ou un campus précis).
- * Peuple le portail en l'absence d'UI admin (Phase 2 — admin React reportée).
+ * Inserts published testimonials for all campuses (or a specific campus).
+ * Populates the portal in the absence of an admin UI (Phase 2 — React admin deferred).
  *
- * Usage :
- *   node scripts/seed-testimonials.js                          → tous les campus
- *   node scripts/seed-testimonials.js --slug=campus-douala     → un seul campus
- *   node scripts/seed-testimonials.js --dry-run                → aperçu sans insertion
- *   node scripts/seed-testimonials.js --clear                  → supprime et réinsère
+ * Usage:
+ *   node scripts/seed-testimonials.js                          → all campuses
+ *   node scripts/seed-testimonials.js --slug=campus-douala     → a single campus
+ *   node scripts/seed-testimonials.js --dry-run                → preview without inserting
+ *   node scripts/seed-testimonials.js --clear                  → deletes and re-inserts
  */
 
 'use strict';
@@ -23,7 +23,7 @@ const DRY_RUN  = process.argv.includes('--dry-run');
 const CLEAR    = process.argv.includes('--clear');
 const SLUG_ARG = process.argv.find(a => a.startsWith('--slug='))?.split('=')[1];
 
-// Banque de témoignages (citation bilingue fr/en)
+// Testimonials bank (bilingual fr/en quote)
 const TESTIMONIALS = [
   {
     firstName: 'Awa', city: 'Douala', graduationYear: 2024, program: 'Développement Web',

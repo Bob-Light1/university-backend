@@ -1,44 +1,44 @@
 'use strict';
 
 /**
- * @file student.service.js — API inter-modules du domaine student.
+ * @file student.service.js — inter-module API of the student domain.
  *
- * Couche d'orchestration : compose les filtres/paramètres métier puis délègue
- * toute la persistance à student.repository (seul à toucher les models).
+ * Orchestration layer: composes the business filters/parameters then delegates
+ * all persistence to student.repository (the only one touching the models).
  *
- * Exposé (par modèle possédé) :
+ * Exposed (per owned model):
  *
- *  Student :
- *   - entityConfig : config GenericEntityController (campus.controller).
- *   - validateStudentBelongsToCampus : garde multi-tenant (result.crud,
+ *  Student:
+ *   - entityConfig: GenericEntityController config (campus.controller).
+ *   - validateStudentBelongsToCampus: multi-tenant guard (result.crud,
  *     student.attendance.controller).
- *   - countStudents : compteur paramétrable (staff.readonly, mentor ×2,
+ *   - countStudents: configurable counter (staff.readonly, mentor ×2,
  *     campus ×3, teacher.dashboard).
- *   - listStudentIds : ids des inscrits par classe (mentor.controller, result.crud).
- *   - listStudentsForStaff / ForMentor / ForCampusDashboard : listings paginés.
- *   - getStudentClassRef : classe courante d'un enfant (parent.portal).
- *   - getStudentsCampusRefs : validation de rattachement (parent.crud).
- *   - getStudentForDocument : génération de documents typés (document.template).
- *   - getStudentProfileRef : en-tête de relevé (result.analytics).
- *   - listStudentsForExamEligibility : éligibilité examens (exam.enrollment).
+ *   - listStudentIds: ids of enrolled students per class (mentor.controller, result.crud).
+ *   - listStudentsForStaff / ForMentor / ForCampusDashboard: paginated listings.
+ *   - getStudentClassRef: a child's current class (parent.portal).
+ *   - getStudentsCampusRefs: attachment validation (parent.crud).
+ *   - getStudentForDocument: typed document generation (document.template).
+ *   - getStudentProfileRef: transcript header (result.analytics).
+ *   - listStudentsForExamEligibility: exam eligibility (exam.enrollment).
  *   - getStudentForPrint / listClassStudentsForCards / listClassStudentsForList /
- *     getStudentNamesByIds : impressions académiques (academic-print).
+ *     getStudentNamesByIds: academic prints (academic-print).
  *
- *  StudentSchedule :
- *   - resolveSessionParticipants / syncTeacherSchedule : création de sessions
- *     (gaet ; délègue subject/class/teacher aux façades propriétaires).
- *   - createScheduleSession : génération GAET.
- *   - listSessionsForClass : requête bornée (parent.portal ×3, academic-print ×2).
- *   - updateAttendanceSummary / getSessionRoster : appel/roster (teacher.schedule).
- *   - upsert/updateStudentScheduleByReference : miroir examens (exam.schedule.helper).
+ *  StudentSchedule:
+ *   - resolveSessionParticipants / syncTeacherSchedule: session creation
+ *     (gaet; delegates subject/class/teacher to the owner facades).
+ *   - createScheduleSession: GAET generation.
+ *   - listSessionsForClass: bounded query (parent.portal ×3, academic-print ×2).
+ *   - updateAttendanceSummary / getSessionRoster: roll-call/roster (teacher.schedule).
+ *   - upsert/updateStudentScheduleByReference: exam mirror (exam.schedule.helper).
  *
- *  StudentAttendance :
- *   - summarizeStudentAttendance : résumé par enfant (parent.portal ×2).
- *   - summarizeAttendanceTotals : totaux campus/mentor (staff.readonly, mentor.readonly).
- *   - getAvgAbsenceRateForCampus : taux d'absence moyen (campus.controller).
- *   - listStudentAttendanceForParent / listAttendanceForStaff / ForMentor :
- *     listings paginés.
- *   - getStudentAttendanceStats : statique getStudentStats (exam.enrollment).
+ *  StudentAttendance:
+ *   - summarizeStudentAttendance: per-child summary (parent.portal ×2).
+ *   - summarizeAttendanceTotals: campus/mentor totals (staff.readonly, mentor.readonly).
+ *   - getAvgAbsenceRateForCampus: average absence rate (campus.controller).
+ *   - listStudentAttendanceForParent / listAttendanceForStaff / ForMentor:
+ *     paginated listings.
+ *   - getStudentAttendanceStats: getStudentStats static (exam.enrollment).
  */
 
 const mongoose = require('mongoose');
@@ -78,12 +78,12 @@ const validateStudentBelongsToCampus = async (studentId, campusId) => {
 };
 
 /**
- * Compteur de students paramétrable.
+ * Configurable student counter.
  * @param {{
  *   campusId?:        string|ObjectId,
- *   studentIds?:      Array,           - restreint à ces _id
- *   studentClassIds?: Array,           - restreint à ces classes (studentClass)
- *   status?:          string,          - valeur exacte (ex. 'active')
+ *   studentIds?:      Array,           - restricted to these _id
+ *   studentClassIds?: Array,           - restricted to these classes (studentClass)
+ *   status?:          string,          - exact value (e.g. 'active')
  *   excludeArchived?: boolean,         - status ≠ 'archived'
  *   createdSince?:    Date,
  * }} params
@@ -101,8 +101,8 @@ const countStudents = ({ campusId, studentIds, studentClassIds, status, excludeA
 };
 
 /**
- * Ids des students inscrits dans une ou plusieurs classes (source de vérité :
- * Student.studentClass, pas Class.students[]).
+ * Ids of students enrolled in one or more classes (source of truth:
+ * Student.studentClass, not Class.students[]).
  * @param {{classIds: Array, campusId: string|ObjectId, excludeArchived?: boolean}} params
  * @returns {Promise<Array<{_id}>>}
  */
@@ -116,8 +116,8 @@ const listStudentIds = ({ classIds, campusId, excludeArchived = false }) => {
 };
 
 /**
- * Listing paginé des students pour le portail staff (classe peuplée, tri
- * alphabétique). `search` doit déjà être échappé par l'appelant.
+ * Paginated listing of students for the staff portal (populated class,
+ * alphabetical sort). `search` must already be escaped by the caller.
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listStudentsForStaff = ({ campusId, status, search, page = 1, limit = 20 }) => {
@@ -132,8 +132,8 @@ const listStudentsForStaff = ({ campusId, status, search, page = 1, limit = 20 }
 };
 
 /**
- * Listing paginé des students assignés à un mentor. `search` doit déjà être
- * échappé par l'appelant.
+ * Paginated listing of students assigned to a mentor. `search` must already be
+ * escaped by the caller.
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listStudentsForMentor = ({ studentIds, status, classId, search, page = 1, limit = 20 }) => {
@@ -149,8 +149,8 @@ const listStudentsForMentor = ({ studentIds, status, classId, search, page = 1, 
 };
 
 /**
- * Listing paginé des students pour le dashboard campus (tri par date de
- * création desc). `search` doit déjà être échappé par l'appelant.
+ * Paginated listing of students for the campus dashboard (sorted by creation
+ * date desc). `search` must already be escaped by the caller.
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listStudentsForCampusDashboard = ({ campusId, classId, status, search, page = 1, limit = 20 }) => {
@@ -170,83 +170,83 @@ const listStudentsForCampusDashboard = ({ campusId, classId, status, search, pag
 };
 
 /**
- * Référence de classe courante d'un student d'un campus (portail parent).
+ * Current class reference of a student in a campus (parent portal).
  * @returns {Promise<{studentClass}|null>}
  */
 const getStudentClassRef = (studentId, campusId) =>
   studentRepo.getStudentClassRef(studentId, campusId);
 
 /**
- * Rattachements campus d'une liste de students (validation parent ↔ enfants).
+ * Campus attachments of a list of students (parent ↔ children validation).
  * @returns {Promise<Array<{_id, schoolCampus}>>}
  */
 const getStudentsCampusRefs = (studentIds) =>
   studentRepo.getStudentsCampusRefs(studentIds);
 
 /**
- * Student complet (lean) d'un campus — génération de documents typés.
+ * Full student (lean) of a campus — typed document generation.
  * @returns {Promise<Object|null>}
  */
 const getStudentForDocument = (studentId, campusId) =>
   studentRepo.getStudentForDocument(studentId, campusId);
 
 /**
- * Profil minimal d'un student (en-tête de relevé de notes).
+ * Minimal student profile (transcript header).
  * @returns {Promise<Object|null>}
  */
 const getStudentProfileRef = (studentId) =>
   studentRepo.getStudentProfileRef(studentId);
 
 /**
- * Students candidats à l'éligibilité d'une session d'examen.
- * NB : filtre sur `currentClass` (champ historique de l'éligibilité examens),
- * pas `studentClass` — comportement préservé tel quel.
+ * Students candidate for an exam session's eligibility.
+ * NB: filters on `currentClass` (legacy field for exam eligibility),
+ * not `studentClass` — behavior preserved as-is.
  * @param {{classIds: Array<string>, campusId?: string|ObjectId}} params
- * @returns {Promise<Array>} documents Mongoose (_id, currentClass)
+ * @returns {Promise<Array>} Mongoose documents (_id, currentClass)
  */
 const listStudentsForExamEligibility = ({ classIds, campusId }) =>
   studentRepo.listStudentsForExamEligibility({ classIds, campusId });
 
 /**
- * Student d'un campus avec les champs nécessaires aux impressions (carte,
- * certificat de scolarité…).
+ * Student of a campus with the fields needed for prints (card,
+ * enrollment certificate…).
  * @returns {Promise<Object|null>}
  */
 const getStudentForPrint = (studentId, campusId) =>
   studentRepo.getStudentForPrint(studentId, campusId);
 
 /**
- * Students non archivés d'une classe avec les champs cartes (impression en lot).
+ * Non-archived students of a class with the card fields (batch printing).
  * @returns {Promise<Array>}
  */
 const listClassStudentsForCards = (classId, campusId) =>
   studentRepo.listClassStudentsForCards(classId, campusId);
 
 /**
- * Students non archivés d'une classe, triés, pour la liste de classe imprimée.
+ * Non-archived students of a class, sorted, for the printed class list.
  * @returns {Promise<Array>}
  */
 const listClassStudentsForList = (classId, campusId) =>
   studentRepo.listClassStudentsForList(classId, campusId);
 
 /**
- * Noms/matricules d'une liste de students d'un campus (cibles de lot d'impression).
+ * Names/matricules of a list of students of a campus (batch print targets).
  * @returns {Promise<Array<{_id, firstName, lastName, matricule}>>}
  */
 const getStudentNamesByIds = (studentIds, campusId) =>
   studentRepo.getStudentNamesByIds(studentIds, campusId);
 
 /**
- * Coordonnées de notification d'un lot d'étudiants (email/téléphone).
- * Consommé par les émetteurs de notification (result/exam) pour activer le
- * canal email sans qu'ils touchent le model Student.
+ * Notification contact details of a batch of students (email/phone).
+ * Consumed by notification emitters (result/exam) to enable the
+ * email channel without them touching the Student model.
  * @returns {Promise<Array<{_id, email, phone}>>}
  */
 const getStudentContacts = (studentIds) =>
   studentRepo.getStudentContactsByIds(studentIds);
 
 /**
- * Coordonnées d'un seul étudiant (commodité pour les émetteurs unitaires).
+ * Contact details of a single student (convenience for unit emitters).
  * @returns {Promise<{_id, email, phone}|null>}
  */
 const getStudentContact = async (studentId) => {
@@ -259,43 +259,43 @@ const getStudentContact = async (studentId) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Crée une session StudentSchedule (génération GAET).
- * @param {Object} payload - document complet (campus, horaires, subject/teacher/classes dénormalisés…)
- * @returns {Promise<Object>} document créé
+ * Creates a StudentSchedule session (GAET generation).
+ * @param {Object} payload - full document (campus, schedule times, denormalized subject/teacher/classes…)
+ * @returns {Promise<Object>} created document
  */
 const createScheduleSession = (payload) => studentRepo.createScheduleSession(payload);
 
 /**
- * Sessions d'une classe d'un campus, requête bornée.
- * @param {Object} params - voir student.repository.listSessionsForClass
+ * Sessions of a class in a campus, bounded query.
+ * @param {Object} params - see student.repository.listSessionsForClass
  * @returns {Promise<Array>}
  */
 const listSessionsForClass = (params) => studentRepo.listSessionsForClass(params);
 
 /**
- * Met à jour le résumé d'appel d'une session StudentSchedule (sync depuis le
- * roll-call TeacherSchedule).
+ * Updates the roll-call summary of a StudentSchedule session (sync from the
+ * TeacherSchedule roll-call).
  */
 const updateAttendanceSummary = (studentScheduleId, summaryFields) =>
   studentRepo.updateAttendanceSummary(studentScheduleId, summaryFields);
 
 /**
- * Roster (classes + effectif attendu) d'une session, classes peuplées.
+ * Roster (classes + expected headcount) of a session, classes populated.
  * @returns {Promise<{classes, expectedAttendees}|null>}
  */
 const getSessionRoster = (studentScheduleId) =>
   studentRepo.getSessionRoster(studentScheduleId);
 
 /**
- * Upsert d'une entrée StudentSchedule par référence (miroir des sessions
- * d'examen — références EXAM-SS-*).
+ * Upsert of a StudentSchedule entry by reference (mirror of exam
+ * sessions — EXAM-SS-* references).
  */
 const upsertStudentScheduleByReference = (reference, fields) =>
   studentRepo.upsertStudentScheduleByReference(reference, fields);
 
 /**
- * Mise à jour d'une entrée StudentSchedule par référence (statut/horaires
- * d'une session d'examen annulée/reportée).
+ * Update of a StudentSchedule entry by reference (status/schedule times
+ * of a cancelled/postponed exam session).
  */
 const updateStudentScheduleByReference = (reference, fields) =>
   studentRepo.updateStudentScheduleByReference(reference, fields);
@@ -305,17 +305,17 @@ const updateStudentScheduleByReference = (reference, fields) =>
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Résumé de présence d'un student (totaux + taux calculé par l'appelant).
- * @param {Object} params - voir student.repository.summarizeStudentAttendance
- * @returns {Promise<Array>} résultat d'agrégation ([0] ou vide)
+ * Attendance summary of a student (totals + rate computed by the caller).
+ * @param {Object} params - see student.repository.summarizeStudentAttendance
+ * @returns {Promise<Array>} aggregation result ([0] or empty)
  */
 const summarizeStudentAttendance = (params) =>
   studentRepo.summarizeStudentAttendance(params);
 
 /**
- * Totaux présence d'un campus (ou des classes d'un mentor).
- * NB : la comparaison `status === 'present'` (chaîne) est historique et
- * préservée telle quelle.
+ * Attendance totals of a campus (or of a mentor's classes).
+ * NB: the `status === 'present'` (string) comparison is legacy and
+ * preserved as-is.
  * @param {{campusId: ObjectId, classIds?: Array}} params
  * @returns {Promise<Array<{total, present}>>}
  */
@@ -323,7 +323,7 @@ const summarizeAttendanceTotals = (params) =>
   studentRepo.summarizeAttendanceTotals(params);
 
 /**
- * Taux d'absence moyen par student d'un campus (agrégat dashboard campus).
+ * Average absence rate per student of a campus (campus dashboard aggregate).
  * @param {ObjectId} campusOid
  * @returns {Promise<Array<{avgAbsenceRate}>>}
  */
@@ -331,15 +331,15 @@ const getAvgAbsenceRateForCampus = (campusOid) =>
   studentRepo.getAvgAbsenceRateForCampus(campusOid);
 
 /**
- * Relevé de présence paginé d'un enfant (portail parent).
+ * Paginated attendance record of a child (parent portal).
  * @returns {Promise<{records: Array, total: number}>}
  */
 const listStudentAttendanceForParent = (params) =>
   studentRepo.listStudentAttendanceForParent(params);
 
 /**
- * Listing de présence du portail staff. Le statut texte est traduit en
- * combinaison status/isLate/isJustified (sémantique historique du staff).
+ * Attendance listing for the staff portal. The text status is translated into
+ * a status/isLate/isJustified combination (legacy staff semantics).
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listAttendanceForStaff = ({ campusId, status, classId, studentId, from, to, page = 1, limit = 20 }) => {
@@ -361,9 +361,9 @@ const listAttendanceForStaff = ({ campusId, status, classId, studentId, from, to
 };
 
 /**
- * Listing de présence du portail mentor (statut transmis tel quel —
- * sémantique historique du mentor, différente du staff et préservée).
- * L'autorisation (classe/student assignés) reste dans le controller.
+ * Attendance listing for the mentor portal (status passed through as-is —
+ * legacy mentor semantics, different from staff and preserved).
+ * Authorization (assigned class/student) stays in the controller.
  * @returns {Promise<{docs: Array, total: number}>}
  */
 const listAttendanceForMentor = ({ campusId, classId, classIds, studentId, status, from, to, page = 1, limit = 20 }) => {
@@ -381,9 +381,9 @@ const listAttendanceForMentor = ({ campusId, classId, classIds, studentId, statu
 };
 
 /**
- * Statistiques de présence d'un student (statique getStudentStats du model).
- * Retourne { attendanceRate: 100 } si la statique n'existe pas — comportement
- * préservé de l'éligibilité examens.
+ * Attendance statistics of a student (getStudentStats static of the model).
+ * Returns { attendanceRate: 100 } if the static does not exist — behavior
+ * preserved from exam eligibility.
  */
 const getStudentAttendanceStats = (studentId, academicYear, semester, scope) =>
   studentRepo.getStudentAttendanceStats(studentId, academicYear, semester, scope);

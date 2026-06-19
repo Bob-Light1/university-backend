@@ -21,7 +21,7 @@ const incomeSchema = new mongoose.Schema(
       sparse: true,
     },
 
-    // Source du revenu
+    // Income source
     source: {
       type: String,
       enum: [
@@ -39,7 +39,7 @@ const incomeSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Montants
+    // Amounts
     amount: {
       type: Number,
       required: true,
@@ -69,7 +69,7 @@ const incomeSchema = new mongoose.Schema(
       type: Date,
     },
 
-    // Relations (optionnelles selon le type)
+    // Relations (optional depending on the type)
     student: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Student",
@@ -91,14 +91,14 @@ const incomeSchema = new mongoose.Schema(
       ref: "Campus",
     },
 
-    // Responsable
+    // Responsible person
     receivedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User", // comptable / admin
+      ref: "User", // accountant / admin
       required: true,
     },
 
-    // Statut & contrôle
+    // Status & control
     status: {
       type: String,
       enum: ["pending", "received", "cancelled"],
@@ -106,14 +106,14 @@ const incomeSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Pièces justificatives
+    // Supporting documents
     attachments: [
       {
-        type: String, // URL reçu / facture
+        type: String, // receipt / invoice URL
       },
     ],
 
-    // Notes internes
+    // Internal notes
     notes: {
       type: String,
       maxlength: 500,

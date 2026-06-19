@@ -16,8 +16,8 @@
  *   Layer 3 → document.access.middleware.js (doc.campusId === req.campusId cross-check)
  */
 
-const mongoose = require('mongoose'); // conservé pour le cast ObjectId du $match
-// Require paresseux : document est dans la cloture statique de campus (via staff)
+const mongoose = require('mongoose'); // kept for ObjectId cast in the $match
+// Lazy require: document is in the static closure of campus (via staff)
 const getCampusStorageInfo = (...args) => require('../../campus').service.getCampusStorageInfo(...args);
 const repo = require('../document.repository');
 
@@ -47,7 +47,7 @@ const computeCampusStorageUsageMB = async (campusId) => {
     return cached.valueMB;
   }
 
-  // $match casté en ObjectId par l'appelant (convention agrégats du repo).
+  // $match cast to ObjectId by the caller (repo aggregation convention).
   const result = await repo.aggregateImportedStorageBytes({
     // Fix: use `new` — direct constructor call is deprecated in Mongoose 7+
     campusId:                 new mongoose.Types.ObjectId(campusId),

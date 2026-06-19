@@ -1,28 +1,28 @@
 'use strict';
 
 /**
- * @file student.repository.js — couche d'accès aux données du module student.
+ * @file student.repository.js — data access layer for the student module.
  *
- * SEUL fichier autorisé à toucher les 3 models possédés :
+ * The ONLY file allowed to touch the 3 owned models:
  *   - Student            (student.model)
  *   - StudentSchedule    (student.schedule.model)
  *   - StudentAttendance  (student.attend.model)
  *
- * Controllers, service inter-modules et config (hors `Model:` du
- * GenericEntityController) passent exclusivement par lui. Lectures `.lean()`
- * (ou `.lean({ virtuals: true })` là où la sortie historique exposait des
- * virtuals comme `fullName`) ; écritures à hook via load→mutate→save, sinon
- * opérateurs atomiques. Les pipelines d'agrégation vivent ici ; l'appelant
- * fournit le `$match` déjà casté en ObjectId. Les filtres d'isolation campus
- * sont construits par l'appelant et passés tels quels.
+ * Controllers, the cross-module service and config (except the `Model:` of the
+ * GenericEntityController) go exclusively through it. Reads use `.lean()`
+ * (or `.lean({ virtuals: true })` where the historical output exposed
+ * virtuals like `fullName`); hooked writes go through load→mutate→save,
+ * otherwise atomic operators. Aggregation pipelines live here; the caller
+ * provides the `$match` already cast to ObjectId. Campus isolation filters
+ * are built by the caller and passed as-is.
  *
- * Exceptions assumées (restent hors repo) :
- *   - GenericEntityController / GenericBulkController : opèrent sur le Model
- *     fourni par student.config.js (`Model: Student`).
- *   - shared/services/profile.service : opère sur le Model passé par
+ * Accepted exceptions (stay outside the repo):
+ *   - GenericEntityController / GenericBulkController: operate on the Model
+ *     provided by student.config.js (`Model: Student`).
+ *   - shared/services/profile.service: operates on the Model passed by
  *     student.profile.controller.
- *   - Statiques/méthodes d'instance des models (getStudentStats, toggleStatus,
- *     detectConflicts…) : logique métier de la couche model, invoquée ICI.
+ *   - Model statics/instance methods (getStudentStats, toggleStatus,
+ *     detectConflicts…): business logic of the model layer, invoked HERE.
  */
 
 const mongoose          = require('mongoose');
@@ -34,44 +34,44 @@ const SAFE = '-password -__v';
 const toOid = (id) => new mongoose.Types.ObjectId(String(id));
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUDENT — lectures de référence (service inter-modules)
+// STUDENT — reference reads (cross-module service)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Rattachement campus d'un student (validation multi-tenant). */
+/** Campus attachment of a student (multi-tenant validation). */
 const findStudentCampusRef = (studentId) =>
   Student.findById(studentId).select('schoolCampus').lean();
 
-/** Compteur paramétrable. L'appelant fournit le filtre déjà composé. */
+/** Configurable counter. The caller provides the already-composed filter. */
 const countStudents = (filter) => Student.countDocuments(filter);
 
-/** Ids des inscrits (source de vérité : Student.studentClass). */
+/** Ids of the enrolled students (source of truth: Student.studentClass). */
 const listStudentIds = (filter) => Student.find(filter, { _id: 1 }).lean();
 
-/** Référence de classe courante d'un student d'un campus. */
+/** Current class reference of a student of a campus. */
 const getStudentClassRef = (studentId, campusId) =>
   Student.findOne({ _id: studentId, schoolCampus: campusId })
     .select('studentClass')
     .lean();
 
-/** Rattachements campus d'une liste de students. */
+/** Campus attachments of a list of students. */
 const getStudentsCampusRefs = (studentIds) =>
   Student.find({ _id: { $in: studentIds } })
     .select('_id schoolCampus')
     .lean();
 
-/** Student complet (lean) d'un campus — génération de documents typés. */
+/** Full student (lean) of a campus — typed document generation. */
 const getStudentForDocument = (studentId, campusId) =>
   Student.findOne({ _id: studentId, schoolCampus: campusId }).lean();
 
-/** Profil minimal d'un student (en-tête de relevé de notes). */
+/** Minimal profile of a student (transcript header). */
 const getStudentProfileRef = (studentId) =>
   Student.findById(studentId)
     .select('firstName lastName matricule email schoolCampus studentClass')
     .lean();
 
 /**
- * Students candidats à l'éligibilité examens (documents Mongoose, champ
- * historique `currentClass`).
+ * Students that are candidates for exam eligibility (Mongoose documents,
+ * historical `currentClass` field).
  */
 const listStudentsForExamEligibility = ({ classIds, campusId }) =>
   Student.find({
@@ -80,42 +80,42 @@ const listStudentsForExamEligibility = ({ classIds, campusId }) =>
     status:       { $ne: 'archived' },
   }).select('_id currentClass');
 
-/** Student d'un campus avec les champs d'impression (carte/certificat). */
+/** Student of a campus with the print fields (card/certificate). */
 const getStudentForPrint = (studentId, campusId) =>
   Student.findOne({ _id: studentId, schoolCampus: campusId })
     .select('firstName lastName matricule profileImage dateOfBirth gender studentClass cardNumber cardValidUntil')
     .lean();
 
-/** Students non archivés d'une classe avec les champs cartes (impression lot). */
+/** Non-archived students of a class with the card fields (batch printing). */
 const listClassStudentsForCards = (classId, campusId) =>
   Student.find({ studentClass: classId, schoolCampus: campusId, status: { $ne: 'archived' } })
     .select('firstName lastName matricule profileImage dateOfBirth gender cardNumber cardValidUntil')
     .lean();
 
-/** Students non archivés d'une classe, triés, pour la liste imprimée. */
+/** Non-archived students of a class, sorted, for the printed list. */
 const listClassStudentsForList = (classId, campusId) =>
   Student.find({ studentClass: classId, schoolCampus: campusId, status: { $ne: 'archived' } })
     .select('firstName lastName matricule dateOfBirth gender status')
     .sort({ lastName: 1, firstName: 1 })
     .lean();
 
-/** Noms/matricules d'une liste de students d'un campus. */
+/** Names/matricules of a list of students of a campus. */
 const getStudentNamesByIds = (studentIds, campusId) =>
   Student.find({ _id: { $in: studentIds }, schoolCampus: campusId })
     .select('firstName lastName matricule')
     .lean();
 
-/** Coordonnées de notification (email/téléphone) d'un lot d'étudiants. */
+/** Notification contact details (email/phone) of a batch of students. */
 const getStudentContactsByIds = (studentIds) =>
   Student.find({ _id: { $in: studentIds } })
     .select('email phone')
     .lean();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUDENT — listings paginés (service inter-modules)
+// STUDENT — paginated listings (cross-module service)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Listing staff : classe peuplée, tri alphabétique, virtuals. */
+/** Staff listing: populated class, alphabetical sort, virtuals. */
 const paginateStudentsForStaff = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     Student.find(filter)
@@ -128,7 +128,7 @@ const paginateStudentsForStaff = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Listing mentor : classe + campus peuplés, tri alphabétique, virtuals. */
+/** Mentor listing: populated class + campus, alphabetical sort, virtuals. */
 const paginateStudentsForMentor = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     Student.find(filter)
@@ -142,7 +142,7 @@ const paginateStudentsForMentor = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Listing dashboard campus : tri par date de création desc. */
+/** Campus dashboard listing: sorted by creation date desc. */
 const paginateStudentsForCampusDashboard = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     Student.find(filter)
@@ -156,36 +156,36 @@ const paginateStudentsForCampusDashboard = async (filter, { skip, limit }) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUDENT — écritures & accès controller (auth / suppression)
+// STUDENT — writes & controller access (auth / deletion)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Doc student pour login (mot de passe + campus peuplé). */
+/** Student doc for login (password + populated campus). */
 const findStudentForLogin = (query) =>
   Student.findOne(query)
     .select('+password')
     .populate('schoolCampus', 'campus_name');
 
-/** MAJ atomique de lastLogin (n'exécute pas les hooks de save). */
+/** Atomic update of lastLogin (does not run the save hooks). */
 const touchLastLogin = (id) =>
   Student.findByIdAndUpdate(id, { lastLogin: new Date() }).exec();
 
-/** Doc student avec mot de passe (changement de mot de passe). */
+/** Student doc with password (password change). */
 const findStudentByIdWithPassword = (id) =>
   Student.findById(id).select('+password');
 
-/** Doc student complet par id (suppression définitive : besoin de profileImage). */
+/** Full student doc by id (permanent deletion: needs profileImage). */
 const findStudentDocById = (id) => Student.findById(id);
 
-/** Persiste un doc student (déclenche pre('validate')/pre('save')). */
+/** Persists a student doc (triggers pre('validate')/pre('save')). */
 const saveStudentDoc = (doc) => doc.save();
 
 /**
- * Suppression définitive — `findByIdAndDelete` pour déclencher le hook
- * post('findOneAndDelete') (cascade de retrait des parents).
+ * Permanent deletion — `findByIdAndDelete` to trigger the
+ * post('findOneAndDelete') hook (cascade removal from parents).
  */
 const deleteStudentById = (id) => Student.findByIdAndDelete(id);
 
-/** Students actifs d'une classe/campus pour l'init de feuille d'appel (ids). */
+/** Active students of a class/campus for attendance sheet init (ids). */
 const findActiveStudentsForAttendance = (classId, campusId) =>
   Student.find({
     studentClass: toOid(classId),
@@ -193,7 +193,7 @@ const findActiveStudentsForAttendance = (classId, campusId) =>
     status:       'active',
   }).select('_id').lean();
 
-/** Profil d'en-tête du dashboard self-service (classe/campus/mentor peuplés). */
+/** Header profile of the self-service dashboard (populated class/campus/mentor). */
 const findStudentDashboardProfile = (studentId) =>
   Student.findById(studentId)
     .populate('studentClass', 'className level')
@@ -201,7 +201,7 @@ const findStudentDashboardProfile = (studentId) =>
     .populate('mentor',       'firstName lastName email')
     .lean({ virtuals: true });
 
-/** classId courant d'un student (résolution calendrier, campus-isolée). */
+/** Current classId of a student (calendar resolution, campus-isolated). */
 const resolveStudentClass = async (userId, campusId) => {
   const student = await Student.findOne({
     _id:          userId,
@@ -212,23 +212,23 @@ const resolveStudentClass = async (userId, campusId) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUDENT — accès config GenericEntityController (session-aware)
+// STUDENT — GenericEntityController config access (session-aware)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Unicité matricule dans un campus (validation de création, en session). */
+/** Matricule uniqueness within a campus (creation validation, in session). */
 const findStudentByMatriculeInCampus = (matricule, campusId, { session } = {}) =>
   Student.findOne({ matricule, schoolCampus: campusId })
     .select('_id')
     .session(session ?? null)
     .lean();
 
-/** Unicité matricule hors d'un id (validation de mise à jour). */
+/** Matricule uniqueness excluding an id (update validation). */
 const findStudentByMatriculeExcluding = (matricule, campusId, excludeId) =>
   Student.findOne({ matricule, schoolCampus: campusId, _id: { $ne: excludeId } })
     .select('_id')
     .lean();
 
-/** Compteur de students d'un campus (génération de matricule, en session). */
+/** Student counter of a campus (matricule generation, in session). */
 const countStudentsInCampus = (campusId, { session } = {}) =>
   Student.countDocuments({ schoolCampus: campusId }).session(session ?? null);
 
@@ -236,12 +236,12 @@ const countStudentsInCampus = (campusId, { session } = {}) =>
 // STUDENT SCHEDULE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée une session StudentSchedule. */
+/** Creates a StudentSchedule session. */
 const createScheduleSession = (payload) => StudentSchedule.create(payload);
 
 /**
- * Sessions d'une classe d'un campus, requête bornée (service inter-modules).
- * Signature/params identiques à l'historique listSessionsForClass.
+ * Sessions of a class in a campus, bounded query (inter-module service).
+ * Signature/params identical to the legacy listSessionsForClass.
  */
 const listSessionsForClass = ({
   classId,
@@ -276,18 +276,18 @@ const listSessionsForClass = ({
   return leanVirtuals ? q.lean({ virtuals: true }) : q.lean();
 };
 
-/** MAJ du résumé d'appel d'une session (sync depuis TeacherSchedule). */
+/** Update of a session's roll-call summary (sync from TeacherSchedule). */
 const updateAttendanceSummary = (studentScheduleId, summaryFields) =>
   StudentSchedule.findByIdAndUpdate(studentScheduleId, summaryFields).exec();
 
-/** Roster (classes peuplées + effectif attendu) d'une session. */
+/** Roster (populated classes + expected headcount) of a session. */
 const getSessionRoster = (studentScheduleId) =>
   StudentSchedule.findById(studentScheduleId)
     .select('classes expectedAttendees')
     .populate('classes.classId', 'className students')
     .lean();
 
-/** Upsert d'une entrée StudentSchedule par référence (miroir examens). */
+/** Upsert of a StudentSchedule entry by reference (exam mirror). */
 const upsertStudentScheduleByReference = (reference, fields) =>
   StudentSchedule.findOneAndUpdate(
     { reference },
@@ -295,15 +295,15 @@ const upsertStudentScheduleByReference = (reference, fields) =>
     { upsert: true, new: true }
   );
 
-/** MAJ d'une entrée StudentSchedule par référence. */
+/** Update of a StudentSchedule entry by reference. */
 const updateStudentScheduleByReference = (reference, fields) =>
   StudentSchedule.findOneAndUpdate({ reference }, { $set: fields });
 
-// — accès controller (calendrier / admin) —
+// — controller access (calendar / admin) —
 
 /**
- * Sessions publiées d'une classe sur une fenêtre [start, end] (calendrier
- * étudiant + export ICS). `sessionType`/`select` optionnels.
+ * Published sessions of a class over a [start, end] window (student
+ * calendar + ICS export). `sessionType`/`select` optional.
  */
 const listPublishedSessionsInWindow = ({ classId, campusId, start, end, sessionType, select }) => {
   const filter = {
@@ -322,8 +322,8 @@ const listPublishedSessionsInWindow = ({ classId, campusId, start, end, sessionT
 };
 
 /**
- * Sessions publiées d'une classe bornées sur `startTime` (dashboard : créneaux
- * du jour / à venir). Bornes optionnelles gte/gt/lte ; `limit` optionnel.
+ * Published sessions of a class bounded on `startTime` (dashboard: today's /
+ * upcoming slots). Optional gte/gt/lte bounds; `limit` optional.
  */
 const listClassPublishedSessionsByStart = ({ classId, campusId, gte, gt, lte, limit }) => {
   const filter = {
@@ -342,29 +342,29 @@ const listClassPublishedSessionsByStart = ({ classId, campusId, gte, gt, lte, li
   return q.lean();
 };
 
-/** Détail d'une session publiée (accès étudiant). */
+/** Detail of a published session (student access). */
 const findPublishedSessionById = (id) =>
   StudentSchedule.findOne({ _id: id, isDeleted: false, status: 'PUBLISHED' })
     .select('-__v')
     .lean();
 
-/** Résumé d'appel d'une session (par id, non supprimée). */
+/** Roll-call summary of a session (by id, not deleted). */
 const findSessionAttendanceInfo = (id) =>
   StudentSchedule.findOne({ _id: id, isDeleted: false })
     .select('reference subject startTime endTime attendance')
     .lean();
 
-/** Détection de conflits (statique du model : classe/salle). */
+/** Conflict detection (model static: class/room). */
 const detectScheduleConflicts = (args) => StudentSchedule.detectConflicts(args);
 
-/** Doc session pour écriture, scopé campus + non supprimée (update/publish/cancel). */
+/** Session doc for writing, campus-scoped + not deleted (update/publish/cancel). */
 const findScheduleSessionForWrite = (id, campusFilter) =>
   StudentSchedule.findOne({ _id: id, isDeleted: false, ...campusFilter });
 
-/** Persiste un doc session (déclenche pre('save')). */
+/** Persists a session doc (triggers pre('save')). */
 const saveScheduleDoc = (doc) => doc.save();
 
-/** Soft-delete d'une session, scopée campus. */
+/** Soft-delete of a session, campus-scoped. */
 const softDeleteScheduleSession = (id, campusFilter, actorId) =>
   StudentSchedule.findOneAndUpdate(
     { _id: id, isDeleted: false, ...campusFilter },
@@ -372,7 +372,7 @@ const softDeleteScheduleSession = (id, campusFilter, actorId) =>
     { new: true }
   );
 
-/** Overview paginé des sessions (admin). Filtre composé par l'appelant. */
+/** Paginated overview of sessions (admin). Filter composed by the caller. */
 const paginateScheduleSessions = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     StudentSchedule.find(filter)
@@ -384,7 +384,7 @@ const paginateScheduleSessions = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Rapport d'occupation des salles (agrégat). L'appelant fournit le $match. */
+/** Room occupancy report (aggregate). The caller provides the $match. */
 const aggregateRoomOccupancy = (matchStage) =>
   StudentSchedule.aggregate([
     { $match: matchStage },
@@ -419,12 +419,12 @@ const aggregateRoomOccupancy = (matchStage) =>
   ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUDENT ATTENDANCE — agrégats & listings (service inter-modules)
+// STUDENT ATTENDANCE — aggregates & listings (inter-module service)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Résumé de présence d'un student (totaux + cond). Le cast ObjectId de
- * student/campus est fait ici.
+ * Attendance summary of a student (totals + cond). The ObjectId cast of
+ * student/campus is done here.
  */
 const summarizeStudentAttendance = ({ studentId, campusId, academicYear, semester, status, includeJustified = false }) => {
   const match = { student: toOid(studentId), schoolCampus: toOid(campusId) };
@@ -462,7 +462,7 @@ const aggregateStudentYearAttendance = ({ studentOid, campusOid, academicYear })
     },
   ]);
 
-/** Totaux présence d'un campus (ou des classes d'un mentor). */
+/** Attendance totals of a campus (or of a mentor's classes). */
 const summarizeAttendanceTotals = ({ campusId, classIds }) => {
   const match = { schoolCampus: campusId };
   if (classIds) match.class = { $in: classIds };
@@ -478,7 +478,7 @@ const summarizeAttendanceTotals = ({ campusId, classIds }) => {
   ]);
 };
 
-/** Taux d'absence moyen par student d'un campus (dashboard). */
+/** Average absence rate per student of a campus (dashboard). */
 const getAvgAbsenceRateForCampus = (campusOid) =>
   StudentAttendance.aggregate([
     { $match: { schoolCampus: campusOid } },
@@ -499,7 +499,7 @@ const getAvgAbsenceRateForCampus = (campusOid) =>
     },
   ]);
 
-/** Relevé de présence paginé d'un enfant (portail parent). */
+/** Paginated attendance record of a child (parent portal). */
 const listStudentAttendanceForParent = async ({ studentId, campusId, academicYear, semester, status, skip = 0, limit = 20 }) => {
   const filter = { student: studentId, schoolCampus: campusId };
   if (academicYear)         filter.academicYear = academicYear;
@@ -518,7 +518,7 @@ const listStudentAttendanceForParent = async ({ studentId, campusId, academicYea
   return { records, total };
 };
 
-/** Listing paginé de présence (staff / mentor). Filtre composé par l'appelant. */
+/** Paginated attendance listing (staff / mentor). Filter composed by the caller. */
 const paginateAttendance = async (filter, { page = 1, limit = 20 }) => {
   const skip = (Number(page) - 1) * Number(limit);
   const [docs, total] = await Promise.all([
@@ -534,8 +534,8 @@ const paginateAttendance = async (filter, { page = 1, limit = 20 }) => {
 };
 
 /**
- * Statistiques de présence d'un student (statique getStudentStats du model ;
- * repli historique { attendanceRate: 100 } si la statique est absente).
+ * Attendance statistics of a student (getStudentStats static of the model;
+ * legacy fallback { attendanceRate: 100 } if the static is absent).
  */
 const getStudentAttendanceStats = (studentId, academicYear, semester, scope) =>
   StudentAttendance.getStudentStats
@@ -543,12 +543,12 @@ const getStudentAttendanceStats = (studentId, academicYear, semester, scope) =>
     : Promise.resolve({ attendanceRate: 100 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// STUDENT ATTENDANCE — accès controller
+// STUDENT ATTENDANCE — controller access
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Init/upsert de la feuille d'appel d'une session (bulkWrite $setOnInsert).
- * `students` = ids résolus en amont ; renvoie { upsertedCount, matchedCount }.
+ * Init/upsert of a session's roll-call sheet (bulkWrite $setOnInsert).
+ * `students` = ids resolved upstream; returns { upsertedCount, matchedCount }.
  */
 const initSessionAttendanceRecords = async ({
   students, scheduleId, classId, campusId, subjectId,
@@ -586,7 +586,7 @@ const initSessionAttendanceRecords = async ({
   return { upsertedCount: result.upsertedCount, matchedCount: result.matchedCount };
 };
 
-/** Records de présence d'une session (filtre composé par l'appelant). */
+/** Attendance records of a session (filter composed by the caller). */
 const findSessionAttendanceRecords = (filter) =>
   StudentAttendance.find(filter)
     .populate('student', 'firstName lastName email profileImage matricule')
@@ -608,15 +608,15 @@ const lockSessionAttendance = async (filter, actorId) => {
   return { modifiedCount: result.modifiedCount };
 };
 
-/** Doc record de présence scopé campus (toggle / justification). */
+/** Campus-scoped attendance record (toggle / justification). */
 const findAttendanceRecordScoped = (attendanceId, campusFilter) =>
   StudentAttendance.findOne({ _id: toOid(attendanceId), ...campusFilter });
 
-/** Bascule le statut d'un record (méthode d'instance). */
+/** Toggles the status of a record (instance method). */
 const toggleAttendanceStatus = (record, newStatus, userId) =>
   record.toggleStatus(newStatus, userId);
 
-/** Ajoute une justification d'absence (méthode d'instance). */
+/** Adds an absence justification (instance method). */
 const addAttendanceJustification = (record, justification, userId, document) =>
   record.addJustification(justification, userId, document);
 
@@ -624,7 +624,7 @@ const addAttendanceJustification = (record, justification, userId, document) =>
 const lockDailyAttendance = (targetDate, campusId) =>
   StudentAttendance.lockDailyAttendance(targetDate, campusId);
 
-/** Records de présence d'un student (self-service), filtre composé par l'appelant. */
+/** Attendance records for a student (self-service); filter composed by the caller. */
 const findStudentAttendanceRecords = (filter) =>
   StudentAttendance.find(filter)
     .populate('schedule', 'startTime endTime')
@@ -632,11 +632,11 @@ const findStudentAttendanceRecords = (filter) =>
     .sort({ attendanceDate: -1 })
     .lean();
 
-/** Stats de présence d'un student (statique brute — self-service / analytics). */
+/** Attendance stats for a student (raw static — self-service / analytics). */
 const getStudentStats = (studentId, academicYear, semester, period) =>
   StudentAttendance.getStudentStats(studentId, academicYear, semester, period);
 
-/** Stats de présence d'une classe (statique brute). */
+/** Attendance stats for a class (raw static). */
 const getClassStats = (classId, date, period) =>
   StudentAttendance.getClassStats(classId, date, period);
 
@@ -673,11 +673,11 @@ module.exports = {
   listClassStudentsForList,
   getStudentNamesByIds,
   getStudentContactsByIds,
-  // Student — listings paginés
+  // Student — paginated listings
   paginateStudentsForStaff,
   paginateStudentsForMentor,
   paginateStudentsForCampusDashboard,
-  // Student — écritures & controller
+  // Student — writes & controller
   findStudentForLogin,
   touchLastLogin,
   findStudentByIdWithPassword,
@@ -708,7 +708,7 @@ module.exports = {
   softDeleteScheduleSession,
   paginateScheduleSessions,
   aggregateRoomOccupancy,
-  // StudentAttendance — agrégats & listings
+  // StudentAttendance — aggregates & listings
   summarizeStudentAttendance,
   aggregateStudentYearAttendance,
   summarizeAttendanceTotals,

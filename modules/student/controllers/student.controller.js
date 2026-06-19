@@ -2,9 +2,9 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
-const Student = require('../models/student.model'); // exception assumée : Model du GenericBulkController
+const Student = require('../models/student.model'); // deliberate exception: Model for GenericBulkController
 const studentRepo = require('../student.repository');
-const classService = require('../../class').service; // façade module class (§3)
+const classService = require('../../class').service; // class module facade (§3)
 const studentConfig = require('../student.config');
 
 const {
@@ -178,7 +178,7 @@ const loginStudent = async (req, res) => {
       { expiresIn: '7d', issuer: 'school-management-app' }
     );
 
-    // Update last login (atomique : n'exécute pas les hooks de save)
+    // Update last login (atomic: does not trigger save hooks)
     await studentRepo.touchLastLogin(student._id);
 
     const prefs = await getLoginPrefs(student._id, 'STUDENT', campusId);
@@ -296,8 +296,8 @@ const deleteStudentPermanently = async (req, res) => {
       await deleteFile(STUDENT_FOLDER, student.profileImage);
     }
 
-    // Delete student from database (déclenche le hook post-findOneAndDelete :
-    // cascade de retrait des enfants côté parent)
+    // Delete student from database (triggers post-findOneAndDelete hook:
+    // cascades child removal on the parent side)
     await studentRepo.deleteStudentById(id);
 
     return sendSuccess(res, 200, 'Student deleted permanently');

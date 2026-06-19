@@ -2,7 +2,7 @@
 
 /**
  * @file public.partner.application.controller.js
- * @description Candidature partenaire publique (spec §4.9 / §7.9).
+ * @description Public partner application (spec §4.9 / §7.9).
  *
  * Route: POST /api/public/partner-application
  *
@@ -10,8 +10,8 @@
  * The admin reviews it from /api/portal-admin/applications.
  */
 
-const partnerService = require('../../../partner').service; // façade module partner (§3)
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+const partnerService = require('../../../partner').service; // partner module facade (§3)
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
 const {

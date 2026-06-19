@@ -253,16 +253,16 @@ studentSchema.pre('save', function () {
   }
 });
 
-// NOTE — La règle « la classe doit appartenir au même campus » ne vit PLUS dans
-// un hook de schéma. Un model ne doit pas lire une autre collection
-// (`mongoose.model('Class')`) depuis un hook : logique métier cross-entité
-// implicite, non testable, et qui ne s'exécute que sur les chemins `.save()`
-// (jamais sur `findByIdAndUpdate`/`updateMany`). La règle est désormais portée
-// par la couche orchestration du chemin d'écriture, via la façade du module
-// propriétaire (`class`) :
-//   - création : student.config.js → customValidation (getClassCampusRefForValidation)
-//   - bulk change-class : generic-bulk.controller.js (vérif campus inline)
-// (Patron de référence pour la sortie des hooks async cross-entité des autres models.)
+// NOTE — The rule "the class must belong to the same campus" no longer lives in
+// a schema hook. A model must not read another collection
+// (`mongoose.model('Class')`) from a hook: implicit cross-entity business logic,
+// untestable, and that only runs on `.save()` paths
+// (never on `findByIdAndUpdate`/`updateMany`). The rule is now carried
+// by the write-path orchestration layer, via the owning module's facade
+// (`class`):
+//   - creation: student.config.js → customValidation (getClassCampusRefForValidation)
+//   - bulk change-class: generic-bulk.controller.js (inline campus check)
+// (Reference pattern for moving other models' async cross-entity hooks out.)
 
 // **METHODS**
 // Check if student can login (active status)
@@ -306,8 +306,8 @@ studentSchema.statics.countByCampus = function (campusId) {
  */
 studentSchema.post('findOneAndDelete', function (doc) {
   if (!doc) return;
-  // require paresseux : la façade parent au chargement créerait un cycle
-  // (parent.controller importe le model Student via shim — vague C).
+  // Lazy require: loading the parent facade at module init would create a cycle
+  // (parent.controller imports the Student model via shim — wave C).
   const { removeChildFromAllParents } = require('../../parent').service;
   removeChildFromAllParents(doc._id).catch((err) => {
     console.warn('[Student post-delete] Failed to clean up parent children:', err.message);

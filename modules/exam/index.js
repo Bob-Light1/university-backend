@@ -11,7 +11,7 @@ const routes  = require('./exam.routes');
 const service = require('./exam.service');
 
 module.exports = {
-  routes,   // monté par server.js :  app.use('/api/examination', routes)
+  routes,   // mounted by server.js:  app.use('/api/examination', routes)
   service,  // { runAntiCheatJob }
-  // PAS de model exporté. PAS de controller exporté.
+  // No model exported. No controller exported.
 };

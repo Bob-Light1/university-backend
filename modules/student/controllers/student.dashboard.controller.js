@@ -19,8 +19,8 @@
 const mongoose = require('mongoose');
 
 const studentRepo      = require('../student.repository');
-const examService      = require('../../exam').service; // façade module exam (§3)
-const resultService    = require('../../result').service; // façade module result (§3)
+const examService      = require('../../exam').service; // exam module facade (§3)
+const resultService    = require('../../result').service; // result module facade (§3)
 const {
   sendSuccess,
   sendError,

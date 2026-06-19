@@ -1,19 +1,19 @@
 'use strict';
 
 /**
- * @file notification.service.js — API publique du socle notifications.
+ * @file notification.service.js — public API of the notifications foundation.
  *
- * C'est le SEUL point d'entrée des autres modules :
+ * This is the ONLY entry point for the other modules:
  *   require('../notification').service.notify({ ... })
  *
- * Responsabilités :
- *   - rendre un template par canal/locale (templates/index.js) ;
- *   - persister une ligne Notification par canal (repository) ;
- *   - tenter la livraison des canaux externes en best-effort (jamais throw) ;
- *   - exposer la boîte de réception in-app + le journal admin + le retry.
+ * Responsibilities:
+ *   - render a template per channel/locale (templates/index.js);
+ *   - persist one Notification row per channel (repository);
+ *   - attempt delivery of external channels best-effort (never throws);
+ *   - expose the in-app inbox + the admin log + the retry.
  *
- * Découplage : l'appelant fournit les coordonnées du destinataire (email/phone)
- * — le socle n'interroge JAMAIS les models des autres modules (façade §3).
+ * Decoupling: the caller provides the recipient's contact details (email/phone)
+ * — the foundation NEVER queries the models of other modules (facade §3).
  */
 
 const repo      = require('./notification.repository');
@@ -24,7 +24,7 @@ const config    = require('../../shared/configs/general.config');
 const Notification = require('./models/notification.model');
 const CHANNELS = Notification.CHANNELS;
 
-// Coordonnée requise par canal (inapp n'en a pas).
+// Contact detail required per channel (inapp has none).
 const contactFor = (channel, recipient) => {
   if (channel === 'email')    return recipient.email || null;
   if (channel === 'whatsapp') return recipient.phone || null;
@@ -32,16 +32,16 @@ const contactFor = (channel, recipient) => {
 };
 
 /**
- * Envoie une notification multi-canal à un destinataire.
+ * Sends a multi-channel notification to a recipient.
  *
  * @param {Object} params
  * @param {Object} params.recipient   { id, model, email?, phone?, campusId?, locale? }
- * @param {string[]} [params.channels] sous-ensemble de ['inapp','email','whatsapp'] (défaut ['inapp'])
- * @param {string} params.template     clé de template (voir templates/index.js)
- * @param {Object} [params.data]       variables de rendu
- * @param {string} [params.locale]     surcharge la locale du destinataire
- * @param {string} [params.groupKey]   clé de regroupement optionnelle
- * @returns {Promise<Object[]>} les notifications créées (lignes lean enrichies du statut)
+ * @param {string[]} [params.channels] subset of ['inapp','email','whatsapp'] (default ['inapp'])
+ * @param {string} params.template     template key (see templates/index.js)
+ * @param {Object} [params.data]       render variables
+ * @param {string} [params.locale]     overrides the recipient's locale
+ * @param {string} [params.groupKey]   optional grouping key
+ * @returns {Promise<Object[]>} the created notifications (lean rows enriched with the status)
  */
 async function notify({ recipient, channels: chans, template, data = {}, locale, groupKey = null }) {
   if (!recipient || !recipient.id || !recipient.model) {
@@ -58,7 +58,7 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
   const useLocale = locale || recipient.locale || templates.DEFAULT_LOCALE;
   const maxAttempts = config.notification.maxAttempts;
 
-  // 1) Construire + persister une ligne par canal (snapshot du rendu).
+  // 1) Build + persist one row per channel (snapshot of the render).
   const rows = requested.map((channel) => {
     const { subject, body } = templates.render(template, channel, data, useLocale);
     return {
@@ -81,15 +81,15 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
 
   const created = await repo.createMany(rows);
 
-  // 2) Livrer (best-effort, jamais throw vers l'appelant).
+  // 2) Deliver (best-effort, never throws to the caller).
   await Promise.all(created.map((doc) => deliver(doc)));
 
   return created.map((d) => (typeof d.toObject === 'function' ? d.toObject() : d));
 }
 
 /**
- * Tente la livraison d'UNE ligne et met à jour son statut. Ne lève jamais.
- * @param {Object} doc  document/lean Notification (doit avoir _id, channel, to, subject, body)
+ * Attempts delivery of ONE row and updates its status. Never throws.
+ * @param {Object} doc  Notification document/lean (must have _id, channel, to, subject, body)
  */
 async function deliver(doc) {
   const channel = channels.get(doc.channel);
@@ -98,7 +98,7 @@ async function deliver(doc) {
       await repo.markSkipped(doc._id, `Unknown channel '${doc.channel}'`);
       return 'skipped';
     }
-    // in-app : la persistance suffit → sent. Externes : skip si non configuré.
+    // in-app: persistence is enough → sent. External: skip if not configured.
     if (doc.channel !== 'inapp' && !channel.isConfigured()) {
       await repo.markSkipped(doc._id, `Channel '${doc.channel}' not configured`);
       return 'skipped';
@@ -116,7 +116,7 @@ async function deliver(doc) {
   }
 }
 
-// ── Boîte de réception in-app (consommée par les controllers) ─────────────────
+// ── In-app inbox (consumed by the controllers) ───────────────────────────────
 
 const getInbox = async ({ recipientId, unreadOnly = false, page = 1, limit = 20 }) => {
   const skip = (Math.max(1, page) - 1) * limit;
@@ -131,14 +131,14 @@ const getUnreadCount = (recipientId) => repo.countUnread(recipientId);
 const markRead       = async (id, recipientId) => (await repo.markRead(id, recipientId)).modifiedCount > 0;
 const markAllRead    = async (recipientId) => (await repo.markAllRead(recipientId)).modifiedCount;
 
-// ── Journal admin + retry manuel ──────────────────────────────────────────────
+// ── Admin log + manual retry ──────────────────────────────────────────────────
 
 const getLog = ({ campusFilter, channel, status, recipientId, search, page = 1, limit = 20 }) => {
   const skip = (Math.max(1, page) - 1) * limit;
   return repo.paginateLog({ campusFilter, channel, status, recipientId, search, skip, limit });
 };
 
-/** Rejoue manuellement un envoi (admin). @returns {Promise<string>} statut résultant */
+/** Manually replays a send (admin). @returns {Promise<string>} resulting status */
 const retryOne = async (id) => {
   const doc = await repo.findById(id);
   if (!doc) throw new Error('Notification not found');
@@ -146,7 +146,7 @@ const retryOne = async (id) => {
   return deliver(doc);
 };
 
-// ── Cron : flush des envois externes en attente / en échec récupérable ─────────
+// ── Cron: flush pending / recoverable-failure external sends ───────────────────
 
 const runRetryJob = async () => {
   const batch = await repo.findDeliverable(50);

@@ -1,31 +1,30 @@
 'use strict';
 
 /**
- * @file result.repository.js — couche d'accès aux données du module result.
+ * @file result.repository.js — data access layer of the result module.
  *
- * SEUL fichier autorisé à toucher les 3 models possédés :
+ * ONLY file allowed to touch the 3 owned models :
  *   - Result          (result.model)
  *   - FinalTranscript (final-transcript.model)
  *   - GradingScale    (grading-scale.model)
  *
- * Controllers (crud / workflow / analytics) et service inter-modules passent
- * exclusivement par lui. Lectures `.lean()` (ou `.lean({ virtuals: true })` là
- * où la sortie historique exposait des virtuals) ; écritures à hook via
- * load→mutate→save (préserve gradeBand/verificationToken/normalizedScore et
- * l'auditLog append-only), sinon opérateurs atomiques. Les pipelines
- * d'agrégation (relevé à la volée, overview campus, distinct étudiants de
- * clôture) vivent ici ; l'appelant fournit le `$match` déjà casté en ObjectId.
- * Les filtres d'isolation campus sont construits par l'appelant et passés tels
- * quels.
+ * Controllers (crud / workflow / analytics) and the inter-module service go
+ * exclusively through it. Reads `.lean()` (or `.lean({ virtuals: true })` where
+ * the historical output exposed virtuals) ; hook-driven writes via
+ * load→mutate→save (preserves gradeBand/verificationToken/normalizedScore and
+ * the append-only auditLog), otherwise atomic operators. The aggregation
+ * pipelines (transcript on the fly, campus overview, distinct students of a
+ * lock) live here ; the caller provides the `$match` already cast to ObjectId.
+ * Campus isolation filters are built by the caller and passed as-is.
  *
- * Exceptions assumées (restent hors repo) :
- *   - Constantes de domaine (RESULT_STATUS, EVALUATION_TYPE, SEMESTER,
- *     GRADING_SYSTEM, TRANSCRIPT_STATUS) : importées directement par les
- *     controllers/helper — ce sont des enums, pas un accès persistance.
- *   - Statiques/méthodes d'instance des models (computeDropoutRisk,
+ * Accepted exceptions (stay out of the repo) :
+ *   - Domain constants (RESULT_STATUS, EVALUATION_TYPE, SEMESTER,
+ *     GRADING_SYSTEM, TRANSCRIPT_STATUS) : imported directly by the
+ *     controllers/helper — these are enums, not a persistence access.
+ *   - Model statics/instance methods (computeDropoutRisk,
  *     getClassDistribution, generateForStudent, canModify, addAuditEntry,
- *     signByParent…) : logique métier de la couche model, invoquée ICI ou
- *     portée par le doc retourné.
+ *     signByParent…) : business logic of the model layer, invoked HERE or
+ *     carried by the returned doc.
  */
 
 const mongoose = require('mongoose');
@@ -34,7 +33,7 @@ const { Result }          = require('./models/result.model');
 const { FinalTranscript } = require('./models/final-transcript.model');
 const { GradingScale }    = require('./models/grading-scale.model');
 
-// Formes de populate des lectures de résultat (query shape — vit ici).
+// Populate shapes for result reads (query shape — lives here).
 const RESULT_LIST_POPULATE = [
   { path: 'student', select: 'firstName lastName matricule' },
   { path: 'subject', select: 'subject_name subject_code coefficient' },
@@ -56,30 +55,30 @@ const applyPopulate = (query, paths) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — sessions de transaction
+// RESULT — transaction sessions
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Ouvre une session Mongoose (transaction de publication RETAKE). */
+/** Opens a Mongoose session (RETAKE publication transaction). */
 const startSession = () => mongoose.startSession();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — création
+// RESULT — creation
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Crée un résultat (déclenche pre('validate')/pre('save') : gradeBand…). */
+/** Creates a result (triggers pre('validate')/pre('save') : gradeBand…). */
 const createResult = (payload) => Result.create(payload);
 
 /**
- * Insertion massive non ordonnée (saisie de classe). `ordered:false` laisse
- * passer les doublons ; l'appelant traite err.insertedDocs / err.writeErrors.
+ * Unordered bulk insertion (class entry). `ordered:false` lets
+ * duplicates through ; the caller handles err.insertedDocs / err.writeErrors.
  */
 const insertManyResults = (docs) => Result.insertMany(docs, { ordered: false });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — lectures (controller)
+// RESULT — reads (controller)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Liste paginée + compteur (getResults). Filtre composé par l'appelant. */
+/** Paginated list + count (getResults). Filter composed by the caller. */
 const paginateResults = async (filter, { skip, limit }) => {
   let query = Result.find(filter).sort({ createdAt: -1 });
   query = applyPopulate(query, RESULT_LIST_POPULATE);
@@ -90,53 +89,53 @@ const paginateResults = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Détail complet d'un résultat non supprimé (lean, populate DETAIL). */
+/** Full detail of a non-deleted result (lean, populate DETAIL). */
 const findResultByIdPopulated = (id) =>
   applyPopulate(Result.findOne({ _id: id, isDeleted: false }), RESULT_DETAIL_POPULATE).lean();
 
-/** Doc résultat non supprimé pour écriture (update / delete / workflow). */
+/** Non-deleted result doc for writing (update / delete / workflow). */
 const findResultForWrite = (id) => Result.findOne({ _id: id, isDeleted: false });
 
-/** Doc résultat par id, session-aware (note originale d'un RETAKE en transaction). */
+/** Result doc by id, session-aware (original grade of a RETAKE in transaction). */
 const findResultById = (id, { session } = {}) =>
   Result.findById(id).session(session ?? null);
 
-/** Docs résultats pour écriture (publication par lot : besoin des hooks de save). */
+/** Result docs for writing (batch publication : needs the save hooks). */
 const findResultsForWrite = (filter) => Result.find(filter);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — écritures
+// RESULT — writes
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Persiste un doc résultat (déclenche les hooks de save). `opts` : { session }. */
+/** Persists a result doc (triggers the save hooks). `opts` : { session }. */
 const saveResultDoc = (doc, opts) => doc.save(opts);
 
-/** MAJ en masse de résultats (soumission/clôture par lot). */
+/** Bulk update of results (batch submission/lock). */
 const updateManyResults = (filter, update) => Result.updateMany(filter, update);
 
-/** Écrit le score de risque de décrochage (atomique, fire-and-forget). */
+/** Writes the dropout risk score (atomic, fire-and-forget). */
 const setDropoutRiskScore = (id, risk) =>
   Result.updateOne({ _id: id }, { $set: { dropoutRiskScore: risk } });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — statiques métier (logique de la couche model)
+// RESULT — business statics (model layer logic)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Calcul du risque de décrochage d'un étudiant (statique du model). */
+/** Computes a student's dropout risk (model static). */
 const computeDropoutRisk = (studentId, campusId) =>
   Result.computeDropoutRisk(studentId, campusId);
 
-/** Distribution statistique d'une évaluation (statique du model). */
+/** Statistical distribution of an evaluation (model static). */
 const getClassDistribution = (classId, subjectId, evaluationTitle, academicYear, semester) =>
   Result.getClassDistribution(classId, subjectId, evaluationTitle, academicYear, semester);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — agrégats (analytics / clôture)
+// RESULT — aggregates (analytics / lock)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Étudiants distincts d'un périmètre de clôture (génération des bulletins).
- * `matchStage` fourni casté par l'appelant.
+ * Distinct students of a lock scope (transcript generation).
+ * `matchStage` provided already cast by the caller.
  */
 const aggregateDistinctStudentsForLock = (matchStage) =>
   Result.aggregate([
@@ -151,8 +150,8 @@ const aggregateDistinctStudentsForLock = (matchStage) =>
   ]);
 
 /**
- * Relevé de notes calculé à la volée (groupé par année/semestre/matière).
- * `matchFilter` fourni casté par l'appelant (student en ObjectId).
+ * Transcript computed on the fly (grouped by year/semester/subject).
+ * `matchFilter` provided already cast by the caller (student as ObjectId).
  */
 const aggregateStudentTranscript = (matchFilter) =>
   Result.aggregate([
@@ -204,8 +203,8 @@ const aggregateStudentTranscript = (matchFilter) =>
   ]);
 
 /**
- * Vue analytique campus (facettes statut/type/période + stats générales).
- * `matchFilter` fourni par l'appelant. Renvoie le tableau brut d'agrégat.
+ * Campus analytics view (status/type/period facets + general stats).
+ * `matchFilter` provided by the caller. Returns the raw aggregate array.
  */
 const aggregateCampusOverview = (matchFilter) =>
   Result.aggregate([
@@ -258,10 +257,10 @@ const aggregateCampusOverview = (matchFilter) =>
   ]);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — listes spécialisées (controller)
+// RESULT — specialized lists (controller)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Liste de rattrapage (student/subject peuplés, tri score croissant). */
+/** Retake list (student/subject populated, ascending score sort). */
 const listRetakeResults = (filter) =>
   Result.find(filter)
     .populate('student', 'firstName lastName matricule email')
@@ -270,7 +269,7 @@ const listRetakeResults = (filter) =>
     .sort({ normalizedScore: 1 })
     .lean();
 
-/** Résultat authentifiable par token QR (vérification publique, lean). */
+/** Result authenticatable by QR token (public verification, lean). */
 const findResultByVerificationToken = (token) =>
   Result.findOne({ verificationToken: token, isDeleted: false })
     .populate('student', 'firstName lastName matricule')
@@ -281,13 +280,13 @@ const findResultByVerificationToken = (token) =>
     .lean();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RESULT — service inter-modules (compteurs / listes paginées / récents)
+// RESULT — inter-module service (counters / paginated lists / recents)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Compteur de résultats (filtre composé par le service). */
+/** Result counter (filter composed by the service). */
 const countResults = (filter) => Result.countDocuments(filter);
 
-/** Liste paginée campus (staff/mentor readonly) : student/subject/class peuplés. */
+/** Paginated campus list (staff/mentor readonly) : student/subject/class populated. */
 const paginateCampusResults = async (filter, { skip, limit }) => {
   const [docs, total] = await Promise.all([
     Result.find(filter)
@@ -302,7 +301,7 @@ const paginateCampusResults = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Résultats PUBLISHED d'un étudiant (portail parent), virtuals inclus. */
+/** PUBLISHED results of a student (parent portal), virtuals included. */
 const paginateStudentPublishedResults = async (filter, { skip, limit }) => {
   const [results, total] = await Promise.all([
     Result.find(filter)
@@ -317,7 +316,7 @@ const paginateStudentPublishedResults = async (filter, { skip, limit }) => {
   return { results, total };
 };
 
-/** Commentaires pédagogiques des résultats PUBLISHED d'un étudiant (parent). */
+/** Pedagogical comments of a student's PUBLISHED results (parent). */
 const paginateStudentResultComments = async (filter, { skip, limit }) => {
   const [comments, total] = await Promise.all([
     Result.find(filter)
@@ -331,7 +330,7 @@ const paginateStudentResultComments = async (filter, { skip, limit }) => {
   return { comments, total };
 };
 
-/** Dashboard étudiant : derniers résultats PUBLISHED (scores inclus). */
+/** Student dashboard : latest PUBLISHED results (scores included). */
 const findRecentResultsForStudent = (filter, limit) =>
   Result.find(filter)
     .select('evaluationTitle evaluationType academicYear semester normalizedScore score maxScore gradeBand publishedAt subject')
@@ -340,7 +339,7 @@ const findRecentResultsForStudent = (filter, limit) =>
     .limit(limit)
     .lean({ virtuals: true });
 
-/** Dashboard parent : derniers résultats PUBLISHED d'un enfant. */
+/** Parent dashboard : latest PUBLISHED results of a child. */
 const findRecentResultsForChild = (filter, limit) =>
   Result.find(filter)
     .select('evaluationTitle evaluationType academicYear semester normalizedScore gradeBand publishedAt subject')
@@ -349,7 +348,7 @@ const findRecentResultsForChild = (filter, limit) =>
     .limit(limit)
     .lean({ virtuals: true });
 
-/** Dashboard mentor : derniers résultats PUBLISHED de ses étudiants. */
+/** Mentor dashboard : latest PUBLISHED results of their students. */
 const findRecentResultsForStudents = (filter, limit) =>
   Result.find(filter)
     .select('student subject score maxScore grade evaluationTitle createdAt')
@@ -363,24 +362,24 @@ const findRecentResultsForStudents = (filter, limit) =>
 // FINAL TRANSCRIPT
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Génération d'un bulletin définitif d'étudiant (statique du model). */
+/** Generation of a student's final transcript (model static). */
 const generateTranscriptForStudent = (params) =>
   FinalTranscript.generateForStudent(params);
 
-/** Bulletin définitif stocké d'un étudiant (student/class peuplés, lean). */
+/** Stored final transcript of a student (student/class populated, lean). */
 const findTranscriptForStudentPopulated = ({ studentId, academicYear, semester }) =>
   FinalTranscript.findOne({ student: studentId, academicYear, semester })
     .populate('student', 'firstName lastName matricule email')
     .populate('class',   'className')
     .lean();
 
-/** Doc bulletin par id pour écriture (validation / signature). */
+/** Transcript doc by id for writing (validation / signature). */
 const findTranscriptForWrite = (id) => FinalTranscript.findById(id);
 
-/** Persiste un doc bulletin (déclenche les hooks de save). */
+/** Persists a transcript doc (triggers the save hooks). */
 const saveTranscriptDoc = (doc) => doc.save();
 
-/** Bulletins VALIDATED/SEALED d'un étudiant (portail parent, lean virtuals). */
+/** VALIDATED/SEALED transcripts of a student (parent portal, lean virtuals). */
 const listStudentTranscripts = (filter) =>
   FinalTranscript.find(filter)
     .select('-__v')
@@ -389,7 +388,7 @@ const listStudentTranscripts = (filter) =>
     .sort({ academicYear: -1, semester: 1 })
     .lean({ virtuals: true });
 
-/** Doc bulletin scopé étudiant/campus pour signature parent (écriture). */
+/** Transcript doc scoped student/campus for parent signature (write). */
 const findTranscriptForSignature = ({ transcriptId, studentId, campusId }) =>
   FinalTranscript.findOne({
     _id:          transcriptId,
@@ -397,7 +396,7 @@ const findTranscriptForSignature = ({ transcriptId, studentId, campusId }) =>
     schoolCampus: campusId,
   });
 
-/** Bulletin d'un étudiant pour impression PDF (academic-print, lean). */
+/** A student's transcript for PDF printing (academic-print, lean). */
 const findTranscriptForPrint = ({ studentId, campusId, academicYear, semester }) =>
   FinalTranscript.findOne({
     student:      studentId,
@@ -410,25 +409,25 @@ const findTranscriptForPrint = ({ studentId, campusId, academicYear, semester })
 // GRADING SCALE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Barèmes actifs d'un campus (tri défaut puis nom, lean). */
+/** Active grading scales of a campus (sort by default then name, lean). */
 const listActiveGradingScales = (campusFilter) =>
   GradingScale.find({ isActive: true, ...campusFilter })
     .sort({ isDefault: -1, name: 1 })
     .lean();
 
-/** Crée un barème (validation des bands en pre-save). */
+/** Creates a grading scale (bands validation in pre-save). */
 const createGradingScale = (payload) => GradingScale.create(payload);
 
-/** Doc barème par id pour écriture (mise à jour). */
+/** Grading scale doc by id for writing (update). */
 const findGradingScaleForWrite = (id) => GradingScale.findById(id);
 
-/** Persiste un doc barème (déclenche la validation pre-save des bands). */
+/** Persists a grading scale doc (triggers the pre-save bands validation). */
 const saveGradingScaleDoc = (doc) => doc.save();
 
 module.exports = {
   // Result — transaction
   startSession,
-  // Result — création
+  // Result — creation
   createResult,
   insertManyResults,
   // Result — lectures
@@ -437,18 +436,18 @@ module.exports = {
   findResultForWrite,
   findResultById,
   findResultsForWrite,
-  // Result — écritures
+  // Result — writes
   saveResultDoc,
   updateManyResults,
   setDropoutRiskScore,
-  // Result — statiques métier
+  // Result — business statics
   computeDropoutRisk,
   getClassDistribution,
-  // Result — agrégats
+  // Result — aggregates
   aggregateDistinctStudentsForLock,
   aggregateStudentTranscript,
   aggregateCampusOverview,
-  // Result — listes spécialisées
+  // Result — specialized lists
   listRetakeResults,
   findResultByVerificationToken,
   // Result — service inter-modules

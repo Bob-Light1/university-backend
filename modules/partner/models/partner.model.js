@@ -80,7 +80,7 @@ const partnerSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // ── IDENTITÉ ─────────────────────────────────────────────────────────
+    // ── IDENTITY ──────────────────────────────────────────────────────────
     firstName: {
       type:      String,
       required:  [true, 'First name is required'],
@@ -207,7 +207,7 @@ const partnerSchema = new mongoose.Schema(
       index:   true,
     },
 
-    // ── RÉFÉRENCEMENT AFFILIÉ ─────────────────────────────────────────────
+    // ── AFFILIATE REFERENCING ─────────────────────────────────────────────
     partnerCode: {
       type:      String,
       trim:      true,
@@ -227,7 +227,7 @@ const partnerSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ── CONTACTS SUPPLÉMENTAIRES (institutional) ──────────────────────────
+    // ── ADDITIONAL CONTACTS (institutional) ───────────────────────────────
     contacts: {
       type:     [ContactSchema],
       default:  [],
@@ -249,13 +249,13 @@ const partnerSchema = new mongoose.Schema(
       default: null,
     },
 
-    // ── RÉSEAUX SOCIAUX ───────────────────────────────────────────────────
+    // ── SOCIAL NETWORKS ───────────────────────────────────────────────────
     socialLinks: {
       type:    SocialLinksSchema,
       default: null,
     },
 
-    // ── MÉTADONNÉES ───────────────────────────────────────────────────────
+    // ── METADATA ──────────────────────────────────────────────────────────
     lastLoginAt:    { type: Date, default: null },
     lastActivityAt: { type: Date, default: null },
 
@@ -272,7 +272,7 @@ const partnerSchema = new mongoose.Schema(
   }
 );
 
-// ── INDEXES COMPOSÉS ──────────────────────────────────────────────────────────
+// ── COMPOUND INDEXES ──────────────────────────────────────────────────────────
 
 partnerSchema.index({ partnerCode: 1 }, { unique: true, sparse: true });
 partnerSchema.index({ schoolCampus: 1, status: 1 });

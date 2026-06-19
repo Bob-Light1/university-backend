@@ -1,18 +1,18 @@
 'use strict';
 
 /**
- * @file subject.service.js — API inter-modules du domaine subject.
+ * @file subject.service.js — inter-module API of the subject domain.
  *
- * Exposé :
- *   - countSubjectsOnCampus        : garde campus en masse (gaet).
- *   - listCampusSubjects           : listing dashboard campus (campus.controller).
- *   - getLinkedCourseRefIds        : ids de cours liés à un subject actif (course.crud, filtre isLinked).
- *   - listActiveSubjectsLinkedToCourse : garde de suppression d'un cours (course.crud).
- *   - getSubjectCampusRef          : validation cross-campus (exam.session).
- *   - resolveSubjectForSchedule    : forme dénormalisée subject{} des emplois
- *     du temps (student.schedule.helpers).
+ * Exposes:
+ *   - countSubjectsOnCampus        : bulk campus guard (gaet).
+ *   - listCampusSubjects           : campus dashboard listing (campus.controller).
+ *   - getLinkedCourseRefIds        : course ids linked to an active subject (course.crud, isLinked filter).
+ *   - listActiveSubjectsLinkedToCourse : course deletion guard (course.crud).
+ *   - getSubjectCampusRef          : cross-campus validation (exam.session).
+ *   - resolveSubjectForSchedule    : denormalized subject{} shape for
+ *     schedules (student.schedule.helpers).
  *
- * Toute la persistance passe par subject.repository (étape 0 pré-Postgres).
+ * All persistence goes through subject.repository (step 0 pre-Postgres).
  */
 
 const subjectRepo = require('./subject.repository');

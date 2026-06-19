@@ -29,10 +29,10 @@ const touchLastLogin = (id) =>
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────
 
-/** Crée un staff (Staff.create → hook pre('save') de hash). @returns {Promise<Document>} */
+/** Creates a staff member (Staff.create → pre('save') hash hook). @returns {Promise<Document>} */
 const create = (data) => Staff.create(data);
 
-/** Liste paginée (campus + subRole peuplés). @returns {Promise<{data, total}>} */
+/** Paginated list (campus + subRole populated). @returns {Promise<{data, total}>} */
 const paginate = async ({ campusFilter, status, includeArchived, subRole, search, skip, limit }) => {
   const filter = { ...campusFilter };
   if (status) filter.status = status;
@@ -83,10 +83,10 @@ const updatePassword = (id, hashedPassword) =>
 
 const deleteById = (id) => Staff.findByIdAndDelete(id);
 
-/** Un staff porte-t-il ce rôle ? (garde de suppression de StaffRole). */
+/** Does any staff member hold this role? (guard for StaffRole deletion). */
 const isRoleInUse = (roleId) => Staff.exists({ subRole: roleId });
 
-/** Compteur de staff d'un campus + critères additionnels (dashboard). */
+/** Count of staff on a campus + additional criteria (dashboard). */
 const countByCampus = (campusId, criteria = {}) =>
   Staff.countDocuments({ schoolCampus: campusId, ...criteria });
 

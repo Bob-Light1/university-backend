@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * @file document.service.js — API inter-modules du domaine document (façade).
+ * @file document.service.js — inter-module API of the document domain (facade).
  *
- * ⚠️ Ne pas confondre avec ./services/document.service.js (service INTERNE :
- * recherche, listing). Ce fichier-ci n'expose que ce que les autres parties
- * de l'application consomment :
- *   - server.js : runRetentionJob (cron hebdomadaire de rétention)
- *   - server.js : shutdownPool (arrêt propre du pool Puppeteer PDF)
- *   - academic-print : generateQrCodeDataUrl (QR de vérification sur les PDF)
- *   - staff : listPublishedForCampus (documents publiés visibles par le staff)
+ * ⚠️ Do not confuse with ./services/document.service.js (INTERNAL service:
+ * search, listing). This file only exposes what other parts
+ * of the application consume:
+ *   - server.js : runRetentionJob (weekly retention cron)
+ *   - server.js : shutdownPool (clean shutdown of the Puppeteer PDF pool)
+ *   - academic-print : generateQrCodeDataUrl (verification QR on PDFs)
+ *   - staff : listPublishedForCampus (published documents visible to staff)
  */
 
 const { runRetentionJob }       = require('./document.retention.cron');
@@ -20,14 +20,14 @@ const repo                      = require('./document.repository');
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Liste paginée des documents PUBLISHED d'un campus (lecture seule).
+ * Paginated list of a campus's PUBLISHED documents (read-only).
  * @param {Object} p
  * @param {ObjectId|string} p.campusId
  * @param {number}  [p.page=1]
  * @param {number}  [p.limit=20]
- * @param {string}  [p.search]   — sur title/description
- * @param {string}  [p.type]     — normalisé en MAJUSCULES
- * @param {string}  [p.category] — normalisé en MAJUSCULES
+ * @param {string}  [p.search]   — on title/description
+ * @param {string}  [p.type]     — normalized to UPPERCASE
+ * @param {string}  [p.category] — normalized to UPPERCASE
  * @returns {Promise<{docs: Object[], total: number}>}
  */
 const listPublishedForCampus = async ({ campusId, page = 1, limit = 20, search, type, category }) => {

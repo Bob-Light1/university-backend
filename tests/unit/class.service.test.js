@@ -11,8 +11,8 @@
  * sans le champ fantôme `campus`. Le model Class est mocké (aucune DB).
  */
 
-// Mock du model Mongoose : findOne(filter).select(...).lean()
-// (chemin en littéral + tout construit DANS la factory — contraintes de hoisting de jest.mock).
+// Mongoose model mock: findOne(filter).select(...).lean()
+// (literal path + everything built INSIDE the factory — jest.mock hoisting constraints).
 jest.mock('../../modules/class/class.model', () => {
   const query = {
     select: jest.fn().mockReturnThis(),
@@ -38,7 +38,7 @@ describe('getClassForDocumentList (bug #8)', () => {
     const filter = Class.findOne.mock.calls[0][0];
     expect(filter).toHaveProperty('schoolCampus', 'campus-1');
     expect(filter).toHaveProperty('_id', 'class-1');
-    expect(filter).not.toHaveProperty('campus'); // ← le bug
+    expect(filter).not.toHaveProperty('campus'); // ← the bug
   });
 
   test('retourne le document de classe (lean)', async () => {
