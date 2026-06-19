@@ -37,6 +37,7 @@ const { apiLimiter }              = require('../../shared/middleware/rate-limite
 const {
   createCourse,
   listCourses,
+  getCourseStats,
   getCourseById,
   getCourseByCode,
   getCourseVersions,
@@ -79,6 +80,14 @@ router.use(apiLimiter);
  * @access All authenticated roles
  */
 router.get('/', authorize(allRoles), listCourses);
+
+/**
+ * @route  GET /api/courses/stats
+ * @desc   Catalog-wide KPI counts by approval status (role-scoped visibility)
+ * @access All authenticated roles
+ * @note   Must be declared BEFORE /:id to avoid Express conflict
+ */
+router.get('/stats', authorize(allRoles), getCourseStats);
 
 /**
  * @route  GET /api/courses/code/:courseCode

@@ -125,6 +125,24 @@ const listActiveLinkedToCourse = (courseId) =>
     .populate('schoolCampus', 'name')
     .lean();
 
+/**
+ * True if the teacher is assigned to at least one active subject linking any of
+ * the given courses. This is the canonical "teacher of a course" relationship:
+ * courses are global, so the teacher ↔ course link only exists through the
+ * campus-scoped Subject (teachers[] + courseRef).
+ * @param {string[]} courseIds
+ * @param {string}   teacherId
+ * @returns {Promise<boolean>}
+ */
+const existsTeacherLinkedToCourse = async (courseIds, teacherId) => {
+  const doc = await Subject.findOne({
+    courseRef: { $in: courseIds },
+    teachers:  teacherId,
+    status:    'active',
+  }).select('_id').lean();
+  return doc != null;
+};
+
 /** Campus reference of a subject. */
 const getCampusRef = (subjectId) =>
   Subject.findById(subjectId).select('schoolCampus').lean();
@@ -166,6 +184,7 @@ module.exports = {
   listForCampus,
   distinctLinkedCourseRefs,
   listActiveLinkedToCourse,
+  existsTeacherLinkedToCourse,
   getCampusRef,
   getCampusRefsByIds,
   resolveForSchedule,

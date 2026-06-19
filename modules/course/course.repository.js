@@ -89,6 +89,28 @@ const listDependents = (id) =>
   Course.find({ 'prerequisites.course': id, status: ACTIVE })
     .select('courseCode title version approvalStatus').lean();
 
+/**
+ * Aggregate course counts by approval status over the whole catalog (latest,
+ * non-archived). Powers dashboard KPIs accurately regardless of pagination.
+ * An optional base filter restricts the scope (e.g. APPROVED-only for
+ * non-global roles).
+ * @param {Object} [baseFilter={}]
+ * @returns {Promise<{ total: number, byStatus: Record<string, number> }>}
+ */
+const getStatusCounts = async (baseFilter = {}) => {
+  const match = { status: ACTIVE, isLatestVersion: true, ...baseFilter };
+  const rows = await Course.aggregate([
+    { $match: match },
+    { $group: { _id: '$approvalStatus', count: { $sum: 1 } } },
+  ]);
+  const byStatus = rows.reduce((acc, r) => {
+    acc[r._id] = r.count;
+    return acc;
+  }, {});
+  const total = rows.reduce((sum, r) => sum + r.count, 0);
+  return { total, byStatus };
+};
+
 // ── Writes (load→mutate→save, hooks preserved) ──────────────────────────────
 
 /** Creates a course and populates level + createdBy for the response. @returns {Promise<Document>} */
@@ -253,17 +275,11 @@ const listApproved = async ({ search, page = 1, limit = 20 } = {}) => {
   const skip = (Number(page) - 1) * Number(limit);
   const [docs, total] = await Promise.all([
     Course.find(filter).select('-__v')
-      .populate('subject', 'subject_name').populate('createdBy', 'firstName lastName')
+      .populate('level', 'name').populate('createdBy', 'firstName lastName')
       .sort({ title: 1 }).skip(skip).limit(Number(limit)).lean(),
     Course.countDocuments(filter),
   ]);
   return { docs, total };
-};
-
-/** True if the teacher owns at least one of the courses (document access control). */
-const teacherOwnsAnyCourse = async (courseIds, teacherId) => {
-  const owned = await Course.findOne({ _id: { $in: courseIds }, teacher: teacherId }).select('_id').lean();
-  return owned != null;
 };
 
 /** Course eligible for the Subject→Course link (level populated). */
@@ -292,6 +308,6 @@ module.exports = {
   pullResource,
   cloneAsNewVersion,
   listApproved,
-  teacherOwnsAnyCourse,
   findApprovedForLinking,
+  getStatusCounts,
 };

@@ -134,10 +134,8 @@ describe('API inter-modules', () => {
     }));
   });
 
-  test('teacherOwnsAnyCourse : findOne { _id:$in, teacher }', async () => {
-    model.__setLean({ _id: 'c1' });
-    const owns = await repo.teacherOwnsAnyCourse(['c1', 'c2'], 't1');
-    expect(Course.findOne).toHaveBeenCalledWith({ _id: { $in: ['c1', 'c2'] }, teacher: 't1' });
-    expect(owns).toBe(true);
-  });
+  // NOTE: the former teacherOwnsAnyCourse lived here but queried a non-existent
+  // Course.teacher field (always false). The teacher ↔ course relationship is
+  // campus-scoped and now resolved in the subject domain
+  // (subject.repository.existsTeacherLinkedToCourse); see course.service.
 });

@@ -193,8 +193,12 @@ const buildCourseFilter = (query, user) => {
     if (query.approvalStatus) {
       filter.approvalStatus = query.approvalStatus;
     }
-    if (query.includeDeleted === 'true' && user.role === 'ADMIN') {
-      delete filter.status; // ADMIN only — show all including archived
+    if (user.role === 'ADMIN') {
+      if (query.archived === 'true') {
+        filter.status = 'archived';      // ADMIN only — archived view (restore tab)
+      } else if (query.includeDeleted === 'true') {
+        delete filter.status;            // ADMIN only — show all including archived
+      }
     }
   }
 

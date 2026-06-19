@@ -156,6 +156,33 @@ const listCourses = asyncHandler(async (req, res) => {
   });
 });
 
+// ─── STATS ────────────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/courses/stats
+ * Catalog-wide KPI counts by approval status (latest, non-archived).
+ *
+ * Visibility:
+ *  • Global roles (ADMIN/DIRECTOR) → full breakdown across all statuses.
+ *  • Non-global roles → APPROVED only (mirrors listCourses visibility), so
+ *    DRAFT/PENDING_REVIEW/REJECTED are never disclosed.
+ */
+const getCourseStats = asyncHandler(async (req, res) => {
+  const baseFilter = isGlobalRole(req.user.role)
+    ? {}
+    : { approvalStatus: APPROVAL_STATUS.APPROVED };
+
+  const { total, byStatus } = await courseRepo.getStatusCounts(baseFilter);
+
+  return sendSuccess(res, 200, 'Course statistics retrieved successfully.', {
+    total,
+    draft:    byStatus[APPROVAL_STATUS.DRAFT]          || 0,
+    pending:  byStatus[APPROVAL_STATUS.PENDING_REVIEW] || 0,
+    approved: byStatus[APPROVAL_STATUS.APPROVED]       || 0,
+    rejected: byStatus[APPROVAL_STATUS.REJECTED]       || 0,
+  });
+});
+
 // ─── GET BY ID ────────────────────────────────────────────────────────────────
 
 /**
@@ -378,6 +405,7 @@ const restoreCourse = asyncHandler(async (req, res) => {
 module.exports = {
   createCourse,
   listCourses,
+  getCourseStats,
   getCourseById,
   getCourseByCode,
   getCourseVersions,
