@@ -1,16 +1,19 @@
 'use strict';
 
 /**
- * @file academic-print.service.js — API inter-modules du domaine academic-print (façade).
+ * @file academic-print.service.js — inter-module API of the academic-print domain (facade).
  *
- * Consommateurs actuels :
- *   - server.js : shutdownAcademicPool (arrêt propre du pool Puppeteer)
- *   - modules/document (cron rétention) : cleanupExpiredPrintFiles
+ * Current consumers:
+ *   - server.js : shutdownAcademicPool (graceful Puppeteer pool shutdown)
+ *   - server.js (cron) : runPrintQueueJob (sweep the persisted print job queue)
+ *   - modules/document (retention cron) : cleanupExpiredPrintFiles
  */
 
 const { shutdownAcademicPool, cleanupExpiredPrintFiles } = require('./academic-pdf.service');
+const { runPrintQueueJob } = require('./print-job.processor');
 
 module.exports = {
   shutdownAcademicPool,
   cleanupExpiredPrintFiles,
+  runPrintQueueJob,
 };

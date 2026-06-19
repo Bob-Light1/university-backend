@@ -2,16 +2,22 @@
 
 /**
  * @file academic-pdf.service.js
- * @description PDF generation for 4 academic document types:
+ * @description PDF generation for 6 academic document types:
  *   - STUDENT_CARD  : CR80 ID card (85.6×54mm, front + back)
  *   - TRANSCRIPT    : Semester bulletin A4 (MINESUP-style)
  *   - ENROLLMENT    : Enrollment certificate A4
  *   - TIMETABLE     : Class weekly timetable A4 landscape
+ *   - STUDENT_LIST  : Class roster A4
+ *   - TEACHER_LIST  : Class teaching staff A4
  *
  * Uses the existing Puppeteer installation (shared with document.pdf.service.js).
  * Maintains its own singleton browser to avoid pool contention.
  * QR codes reuse the existing document.qr.service.js (qrcode package).
  * Campus branding (logo as base64) is cached in memory with a 10-min TTL.
+ *
+ * i18n: all visible labels are resolved from shared/i18n/catalogs/academic-print.js
+ * via the shared `pick` helper. The caller supplies a `locale` (BCP-47 code);
+ * cascading fallback to English when a translation is missing.
  */
 
 const puppeteer = require('puppeteer-core');
@@ -20,13 +26,66 @@ const path      = require('path');
 const fs        = require('fs').promises;
 
 const { generateQrCodeDataUrl } = require('../document').service;
+const { pick, interpolate, normalize, RTL_LANGUAGES } = require('../../shared/i18n');
+const catalog = require('../../shared/i18n/catalogs/academic-print');
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
 const TIMEOUT_MS = parseInt(process.env.PUPPETEER_TIMEOUT_MS || '45000', 10);
-const UPLOAD_DIR = process.env.UPLOAD_DIR
-  ? path.join(process.env.UPLOAD_DIR, 'print')
-  : path.join(__dirname, '..', 'uploads', 'print');
+
+// Base uploads directory — same convention as multer (shared/middleware/upload.js)
+// and the document module. From modules/academic-print, the repo's uploads/ dir is
+// two levels up. UPLOAD_DIR is honored in every environment.
+const BASE_UPLOAD_DIR = process.env.UPLOAD_DIR || path.join(__dirname, '..', '..', 'uploads');
+const UPLOAD_DIR      = path.join(BASE_UPLOAD_DIR, 'print');
+
+// Caps simultaneous Puppeteer pages across the whole process so a burst of batch
+// jobs (many managers printing at once) cannot exhaust memory — see renderPdf().
+const MAX_CONCURRENT_RENDERS = parseInt(process.env.PRINT_MAX_CONCURRENCY || '4', 10);
+
+// Bounded timeout for fetching a remote image (logo/photo) before inlining it.
+const IMAGE_FETCH_TIMEOUT_MS = parseInt(process.env.PRINT_IMAGE_TIMEOUT_MS || '8000', 10);
+
+// ── i18n helpers ──────────────────────────────────────────────────────────────
+
+// Maps our locale codes to BCP-47 tags accepted by Intl / Date#toLocaleDateString.
+const DATE_LOCALE_MAP = {
+  en:      'en-GB',
+  fr:      'fr-FR',
+  es:      'es-ES',
+  ar:      'ar-SA',
+  'zh-CN': 'zh-CN',
+  de:      'de-DE',
+  pt:      'pt-BR',
+  it:      'it-IT',
+  ru:      'ru-RU',
+  ja:      'ja-JP',
+};
+
+// Maps our locale codes to the HTML `lang` attribute value.
+const HTML_LANG_MAP = {
+  en: 'en', fr: 'fr', es: 'es', ar: 'ar', 'zh-CN': 'zh',
+  de: 'de', pt: 'pt', it: 'it', ru: 'ru', ja: 'ja',
+};
+
+/**
+ * Build the i18n context used by all template builders.
+ * @param {string} locale  Supported language code (e.g. 'fr', 'ar'). Defaults to 'en'.
+ * @returns {{ labels: Object, dateLocale: string, dir: string, htmlLang: string }}
+ */
+const buildI18n = (locale = 'en') => {
+  const lang = normalize(locale) || 'en';
+  const labels = {};
+  for (const [key, dict] of Object.entries(catalog)) {
+    labels[key] = pick(dict, lang);
+  }
+  return {
+    labels,
+    htmlLang:   HTML_LANG_MAP[lang]   || 'en',
+    dateLocale: DATE_LOCALE_MAP[lang] || 'en-GB',
+    dir:        RTL_LANGUAGES.includes(lang) ? 'rtl' : 'ltr',
+  };
+};
 
 // ── XSS-safe HTML escape ──────────────────────────────────────────────────────
 
@@ -37,6 +96,45 @@ const esc = (str) =>
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
+
+// ── Image inlining ─────────────────────────────────────────────────────────────
+// Resolve an image reference to a self-contained data: URL so PDF rendering never
+// depends on live network or relative-path resolution at print time.
+//   - data: URLs are returned unchanged
+//   - http(s) URLs are fetched (bounded timeout) and inlined
+//   - anything else is treated as a path relative to the uploads dir
+// Returns null on any failure; callers render a placeholder instead.
+
+const imageToDataUrl = async (ref) => {
+  if (!ref || typeof ref !== 'string') return null;
+  if (ref.startsWith('data:')) return ref;
+
+  try {
+    if (/^https?:\/\//i.test(ref)) {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), IMAGE_FETCH_TIMEOUT_MS);
+      try {
+        const resp = await fetch(ref, { signal: controller.signal });
+        if (!resp.ok) return null;
+        const ct = resp.headers.get('content-type') || 'image/png';
+        if (!ct.startsWith('image/')) return null;
+        const buf = Buffer.from(await resp.arrayBuffer());
+        return `data:${ct};base64,${buf.toString('base64')}`;
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    // Local path relative to the uploads dir (path-traversal stripped).
+    const safeRel = path.normalize(ref).replace(/^(\.\.(\/|\\|$))+/, '');
+    const buf     = await fs.readFile(path.join(BASE_UPLOAD_DIR, safeRel));
+    const ext     = (path.extname(safeRel).replace('.', '') || 'png').toLowerCase();
+    const mime    = ext === 'jpg' ? 'jpeg' : ext === 'svg' ? 'svg+xml' : ext;
+    return `data:image/${mime};base64,${buf.toString('base64')}`;
+  } catch {
+    return null;
+  }
+};
 
 // Renders a circular campus logo <img> or empty string if no logo.
 const logoCircleHtml = (logoDataUrl, size = '18mm') =>
@@ -59,22 +157,9 @@ const getCampusBranding = async (campusId) => {
 
   if (!campus) throw Object.assign(new Error('Campus not found'), { statusCode: 404 });
 
-  let logoDataUrl = null;
-  if (campus.campus_image) {
-    if (campus.campus_image.startsWith('http')) {
-      // Cloudinary / external URL — use directly in img src
-      logoDataUrl = campus.campus_image;
-    } else {
-      try {
-        const absPath = path.join(__dirname, '..', 'uploads', campus.campus_image);
-        const buf     = await fs.readFile(absPath);
-        const ext     = path.extname(campus.campus_image).replace('.', '') || 'png';
-        logoDataUrl   = `data:image/${ext};base64,${buf.toString('base64')}`;
-      } catch {
-        logoDataUrl = null;
-      }
-    }
-  }
+  // Inline the logo (Cloudinary URL or local upload) once per cache window so PDF
+  // rendering never reaches out to the network — see imageToDataUrl().
+  const logoDataUrl = await imageToDataUrl(campus.campus_image);
 
   const branding = { campus_name: campus.campus_name, location: campus.location || {}, logoDataUrl, cachedAt: Date.now() };
   brandingCache.set(key, branding);
@@ -132,35 +217,64 @@ const shutdownAcademicPool = async () => {
   }
 };
 
+// ── Concurrency limiter ─────────────────────────────────────────────────────
+// Bounds the number of simultaneous Puppeteer pages process-wide. Excess renders
+// queue (FIFO) instead of all opening pages at once.
+
+let _activeRenders = 0;
+const _renderQueue = [];
+
+const acquireRenderSlot = () => {
+  if (_activeRenders < MAX_CONCURRENT_RENDERS) {
+    _activeRenders++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _renderQueue.push(resolve));
+};
+
+const releaseRenderSlot = () => {
+  const next = _renderQueue.shift();
+  if (next) next();            // hand the held slot directly to the next waiter
+  else _activeRenders--;
+};
+
 // ── PDF Renderer ──────────────────────────────────────────────────────────────
 
 const renderPdf = async (html, { format, width, height, landscape = false, margins = {} } = {}) => {
-  const browser = await getBrowser();
-  const page    = await browser.newPage();
+  await acquireRenderSlot();
   try {
-    await page.setContent(html, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
-    return await page.pdf({
-      format:         format || (width && height ? undefined : 'A4'),
-      width,
-      height,
-      landscape,
-      margin: {
-        top:    margins.top    ?? '15mm',
-        right:  margins.right  ?? '15mm',
-        bottom: margins.bottom ?? '15mm',
-        left:   margins.left   ?? '15mm',
-      },
-      printBackground: true,
-    });
+    const browser = await getBrowser();
+    const page    = await browser.newPage();
+    try {
+      // All images are inlined as data: URLs upstream, so 'load' is sufficient and
+      // avoids waiting on (or hanging upon) any external network request.
+      await page.setContent(html, { waitUntil: 'load', timeout: TIMEOUT_MS });
+      return await page.pdf({
+        format:         format || (width && height ? undefined : 'A4'),
+        width,
+        height,
+        landscape,
+        margin: {
+          top:    margins.top    ?? '15mm',
+          right:  margins.right  ?? '15mm',
+          bottom: margins.bottom ?? '15mm',
+          left:   margins.left   ?? '15mm',
+        },
+        printBackground: true,
+      });
+    } finally {
+      await page.close().catch(() => {});
+    }
   } finally {
-    await page.close().catch(() => {});
+    releaseRenderSlot();
   }
 };
 
 // ── Template 1 — STUDENT ID CARD (CR80) ───────────────────────────────────────
 
-const buildStudentCardHtml = async (student, branding, params = {}) => {
+const buildStudentCardHtml = async (student, branding, params = {}, i18n = {}) => {
   const { academicYear, cardNumber, cardValidUntil } = params;
+  const { labels, htmlLang, dir } = i18n;
 
   const BASE_URL    = process.env.QR_VERIFICATION_BASE_URL || 'https://app.yourdomain.com';
   const qrPayload   = `${BASE_URL}/verify-card/${esc(student.matricule || String(student._id))}`;
@@ -169,18 +283,25 @@ const buildStudentCardHtml = async (student, branding, params = {}) => {
   const cardNo      = cardNumber || student.matricule || `ID-${String(student._id).slice(-6).toUpperCase()}`;
   const validYear   = cardValidUntil
     ? new Date(cardValidUntil).getFullYear()
-    : (academicYear ? academicYear.split('-')[1] : String(new Date().getFullYear() + 1));
+    : (academicYear?.includes('-') ? academicYear.split('-')[1] : String(new Date().getFullYear() + 1));
 
   const logoHtml = branding.logoDataUrl
     ? logoCircleHtml(branding.logoDataUrl, '12mm')
     : `<div style="width:12mm;height:12mm;background:#003366;border-radius:50%;flex-shrink:0;"></div>`;
 
-  const photoHtml = student.profileImage
-    ? `<img src="${esc(student.profileImage)}" alt="photo" style="width:22mm;height:28mm;object-fit:cover;border:0.5mm solid rgba(255,255,255,0.4);border-radius:1mm;" />`
-    : `<div style="width:22mm;height:28mm;background:#dde3ec;display:flex;align-items:center;justify-content:center;font-size:6pt;color:#888;border-radius:1mm;">No Photo</div>`;
+  // Inline the student photo so the renderer never depends on a live/relative URL.
+  const photoDataUrl = await imageToDataUrl(student.profileImage);
+  const photoHtml = photoDataUrl
+    ? `<img src="${photoDataUrl}" alt="photo" style="width:22mm;height:28mm;object-fit:cover;border:0.5mm solid rgba(255,255,255,0.4);border-radius:1mm;" />`
+    : `<div style="width:22mm;height:28mm;background:#dde3ec;display:flex;align-items:center;justify-content:center;font-size:6pt;color:#888;border-radius:1mm;">${esc(labels.noPhoto)}</div>`;
+
+  const disclaimer = interpolate(labels.cardDisclaimer, {
+    campusName:   branding.campus_name,
+    academicYear: academicYear || String(new Date().getFullYear()),
+  });
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${esc(htmlLang)}" dir="${esc(dir)}">
 <head>
 <meta charset="UTF-8"/>
 <style>
@@ -232,23 +353,23 @@ const buildStudentCardHtml = async (student, branding, params = {}) => {
       <div class="school-name">${esc(branding.campus_name)}</div>
       <div class="school-sub">${esc(branding.location?.city || '')}${branding.location?.country ? ', ' + esc(branding.location.country) : ''}</div>
     </div>
-    <div class="card-label">Student ID</div>
+    <div class="card-label">${esc(labels.studentId)}</div>
   </div>
   <div class="card-body">
     ${photoHtml}
     <div class="info">
       <div class="full-name">${esc(student.firstName)} ${esc(student.lastName)}</div>
-      <div class="info-label">Matricule</div>
+      <div class="info-label">${esc(labels.matricule)}</div>
       <div class="info-value">${esc(student.matricule || '—')}</div>
-      <div class="info-label">Class</div>
+      <div class="info-label">${esc(labels.class)}</div>
       <div class="info-value">${esc(student._className || '—')}</div>
-      <div class="info-label">Academic Year</div>
+      <div class="info-label">${esc(labels.academicYear)}</div>
       <div class="info-value">${esc(academicYear || '—')}</div>
     </div>
   </div>
   <div class="card-footer">
     <div>
-      <div style="font-size:3.5pt;opacity:0.6;text-transform:uppercase;">Valid Until</div>
+      <div style="font-size:3.5pt;opacity:0.6;text-transform:uppercase;">${esc(labels.validUntil)}</div>
       <div class="card-no">${esc(String(validYear))}</div>
     </div>
     <div class="card-no">${esc(cardNo)}</div>
@@ -266,14 +387,13 @@ const buildStudentCardHtml = async (student, branding, params = {}) => {
       ${branding.location?.city ? `<div>${esc(branding.location.city)}${branding.location?.country ? ', ' + esc(branding.location.country) : ''}</div>` : ''}
     </div>
     <div class="back-col">
-      <div class="back-label">If found, please return to:</div>
+      <div class="back-label">${esc(labels.ifFoundReturn)}</div>
       <div>${esc(branding.campus_name)}</div>
-      <div>Campus Administration</div>
+      <div>${esc(labels.campusAdministration)}</div>
     </div>
   </div>
   <div class="back-footer">
-    This card is the property of ${esc(branding.campus_name)}. It is non-transferable and must be carried at all times on campus.
-    Any loss must be reported immediately to the administration. Valid for ${esc(academicYear || 'current academic year')}.
+    ${esc(disclaimer)}
   </div>
 </div>
 </body>
@@ -282,8 +402,9 @@ const buildStudentCardHtml = async (student, branding, params = {}) => {
 
 // ── Template 2 — ACADEMIC TRANSCRIPT (A4) ─────────────────────────────────────
 
-const buildTranscriptHtml = async (transcript, student, branding, params = {}) => {
+const buildTranscriptHtml = async (transcript, student, branding, params = {}, i18n = {}) => {
   const { academicYear, semester } = params;
+  const { labels, htmlLang, dateLocale, dir } = i18n;
 
   const BASE_URL  = process.env.QR_VERIFICATION_BASE_URL || 'https://app.yourdomain.com';
   const token     = transcript.verificationToken || String(transcript._id);
@@ -303,7 +424,7 @@ const buildTranscriptHtml = async (transcript, student, branding, params = {}) =
       <td class="td-center">${esc(String(s.coefficient ?? 1))}</td>
       <td class="td-center" style="font-weight:bold;color:${avgColor(avg)};">${avg.toFixed(2)}</td>
       <td class="td-center">${esc(s.gradeBand?.letterGrade || '—')}</td>
-      <td class="td-center" style="color:${passing ? '#2e7d32' : '#c62828'};font-weight:bold;">${passing ? 'PASS' : 'FAIL'}</td>
+      <td class="td-center" style="color:${passing ? '#2e7d32' : '#c62828'};font-weight:bold;">${passing ? esc(labels.pass) : esc(labels.fail)}</td>
       <td class="td-left" style="font-size:8pt;font-style:italic;color:#555;">${esc(s.classManagerRemarks || '')}</td>
     </tr>`;
   }).join('');
@@ -312,7 +433,7 @@ const buildTranscriptHtml = async (transcript, student, branding, params = {}) =
   const passing = ga >= 10;
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${esc(htmlLang)}" dir="${esc(dir)}">
 <head>
 <meta charset="UTF-8"/>
 <style>
@@ -363,58 +484,58 @@ const buildTranscriptHtml = async (transcript, student, branding, params = {}) =
     ${logoHtml}
     <div class="campus-name">${esc(branding.campus_name)}</div>
     <div class="campus-sub">${esc(branding.location?.address || '')}${branding.location?.city ? ', ' + esc(branding.location.city) : ''}${branding.location?.country ? ', ' + esc(branding.location.country) : ''}</div>
-    <div class="doc-badge">Academic Transcript — ${esc(semester || '')}</div>
-    <div class="doc-sub">Academic Year: ${esc(academicYear || '')}</div>
+    <div class="doc-badge">${esc(labels.academicTranscript)} — ${esc(semester || '')}</div>
+    <div class="doc-sub">${esc(labels.academicYear)}: ${esc(academicYear || '')}</div>
   </div>
-  ${qrDataUrl ? `<div class="qr-section"><img src="${qrDataUrl}" alt="QR" style="width:22mm;height:22mm;" /><div style="font-size:6pt;color:#888;margin-top:1mm;">Scan to verify</div><div style="font-size:5.5pt;color:#aaa;">${token.slice(0, 14)}...</div></div>` : ''}
+  ${qrDataUrl ? `<div class="qr-section"><img src="${qrDataUrl}" alt="QR" style="width:22mm;height:22mm;" /><div style="font-size:6pt;color:#888;margin-top:1mm;">${esc(labels.scanToVerify)}</div><div style="font-size:5.5pt;color:#aaa;">${token.slice(0, 14)}...</div></div>` : ''}
 </div>
 
 <div class="student-box">
-  <div><div class="s-label">Student Name</div><div class="s-val" style="font-weight:bold;">${esc(student.firstName)} ${esc(student.lastName)}</div></div>
-  <div><div class="s-label">Matricule</div><div class="s-val">${esc(student.matricule || '—')}</div></div>
-  <div><div class="s-label">Class</div><div class="s-val">${esc(student._className || '—')}</div></div>
-  <div><div class="s-label">Date of Birth</div><div class="s-val">${student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString('en-GB') : '—'}</div></div>
-  <div><div class="s-label">Gender</div><div class="s-val" style="text-transform:capitalize;">${esc(student.gender || '—')}</div></div>
-  <div><div class="s-label">Print Date</div><div class="s-val">${new Date().toLocaleDateString('en-GB')}</div></div>
+  <div><div class="s-label">${esc(labels.studentName)}</div><div class="s-val" style="font-weight:bold;">${esc(student.firstName)} ${esc(student.lastName)}</div></div>
+  <div><div class="s-label">${esc(labels.matricule)}</div><div class="s-val">${esc(student.matricule || '—')}</div></div>
+  <div><div class="s-label">${esc(labels.class)}</div><div class="s-val">${esc(student._className || '—')}</div></div>
+  <div><div class="s-label">${esc(labels.dateOfBirth)}</div><div class="s-val">${student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString(dateLocale) : '—'}</div></div>
+  <div><div class="s-label">${esc(labels.gender)}</div><div class="s-val" style="text-transform:capitalize;">${esc(student.gender || '—')}</div></div>
+  <div><div class="s-label">${esc(labels.printDate)}</div><div class="s-val">${new Date().toLocaleDateString(dateLocale)}</div></div>
 </div>
 
 <table>
   <thead>
     <tr>
-      <th style="text-align:left;width:28%;">Subject</th>
-      <th style="text-align:center;width:9%;">Code</th>
-      <th style="text-align:center;width:8%;">Coeff.</th>
-      <th style="text-align:center;width:10%;">Avg/20</th>
-      <th style="text-align:center;width:8%;">Grade</th>
-      <th style="text-align:center;width:8%;">Result</th>
-      <th style="text-align:left;width:29%;">Remarks</th>
+      <th style="text-align:left;width:28%;">${esc(labels.subject)}</th>
+      <th style="text-align:center;width:9%;">${esc(labels.code)}</th>
+      <th style="text-align:center;width:8%;">${esc(labels.coefficient)}</th>
+      <th style="text-align:center;width:10%;">${esc(labels.average)}</th>
+      <th style="text-align:center;width:8%;">${esc(labels.grade)}</th>
+      <th style="text-align:center;width:8%;">${esc(labels.result)}</th>
+      <th style="text-align:left;width:29%;">${esc(labels.remarks)}</th>
     </tr>
   </thead>
   <tbody>
-    ${subjectRows || '<tr><td colspan="7" style="padding:10px;text-align:center;color:#aaa;">No results recorded</td></tr>'}
+    ${subjectRows || `<tr><td colspan="7" style="padding:10px;text-align:center;color:#aaa;">${esc(labels.noResults)}</td></tr>`}
   </tbody>
 </table>
 
 <div class="summary-bar">
-  <div><div class="sum-label">General Average</div><div class="sum-val">${ga.toFixed(2)} / 20</div></div>
-  <div><div class="sum-label">Class Rank</div><div class="sum-val">${esc(String(transcript.classRank || '—'))} / ${esc(String(transcript.classTotal || '—'))}</div></div>
-  <div><div class="sum-label">Status</div><div class="sum-val" style="color:${passing ? '#a5d6a7' : '#ef9a9a'};">${passing ? 'ADMITTED ✓' : 'NOT ADMITTED ✗'}</div></div>
+  <div><div class="sum-label">${esc(labels.generalAverage)}</div><div class="sum-val">${ga.toFixed(2)} / 20</div></div>
+  <div><div class="sum-label">${esc(labels.classRank)}</div><div class="sum-val">${esc(String(transcript.classRank || '—'))} / ${esc(String(transcript.classTotal || '—'))}</div></div>
+  <div><div class="sum-label">${esc(labels.status)}</div><div class="sum-val" style="color:${passing ? '#a5d6a7' : '#ef9a9a'};">${passing ? esc(labels.admitted) : esc(labels.notAdmitted)}</div></div>
 </div>
 
 ${transcript.decision || transcript.generalAppreciation ? `<div class="decision-box">
-  ${transcript.decision ? `<div class="dec-title">Decision</div><div class="dec-text">${esc(transcript.decision)}</div>` : ''}
-  ${transcript.generalAppreciation ? `<div class="dec-title" style="margin-top:${transcript.decision ? '3mm' : '0'};">Appreciation</div><div class="dec-text" style="font-style:italic;">${esc(transcript.generalAppreciation)}</div>` : ''}
+  ${transcript.decision ? `<div class="dec-title">${esc(labels.decision)}</div><div class="dec-text">${esc(transcript.decision)}</div>` : ''}
+  ${transcript.generalAppreciation ? `<div class="dec-title" style="margin-top:${transcript.decision ? '3mm' : '0'};">${esc(labels.appreciation)}</div><div class="dec-text" style="font-style:italic;">${esc(transcript.generalAppreciation)}</div>` : ''}
 </div>` : ''}
 
 <div class="signatures">
-  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Class Manager</div></div>
-  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Campus Manager</div></div>
-  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Parent / Guardian</div></div>
+  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">${esc(labels.classManager)}</div></div>
+  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">${esc(labels.campusManager)}</div></div>
+  <div class="sig-block"><div class="sig-line"></div><div class="sig-label">${esc(labels.parentGuardian)}</div></div>
 </div>
 
 <div class="footer">
-  <span>Generated: ${new Date().toLocaleString('en-GB')}</span>
-  <span>${esc(branding.campus_name)} — Official Transcript</span>
+  <span>${esc(labels.generated)} ${new Date().toLocaleString(dateLocale)}</span>
+  <span>${esc(branding.campus_name)} — ${esc(labels.officialTranscript)}</span>
   <span>Ref: ${esc(token.slice(0, 16))}</span>
 </div>
 </body>
@@ -423,8 +544,9 @@ ${transcript.decision || transcript.generalAppreciation ? `<div class="decision-
 
 // ── Template 3 — ENROLLMENT CERTIFICATE (A4) ──────────────────────────────────
 
-const buildEnrollmentCertHtml = async (student, branding, params = {}) => {
+const buildEnrollmentCertHtml = async (student, branding, params = {}, i18n = {}) => {
   const { academicYear, semester } = params;
+  const { labels, htmlLang, dateLocale, dir } = i18n;
 
   const BASE_URL  = process.env.QR_VERIFICATION_BASE_URL || 'https://app.yourdomain.com';
   const certRef   = `CERT-${(student.matricule || String(student._id).slice(-8)).toUpperCase()}-${(academicYear || String(new Date().getFullYear())).replace('-', '')}`;
@@ -434,7 +556,7 @@ const buildEnrollmentCertHtml = async (student, branding, params = {}) => {
   const logoHtml  = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '20mm') : '';
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${esc(htmlLang)}" dir="${esc(dir)}">
 <head>
 <meta charset="UTF-8"/>
 <style>
@@ -475,32 +597,32 @@ const buildEnrollmentCertHtml = async (student, branding, params = {}) => {
       ${logoHtml}
       <div class="campus-name">${esc(branding.campus_name)}</div>
       <div class="campus-sub">${esc(branding.location?.address || '')}${branding.location?.city ? ', ' + esc(branding.location.city) : ''}${branding.location?.country ? ', ' + esc(branding.location.country) : ''}</div>
-      <div class="cert-title">Certificate of Enrollment</div>
-      <div class="cert-subtitle">Attestation d'Inscription</div>
+      <div class="cert-title">${esc(labels.certOfEnrollment)}</div>
+      <div class="cert-subtitle">${esc(labels.certSubtitle)}</div>
     </div>
 
     <div class="cert-body">
-      <p>We, the undersigned, Academic Authorities of</p>
+      <p>${esc(labels.weUndersigned)}</p>
       <p class="highlight">${esc(branding.campus_name)}</p>
-      <p>hereby certify that</p>
+      <p>${esc(labels.herebyCertify)}</p>
       <p class="highlight">${esc(student.firstName)} ${esc(student.lastName)}</p>
-      <p>born on <strong>${student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString('en-GB') : '—'}</strong>${student.gender ? ` (${esc(student.gender)})` : ''}</p>
-      <p>holding matricule number <strong>${esc(student.matricule || '—')}</strong></p>
-      <p>is duly enrolled in class <strong>${esc(student._className || '—')}</strong></p>
-      <p>for the academic year <strong>${esc(academicYear || '—')}</strong>${semester ? `, <strong>${esc(semester)}</strong>` : ''}</p>
-      <p style="font-size:10pt;color:#666;margin-top:4mm;">This certificate is issued upon request for any legitimate academic or administrative purpose.</p>
-      <div class="ref-tag">Ref: ${esc(certRef)} | Issued: ${new Date().toLocaleDateString('en-GB')}</div>
+      <p>${esc(labels.bornOn)} <strong>${student.dateOfBirth ? new Date(student.dateOfBirth).toLocaleDateString(dateLocale) : '—'}</strong>${student.gender ? ` (${esc(student.gender)})` : ''}</p>
+      <p>${esc(labels.holdingMatricule)} <strong>${esc(student.matricule || '—')}</strong></p>
+      <p>${esc(labels.enrolledInClass)} <strong>${esc(student._className || '—')}</strong></p>
+      <p>${esc(labels.forAcademicYear)} <strong>${esc(academicYear || '—')}</strong>${semester ? `, <strong>${esc(semester)}</strong>` : ''}</p>
+      <p style="font-size:10pt;color:#666;margin-top:4mm;">${esc(labels.certPurpose)}</p>
+      <div class="ref-tag">Ref: ${esc(certRef)} | ${esc(labels.issued)} ${new Date().toLocaleDateString(dateLocale)}</div>
     </div>
 
-    ${qrDataUrl ? `<div class="qr-wrap"><img src="${qrDataUrl}" alt="QR"/><div class="qr-label">Scan to verify authenticity</div></div>` : ''}
+    ${qrDataUrl ? `<div class="qr-wrap"><img src="${qrDataUrl}" alt="QR"/><div class="qr-label">${esc(labels.scanToVerifyAuthenticity)}</div></div>` : ''}
 
     <div class="signatures">
-      <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Campus Manager</div><div class="sig-label">Directeur(trice) du Campus</div></div>
-      <div class="sig-block"><div class="sig-line"></div><div class="sig-label">Official Stamp</div><div class="sig-label">Cachet Officiel</div></div>
+      <div class="sig-block"><div class="sig-line"></div><div class="sig-label">${esc(labels.campusManager)}</div></div>
+      <div class="sig-block"><div class="sig-line"></div><div class="sig-label">${esc(labels.officialStamp)}</div></div>
     </div>
 
     <div class="cert-footer">
-      ${esc(branding.campus_name)} — Official Document | Generated: ${new Date().toLocaleString('en-GB')} | Ref: ${esc(certRef)}
+      ${esc(branding.campus_name)} — ${esc(labels.officialDocument)} | ${esc(labels.generated)} ${new Date().toLocaleString(dateLocale)} | Ref: ${esc(certRef)}
     </div>
   </div>
 </div>
@@ -510,11 +632,11 @@ const buildEnrollmentCertHtml = async (student, branding, params = {}) => {
 
 // ── Template 4 — CLASS TIMETABLE (A4 Landscape) ───────────────────────────────
 
-const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const PALETTE = ['#1565c0', '#4527a0', '#2e7d32', '#bf360c', '#6a1b9a', '#00695c', '#00838f', '#37474f', '#c62828', '#558b2f'];
 
-const buildTimetableHtml = async (sessions, cls, branding, params = {}) => {
+const buildTimetableHtml = async (sessions, cls, branding, params = {}, i18n = {}) => {
   const { weekStart, academicYear, semester } = params;
+  const { labels, htmlLang, dateLocale, dir } = i18n;
 
   const logoHtml = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '11mm') : '';
 
@@ -550,8 +672,11 @@ const buildTimetableHtml = async (sessions, cls, branding, params = {}) => {
     if (!subjectColors[k]) subjectColors[k] = PALETTE[ci++ % PALETTE.length];
   });
 
+  // labels.days is an array of localized day names (Mon…Sat)
+  const dayNames = Array.isArray(labels.days) ? labels.days : catalog.days.en;
+
   const headerCells = activeDays.map((d) =>
-    `<th style="background:#003366;color:#fff;padding:3px 4px;font-size:7.5pt;text-align:center;">${DAYS[d]}</th>`
+    `<th style="background:#003366;color:#fff;padding:3px 4px;font-size:7.5pt;text-align:center;">${esc(dayNames[d] || d)}</th>`
   ).join('');
 
   const bodyRows = timeSlots.map((slot) => {
@@ -579,7 +704,7 @@ const buildTimetableHtml = async (sessions, cls, branding, params = {}) => {
   }).join('');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${esc(htmlLang)}" dir="${esc(dir)}">
 <head>
 <meta charset="UTF-8"/>
 <style>
@@ -599,18 +724,18 @@ const buildTimetableHtml = async (sessions, cls, branding, params = {}) => {
   <div>
     ${logoHtml}
     <div class="campus-name">${esc(branding.campus_name)}</div>
-    <div class="doc-title">Class Timetable — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}${semester ? ' | ' + esc(semester) : ''}</div>
-    ${weekStart ? `<div style="font-size:8pt;color:#888;margin-top:1mm;">Week of ${new Date(weekStart).toLocaleDateString('en-GB')}</div>` : ''}
+    <div class="doc-title">${esc(labels.classTimetable)} — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}${semester ? ' | ' + esc(semester) : ''}</div>
+    ${weekStart ? `<div style="font-size:8pt;color:#888;margin-top:1mm;">${esc(labels.weekOf)} ${new Date(weekStart).toLocaleDateString(dateLocale)}</div>` : ''}
   </div>
   <div style="font-size:7.5pt;color:#888;text-align:right;">
-    <div>Printed: ${new Date().toLocaleDateString('en-GB')}</div>
-    <div style="margin-top:1mm;">${sessions.length} session${sessions.length !== 1 ? 's' : ''}</div>
+    <div>${esc(labels.printed)} ${new Date().toLocaleDateString(dateLocale)}</div>
+    <div style="margin-top:1mm;">${sessions.length} ${esc(labels.sessions)}</div>
   </div>
 </div>
 <table>
-  <thead><tr><th style="background:#003366;color:#fff;padding:3px 5px;font-size:7.5pt;width:16mm;text-align:center;">Time</th>${headerCells}</tr></thead>
+  <thead><tr><th style="background:#003366;color:#fff;padding:3px 5px;font-size:7.5pt;width:16mm;text-align:center;">${esc(labels.time)}</th>${headerCells}</tr></thead>
   <tbody>
-    ${bodyRows || `<tr><td colspan="${activeDays.length + 1}" style="padding:15px;text-align:center;color:#aaa;">No sessions scheduled for this period.</td></tr>`}
+    ${bodyRows || `<tr><td colspan="${activeDays.length + 1}" style="padding:15px;text-align:center;color:#aaa;">${esc(labels.noSessions)}</td></tr>`}
   </tbody>
 </table>
 </body>
@@ -619,12 +744,14 @@ const buildTimetableHtml = async (sessions, cls, branding, params = {}) => {
 
 // ── Template 5 — STUDENT LIST (A4) ───────────────────────────────────────────
 
-const buildStudentListHtml = async (students, cls, branding, params = {}) => {
+const buildStudentListHtml = async (students, cls, branding, params = {}, i18n = {}) => {
   const { academicYear } = params;
+  const { labels, htmlLang, dateLocale, dir } = i18n;
+
   const logoHtml = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '18mm') : '';
 
   const rows = students.map((s, i) => {
-    const dob    = s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString('en-GB') : '—';
+    const dob    = s.dateOfBirth ? new Date(s.dateOfBirth).toLocaleDateString(dateLocale) : '—';
     const gender = s.gender ? esc(s.gender.charAt(0).toUpperCase() + s.gender.slice(1)) : '—';
     const status = s.status || 'active';
     const statusLabel = status.charAt(0).toUpperCase() + status.slice(1);
@@ -641,7 +768,7 @@ const buildStudentListHtml = async (students, cls, branding, params = {}) => {
   }).join('');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${esc(htmlLang)}" dir="${esc(dir)}">
 <head><meta charset="UTF-8"/>
 <style>
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -663,29 +790,29 @@ const buildStudentListHtml = async (students, cls, branding, params = {}) => {
   ${logoHtml}
   <div>
     <div class="campus-name">${esc(branding.campus_name)}</div>
-    <div class="doc-title">Student List — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}</div>
-    <div class="meta">${students.length} student${students.length !== 1 ? 's' : ''} · Printed: ${new Date().toLocaleDateString('en-GB')}</div>
+    <div class="doc-title">${esc(labels.studentList)} — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}</div>
+    <div class="meta">${students.length} ${esc(labels.students)} · ${esc(labels.printed)} ${new Date().toLocaleDateString(dateLocale)}</div>
   </div>
 </div>
 <table>
   <thead>
     <tr>
       <th style="width:6%;text-align:center;">#</th>
-      <th style="width:34%;text-align:left;">Full Name</th>
-      <th style="width:17%;text-align:center;">Matricule</th>
-      <th style="width:15%;text-align:center;">Date of Birth</th>
-      <th style="width:12%;text-align:center;">Gender</th>
-      <th style="width:16%;text-align:center;">Status</th>
+      <th style="width:34%;text-align:left;">${esc(labels.fullName)}</th>
+      <th style="width:17%;text-align:center;">${esc(labels.matricule)}</th>
+      <th style="width:15%;text-align:center;">${esc(labels.dateOfBirth)}</th>
+      <th style="width:12%;text-align:center;">${esc(labels.gender)}</th>
+      <th style="width:16%;text-align:center;">${esc(labels.status)}</th>
     </tr>
   </thead>
   <tbody>
-    ${rows || '<tr><td colspan="6" style="padding:14px;text-align:center;color:#aaa;">No students found.</td></tr>'}
+    ${rows || `<tr><td colspan="6" style="padding:14px;text-align:center;color:#aaa;">${esc(labels.noStudents)}</td></tr>`}
   </tbody>
 </table>
 <div class="footer">
-  <span>${esc(branding.campus_name)} — Official Document</span>
-  <span>Total: ${students.length} student${students.length !== 1 ? 's' : ''}</span>
-  <span>Generated: ${new Date().toLocaleString('en-GB')}</span>
+  <span>${esc(branding.campus_name)} — ${esc(labels.officialDocument)}</span>
+  <span>${esc(labels.total)} ${students.length} ${esc(labels.students)}</span>
+  <span>${esc(labels.generated)} ${new Date().toLocaleString(dateLocale)}</span>
 </div>
 </body>
 </html>`;
@@ -693,8 +820,10 @@ const buildStudentListHtml = async (students, cls, branding, params = {}) => {
 
 // ── Template 6 — TEACHER LIST (A4) ───────────────────────────────────────────
 
-const buildTeacherListHtml = async (teachers, cls, branding, params = {}) => {
+const buildTeacherListHtml = async (teachers, cls, branding, params = {}, i18n = {}) => {
   const { academicYear } = params;
+  const { labels, htmlLang, dateLocale, dir } = i18n;
+
   const logoHtml = branding.logoDataUrl ? logoCircleHtml(branding.logoDataUrl, '18mm') : '';
 
   const rows = teachers.map((t, i) => {
@@ -711,7 +840,7 @@ const buildTeacherListHtml = async (teachers, cls, branding, params = {}) => {
   }).join('');
 
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${esc(htmlLang)}" dir="${esc(dir)}">
 <head>
 <meta charset="UTF-8"/>
 <style>
@@ -734,26 +863,26 @@ const buildTeacherListHtml = async (teachers, cls, branding, params = {}) => {
   ${logoHtml}
   <div>
     <div class="campus-name">${esc(branding.campus_name)}</div>
-    <div class="doc-title">Teaching Staff — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}</div>
-    <div class="meta">${teachers.length} instructor${teachers.length !== 1 ? 's' : ''} · Printed: ${new Date().toLocaleDateString('en-GB')}</div>
+    <div class="doc-title">${esc(labels.teachingStaff)} — <strong>${esc(cls?.className || '—')}</strong>${academicYear ? ' | ' + esc(academicYear) : ''}</div>
+    <div class="meta">${teachers.length} ${esc(labels.instructors)} · ${esc(labels.printed)} ${new Date().toLocaleDateString(dateLocale)}</div>
   </div>
 </div>
 <table>
   <thead>
     <tr>
       <th style="width:6%;text-align:center;">#</th>
-      <th style="width:38%;text-align:left;">Full Name</th>
-      <th style="width:56%;text-align:left;">Subject(s)</th>
+      <th style="width:38%;text-align:left;">${esc(labels.fullName)}</th>
+      <th style="width:56%;text-align:left;">${esc(labels.subjectS)}</th>
     </tr>
   </thead>
   <tbody>
-    ${rows || '<tr><td colspan="3" style="padding:14px;text-align:center;color:#aaa;">No teaching staff found for this class.</td></tr>'}
+    ${rows || `<tr><td colspan="3" style="padding:14px;text-align:center;color:#aaa;">${esc(labels.noTeachers)}</td></tr>`}
   </tbody>
 </table>
 <div class="footer">
-  <span>${esc(branding.campus_name)} — Official Document</span>
-  <span>Total: ${teachers.length} instructor${teachers.length !== 1 ? 's' : ''}</span>
-  <span>Generated: ${new Date().toLocaleString('en-GB')}</span>
+  <span>${esc(branding.campus_name)} — ${esc(labels.officialDocument)}</span>
+  <span>${esc(labels.total)} ${teachers.length} ${esc(labels.instructors)}</span>
+  <span>${esc(labels.generated)} ${new Date().toLocaleString(dateLocale)}</span>
 </div>
 </body>
 </html>`;
@@ -765,49 +894,51 @@ const buildTeacherListHtml = async (teachers, cls, branding, params = {}) => {
  * Generate a PDF buffer for the given academic document type.
  *
  * @param {object} opts
- * @param {'STUDENT_CARD'|'TRANSCRIPT'|'ENROLLMENT'|'TIMETABLE'} opts.type
- * @param {object} opts.data        - { student, transcript, sessions, cls }
+ * @param {'STUDENT_CARD'|'TRANSCRIPT'|'ENROLLMENT'|'TIMETABLE'|'STUDENT_LIST'|'TEACHER_LIST'} opts.type
+ * @param {object} opts.data        - { student, transcript, sessions, cls, students, teachers }
  * @param {string} opts.campusId
  * @param {object} opts.params      - { academicYear, semester, weekStart, cardNumber, cardValidUntil }
+ * @param {string} [opts.locale]    - BCP-47 language code (e.g. 'fr', 'ar'). Defaults to 'en'.
  * @returns {Promise<Buffer>}
  */
-const generateAcademicPdf = async ({ type, data, campusId, params = {} }) => {
+const generateAcademicPdf = async ({ type, data, campusId, params = {}, locale = 'en' }) => {
   const branding = await getCampusBranding(campusId);
+  const i18n     = buildI18n(locale);
 
   switch (type) {
     case 'STUDENT_CARD':
       return renderPdf(
-        await buildStudentCardHtml(data.student, branding, params),
+        await buildStudentCardHtml(data.student, branding, params, i18n),
         { width: '85.6mm', height: '54mm', margins: { top: '0', right: '0', bottom: '0', left: '0' } }
       );
 
     case 'TRANSCRIPT':
       return renderPdf(
-        await buildTranscriptHtml(data.transcript, data.student, branding, params),
+        await buildTranscriptHtml(data.transcript, data.student, branding, params, i18n),
         { format: 'A4', margins: { top: '15mm', right: '15mm', bottom: '20mm', left: '15mm' } }
       );
 
     case 'ENROLLMENT':
       return renderPdf(
-        await buildEnrollmentCertHtml(data.student, branding, params),
+        await buildEnrollmentCertHtml(data.student, branding, params, i18n),
         { format: 'A4', margins: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } }
       );
 
     case 'TIMETABLE':
       return renderPdf(
-        await buildTimetableHtml(data.sessions || [], data.cls, branding, params),
+        await buildTimetableHtml(data.sessions || [], data.cls, branding, params, i18n),
         { format: 'A4', landscape: true, margins: { top: '10mm', right: '12mm', bottom: '10mm', left: '12mm' } }
       );
 
     case 'STUDENT_LIST':
       return renderPdf(
-        await buildStudentListHtml(data.students || [], data.cls, branding, params),
+        await buildStudentListHtml(data.students || [], data.cls, branding, params, i18n),
         { format: 'A4', margins: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } }
       );
 
     case 'TEACHER_LIST':
       return renderPdf(
-        await buildTeacherListHtml(data.teachers || [], data.cls, branding, params),
+        await buildTeacherListHtml(data.teachers || [], data.cls, branding, params, i18n),
         { format: 'A4', margins: { top: '15mm', right: '15mm', bottom: '15mm', left: '15mm' } }
       );
 

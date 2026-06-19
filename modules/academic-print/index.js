@@ -1,9 +1,12 @@
 /**
- * @file index.js — FAÇADE du module academic-print
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3.
+ * @file index.js — FACADE of the academic-print module
+ * The module's only public entry point — see MODULAR_MONOLITH_MIGRATION.md §3.
  *
- * Impressions académiques (PDF) : listes de classe, emplois du temps,
- * relevés — génération Puppeteer + QR. Monté sur /api/print.
+ * Academic prints (PDF): class lists, timetables, transcripts — Puppeteer + QR
+ * generation. Mounted on /api/print.
+ *
+ * Batch jobs are persisted (PrintJob model) and processed by a queue worker
+ * (atomic claim) → status/downloads reachable from any process.
  */
 
 const routes  = require('./academic-print.routes');
@@ -11,6 +14,6 @@ const service = require('./academic-print.service');
 
 module.exports = {
   routes,   // mounted by server.js :  app.use('/api/print', routes)
-  service,  // { shutdownAcademicPool, cleanupExpiredPrintFiles }
+  service,  // { shutdownAcademicPool, cleanupExpiredPrintFiles, runPrintQueueJob }
   // NO model exported. NO controller exported.
 };
