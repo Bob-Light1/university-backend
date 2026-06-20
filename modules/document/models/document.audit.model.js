@@ -52,7 +52,11 @@ const DocumentAuditSchema = new mongoose.Schema({
   },
 
   action:      { type: String, enum: Object.values(AUDIT_ACTION), required: true },
-  performedBy: { type: mongoose.Schema.Types.ObjectId, required: true },
+  /**
+   * Actor that performed the action. Null for System-initiated events
+   * (auto-lock on share, retention-cron deletions) — those carry userModel: 'System'.
+   */
+  performedBy: { type: mongoose.Schema.Types.ObjectId, default: null },
   /** Discriminator to determine which collection to look up the performer in */
   userModel:   { type: String, enum: ['Admin', 'Teacher', 'Campus', 'System'], required: true },
   /** Authoritative event timestamp — not relying on Mongoose timestamps */

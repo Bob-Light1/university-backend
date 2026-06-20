@@ -25,7 +25,7 @@ const repo = require('../document.repository');
 const { AUDIT_ACTION }    = require('../models/document.audit.model');
 const documentService     = require('../services/document.service');
 const pdfService          = require('../services/document.pdf.service');
-// Require paresseux : document est dans la cloture statique de campus (via staff)
+// Lazy require: document is in the static closure of campus (via staff).
 const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const {
@@ -56,14 +56,13 @@ const createShareLink = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Creating share links requires CAMPUS_MANAGER or higher role');
   }
 
-  const doc = await repo.findDocumentLean(
-    {
-      _id:       req.params.id,
-      campusId:  req.isGlobalRole ? undefined : req.campusId,
-      deletedAt: null,
-    },
-    '_id campusId status isOfficial',
-  );
+  // Build the filter conditionally — never include campusId: undefined,
+  // which Mongoose serialises as campusId: null and matches no real document
+  // (this would silently block ADMIN/DIRECTOR from sharing any document).
+  const shareDocFilter = { _id: req.params.id, deletedAt: null };
+  if (!req.isGlobalRole) shareDocFilter.campusId = req.campusId;
+
+  const doc = await repo.findDocumentLean(shareDocFilter, '_id campusId status isOfficial');
 
   if (!doc) return sendNotFound(res, 'Document');
 
@@ -151,6 +150,7 @@ const accessSharedDocument = asyncHandler(async (req, res) => {
     return sendError(res, 404, 'Share link not found or has been revoked');
   }
 
+  // Fast-fail feedback before the atomic reservation (better error messages).
   if (new Date() > share.expiresAt) {
     return sendError(res, 410, 'Share link has expired');
   }
@@ -164,19 +164,34 @@ const accessSharedDocument = asyncHandler(async (req, res) => {
     return sendError(res, 404, 'Document no longer available');
   }
 
-  // Log access IP and increment download counter
-  await repo.registerShareAccess(share._id, req.ip);
-
-  // Auto-lock if official document and not already locked
-  if (doc.isOfficial) {
-    await documentService.autoLockIfOfficial(doc._id.toString());
+  // Atomically reserve a download slot — authoritative guard against concurrent
+  // requests racing past the advisory check above and exceeding maxDownloads.
+  const reserved = await repo.reserveShareDownload(share._id, share.maxDownloads, new Date());
+  if (!reserved) {
+    return sendError(res, 410, 'Share link is no longer available (limit reached or expired)');
   }
 
-  // Generate or serve cached PDF
-  const campus     = await getCampusName(doc.campusId);
-  const campusName = campus?.campus_name || '';
+  let buffer;
+  try {
+    // Auto-lock if official document and not already locked
+    if (doc.isOfficial) {
+      await documentService.autoLockIfOfficial(doc._id.toString());
+    }
 
-  const { buffer } = await pdfService.getOrGeneratePdf(doc._id.toString(), campusName);
+    // Generate or serve cached PDF
+    const campus     = await getCampusName(doc.campusId);
+    const campusName = campus?.campus_name || '';
+
+    ({ buffer } = await pdfService.getOrGeneratePdf(doc._id.toString(), campusName));
+  } catch (err) {
+    // The download did not actually happen — release the reserved slot so the
+    // link is not consumed by a failed generation.
+    await repo.releaseShareDownload(share._id).catch(() => {});
+    throw err;
+  }
+
+  // Record the access IP only after a successful download.
+  repo.recordShareAccessIp(share._id, req.ip).catch(() => {});
 
   const safeTitle = doc.title.replace(/[^a-zA-Z0-9-_ ]/g, '').slice(0, 50);
   res.setHeader('Content-Type', 'application/pdf');

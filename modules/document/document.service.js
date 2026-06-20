@@ -31,7 +31,9 @@ const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
  * @returns {Promise<{docs: Object[], total: number}>}
  */
 const listPublishedForCampus = async ({ campusId, page = 1, limit = 20, search, type, category }) => {
-  const filter = { campusId, status: 'PUBLISHED' };
+  // deletedAt: null is mandatory — soft-deleted documents keep status PUBLISHED
+  // and would otherwise leak into staff/public listings.
+  const filter = { campusId, status: 'PUBLISHED', deletedAt: null };
   if (type)     filter.type     = type.toUpperCase();
   if (category) filter.category = category.toUpperCase();
   if (search) {

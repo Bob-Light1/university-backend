@@ -19,7 +19,7 @@ const slugify  = require('slugify');
 const { nanoid } = require('nanoid');
 
 const repo = require('../document.repository');
-// Require paresseux : document est dans la cloture statique de campus (via staff)
+// Lazy require: document is in the static closure of campus (via staff).
 const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
@@ -699,6 +699,7 @@ const searchDocuments = async (req, params) => {
   if (filters.studentId)    filter['metadata.studentId']       = filters.studentId;
   if (filters.teacherId)    filter['metadata.teacherId']       = filters.teacherId;
   if (filters.courseId)     filter['metadata.courseId']        = filters.courseId;
+  if (filters.classId)      filter['metadata.classId']         = filters.classId;
   if (filters.semester)     filter['metadata.semester']        = filters.semester;
   if (filters.academicYear) filter['metadata.academicYear']    = filters.academicYear;
 

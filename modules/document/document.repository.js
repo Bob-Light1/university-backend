@@ -283,12 +283,32 @@ const findShareByTokenHashPopulated = (tokenHash) =>
     .populate('documentId', 'title ref campusId status isOfficial pdfSnapshot currentVersion')
     .lean();
 
-/** Records a shared access (counter + IP), atomic. */
-const registerShareAccess = (id, ip) =>
-  DocumentShare.findByIdAndUpdate(id, {
-    $inc:  { downloadCount: 1 },
-    $push: { accessedIps: ip },
-  });
+/**
+ * Atomically reserves one download slot on an active share link.
+ * The conditional filter (not revoked, not expired, downloadCount < maxDownloads)
+ * makes the check-and-increment a single operation — preventing concurrent requests
+ * from exceeding maxDownloads (TOCTOU). Returns the updated doc, or null if no slot
+ * was available (limit reached / expired / revoked).
+ */
+const reserveShareDownload = (id, maxDownloads, now) =>
+  DocumentShare.findOneAndUpdate(
+    {
+      _id:           id,
+      revoked:       false,
+      expiresAt:     { $gt: now },
+      downloadCount: { $lt: maxDownloads },
+    },
+    { $inc: { downloadCount: 1 } },
+    { new: true },
+  );
+
+/** Releases a previously reserved download slot (compensating action on failure). */
+const releaseShareDownload = (id) =>
+  DocumentShare.findByIdAndUpdate(id, { $inc: { downloadCount: -1 } });
+
+/** Appends an access IP to the share audit trail (after a successful download). */
+const recordShareAccessIp = (id, ip) =>
+  DocumentShare.findByIdAndUpdate(id, { $push: { accessedIps: ip } });
 
 /** Revokes a scoped share link (revokeShareLink). Returns the updated doc. */
 const revokeShare = (filter, payload) =>
@@ -344,7 +364,9 @@ module.exports = {
   // DocumentShare
   createShare,
   findShareByTokenHashPopulated,
-  registerShareAccess,
+  reserveShareDownload,
+  releaseShareDownload,
+  recordShareAccessIp,
   revokeShare,
   listShares,
 };

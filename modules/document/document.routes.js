@@ -242,6 +242,7 @@ router.post('/generate/badge/:entityType/:entityId',   ...base, async (req, res)
 
 router.post('/bulk/export', ...base, pdfLimiter, exportCtrl.bulkExport);
 router.post('/bulk/print',  ...base, pdfLimiter, exportCtrl.enqueuePrintJob);
+router.get('/print-jobs/:jobId/download', ...base, exportCtrl.downloadPrintJob);
 router.get('/print-jobs/:jobId', ...base, exportCtrl.getPrintJobStatus);
 
 // ── CRUD ──────────────────────────────────────────────────────────────────────

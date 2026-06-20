@@ -46,8 +46,13 @@ const DocumentShareSchema = new mongoose.Schema({
    */
   expiresAt: { type: Date, required: true },
 
-  /** Maximum number of times this link can be used to download the document */
-  maxDownloads:  { type: Number, default: 1, min: 1, max: 10 },
+  /**
+   * Maximum number of times this link can be used to download the document.
+   * The effective business cap is enforced by the controller via
+   * SHARE_LINK_MAX_DOWNLOADS (default 50). The schema ceiling is intentionally
+   * higher so a configured limit never triggers a validation error.
+   */
+  maxDownloads:  { type: Number, default: 1, min: 1, max: 1000 },
   /** Incremented on each successful access */
   downloadCount: { type: Number, default: 0 },
 

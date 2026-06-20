@@ -272,14 +272,22 @@ const streamFile = async (campusId, category, fileName, res, options = {}) => {
   };
 
   const contentType = mimeMap[ext] || 'application/octet-stream';
-  const displayName = options.displayName || fileName;
-  const disposition = options.download
-    ? `attachment; filename="${displayName}"`
-    : `inline; filename="${displayName}"`;
+
+  // Sanitize the display name before placing it in the Content-Disposition header:
+  // strip quotes, backslashes and control chars to prevent header/response splitting.
+  const rawName     = options.displayName || fileName;
+  const safeName    = String(rawName).replace(/[\r\n"\\]/g, '').slice(0, 255) || 'download';
+  // SVG is served as a download (never inline) to avoid stored-XSS via embedded scripts.
+  const forceDownload = options.download || contentType === 'image/svg+xml';
+  const disposition = forceDownload
+    ? `attachment; filename="${safeName}"`
+    : `inline; filename="${safeName}"`;
 
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Disposition', disposition);
   res.setHeader('Cache-Control', 'private, no-cache');
+  // Prevent MIME sniffing — the declared Content-Type is authoritative.
+  res.setHeader('X-Content-Type-Options', 'nosniff');
 
   fsSync.createReadStream(filePath).pipe(res);
 };

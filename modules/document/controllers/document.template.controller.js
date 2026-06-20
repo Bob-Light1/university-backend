@@ -238,8 +238,19 @@ const generateFromTemplate = asyncHandler(async (req, res) => {
  * Returns the rendered HTML for a template without saving to the database.
  */
 const previewTemplate = asyncHandler(async (req, res) => {
+  if (!['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'].includes(req.user.role)) {
+    return sendForbidden(res, 'Previewing templates requires CAMPUS_MANAGER or higher role');
+  }
+
   const template = await repo.findTemplateByIdLean(req.params.id);
   if (!template || !template.isActive) return sendNotFound(res, 'Template');
+
+  // Campus isolation — campus managers may only preview global or own-campus templates.
+  if (!template.isGlobal && !['ADMIN', 'DIRECTOR'].includes(req.user.role)) {
+    if (template.campusId?.toString() !== req.campusId?.toString()) {
+      return sendForbidden(res, 'Access denied');
+    }
+  }
 
   const { templateData = {} } = req.body;
   const resolvedBody          = resolveTemplateVariables(template.layout, templateData);

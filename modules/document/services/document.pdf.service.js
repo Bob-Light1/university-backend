@@ -31,7 +31,10 @@ const path      = require('path');
 const fs        = require('fs').promises;
 const crypto    = require('crypto');
 
+const sanitizeHtml   = require('sanitize-html');
+
 const { saveFile }   = require('./document.storage.service');
+const { HTML_SANITIZE_OPTIONS } = require('./document.validation.service');
 const repo           = require('../document.repository');
 
 // ── Configuration ─────────────────────────────────────────────────────────────
@@ -123,21 +126,51 @@ const drainQueue = () => {
 // ── HTML Template Rendering ───────────────────────────────────────────────────
 
 /**
+ * Escapes HTML special characters to prevent injection.
+ *
+ * Document content (headings, table cells, code, titles, branding text, …) is
+ * user-controlled and is rendered into an HTML string that Puppeteer loads via
+ * setContent — which executes any embedded <script>. Without escaping, a crafted
+ * document body could run arbitrary JavaScript inside the headless browser
+ * (SSRF / local file read) or, via the template preview endpoint, deliver a
+ * stored XSS payload to the browser. Every dynamic value MUST pass through here.
+ *
+ * Safe for both text nodes and double-quoted attribute values.
+ *
+ * @param {*} value
+ * @returns {string}
+ */
+const escapeHtml = (value) =>
+  String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+
+/**
  * Converts a PARAGRAPH block content object to sanitized HTML.
+ *
+ * content.text is sanitized at write time by document.validation.service
+ * (sanitize-html whitelist) but NOT for the template-preview path, which renders
+ * unsaved layout blocks. It is re-sanitized here with the same whitelist so the
+ * allowed formatting tags survive while any script/handler is stripped — safe and
+ * idempotent for both the PDF and preview paths.
  *
  * @param {object} content
  * @returns {string}
  */
 const renderParagraph = (content) => {
   const style = [
-    content.align    && `text-align:${content.align}`,
-    content.color    && `color:${content.color}`,
-    content.fontSize && `font-size:${content.fontSize}px`,
+    content.align    && /^(left|right|center|justify)$/.test(content.align) && `text-align:${content.align}`,
+    content.color    && /^#[0-9A-Fa-f]{6}$/.test(content.color) && `color:${content.color}`,
+    content.fontSize && Number.isFinite(+content.fontSize) && `font-size:${+content.fontSize}px`,
   ].filter(Boolean).join(';');
 
-  const text = content.bold ? `<strong>${content.text}</strong>` : content.text;
+  const safeText = sanitizeHtml(String(content.text ?? ''), HTML_SANITIZE_OPTIONS);
+  const text = content.bold ? `<strong>${safeText}</strong>` : safeText;
   const body = content.italic ? `<em>${text}</em>` : text;
-  return `<p style="${style}">${body}</p>`;
+  return `<p style="${escapeHtml(style)}">${body}</p>`;
 };
 
 /**
@@ -153,35 +186,38 @@ const renderBlock = (block) => {
 
   switch (type) {
     case 'HEADING': {
-      const align = content.align ? ` style="text-align:${content.align}"` : '';
-      return `<h${content.level}${align}>${content.text}</h${content.level}>`;
+      const level = [1, 2, 3].includes(content.level) ? content.level : 2;
+      const align = content.align ? ` style="text-align:${escapeHtml(content.align)}"` : '';
+      return `<h${level}${align}>${escapeHtml(content.text)}</h${level}>`;
     }
     case 'PARAGRAPH':
       return renderParagraph(content);
     case 'IMAGE': {
-      const width = content.width ? ` width="${content.width}"` : '';
-      return `<figure><img src="" data-file="${content.fileName}"${width} alt="${content.alt || ''}" />${content.caption ? `<figcaption>${content.caption}</figcaption>` : ''}</figure>`;
+      const width = Number.isFinite(+content.width) ? ` width="${+content.width}"` : '';
+      return `<figure><img src="" data-file="${escapeHtml(content.fileName)}"${width} alt="${escapeHtml(content.alt || '')}" />${content.caption ? `<figcaption>${escapeHtml(content.caption)}</figcaption>` : ''}</figure>`;
     }
     case 'TABLE': {
-      const headerRow = content.headers.map((h) => `<th>${h}</th>`).join('');
+      const headerRow = (content.headers || []).map((h) => `<th>${escapeHtml(h)}</th>`).join('');
       const bodyRows  = (content.rows || []).map((row) =>
-        `<tr>${row.map((cell) => `<td>${cell}</td>`).join('')}</tr>`,
+        `<tr>${(row || []).map((cell) => `<td>${escapeHtml(cell)}</td>`).join('')}</tr>`,
       ).join('');
       return `<table class="${content.striped ? 'striped' : ''}"><thead><tr>${headerRow}</tr></thead><tbody>${bodyRows}</tbody></table>`;
     }
     case 'LIST': {
       const tag   = content.ordered ? 'ol' : 'ul';
-      const items = (content.items || []).map((item) => `<li>${item}</li>`).join('');
+      const items = (content.items || []).map((item) => `<li>${escapeHtml(item)}</li>`).join('');
       return `<${tag}>${items}</${tag}>`;
     }
-    case 'QR_CODE':
-      return `<div class="qr-code" data-qr-file="${content.fileName || ''}" style="width:${content.size || 80}px">${content.label ? `<span>${content.label}</span>` : ''}</div>`;
+    case 'QR_CODE': {
+      const size = Number.isFinite(+content.size) ? +content.size : 80;
+      return `<div class="qr-code" data-qr-file="${escapeHtml(content.fileName || '')}" style="width:${size}px">${content.label ? `<span>${escapeHtml(content.label)}</span>` : ''}</div>`;
+    }
     case 'CODE_BLOCK':
-      return `<pre><code class="language-${content.language || 'text'}">${content.code}</code></pre>`;
+      return `<pre><code class="language-${escapeHtml(content.language || 'text')}">${escapeHtml(content.code)}</code></pre>`;
     case 'DIVIDER':
       return '<hr />';
     case 'SIGNATURE_PLACEHOLDER':
-      return `<div class="signature-placeholder"><span>${content.label || 'Signature'}</span><div class="signature-line"></div></div>`;
+      return `<div class="signature-placeholder"><span>${escapeHtml(content.label || 'Signature')}</span><div class="signature-line"></div></div>`;
     default:
       return '';
   }
@@ -203,8 +239,12 @@ const buildHtmlTemplate = (doc, campusName) => {
     .map(renderBlock)
     .join('\n');
 
+  // Colors flow into CSS — constrain to a strict hex pattern to prevent CSS injection.
+  const hex = (value, fallback) => (/^#[0-9A-Fa-f]{6}$/.test(value || '') ? value : fallback);
+  const primaryColor = hex(branding.primaryColor, '#003366');
+
   const watermarkSvg = branding.watermark
-    ? `<div class="watermark">${branding.watermark}</div>`
+    ? `<div class="watermark">${escapeHtml(branding.watermark)}</div>`
     : '';
 
   return `<!DOCTYPE html>
@@ -212,19 +252,19 @@ const buildHtmlTemplate = (doc, campusName) => {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>${doc.title}</title>
+<title>${escapeHtml(doc.title)}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 12pt; color: #1a1a1a; }
-  .page-header { border-bottom: 2px solid ${branding.primaryColor || '#003366'}; padding-bottom: 12px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
-  .page-header h1 { color: ${branding.primaryColor || '#003366'}; font-size: 18pt; }
+  .page-header { border-bottom: 2px solid ${primaryColor}; padding-bottom: 12px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
+  .page-header h1 { color: ${primaryColor}; font-size: 18pt; }
   .page-header .campus-name { font-size: 10pt; color: #555; }
   .doc-body { min-height: 70vh; }
-  h1,h2,h3 { color: ${branding.primaryColor || '#003366'}; margin: 16px 0 8px; }
+  h1,h2,h3 { color: ${primaryColor}; margin: 16px 0 8px; }
   p { margin-bottom: 8px; line-height: 1.6; }
   table { width: 100%; border-collapse: collapse; margin: 16px 0; }
   th,td { border: 1px solid #ccc; padding: 8px 12px; text-align: left; }
-  th { background: ${branding.primaryColor || '#003366'}; color: #fff; }
+  th { background: ${primaryColor}; color: #fff; }
   table.striped tr:nth-child(even) td { background: #f5f5f5; }
   ul,ol { margin: 8px 0 8px 24px; }
   li { margin-bottom: 4px; }
@@ -242,18 +282,18 @@ const buildHtmlTemplate = (doc, campusName) => {
 ${watermarkSvg}
 <div class="page-header">
   <div>
-    ${branding.showCampusName ? `<div class="campus-name">${campusName || ''}</div>` : ''}
-    <h1>${doc.title}</h1>
-    ${branding.headerText ? `<div style="font-size:10pt;color:#555;">${branding.headerText}</div>` : ''}
+    ${branding.showCampusName ? `<div class="campus-name">${escapeHtml(campusName || '')}</div>` : ''}
+    <h1>${escapeHtml(doc.title)}</h1>
+    ${branding.headerText ? `<div style="font-size:10pt;color:#555;">${escapeHtml(branding.headerText)}</div>` : ''}
   </div>
 </div>
 <div class="doc-body">
 ${bodyHtml}
 </div>
 <div class="page-footer">
-  <span>${branding.footerText || ''}</span>
-  ${branding.showDate ? `<span>Generated: ${new Date().toLocaleDateString()}</span>` : ''}
-  <span>Ref: ${doc.ref}</span>
+  <span>${escapeHtml(branding.footerText || '')}</span>
+  ${branding.showDate ? `<span>Generated: ${escapeHtml(new Date().toLocaleDateString())}</span>` : ''}
+  <span>Ref: ${escapeHtml(doc.ref)}</span>
 </div>
 </body>
 </html>`;

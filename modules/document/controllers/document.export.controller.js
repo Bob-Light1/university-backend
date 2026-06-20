@@ -27,7 +27,7 @@ const { AUDIT_ACTION }   = require('../models/document.audit.model');
 const documentService    = require('../services/document.service');
 const pdfService         = require('../services/document.pdf.service');
 const storageService     = require('../services/document.storage.service');
-// Require paresseux : document est dans la cloture statique de campus (via staff)
+// Lazy require: document is in the static closure of campus (via staff).
 const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
 const {
@@ -41,9 +41,26 @@ const UPLOAD_DIR = process.env.UPLOAD_DIR
 // ── In-memory print job registry (Phase 1 — replace with bull in Phase 3) ────
 
 /**
- * @type {Map<string, { status: string, campusId: string, documentIds: string[], downloadUrl?: string, error?: string, createdAt: Date }>}
+ * @type {Map<string, { status: string, campusId: string, documentIds: string[], downloadUrl?: string, zipPath?: string, error?: string, createdAt: Date }>}
  */
 const printJobs = new Map();
+
+/** How long a completed/failed job entry (and its ZIP) is retained before purge. */
+const PRINT_JOB_RETENTION_MS = parseInt(process.env.PRINT_JOB_RETENTION_MS || `${60 * 60 * 1000}`, 10);
+
+/**
+ * Removes a print job from the in-memory registry and deletes its ZIP artifact.
+ * Prevents the registry (and disk) from growing unbounded over the process lifetime.
+ *
+ * @param {string} jobId
+ */
+const purgePrintJob = (jobId) => {
+  const job = printJobs.get(jobId);
+  if (job?.zipPath) {
+    require('fs').promises.unlink(job.zipPath).catch(() => {});
+  }
+  printJobs.delete(jobId);
+};
 
 // ── PDF Export ────────────────────────────────────────────────────────────────
 
@@ -214,28 +231,45 @@ const enqueuePrintJob = asyncHandler(async (req, res) => {
     return sendError(res, 400, `Print job is limited to ${maxDocs} documents`);
   }
 
+  // Resolve only documents the caller is allowed to access (campus isolation).
+  // Without this, a CAMPUS_MANAGER could enqueue arbitrary IDs and have PDFs of
+  // other campuses' documents generated — processPrintJob fetches by id alone.
+  const campusFilter = req.isGlobalRole
+    ? { _id: { $in: documentIds }, deletedAt: null }
+    : { _id: { $in: documentIds }, campusId: req.campusId, deletedAt: null };
+
+  const accessible = await repo.findDocumentsByFilterLean(campusFilter, '_id campusId');
+
+  if (accessible.length === 0) {
+    return sendError(res, 404, 'No accessible documents found for the provided IDs');
+  }
+
+  const accessibleIds = accessible.map((d) => d._id.toString());
+
   const jobId = `pjob_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
   printJobs.set(jobId, {
     status:      'QUEUED',
     campusId:    req.campusId?.toString(),
-    documentIds,
+    documentIds: accessibleIds,
     createdAt:   new Date(),
     downloadUrl: null,
     error:       null,
   });
 
-  // Write print audit (non-blocking)
+  // Write print audit (non-blocking).
+  // campusId is required on DocumentAudit; for global roles req.campusId is null,
+  // so fall back to the first accessible document's campus to keep the trail valid.
   documentService.writeAudit(null, {
-    documentId: documentIds[0],
-    campusId:   req.campusId,
+    documentId: accessible[0]._id,
+    campusId:   req.campusId || accessible[0].campusId,
     action:     AUDIT_ACTION.PRINT,
     req,
-    metadata:   { jobId, totalDocuments: documentIds.length },
+    metadata:   { jobId, totalDocuments: accessibleIds.length },
   }).catch(() => {});
 
   // Process asynchronously
-  setImmediate(() => processPrintJob(jobId, req.campusId?.toString(), documentIds));
+  setImmediate(() => processPrintJob(jobId, req.campusId?.toString(), accessibleIds));
 
   return sendSuccess(res, 202, 'Print job queued', { jobId });
 });
@@ -255,7 +289,43 @@ const getPrintJobStatus = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Access denied');
   }
 
-  return sendSuccess(res, 200, 'Print job status', { job: { ...job, jobId: req.params.jobId } });
+  // Never leak the absolute filesystem path of the ZIP artifact to clients.
+  const { zipPath, ...safeJob } = job;
+  return sendSuccess(res, 200, 'Print job status', { job: { ...safeJob, jobId: req.params.jobId } });
+});
+
+/**
+ * GET /api/documents/print-jobs/:jobId/download
+ * Streams the ZIP archive produced by a completed print job.
+ * Matches the downloadUrl returned by getPrintJobStatus.
+ */
+const downloadPrintJob = asyncHandler(async (req, res) => {
+  const job = printJobs.get(req.params.jobId);
+
+  if (!job) return sendNotFound(res, 'Print job');
+
+  // Campus scope check — users can only download their own campus jobs
+  if (!req.isGlobalRole && job.campusId !== req.campusId?.toString()) {
+    return sendForbidden(res, 'Access denied');
+  }
+
+  if (job.status !== 'DONE' || !job.zipPath) {
+    return sendError(res, 409, `Print job is not ready for download (status: ${job.status})`);
+  }
+
+  const fs = require('fs');
+  try {
+    await fs.promises.access(job.zipPath);
+  } catch {
+    return sendNotFound(res, 'Print job archive');
+  }
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', `attachment; filename="print_job_${req.params.jobId}.zip"`);
+  res.setHeader('Cache-Control', 'private, no-cache');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+
+  fs.createReadStream(job.zipPath).pipe(res);
 });
 
 /**
@@ -317,11 +387,15 @@ const processPrintJob = async (jobId, campusId, documentIds) => {
     });
 
     job.status      = 'DONE';
+    job.zipPath     = zipPath;
     job.downloadUrl = `/api/documents/print-jobs/${jobId}/download`;
 
   } catch (err) {
     job.status = 'FAILED';
     job.error  = err.message;
+  } finally {
+    // Bound the registry/disk footprint: purge the entry and its ZIP after the TTL.
+    setTimeout(() => purgePrintJob(jobId), PRINT_JOB_RETENTION_MS).unref?.();
   }
 };
 
@@ -331,4 +405,5 @@ module.exports = {
   bulkExport,
   enqueuePrintJob,
   getPrintJobStatus,
+  downloadPrintJob,
 };
