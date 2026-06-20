@@ -71,14 +71,10 @@ departmentSchema.virtual('teacherCount', {
   count: true
 });
 
-// **MIDDLEWARE**
-departmentSchema.pre('remove', async function() {
-  const Teacher = mongoose.model('Teacher');
-  const count = await Teacher.countDocuments({ department: this._id });
-  if (count > 0) {
-    throw new Error('Cannot delete department with assigned teachers.');
-  };
-});
+// NOTE: deletion is always a soft delete (status -> 'archived'); the archive
+// controller blocks archiving while active teachers remain assigned (via the
+// teacher facade). No document `remove` hook is used: Mongoose 8 dropped
+// `Document.prototype.remove()`, so such a hook would never fire.
 
 const Department = mongoose.model('Department', departmentSchema);
 

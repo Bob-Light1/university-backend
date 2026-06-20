@@ -7,6 +7,8 @@ const { apiLimiter } = require('../../shared/middleware/rate-limiter');
 
 // Role configurations
 const ADMIN_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
+// Read access additionally granted to teachers (campus-scoped in the controller).
+const READ_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER'];
 
 // ============================================================
 // ALL ROUTES REQUIRE AUTHENTICATION
@@ -33,6 +35,7 @@ router.post(
 router.get(
   '/',
   apiLimiter,
+  authorize(READ_ROLES),
   departmentController.getAllDepartments
 );
 
@@ -54,6 +57,8 @@ router.get(
  */
 router.get(
   '/:id',
+  apiLimiter,
+  authorize(READ_ROLES),
   departmentController.getOneDepartment
 );
 

@@ -4,6 +4,9 @@ const GenericEntityController = require('../../../shared/lib/generic-entity.cont
 // Lazy require: teacher.config consumes the department facade (department ↔ teacher cycle).
 const countTeachersInDepartment = (...args) =>
   require('../../teacher').service.countActiveInDepartment(...args);
+// Lazy require (same cycle): validate a head-of-department belongs to the campus.
+const validateTeacherBelongsToCampus = (...args) =>
+  require('../../teacher').service.validateTeacherBelongsToCampus(...args);
 
 const {
   sendSuccess,
@@ -34,6 +37,7 @@ const resolveCampusId = (req, bodyField = 'schoolCampus') => {
   if (['ADMIN', 'DIRECTOR'].includes(role)) {
     const id = req.body[bodyField] || req.query.campusId;
     if (!id) return { error: 'Campus ID is required' };
+    if (!isValidObjectId(id)) return { error: 'Invalid campus ID' };
     return { campusId: id };
   }
 
@@ -63,8 +67,15 @@ const createDepartment = async (req, res) => {
     if (nameExists) return sendConflict(res, `Department "${name}" already exists in this campus`);
     if (codeExists) return sendConflict(res, `Code "${code.toUpperCase()}" is already used in this campus`);
 
-    if (headOfDepartment && !isValidObjectId(headOfDepartment)) {
-      return sendError(res, 400, 'Invalid head of department ID');
+    if (headOfDepartment) {
+      if (!isValidObjectId(headOfDepartment)) {
+        return sendError(res, 400, 'Invalid head of department ID');
+      }
+      // Campus integrity: the head must belong to the same campus.
+      const belongs = await validateTeacherBelongsToCampus(headOfDepartment, campusId);
+      if (!belongs) {
+        return sendError(res, 400, 'Head of department must be a teacher of this campus');
+      }
     }
 
     const saved = await departmentRepo.create({
@@ -82,6 +93,10 @@ const createDepartment = async (req, res) => {
   } catch (err) {
     console.error('❌ createDepartment:', err);
     if (err.code === 11000) return sendConflict(res, 'Department name or code already exists');
+    if (err.name === 'ValidationError') {
+      const errors = Object.values(err.errors).map((e) => e.message);
+      return sendError(res, 400, 'Validation failed', { errors });
+    }
     return sendError(res, 500, 'Failed to create department');
   }
 };
@@ -93,8 +108,18 @@ const getAllDepartments = async (req, res) => {
   try {
     const { search, status, includeArchived, page = 1, limit = 100 } = req.query;
 
-    const baseFilter = buildCampusFilter(req.user, req.query.campusId);
-    const skip = (Number(page) - 1) * Number(limit);
+    // Cap the page size to avoid full-collection scans under load.
+    const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 200);
+    const safePage = Math.max(Number(page) || 1, 1);
+    const skip = (safePage - 1) * safeLimit;
+
+    let baseFilter;
+    try {
+      baseFilter = buildCampusFilter(req.user, req.query.campusId);
+    } catch {
+      // buildCampusFilter throws when a non-global role has no campus in its JWT.
+      return sendError(res, 403, 'Campus scope required');
+    }
 
     const { data: departments, total } = await departmentRepo.paginate({
       baseFilter,
@@ -102,11 +127,11 @@ const getAllDepartments = async (req, res) => {
       status,
       search,
       skip,
-      limit: Number(limit),
+      limit: safeLimit,
     });
 
     return sendPaginated(res, 200, 'Departments retrieved successfully', departments, {
-      total, page, limit,
+      total, page: safePage, limit: safeLimit,
     });
   } catch (err) {
     console.error('❌ getAllDepartments:', err);
@@ -126,9 +151,10 @@ const getOneDepartment = async (req, res) => {
 
     if (!department) return sendNotFound(res, 'Department');
 
-    // Campus isolation for CAMPUS_MANAGER
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (department.schoolCampus._id.toString() !== req.user.campusId.toString()) {
+    // Campus isolation for every non-global role (CAMPUS_MANAGER, TEACHER, …).
+    if (!['ADMIN', 'DIRECTOR'].includes(req.user.role)) {
+      const deptCampusId = department.schoolCampus?._id?.toString() || department.schoolCampus?.toString();
+      if (deptCampusId !== req.user.campusId?.toString()) {
         return sendError(res, 403, 'This department does not belong to your campus');
       }
     }
@@ -177,8 +203,15 @@ const updateDepartment = async (req, res) => {
 
     if (description !== undefined) updates.description = description?.trim();
     if (headOfDepartment !== undefined) {
-      if (headOfDepartment && !isValidObjectId(headOfDepartment)) {
-        return sendError(res, 400, 'Invalid head of department ID');
+      if (headOfDepartment) {
+        if (!isValidObjectId(headOfDepartment)) {
+          return sendError(res, 400, 'Invalid head of department ID');
+        }
+        // Campus integrity: the head must belong to this department's campus.
+        const belongs = await validateTeacherBelongsToCampus(headOfDepartment, department.schoolCampus);
+        if (!belongs) {
+          return sendError(res, 400, 'Head of department must be a teacher of this campus');
+        }
       }
       updates.headOfDepartment = headOfDepartment || null;
     }
@@ -190,6 +223,10 @@ const updateDepartment = async (req, res) => {
   } catch (err) {
     console.error('❌ updateDepartment:', err);
     if (err.code === 11000) return sendConflict(res, 'Department name or code already exists');
+    if (err.name === 'ValidationError') {
+      const errors = Object.values(err.errors).map((e) => e.message);
+      return sendError(res, 400, 'Validation failed', { errors });
+    }
     return sendError(res, 500, 'Failed to update department');
   }
 };
@@ -230,6 +267,22 @@ const archiveDepartment = async (req, res) => {
 };
 
 // ============================================================
+// GET DEPARTMENT STATS (campus-scoped)
+// ============================================================
+/**
+ * Wraps the generic stats handler to enforce campus isolation:
+ * a CAMPUS_MANAGER may only request statistics for its own campus.
+ */
+const getDepartmentStats = async (req, res) => {
+  if (req.user.role === 'CAMPUS_MANAGER') {
+    if (req.params.campusId?.toString() !== req.user.campusId?.toString()) {
+      return sendError(res, 403, 'You can only view statistics for your own campus');
+    }
+  }
+  return genericController.getStats(req, res);
+};
+
+// ============================================================
 // EXPORTS
 // ============================================================
 module.exports = {
@@ -239,6 +292,5 @@ module.exports = {
   updateDepartment,
   archiveDepartment,
   restoreDepartment: genericController.restore,
-  // Stats delegated to generic controller
-  getDepartmentStats: genericController.getStats,
+  getDepartmentStats,
 };
