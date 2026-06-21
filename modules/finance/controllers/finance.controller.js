@@ -23,6 +23,7 @@ const {
   sendPaginated,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId, buildCampusFilter } = require('../../../shared/utils/validation-helpers');
+const { STATUSES } = require('../fee-status');
 
 const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];
 
@@ -82,7 +83,12 @@ const listFees = asyncHandler(async (req, res) => {
   const limit = Math.min(parseInt(req.query.limit, 10) || 20, 100);
 
   const filter = { ...scope };
-  if (req.query.status) filter.status = req.query.status;
+  if (req.query.status) {
+    if (!STATUSES.includes(req.query.status)) {
+      return sendError(res, 400, `status must be one of: ${STATUSES.join(', ')}`);
+    }
+    filter.status = req.query.status;
+  }
   if (isValidObjectId(req.query.student)) filter.student = req.query.student;
   if (req.query.academicYear) filter.academicYear = req.query.academicYear;
 
@@ -154,6 +160,20 @@ const getStudentLedger = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Student ledger', ledger);
 });
 
+// ── Financial summary (income vs expense) ─────────────────────────────────────
+
+const getSummary = asyncHandler(async (req, res) => {
+  const scope = scopeFor(req, res);
+  if (scope === null) return undefined;
+
+  const period = {};
+  if (req.query.year) period.year = parseInt(req.query.year, 10);
+  if (req.query.month) period.month = parseInt(req.query.month, 10);
+
+  const summary = await service.getFinancialSummary(scope, period);
+  return sendSuccess(res, 200, 'Financial summary', summary);
+});
+
 // ── Student: their own ledger ─────────────────────────────────────────────────
 
 const getMyLedger = asyncHandler(async (req, res) => {
@@ -172,4 +192,5 @@ module.exports = {
   deleteFee,
   getStudentLedger,
   getMyLedger,
+  getSummary,
 };

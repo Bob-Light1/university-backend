@@ -1,5 +1,12 @@
+'use strict';
+
 const mongoose = require("mongoose");
 
+/**
+ * Income — a recorded inbound payment to the institution (tuition, enrollment,
+ * grants, donations…). Optionally tied to a student/class/course and a campus.
+ * Soft-deleted via `isDeleted`. `month`/`year` are denormalized for reporting.
+ */
 const incomeSchema = new mongoose.Schema(
   {
     // Identification
@@ -25,15 +32,15 @@ const incomeSchema = new mongoose.Schema(
     source: {
       type: String,
       enum: [
-        "Frais d'inscription",
-        "Frais de scolarité",
-        "Paiement cours",
-        "Examen",
+        "Enrollment Fees",
+        "Tuition",
+        "Course Payment",
+        "Exam",
         "Certification",
-        "Subvention",
-        "Don",
-        "Partenariat",
-        "Autre",
+        "Grant",
+        "Donation",
+        "Partnership",
+        "Other",
       ],
       required: true,
       index: true,
@@ -86,9 +93,10 @@ const incomeSchema = new mongoose.Schema(
       ref: "Course",
     },
 
-    campus: {
+    schoolCampus: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Campus",
+      index: true,
     },
 
     // Responsible person
@@ -122,8 +130,12 @@ const incomeSchema = new mongoose.Schema(
     isDeleted: {
       type: Boolean,
       default: false,
-    }
-    
+      index: true,
+    },
+
+    // Denormalized period for fast monthly/yearly reporting aggregations.
+    month: { type: Number, min: 1, max: 12 },
+    year: { type: Number },
   },
   {
     timestamps: true,
@@ -132,9 +144,14 @@ const incomeSchema = new mongoose.Schema(
 
 
 incomeSchema.pre("save", function (next) {
-  this.month = this.incomeDate.getMonth() + 1;
-  this.year = this.incomeDate.getFullYear();
+  if (this.incomeDate) {
+    this.month = this.incomeDate.getMonth() + 1;
+    this.year = this.incomeDate.getFullYear();
+  }
   next();
 });
+
+// Reporting: incomes of a campus over a given period.
+incomeSchema.index({ schoolCampus: 1, year: 1, month: 1 });
 
 module.exports = mongoose.model("Income", incomeSchema);

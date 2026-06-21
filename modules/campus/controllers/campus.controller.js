@@ -538,8 +538,8 @@ class CampusController extends GenericEntityController {
         teacherService.countActiveTeachers(campusId, { createdSince: firstDayOfMonth }),
         // Campus-wide average absence rate from attendance records
         studentService.getAvgAbsenceRateForCampus(campusOid),
-        // Pending income records as payment alerts
-        financeService.countPendingIncomes(campusId),
+        // Students with an outstanding balance (pending/partial/overdue)
+        financeService.countOutstandingFees(campusId),
         staffService.getCampusStats(campusId),
         mentorService.getCampusStats(campusId, campusOid),
       ]);

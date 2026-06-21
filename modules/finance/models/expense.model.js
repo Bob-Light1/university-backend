@@ -1,11 +1,19 @@
+'use strict';
+
 const mongoose = require("mongoose");
 
+/**
+ * Expense — a recorded institutional outflow (salaries, rent, supplies…),
+ * categorized via ExpenseCategory and scoped to a campus. Follows an approval
+ * workflow (pending → approved → paid, or rejected). Soft-deleted via `isDeleted`.
+ */
 const expenseSchema = new mongoose.Schema(
   {
      // Relations
      schoolCampus: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "SchoolCampus",
+      ref: "Campus",
+      index: true,
     },
     
     expenseCategory:{
@@ -17,13 +25,13 @@ const expenseSchema = new mongoose.Schema(
 
      paidBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin", // accountant / admin
+      ref: "User", // accountant / admin who recorded the expense
       required: true,
     },
 
     approvedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Admin", // director
+      ref: "User", // director / manager who approved it
     },
 
     // Identification
@@ -108,7 +116,12 @@ const expenseSchema = new mongoose.Schema(
     isDeleted: {
       type: Boolean,
       default: false,
-    }
+      index: true,
+    },
+
+    // Denormalized period for fast monthly/yearly reporting aggregations.
+    month: { type: Number, min: 1, max: 12 },
+    year: { type: Number },
   },
   {
     timestamps: true,
@@ -116,10 +129,15 @@ const expenseSchema = new mongoose.Schema(
 );
 
 expenseSchema.pre("save", function (next) {
-  this.month = this.expenseDate.getMonth() + 1;
-  this.year = this.expenseDate.getFullYear();
+  if (this.expenseDate) {
+    this.month = this.expenseDate.getMonth() + 1;
+    this.year = this.expenseDate.getFullYear();
+  }
   next();
 });
+
+// Reporting: expenses of a campus over a given period.
+expenseSchema.index({ schoolCampus: 1, year: 1, month: 1 });
 
 
 module.exports = mongoose.model("Expense", expenseSchema);

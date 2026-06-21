@@ -81,22 +81,40 @@ describe('createFee', () => {
 });
 
 describe('recordPayment', () => {
-  test('impute l\'acompte, met à jour amountPaid et sauvegarde', async () => {
-    const doc = fakeFeeDoc({ amountDue: 100, amountPaid: 0 });
-    repo.getFeeDoc.mockResolvedValue(doc);
+  test('impute l\'acompte via un incrément atomique garanti et recalcule le statut', async () => {
+    repo.getFeeDoc.mockResolvedValue(fakeFeeDoc({ amountDue: 100, amountPaid: 0 }));
+    // Atomic guarded increment returns the post-update lean doc (balance virtual included).
+    repo.incrementAmountPaidGuarded.mockResolvedValue({
+      _id: 'fee-1', student: 'stud-1', schoolCampus: 'camp-1',
+      amountDue: 100, amountPaid: 40, currency: 'XAF', dueDate: null, status: 'pending', balance: 60,
+    });
+    repo.setFeeStatus.mockResolvedValue({
+      _id: 'fee-1', student: 'stud-1', schoolCampus: 'camp-1',
+      amountDue: 100, amountPaid: 40, currency: 'XAF', dueDate: null, status: 'partial', balance: 60,
+    });
     repo.createPayment.mockResolvedValue({ _id: 'pay-1', amount: 40, toObject: () => ({ _id: 'pay-1', amount: 40 }) });
 
     const { fee, payment } = await finance.recordPayment({
       feeId: 'fee-1', amount: 40, method: 'Cash', recordedBy: 'admin-1',
     });
 
+    expect(repo.incrementAmountPaidGuarded).toHaveBeenCalledWith('fee-1', 40, {});
     expect(repo.createPayment).toHaveBeenCalledWith(expect.objectContaining({
       fee: 'fee-1', student: 'stud-1', schoolCampus: 'camp-1', amount: 40, currency: 'XAF', method: 'Cash',
     }));
-    expect(doc.amountPaid).toBe(40);
-    expect(doc.save).toHaveBeenCalled();
+    // amountPaid 40 < amountDue 100 → derived status moves pending → partial.
+    expect(repo.setFeeStatus).toHaveBeenCalledWith('fee-1', 'partial');
+    expect(fee.status).toBe('partial');
     expect(fee.balance).toBe(60);
     expect(payment._id).toBe('pay-1');
+  });
+
+  test('un solde concurrent modifié → INVALID, aucune ligne de paiement créée', async () => {
+    repo.getFeeDoc.mockResolvedValue(fakeFeeDoc({ amountDue: 100, amountPaid: 0 }));
+    repo.incrementAmountPaidGuarded.mockResolvedValue(null); // guard lost the race
+    await expect(finance.recordPayment({ feeId: 'fee-1', amount: 40, method: 'Cash', recordedBy: 'a' }))
+      .rejects.toMatchObject({ code: 'INVALID' });
+    expect(repo.createPayment).not.toHaveBeenCalled();
   });
 
   test('refuse un surpaiement au-delà du solde restant', async () => {

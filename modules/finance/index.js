@@ -2,8 +2,10 @@
  * @file index.js — FACADE of the finance module
  * Sole public entry point of the module — see MODULAR_MONOLITH_MIGRATION.md §3.
  *
- * Routes: student payment tracking (debts + payments), mounted on /api/finance.
- * Service: inter-module API (campus dashboard counter, payment tracking, overdue cron).
+ * Routes: student debts + payments, expenses (+ categories), incomes and a
+ *         financial summary — mounted on /api/finance.
+ * Service: inter-module API (campus dashboard counter, outstanding-fees count,
+ *          financial summary, payment tracking, overdue cron).
  */
 
 const routes  = require('./finance.routes');

@@ -5,7 +5,9 @@
  * All persistence goes through finance.repository (step 0 pre-Postgres).
  */
 
+const mongoose     = require('mongoose');
 const financeRepo  = require('./finance.repository');
+const { computeStatus } = require('./fee-status');
 const notification = require('../notification').service;
 
 /**
@@ -16,6 +18,17 @@ const notification = require('../notification').service;
  */
 function countPendingIncomes(campusId) {
   return financeRepo.countByCampusAndStatus(campusId, 'pending');
+}
+
+/**
+ * Number of students with an outstanding balance (pending/partial/overdue) for a
+ * campus. Powers the dashboard "payment alerts" KPI — student debts are the only
+ * actively-written finance records, unlike Income which has no API writer yet.
+ * @param {string|ObjectId} campusId
+ * @returns {Promise<number>}
+ */
+function countOutstandingFees(campusId) {
+  return financeRepo.countOutstandingFeesByCampus(campusId);
 }
 
 // ── Student payment tracking ──────────────────────────────────────────────────
@@ -76,15 +89,16 @@ async function createFee(input) {
  * @returns {Promise<{ fee: Object, payment: Object }>}
  */
 async function recordPayment({ feeId, amount, method, reference, paidAt, notes, recordedBy, scope = {} }) {
+  const value = Number(amount);
+  if (!Number.isFinite(value) || value <= 0) {
+    throw Object.assign(new Error('amount must be greater than 0'), { code: 'INVALID' });
+  }
+
+  // Up-front validation for fast, precise errors (not found / cancelled / overpay).
   const feeDoc = await financeRepo.getFeeDoc(feeId, scope);
   if (!feeDoc) throw Object.assign(new Error('Fee not found'), { code: 'NOT_FOUND' });
   if (feeDoc.status === 'cancelled') {
     throw Object.assign(new Error('Cannot pay a cancelled fee'), { code: 'INVALID' });
-  }
-
-  const value = Number(amount);
-  if (!Number.isFinite(value) || value <= 0) {
-    throw Object.assign(new Error('amount must be greater than 0'), { code: 'INVALID' });
   }
 
   const balance = Math.max(0, (feeDoc.amountDue || 0) - (feeDoc.amountPaid || 0));
@@ -95,24 +109,47 @@ async function recordPayment({ feeId, amount, method, reference, paidAt, notes, 
     );
   }
 
-  const payment = await financeRepo.createPayment({
-    fee:          feeDoc._id,
-    student:      feeDoc.student,
-    schoolCampus: feeDoc.schoolCampus,
-    amount:       value,
-    currency:     feeDoc.currency,
-    method,
-    reference:    reference || undefined,
-    paidAt:       paidAt || new Date(),
-    notes,
-    recordedBy,
-  });
+  // Authoritative write: atomic guarded increment closes the lost-update / overpay
+  // race a read-modify-write save() leaves open under concurrent payments. A null
+  // result means a competing payment changed the balance between the read above and
+  // now (or the debt was cancelled/deleted meanwhile).
+  const updatedFee = await financeRepo.incrementAmountPaidGuarded(feeDoc._id, value, scope);
+  if (!updatedFee) {
+    throw Object.assign(
+      new Error('Payment rejected: the balance changed concurrently, please retry'),
+      { code: 'INVALID' },
+    );
+  }
 
-  feeDoc.amountPaid = (feeDoc.amountPaid || 0) + value; // pre-save recalculates the status
-  await feeDoc.save();
+  let payment;
+  try {
+    payment = await financeRepo.createPayment({
+      fee:          updatedFee._id,
+      student:      updatedFee.student,
+      schoolCampus: updatedFee.schoolCampus,
+      amount:       value,
+      currency:     updatedFee.currency,
+      method,
+      reference:    reference || undefined,
+      paidAt:       paidAt || new Date(),
+      notes,
+      recordedBy,
+    });
+  } catch (err) {
+    // Payment line creation failed (e.g. duplicate reference): roll back the
+    // increment so the debt total stays consistent.
+    await financeRepo.incrementAmountPaidGuarded(updatedFee._id, -value).catch(() => {});
+    throw err;
+  }
+
+  // The atomic $inc bypassed the pre-save hook; recompute the derived status.
+  const nextStatus = computeStatus(updatedFee);
+  const fee = nextStatus !== updatedFee.status
+    ? (await financeRepo.setFeeStatus(updatedFee._id, nextStatus)) || { ...updatedFee, status: nextStatus }
+    : updatedFee;
 
   return {
-    fee: feeDoc.toObject({ virtuals: true }),
+    fee,
     payment: typeof payment.toObject === 'function' ? payment.toObject() : payment,
   };
 }
@@ -124,9 +161,11 @@ async function recordPayment({ feeId, amount, method, reference, paidAt, notes, 
  * @returns {Promise<{ fees, payments, totals }>}
  */
 async function getStudentLedger(studentId, scope = {}) {
+  // Payments carry a denormalized schoolCampus → apply the same scope as the
+  // debts so a manager cannot read another campus's payment lines.
   const [fees, payments] = await Promise.all([
     financeRepo.findFeesByStudent(studentId, scope),
-    financeRepo.findPaymentsByStudent(studentId),
+    financeRepo.findPaymentsByStudent(studentId, scope),
   ]);
   const totals = fees.reduce(
     (acc, f) => {
@@ -138,6 +177,37 @@ async function getStudentLedger(studentId, scope = {}) {
   );
   totals.balance = Math.max(0, totals.totalDue - totals.totalPaid);
   return { fees, payments, totals };
+}
+
+/**
+ * Financial summary for a scope/period: received income vs paid expenses and the
+ * resulting net. The scope is already campus-resolved by the caller (never the client).
+ * @param {Object} [scope]  e.g. { schoolCampus }
+ * @param {Object} [period] { year?, month? }
+ * @returns {Promise<{ income, expense, net, currency }>}
+ */
+async function getFinancialSummary(scope = {}, period = {}) {
+  // Aggregation pipelines do NOT auto-cast types (unlike find/count) → coerce the
+  // campus id to an ObjectId so the $match works against ObjectId-stored fields.
+  const match = {};
+  if (scope.schoolCampus) {
+    match.schoolCampus = new mongoose.Types.ObjectId(String(scope.schoolCampus));
+  }
+  if (period.year) match.year = period.year;
+  if (period.month) match.month = period.month;
+
+  const [incomeAgg, expenseAgg] = await Promise.all([
+    financeRepo.sumIncomes(match),
+    financeRepo.sumExpenses(match),
+  ]);
+
+  const income  = incomeAgg[0]  || { total: 0, count: 0 };
+  const expense = expenseAgg[0] || { total: 0, count: 0 };
+  return {
+    income:  { total: income.total,  count: income.count },
+    expense: { total: expense.total, count: expense.count },
+    net: income.total - expense.total,
+  };
 }
 
 /** Paginated list of debts (filter already campus-scoped by the caller). */
@@ -185,6 +255,8 @@ async function runOverdueJob() {
 
 module.exports = {
   countPendingIncomes,
+  countOutstandingFees,
+  getFinancialSummary,
   createFee,
   recordPayment,
   getStudentLedger,
