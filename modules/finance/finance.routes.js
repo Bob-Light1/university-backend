@@ -93,6 +93,14 @@ router.get('/students/:studentId/ledger', authorize(MGMT_ROLES), apiLimiter, ctr
  */
 router.get('/summary', authorize(MGMT_ROLES), apiLimiter, ctrl.getSummary);
 
+// ── Upload signature for supporting documents (income/expense attachments) ────
+/**
+ * @route GET /api/finance/upload-signature
+ * @desc  Signed Cloudinary params for a direct browser upload of a receipt/invoice
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+router.get('/upload-signature', authorize(MGMT_ROLES), apiLimiter, ctrl.getUploadSignature);
+
 // ── Expense categories (named routes before any /:id) ─────────────────────────
 /**
  * @route GET /api/finance/expense-categories

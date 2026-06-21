@@ -12,6 +12,8 @@
  * scoping is derived from the JWT via buildCampusFilter (anti cross-campus leak).
  */
 
+const crypto = require('crypto');
+
 const service = require('../finance.service');
 const {
   asyncHandler,
@@ -183,6 +185,35 @@ const getMyLedger = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'My ledger', ledger);
 });
 
+// ── Upload signature (supporting documents) ───────────────────────────────────
+
+/**
+ * Generate a short-lived Cloudinary signed upload token so the browser can
+ * upload an income/expense supporting document directly to Cloudinary — only
+ * the resulting secure_url is then stored in the record's `attachments[]`.
+ *
+ * @route  GET /api/finance/upload-signature
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ */
+const getUploadSignature = (_req, res) => {
+  const timestamp = Math.round(Date.now() / 1000);
+  const folder    = 'backend/finance';
+
+  // Cloudinary signature: SHA-1( sorted_params + api_secret )
+  const signature = crypto
+    .createHash('sha1')
+    .update(`folder=${folder}&timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`)
+    .digest('hex');
+
+  return sendSuccess(res, 200, 'Upload signature generated', {
+    signature,
+    timestamp,
+    folder,
+    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+    apiKey:    process.env.CLOUDINARY_API_KEY,
+  });
+};
+
 module.exports = {
   createFee,
   listFees,
@@ -193,4 +224,5 @@ module.exports = {
   getStudentLedger,
   getMyLedger,
   getSummary,
+  getUploadSignature,
 };
