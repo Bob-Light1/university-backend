@@ -184,12 +184,18 @@ const setSessionStatus = (id, status) =>
 const findEnrollment = (sessionId, studentId) =>
   ExamEnrollment.findOne({ examSession: sessionId, student: studentId, isDeleted: false });
 
-/** Enrollment by id — non lean. */
-const findEnrollmentById = (id) => ExamEnrollment.findOne({ _id: id, isDeleted: false });
+/**
+ * Enrollment by filter — non lean.
+ * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
+ */
+const findEnrollmentById = (filter) => ExamEnrollment.findOne({ ...filter, isDeleted: false });
 
-/** Detailed enrollment (student + session→subject) — card/hall-ticket view. */
-const findEnrollmentDetailed = (id) =>
-  ExamEnrollment.findOne({ _id: id, isDeleted: false })
+/**
+ * Detailed enrollment (student + session→subject) — card/hall-ticket view.
+ * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
+ */
+const findEnrollmentDetailed = (filter) =>
+  ExamEnrollment.findOne({ ...filter, isDeleted: false })
     .populate('student', 'firstName lastName matricule profileImage')
     .populate({ path: 'examSession', populate: { path: 'subject', select: 'subject_name' } });
 
@@ -224,6 +230,10 @@ const countEnrollmentsForSession = (sessionId) =>
 /** Count of a session's absentees (analytics snapshot). */
 const countAbsentEnrollments = (sessionId) =>
   ExamEnrollment.countDocuments({ examSession: sessionId, attendance: 'ABSENT', isDeleted: false });
+
+/** Distinct session ids a student is enrolled in (student session scoping). */
+const findEnrollmentSessionIdsForStudent = (studentId) =>
+  ExamEnrollment.find({ student: studentId, isDeleted: false }).distinct('examSession');
 
 /** A student's upcoming enrollments (dashboard facade) — lean. */
 const findUpcomingEnrollmentsForStudent = (studentId) =>
@@ -267,8 +277,11 @@ const findSubmissionByIdForStudent = (id, studentId) =>
 const findActiveSubmission = (id, studentId) =>
   ExamSubmission.findOne({ _id: id, student: studentId, status: 'IN_PROGRESS', isDeleted: false });
 
-/** Submission by id (staff/student submission view) — non lean (.toObject()). */
-const findSubmissionByIdAny = (id) => ExamSubmission.findOne({ _id: id, isDeleted: false });
+/**
+ * Submission by filter (staff/student submission view) — non lean (.toObject()).
+ * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
+ */
+const findSubmissionByIdAny = (filter) => ExamSubmission.findOne({ ...filter, isDeleted: false });
 
 /** Submission by id, verifiable for grading (any non-deleted submission). */
 const findSubmissionById = (id) => ExamSubmission.findOne({ _id: id, isDeleted: false });
@@ -316,8 +329,11 @@ const pushAntiCheatFlag = (id, flag) =>
 // EXAM GRADING
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Grading by id — non lean (mutated/saved). */
-const findGradingById = (id) => ExamGrading.findOne({ _id: id, isDeleted: false });
+/**
+ * Grading by filter — non lean (mutated/saved).
+ * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
+ */
+const findGradingById = (filter) => ExamGrading.findOne({ ...filter, isDeleted: false });
 
 /** Grading by filter (campus isolation) — populated detail. */
 const findGradingDetailed = (filter) =>
@@ -355,7 +371,7 @@ const paginateGradings = async (match, { skip, limit }) => {
       .populate('student',      'firstName lastName matricule')
       .populate('grader',       'firstName lastName')
       .populate('secondGrader', 'firstName lastName')
-      .populate('examSession',  'title subject startTime')
+      .populate({ path: 'examSession', select: 'title subject startTime', populate: { path: 'subject', select: 'subject_name' } })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
@@ -681,6 +697,7 @@ module.exports = {
   paginateEnrollments,
   countEnrollmentsForSession,
   countAbsentEnrollments,
+  findEnrollmentSessionIdsForStudent,
   findUpcomingEnrollmentsForStudent,
   createEnrollment,
   saveEnrollmentDoc,

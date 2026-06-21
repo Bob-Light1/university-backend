@@ -442,10 +442,11 @@ router.post(
 /**
  * GET /api/examination/grading
  * List gradings. Query: sessionId?, status?, grader?, page, limit
+ * Students are self-scoped to their own PUBLISHED gradings in the controller.
  */
 router.get(
   '/grading',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER']),
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER', 'STUDENT']),
   listGradings
 );
 
@@ -522,10 +523,11 @@ router.post(
 /**
  * GET /api/examination/appeals
  * List appeals. Query: status?, page, limit
+ * Students are self-scoped to their own appeals in the controller.
  */
 router.get(
   '/appeals',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER']),
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER', 'STUDENT']),
   listAppeals
 );
 

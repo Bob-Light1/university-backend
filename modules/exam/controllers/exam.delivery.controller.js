@@ -22,6 +22,7 @@ const {
   sendCreated,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
+const { getCampusFilter } = require('./exam.helper');
 
 // ── Deterministic shuffle (seeded by studentId + sessionId) ──────────────────
 
@@ -69,7 +70,8 @@ const startAttempt = async (req, res) => {
       return sendError(res, 403, `You are not eligible: ${enrollment.eligibilityNotes || ''}`);
     }
 
-    // Idempotent — return existing attempt if already started
+    // Idempotent — return existing attempt if already started (resume is always
+    // allowed, even past endTime, so the candidate can still submit in-flight work).
     const existing = await repo.findSubmissionForStudent(id, studentId);
     if (existing) {
       if (existing.status === 'SUBMITTED') {
@@ -81,6 +83,15 @@ const startAttempt = async (req, res) => {
         endTime:      session.endTime,
         duration:     session.duration,
       });
+    }
+
+    // New attempts must fall inside the scheduled exam window.
+    const now = new Date();
+    if (now < new Date(session.startTime)) {
+      return sendError(res, 400, 'This exam has not started yet.');
+    }
+    if (session.endTime && now > new Date(session.endTime)) {
+      return sendError(res, 400, 'This exam has already ended.');
     }
 
     const submission = await repo.createSubmission({
@@ -139,6 +150,10 @@ const getQuestions = async (req, res) => {
     // Build ordered map
     const qMap = Object.fromEntries(rawQuestions.map((q) => [q._id.toString(), q.toObject()]));
 
+    // While the attempt is IN_PROGRESS, correct answers must never reach the client
+    // (this includes any translated option set, see translation step below).
+    const stripAnswers = submission.status === 'IN_PROGRESS';
+
     let ordered = questionRefs.map((ref) => {
       const q    = qMap[ref.questionId.toString()];
       if (!q) return null;
@@ -146,7 +161,7 @@ const getQuestions = async (req, res) => {
       const base = { ...q, points: pts, refOrder: ref.order };
 
       // Strip correct answer for IN_PROGRESS
-      if (submission.status === 'IN_PROGRESS') {
+      if (stripAnswers) {
         delete base.correctAnswer;
         base.options = (base.options || []).map(({ text, explanation }) => ({ text, explanation }));
       }
@@ -167,10 +182,16 @@ const getQuestions = async (req, res) => {
       ordered = ordered.map((q) => {
         const tr = (q.translations || []).find((t) => t.lang === lang);
         if (tr) {
+          // Translated options carry isCorrect; strip it while the attempt is live.
+          const trOptions = tr.options
+            ? (stripAnswers
+                ? tr.options.map(({ text, explanation }) => ({ text, explanation }))
+                : tr.options)
+            : q.options;
           return {
             ...q,
             questionText: tr.questionText || q.questionText,
-            options:      tr.options       || q.options,
+            options:      trOptions,
             instructions: tr.instructions  || q.instructions,
           };
         }
@@ -213,8 +234,11 @@ const saveAnswer = async (req, res) => {
     if (session && new Date() > new Date(session.endTime)) {
       // Auto-submit
       submission.status          = 'SUBMITTED';
+      submission.submittedAt     = submission.submittedAt || new Date();
       submission.autoSubmittedAt = new Date();
       await repo.saveSubmissionDoc(submission);
+      // Same non-blocking MCQ auto-grading path as an explicit submit.
+      setImmediate(() => _autoGradeMCQ(submission).catch(console.error));
       return sendError(res, 410, 'Exam time has expired. Your answers have been auto-submitted.');
     }
 
@@ -332,7 +356,9 @@ const logAntiCheat = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid submission ID.');
 
-    const { type, detail } = req.body;
+    // Accept both `type` (canonical) and `event` (legacy client field name).
+    const type   = req.body.type || req.body.event;
+    const detail = req.body.detail;
     if (!type) return sendError(res, 400, 'event type is required.');
 
     const submission = await repo.findActiveSubmission(id, req.user.id);
@@ -361,7 +387,11 @@ const getSubmission = async (req, res) => {
     const { id } = req.params; // submissionId
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid submission ID.');
 
-    const submission = await repo.findSubmissionByIdAny(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    // Campus isolation: staff may only view submissions from their own campus.
+    const submission = await repo.findSubmissionByIdAny({ _id: id, ...campusFilter });
     if (!submission) return sendNotFound(res, 'Submission');
 
     // Students can only see their own submission; staff sees any

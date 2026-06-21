@@ -149,7 +149,10 @@ const getEnrollment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await repo.findEnrollmentDetailed(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const enrollment = await repo.findEnrollmentDetailed({ _id: id, ...campusFilter });
 
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 
@@ -177,7 +180,10 @@ const updateEnrollment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await repo.findEnrollmentById(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const enrollment = await repo.findEnrollmentById({ _id: id, ...campusFilter });
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 
     const ALLOWED = ['isEligible', 'eligibilityNotes', 'seatNumber', 'specialNeeds', 'attendance'];
@@ -203,7 +209,10 @@ const deleteEnrollment = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await repo.findEnrollmentById(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const enrollment = await repo.findEnrollmentById({ _id: id, ...campusFilter });
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 
     // Cannot delete enrollment once exam is ONGOING or COMPLETED
@@ -276,7 +285,10 @@ const getHallTicket = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid enrollment ID.');
 
-    const enrollment = await repo.findEnrollmentDetailed(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const enrollment = await repo.findEnrollmentDetailed({ _id: id, ...campusFilter });
 
     if (!enrollment) return sendNotFound(res, 'Enrollment');
 

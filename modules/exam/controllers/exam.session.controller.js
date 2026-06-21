@@ -74,6 +74,17 @@ const listSessions = async (req, res) => {
     if (semester)     match.semester     = semester;
     if (search)       match.title        = { $regex: escapeRegex(search), $options: 'i' };
 
+    // Students may only see sessions they are enrolled in, and never DRAFT
+    // (unpublished) ones — regardless of the status filter they request.
+    if (req.user.role === 'STUDENT') {
+      const enrolledIds = await repo.findEnrollmentSessionIdsForStudent(req.user.id);
+      match._id = { $in: enrolledIds };
+      const requested = status
+        ? status.split(',').map((s) => s.trim()).filter((s) => s && s !== 'DRAFT')
+        : ['SCHEDULED', 'ONGOING', 'COMPLETED', 'POSTPONED', 'CANCELLED'];
+      match.status = { $in: requested };
+    }
+
     const { docs: sessions, total } = await repo.paginateSessions(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Sessions retrieved.', sessions, { total, page, limit });
@@ -175,6 +186,16 @@ const getSession = async (req, res) => {
     const session = await repo.findSessionDetailed({ _id: id, ...campusFilter, isDeleted: false });
 
     if (!session) return sendNotFound(res, 'Exam session');
+
+    // Students may only access sessions they are enrolled in, and the question
+    // set must never be exposed through this endpoint (delivery serves it instead).
+    if (req.user.role === 'STUDENT') {
+      const enrollment = await repo.findEnrollment(id, req.user.id);
+      if (!enrollment) return sendError(res, 403, 'You are not enrolled in this exam.');
+      const data = session.toObject();
+      delete data.questions;
+      return sendSuccess(res, 200, 'Exam session retrieved.', data);
+    }
 
     const enrolledCount = await repo.countEnrollmentsForSession(id);
 

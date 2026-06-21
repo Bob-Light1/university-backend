@@ -113,15 +113,16 @@ const analyzeSession = async (sessionId) => {
       if (sim >= SIMILARITY_THRESHOLD) {
         flagged++;
         const simRounded = Math.round(sim * 1000) / 1000;
+        // Flag shape MUST match AntiCheatFlagSchema: { type, detail, timestamp }.
         const flag = {
-          event:     'SIMILARITY_FLAG',
+          type:      'SIMILARITY_FLAG',
           detail:    `Cosine similarity ${simRounded} >= threshold ${SIMILARITY_THRESHOLD} with student ${vectors[j].studentId}`,
-          createdAt: new Date(),
+          timestamp: new Date(),
         };
         const flagB = {
-          event:     'SIMILARITY_FLAG',
+          type:      'SIMILARITY_FLAG',
           detail:    `Cosine similarity ${simRounded} >= threshold ${SIMILARITY_THRESHOLD} with student ${vectors[i].studentId}`,
-          createdAt: new Date(),
+          timestamp: new Date(),
         };
 
         // Append flags — non-blocking, fire-and-forget per pair

@@ -127,9 +127,10 @@ const examSessionSchema = new mongoose.Schema(
     completedAt:  { type: Date },
     scheduleRef:  { type: mongoose.Schema.Types.ObjectId, ref: 'StudentSchedule' },
 
-    // Audit: reason required when cancelling/postponing
+    // Audit: reason required when cancelling/postponing/rescheduling
     cancellationReason: { type: String },
     postponeReason:     { type: String },
+    rescheduleReason:   { type: String },
 
     isDeleted: { type: Boolean, default: false },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },

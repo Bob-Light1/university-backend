@@ -37,13 +37,19 @@ const submitAppeal = async (req, res) => {
       return sendError(res, 400, 'reason must be at least 20 characters.');
     }
 
-    const grading = await repo.findGradingById(gradingId);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const grading = await repo.findGradingById({ _id: gradingId, ...campusFilter });
     if (!grading) return sendNotFound(res, 'Grading');
     if (grading.status !== 'PUBLISHED') {
       return sendError(res, 400, 'Appeals can only be filed on PUBLISHED grades.');
     }
     if (grading.student.toString() !== req.user.id) {
       return sendError(res, 403, 'You can only appeal your own grade.');
+    }
+    if (!grading.publishedAt) {
+      return sendError(res, 400, 'This grade has no publication date; appeal window cannot be determined.');
     }
 
     // Compute deadline
@@ -91,6 +97,9 @@ const listAppeals = async (req, res) => {
     const { page, limit, skip } = parsePagination(req.query);
     const match = { ...campusFilter, isDeleted: false };
     if (req.query.status) match.status = req.query.status;
+
+    // Students see only their own appeals
+    if (req.user.role === 'STUDENT') match.student = req.user.id;
 
     const { docs: appeals, total } = await repo.paginateAppeals(match, { skip, limit });
 
@@ -150,9 +159,8 @@ const resolveAppeal = async (req, res) => {
       return sendError(res, 400, "decision must be 'RESOLVED' or 'REJECTED'.");
     }
     if (!resolution) return sendError(res, 400, 'resolution is required.');
-    if (decision === 'RESOLVED' && newScore == null) {
-      return sendError(res, 400, 'newScore is required when resolving an appeal.');
-    }
+    // newScore is optional on RESOLVED: an appeal can be upheld without changing
+    // the score. When provided, it is propagated to the grading's finalScore.
 
     const campusFilter = getCampusFilter(req, res);
     if (!campusFilter) return;

@@ -37,13 +37,20 @@ const campusOverview = async (req, res) => {
     const aggFilter = castForAggregation(campusFilter);
     const { academicYear, semester, examPeriod } = req.query;
 
-    const sessionMatch = { ...aggFilter, isDeleted: false, status: 'COMPLETED' };
-    if (academicYear) sessionMatch.academicYear = academicYear;
-    if (semester)     sessionMatch.semester     = semester;
-    if (examPeriod)   sessionMatch.examPeriod   = examPeriod;
+    // Published-grading match for the campus. When period filters are supplied,
+    // restrict to the sessions matching them (gradings don't carry these fields).
+    const gradingMatch = { ...aggFilter, status: 'PUBLISHED', isDeleted: false };
+    if (academicYear || semester || examPeriod) {
+      const sessionFilter = { ...campusFilter, isDeleted: false };
+      if (academicYear) sessionFilter.academicYear = academicYear;
+      if (semester)     sessionFilter.semester     = semester;
+      if (examPeriod)   sessionFilter.examPeriod    = examPeriod;
+      const sessionIds = await repo.distinctSessionIds(sessionFilter);
+      gradingMatch.examSession = { $in: sessionIds };
+    }
 
     // Aggregate published gradings for this campus
-    const gradingStats = await repo.aggregateCampusGradingStats({ ...aggFilter, status: 'PUBLISHED', isDeleted: false });
+    const gradingStats = await repo.aggregateCampusGradingStats(gradingMatch);
 
     const [totalSessions, ongoingSessions, snapshotCount] = await Promise.all([
       repo.countExamSessions({ ...campusFilter, isDeleted: false }),

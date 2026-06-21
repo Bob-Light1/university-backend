@@ -63,6 +63,12 @@ const listGradings = async (req, res) => {
       match.$or = [{ grader: req.user.id }, { secondGrader: req.user.id }];
     }
 
+    // Students see only their own PUBLISHED gradings (results view)
+    if (req.user.role === 'STUDENT') {
+      match.student = req.user.id;
+      match.status  = 'PUBLISHED';
+    }
+
     const { docs: gradings, total } = await repo.paginateGradings(match, { skip, limit });
 
     return sendPaginated(res, 200, 'Gradings retrieved.', gradings, { total, page, limit });
@@ -118,6 +124,16 @@ const gradingQueue = async (req, res) => {
     const session = await repo.findSessionByFilter({ _id: sessionId, ...campusFilter, isDeleted: false });
     if (!session) return sendNotFound(res, 'Exam session');
 
+    // Teachers may only access the grading queue of sessions they own or invigilate.
+    if (req.user.role === 'TEACHER') {
+      const isAssigned =
+        session.teacher?.toString() === req.user.id ||
+        (session.invigilators || []).some((t) => t.toString() === req.user.id);
+      if (!isAssigned) {
+        return sendError(res, 403, 'You are not assigned to this exam session.');
+      }
+    }
+
     const { page, limit, skip } = parsePagination(req.query);
 
     const match = {
@@ -125,12 +141,6 @@ const gradingQueue = async (req, res) => {
       status:      { $in: ['SUBMITTED'] },
       isDeleted:   false,
     };
-
-    // Teachers see only submissions assigned to them via existing ExamGrading entries
-    if (req.user.role === 'TEACHER') {
-      const assigned = await repo.distinctGradedSubmissions(sessionId, req.user.id);
-      match._id = { $in: assigned };
-    }
 
     const { docs: submissions, total } = await repo.paginateSubmissions(match, { skip, limit });
 
@@ -167,6 +177,16 @@ const gradeSubmission = async (req, res) => {
       isDeleted: false,
     });
     if (!session) return sendNotFound(res, 'Exam session');
+
+    // Teachers may only grade submissions of sessions they own or invigilate.
+    if (req.user.role === 'TEACHER') {
+      const isAssigned =
+        session.teacher?.toString() === req.user.id ||
+        (session.invigilators || []).some((t) => t.toString() === req.user.id);
+      if (!isAssigned) {
+        return sendError(res, 403, 'You are not assigned to this exam session.');
+      }
+    }
 
     if (score < 0 || score > session.maxScore) {
       return sendError(res, 400, `Score must be between 0 and ${session.maxScore}.`);
@@ -220,10 +240,22 @@ const updateGrading = async (req, res) => {
     const { id } = req.params;
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid grading ID.');
 
-    const grading = await repo.findGradingById(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const grading = await repo.findGradingById({ _id: id, ...campusFilter });
     if (!grading) return sendNotFound(res, 'Grading');
     if (grading.status === 'PUBLISHED') {
       return sendError(res, 400, 'Published gradings cannot be modified.');
+    }
+
+    // Teachers may only edit gradings they are assigned to.
+    if (
+      req.user.role === 'TEACHER' &&
+      grading.grader?.toString() !== req.user.id &&
+      grading.secondGrader?.toString() !== req.user.id
+    ) {
+      return sendError(res, 403, 'You can only edit gradings assigned to you.');
     }
 
     const ALLOWED = ['score', 'rubricScores', 'annotations', 'graderFeedback'];
@@ -250,7 +282,10 @@ const assignSecondGrader = async (req, res) => {
     const { teacherId } = req.body;
     if (!isValidObjectId(teacherId)) return sendError(res, 400, 'Valid teacherId is required.');
 
-    const grading = await repo.findGradingById(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const grading = await repo.findGradingById({ _id: id, ...campusFilter });
     if (!grading) return sendNotFound(res, 'Grading');
     if (!['GRADED'].includes(grading.status)) {
       return sendError(res, 400, 'Second grader can only be assigned to GRADED entries.');
@@ -278,10 +313,16 @@ const submitSecondGrade = async (req, res) => {
     const { secondScore } = req.body;
     if (secondScore == null) return sendError(res, 400, 'secondScore is required.');
 
-    const grading = await repo.findGradingById(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const grading = await repo.findGradingById({ _id: id, ...campusFilter });
     if (!grading) return sendNotFound(res, 'Grading');
     if (grading.status !== 'GRADED') {
       return sendError(res, 400, 'Only GRADED entries accept a second score.');
+    }
+    if (secondScore < 0 || secondScore > grading.maxScore) {
+      return sendError(res, 400, `secondScore must be between 0 and ${grading.maxScore}.`);
     }
     if (grading.secondGrader?.toString() !== req.user.id && !isManagerRole(req.user.role)) {
       return sendError(res, 403, 'Only the assigned second grader can submit a second score.');
@@ -311,10 +352,16 @@ const mediate = async (req, res) => {
     const { mediatorScore } = req.body;
     if (mediatorScore == null) return sendError(res, 400, 'mediatorScore is required.');
 
-    const grading = await repo.findGradingById(id);
+    const campusFilter = getCampusFilter(req, res);
+    if (!campusFilter) return;
+
+    const grading = await repo.findGradingById({ _id: id, ...campusFilter });
     if (!grading) return sendNotFound(res, 'Grading');
     if (!grading.needsMediation) {
       return sendError(res, 400, 'This grading does not require mediation.');
+    }
+    if (mediatorScore < 0 || mediatorScore > grading.maxScore) {
+      return sendError(res, 400, `mediatorScore must be between 0 and ${grading.maxScore}.`);
     }
 
     const updated = await repo.updateGradingById(
