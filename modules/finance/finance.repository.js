@@ -17,6 +17,12 @@ const ExpenseCategory = require('./models/expense-category.model');
 const StudentFee      = require('./models/studentFee.model');
 const FeePayment      = require('./models/feePayment.model');
 
+// Populated projections kept minimal: the list/detail views only need the
+// student's display identity and the expense category name. Defined once so
+// every read stays consistent (and cheap).
+const STUDENT_FIELDS  = 'firstName lastName matricule';
+const CATEGORY_FIELDS = 'name';
+
 // ── Income ────────────────────────────────────────────────────────────────────
 
 /**
@@ -31,15 +37,17 @@ const countByCampusAndStatus = (campusId, status) =>
 /** Creates an income record. @returns {Promise<Object>} */
 const createIncome = (doc) => Income.create(doc);
 
-/** Income by id (not deleted), lean. */
+/** Income by id (not deleted), lean — student identity populated for the detail view. */
 const findIncomeById = (id, extra = {}) =>
-  Income.findOne({ _id: id, isDeleted: false, ...extra }).lean();
+  Income.findOne({ _id: id, isDeleted: false, ...extra })
+    .populate('student', STUDENT_FIELDS)
+    .lean();
 
 /** Paginated incomes by filter (already campus-scoped by the caller). */
 const paginateIncomes = async ({ filter, skip, limit, sort = { incomeDate: -1 } }) => {
   const query = { isDeleted: false, ...filter };
   const [data, total] = await Promise.all([
-    Income.find(query).sort(sort).skip(skip).limit(limit).lean(),
+    Income.find(query).populate('student', STUDENT_FIELDS).sort(sort).skip(skip).limit(limit).lean(),
     Income.countDocuments(query),
   ]);
   return { data, total };
@@ -69,9 +77,11 @@ const sumIncomes = (match) =>
 /** Creates an expense record. @returns {Promise<Object>} */
 const createExpense = (doc) => Expense.create(doc);
 
-/** Expense by id (not deleted), lean. */
+/** Expense by id (not deleted), lean — category name populated for display. */
 const findExpenseById = (id, extra = {}) =>
-  Expense.findOne({ _id: id, isDeleted: false, ...extra }).lean();
+  Expense.findOne({ _id: id, isDeleted: false, ...extra })
+    .populate('expenseCategory', CATEGORY_FIELDS)
+    .lean();
 
 /** Mongoose document of an expense (for mutation via save()). */
 const getExpenseDoc = (id, extra = {}) =>
@@ -81,7 +91,7 @@ const getExpenseDoc = (id, extra = {}) =>
 const paginateExpenses = async ({ filter, skip, limit, sort = { expenseDate: -1 } }) => {
   const query = { isDeleted: false, ...filter };
   const [data, total] = await Promise.all([
-    Expense.find(query).sort(sort).skip(skip).limit(limit).lean(),
+    Expense.find(query).populate('expenseCategory', CATEGORY_FIELDS).sort(sort).skip(skip).limit(limit).lean(),
     Expense.countDocuments(query),
   ]);
   return { data, total };
@@ -151,7 +161,9 @@ const countOutstandingFeesByCampus = (campusId) =>
 
 /** Debt by id (filtered not-deleted), lean enriched with the `balance` virtual. */
 const findFeeById = (id, extra = {}) =>
-  StudentFee.findOne({ _id: id, isDeleted: false, ...extra }).lean({ virtuals: true });
+  StudentFee.findOne({ _id: id, isDeleted: false, ...extra })
+    .populate('student', STUDENT_FIELDS)
+    .lean({ virtuals: true });
 
 /** Mongoose document of a debt (for mutation via save()). */
 const getFeeDoc = (id, extra = {}) =>
@@ -164,7 +176,7 @@ const getFeeDoc = (id, extra = {}) =>
 const paginateFees = async ({ filter, skip, limit, sort = { createdAt: -1 } }) => {
   const query = { isDeleted: false, ...filter };
   const [data, total] = await Promise.all([
-    StudentFee.find(query).sort(sort).skip(skip).limit(limit).lean({ virtuals: true }),
+    StudentFee.find(query).populate('student', STUDENT_FIELDS).sort(sort).skip(skip).limit(limit).lean({ virtuals: true }),
     StudentFee.countDocuments(query),
   ]);
   return { data, total };

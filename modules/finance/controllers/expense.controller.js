@@ -20,6 +20,7 @@ const {
   sendForbidden,
   sendConflict,
   sendPaginated,
+  handleDuplicateKeyError,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId, buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 
@@ -127,6 +128,7 @@ const createExpense = asyncHandler(async (req, res) => {
     return sendCreated(res, 'Expense created', expense);
   } catch (err) {
     if (err.code === 'INVALID') return sendError(res, 400, err.message);
+    if (err.code === 11000) return handleDuplicateKeyError(res, err);
     throw err;
   }
 });
@@ -189,6 +191,7 @@ const updateExpense = asyncHandler(async (req, res) => {
   } catch (err) {
     if (err.code === 'INVALID') return sendError(res, 400, err.message);
     if (err.code === 'LOCKED') return sendError(res, 409, err.message);
+    if (err.code === 11000) return handleDuplicateKeyError(res, err);
     throw err;
   }
 });

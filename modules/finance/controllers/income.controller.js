@@ -17,6 +17,7 @@ const {
   sendNotFound,
   sendForbidden,
   sendPaginated,
+  handleDuplicateKeyError,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId, buildCampusFilter } = require('../../../shared/utils/validation-helpers');
 
@@ -79,27 +80,32 @@ const createIncome = asyncHandler(async (req, res) => {
   const schoolCampus = resolveCreateCampus(req, res);
   if (schoolCampus === null) return undefined;
 
-  const income = await service.createIncome({
-    title: String(title).trim(),
-    description,
-    reference: reference || undefined,
-    source,
-    amount: Number(amount),
-    currency,
-    paymentMethod,
-    incomeDate,
-    receivedAt: receivedAt || undefined,
-    student: student || undefined,
-    class: klass || undefined,
-    course: course || undefined,
-    schoolCampus,
-    status,
-    attachments: Array.isArray(attachments) ? attachments : undefined,
-    notes,
-    receivedBy: req.user.id,
-  });
-
-  return sendCreated(res, 'Income created', income);
+  try {
+    const income = await service.createIncome({
+      title: String(title).trim(),
+      description,
+      reference: reference || undefined,
+      source,
+      amount: Number(amount),
+      currency,
+      paymentMethod,
+      incomeDate,
+      receivedAt: receivedAt || undefined,
+      student: student || undefined,
+      class: klass || undefined,
+      course: course || undefined,
+      schoolCampus,
+      status,
+      attachments: Array.isArray(attachments) ? attachments : undefined,
+      notes,
+      receivedBy: req.user.id,
+    });
+    return sendCreated(res, 'Income created', income);
+  } catch (err) {
+    if (err.code === 'INVALID') return sendError(res, 400, err.message);
+    if (err.code === 11000) return handleDuplicateKeyError(res, err);
+    throw err;
+  }
 });
 
 const listIncomes = asyncHandler(async (req, res) => {
@@ -151,9 +157,15 @@ const updateIncome = asyncHandler(async (req, res) => {
   }
   if (Object.keys(updates).length === 0) return sendError(res, 400, 'No updatable field provided');
 
-  const income = await service.updateIncome(req.params.id, updates, scope);
-  if (!income) return sendNotFound(res, 'Income');
-  return sendSuccess(res, 200, 'Income updated', income);
+  try {
+    const income = await service.updateIncome(req.params.id, updates, scope);
+    if (!income) return sendNotFound(res, 'Income');
+    return sendSuccess(res, 200, 'Income updated', income);
+  } catch (err) {
+    if (err.code === 'INVALID') return sendError(res, 400, err.message);
+    if (err.code === 11000) return handleDuplicateKeyError(res, err);
+    throw err;
+  }
 });
 
 const deleteIncome = asyncHandler(async (req, res) => {

@@ -11,7 +11,12 @@ jest.mock('../../modules/notification', () => ({
   service: { notify: jest.fn().mockResolvedValue([]) },
 }));
 jest.mock('../../modules/student', () => ({
-  service: { getStudentContact: jest.fn().mockResolvedValue({ email: 'stud@example.test' }) },
+  service: {
+    getStudentContact: jest.fn().mockResolvedValue({ email: 'stud@example.test' }),
+    // Campus-membership guard for createFee — default to a match so the happy
+    // paths create normally; individual tests override to simulate a miss.
+    getStudentNamesByIds: jest.fn().mockResolvedValue([{ _id: 'stud-1' }]),
+  },
 }));
 jest.mock('../../modules/settings', () => ({
   service: { getPreferredLanguage: jest.fn().mockResolvedValue('fr') },
@@ -19,6 +24,7 @@ jest.mock('../../modules/settings', () => ({
 
 const repo = require('../../modules/finance/finance.repository');
 const { service: notification } = require('../../modules/notification');
+const { service: studentService } = require('../../modules/student');
 const finance = require('../../modules/finance/finance.service');
 
 // The balance notification is fire-and-forget + resolves the contact first (await):
@@ -77,6 +83,15 @@ describe('createFee', () => {
     notification.notify.mockRejectedValueOnce(new Error('SMTP down'));
     await expect(finance.createFee({ student: 's', schoolCampus: 'c', label: 'x', amountDue: 100 }))
       .resolves.toBeDefined();
+  });
+
+  test('rejette (INVALID) un étudiant absent du campus de la dette', async () => {
+    // No student matches the campus → cross-campus / unknown student.
+    studentService.getStudentNamesByIds.mockResolvedValueOnce([]);
+    await expect(
+      finance.createFee({ student: 'other', schoolCampus: 'camp-1', label: 'x', amountDue: 100 }),
+    ).rejects.toMatchObject({ code: 'INVALID' });
+    expect(repo.createFee).not.toHaveBeenCalled();
   });
 });
 

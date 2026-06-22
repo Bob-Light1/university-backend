@@ -43,15 +43,19 @@ function countOutstandingFees(campusId) {
 async function notifyBalanceDue(fee) {
   const balance = fee.balance ?? Math.max(0, (fee.amountDue || 0) - (fee.amountPaid || 0));
   if (balance <= 0) return;
+  // `fee.student` may be a raw ObjectId (create/payment paths) or a populated
+  // object (detail/reminder reads). Resolve the bare id either way so the
+  // facades and the notification recipient always receive a plain id.
+  const studentId = fee.student?._id ?? fee.student;
   try {
     // Contact + language via the facades (finance does not touch the Student model;
     // language from UserPreferences, single source).
     const [contact, locale] = await Promise.all([
-      require('../student').service.getStudentContact(fee.student),
-      require('../settings').service.getPreferredLanguage(fee.student),
+      require('../student').service.getStudentContact(studentId),
+      require('../settings').service.getPreferredLanguage(studentId),
     ]);
     await notification.notify({
-      recipient: { id: fee.student, model: 'Student', campusId: fee.schoolCampus, email: contact?.email },
+      recipient: { id: studentId, model: 'Student', campusId: fee.schoolCampus, email: contact?.email },
       channels: ['inapp', 'email'], // email inert without SMTP → skipped
       template: 'payment.reminder',
       locale,
@@ -72,6 +76,21 @@ async function notifyBalanceDue(fee) {
  * @returns {Promise<Object>} the created debt (lean + balance)
  */
 async function createFee(input) {
+  // Cross-document guard (campus isolation): the debt's student must exist AND
+  // belong to the debt's campus. getStudentNamesByIds filters by campus, so an
+  // empty result means "unknown student" or "student in another campus" — both
+  // rejected here rather than silently creating an orphan/cross-campus debt.
+  const [match] = await require('../student').service.getStudentNamesByIds(
+    [input.student],
+    input.schoolCampus,
+  );
+  if (!match) {
+    throw Object.assign(
+      new Error('Student not found in this campus'),
+      { code: 'INVALID' },
+    );
+  }
+
   const doc = await financeRepo.createFee(input);
   const fee = doc.toObject({ virtuals: true });
   notifyBalanceDue(fee);
@@ -136,9 +155,20 @@ async function recordPayment({ feeId, amount, method, reference, paidAt, notes, 
       recordedBy,
     });
   } catch (err) {
-    // Payment line creation failed (e.g. duplicate reference): roll back the
-    // increment so the debt total stays consistent.
+    // Payment line creation failed (e.g. duplicate reference, invalid method):
+    // roll back the increment so the debt total stays consistent.
     await financeRepo.incrementAmountPaidGuarded(updatedFee._id, -value).catch(() => {});
+    // Surface client-fixable errors (validation / duplicate receipt #) as a clean
+    // 400 instead of a 500.
+    if (err.name === 'ValidationError') {
+      throw Object.assign(new Error(err.message), { code: 'INVALID' });
+    }
+    if (err.code === 11000) {
+      throw Object.assign(
+        new Error('A payment with this reference already exists'),
+        { code: 'INVALID' },
+      );
+    }
     throw err;
   }
 

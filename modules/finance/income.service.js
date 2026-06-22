@@ -16,6 +16,23 @@ const financeRepo = require('./finance.repository');
  * @returns {Promise<Object>} the created income (lean)
  */
 async function createIncome(input) {
+  // Cross-document guard (campus isolation): when an income is linked to a
+  // student, that student must belong to the income's campus. Skipped when no
+  // student link, or when the campus is unresolved (global role without a
+  // campus override) — there is no campus to check against in that case.
+  if (input.student && input.schoolCampus) {
+    const [match] = await require('../student').service.getStudentNamesByIds(
+      [input.student],
+      input.schoolCampus,
+    );
+    if (!match) {
+      throw Object.assign(
+        new Error('Student not found in this campus'),
+        { code: 'INVALID' },
+      );
+    }
+  }
+
   const doc = await financeRepo.createIncome(input);
   return doc.toObject();
 }
@@ -38,6 +55,19 @@ function getIncome(id, scope = {}) {
 async function updateIncome(id, updates, scope = {}) {
   const doc = await financeRepo.getIncomeDoc(id, scope);
   if (!doc) return null;
+  // A re-linked student must still belong to the income's (immutable) campus.
+  if (updates.student && doc.schoolCampus && String(updates.student) !== String(doc.student || '')) {
+    const [match] = await require('../student').service.getStudentNamesByIds(
+      [updates.student],
+      doc.schoolCampus,
+    );
+    if (!match) {
+      throw Object.assign(
+        new Error('Student not found in this campus'),
+        { code: 'INVALID' },
+      );
+    }
+  }
   Object.assign(doc, updates);
   await doc.save();
   return doc.toObject();

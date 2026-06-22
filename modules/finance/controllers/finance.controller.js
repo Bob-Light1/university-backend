@@ -62,19 +62,23 @@ const createFee = asyncHandler(async (req, res) => {
     if (!isValidObjectId(String(schoolCampus))) return sendForbidden(res, 'No campus bound to your account');
   }
 
-  const fee = await service.createFee({
-    student,
-    schoolCampus,
-    label: String(label).trim(),
-    academicYear,
-    amountDue: Number(amountDue),
-    currency,
-    dueDate: dueDate || null,
-    notes,
-    createdBy: req.user.id,
-  });
-
-  return sendCreated(res, 'Fee created', fee);
+  try {
+    const fee = await service.createFee({
+      student,
+      schoolCampus,
+      label: String(label).trim(),
+      academicYear,
+      amountDue: Number(amountDue),
+      currency,
+      dueDate: dueDate || null,
+      notes,
+      createdBy: req.user.id,
+    });
+    return sendCreated(res, 'Fee created', fee);
+  } catch (err) {
+    if (err.code === 'INVALID') return sendError(res, 400, err.message);
+    throw err;
+  }
 });
 
 const listFees = asyncHandler(async (req, res) => {
