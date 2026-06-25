@@ -55,7 +55,10 @@ async function notifyBalanceDue(fee) {
       require('../settings').service.getPreferredLanguage(studentId),
     ]);
     await notification.notify({
-      recipient: { id: studentId, model: 'Student', campusId: fee.schoolCampus, email: contact?.email },
+      recipient: {
+        id: studentId, model: 'Student', campusId: fee.schoolCampus,
+        email: contact?.email, prefs: contact?.notificationPrefs,
+      },
       channels: ['inapp', 'email'], // email inert without SMTP → skipped
       template: 'payment.reminder',
       locale,

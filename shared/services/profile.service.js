@@ -193,7 +193,7 @@ const uploadProfileImage = async (res, Model, filter, body) => {
 
 /**
  * Updates notificationPrefs sub-document.
- * Body: { email?: boolean, sms?: boolean, push?: boolean }
+ * Body: { email?: boolean, whatsapp?: boolean }  (inapp is always on, not writable)
  *
  * @param {Model}  Model  - Mongoose model
  * @param {Object} filter - MongoDB filter
@@ -201,15 +201,16 @@ const uploadProfileImage = async (res, Model, filter, body) => {
  */
 const updateNotifications = async (res, Model, filter, body) => {
   try {
-    const { email, sms, push } = body;
+    const { email, whatsapp } = body;
 
+    // `inapp` is the baseline inbox (always on) and is intentionally NOT writable
+    // here — only the external channels can be opted in/out of.
     const updates = {};
-    if (email !== undefined) updates['notificationPrefs.email'] = Boolean(email);
-    if (sms   !== undefined) updates['notificationPrefs.sms']   = Boolean(sms);
-    if (push  !== undefined) updates['notificationPrefs.push']  = Boolean(push);
+    if (email    !== undefined) updates['notificationPrefs.email']    = Boolean(email);
+    if (whatsapp !== undefined) updates['notificationPrefs.whatsapp'] = Boolean(whatsapp);
 
     if (Object.keys(updates).length === 0) {
-      return sendError(res, 400, 'Provide at least one preference: email, sms, push.');
+      return sendError(res, 400, 'Provide at least one preference: email, whatsapp.');
     }
 
     const doc = await Model.findOneAndUpdate(

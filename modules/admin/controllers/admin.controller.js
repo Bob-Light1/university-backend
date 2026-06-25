@@ -82,7 +82,7 @@ const buildUserResponse = (admin) => ({
   role:              admin.role,
   status:            admin.status,
   profileImage:      admin.profileImage      ?? null,
-  notificationPrefs: admin.notificationPrefs ?? { email: true, sms: false, push: false },
+  notificationPrefs: admin.notificationPrefs ?? { inapp: true, email: true, whatsapp: false },
   lastLogin:         admin.lastLogin         ?? null,
 });
 
@@ -344,7 +344,7 @@ const uploadProfileImage = (req, res) =>
 
 /**
  * PATCH /api/admin/me/notifications
- * Body: { email?: boolean, sms?: boolean, push?: boolean }
+ * Body: { email?: boolean, whatsapp?: boolean }  (inapp is always on, not writable)
  */
 const updateMyNotifications = (req, res) =>
   profileSvc.updateNotifications(res, Admin, { _id: req.user.id }, req.body);

@@ -126,10 +126,10 @@ const getStudentNamesByIds = (studentIds, campusId) =>
     .select('firstName lastName matricule')
     .lean();
 
-/** Notification contact details (email/phone) of a batch of students. */
+/** Notification contact details (email/phone/first name/prefs) of a batch of students. */
 const getStudentContactsByIds = (studentIds) =>
   Student.find({ _id: { $in: studentIds } })
-    .select('email phone')
+    .select('email phone firstName notificationPrefs')
     .lean();
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -168,7 +168,7 @@ const runValidation = (body, isCreate) => {
     if (typeof prefs !== 'object' || Array.isArray(prefs)) {
       errors.push({ field: 'notificationPrefs', message: 'notificationPrefs must be an object.' });
     } else {
-      ['email', 'sms', 'push'].forEach((key) => {
+      ['inapp', 'email', 'whatsapp'].forEach((key) => {
         if (key in prefs && typeof prefs[key] !== 'boolean') {
           errors.push({ field: `notificationPrefs.${key}`, message: `notificationPrefs.${key} must be a boolean.` });
         }
@@ -255,7 +255,7 @@ const validateUpdateProfile = (req, res, next) => {
     if (typeof notificationPrefs !== 'object' || Array.isArray(notificationPrefs)) {
       errors.push({ field: 'notificationPrefs', message: 'notificationPrefs must be an object.' });
     } else {
-      ['email', 'sms', 'push'].forEach((key) => {
+      ['inapp', 'email', 'whatsapp'].forEach((key) => {
         if (key in notificationPrefs && typeof notificationPrefs[key] !== 'boolean') {
           errors.push({ field: `notificationPrefs.${key}`, message: `notificationPrefs.${key} must be a boolean.` });
         }

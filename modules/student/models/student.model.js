@@ -2,9 +2,9 @@ const mongoose = require('mongoose');
 
 const NotificationPrefsSchema = new mongoose.Schema(
   {
-    email: { type: Boolean, default: true  },
-    sms:   { type: Boolean, default: false },
-    push:  { type: Boolean, default: false },
+    inapp:    { type: Boolean, default: true  }, // baseline inbox — always on, not user-disableable
+    email:    { type: Boolean, default: true  },
+    whatsapp: { type: Boolean, default: false },
   },
   { _id: false }
 );
@@ -167,7 +167,7 @@ const studentSchema = new mongoose.Schema(
     // **NOTIFICATION PREFERENCES**
     notificationPrefs: {
       type:    NotificationPrefsSchema,
-      default: () => ({ email: true, sms: false, push: false }),
+      default: () => ({ inapp: true, email: true, whatsapp: false }),
     },
 
     // **PRINT / ID CARD**

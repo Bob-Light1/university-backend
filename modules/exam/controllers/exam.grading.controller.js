@@ -35,12 +35,12 @@ const notification = require('../../notification').service;
 
 // Notifies a student that their exam grade has been published (in-app, best-effort:
 // never fails the publication — same contract as the result.published event).
-const notifyExamGraded = (studentId, campusId, email, locale) =>
+const notifyExamGraded = (studentId, campusId, email, locale, name, prefs) =>
   notification.notify({
-    recipient: { id: studentId, model: 'Student', campusId, email },
-    channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
+    recipient: { id: studentId, model: 'Student', campusId, email, prefs },
+    channels: ['inapp', 'email'], // email inert without SMTP → skipped
     template: 'exam.graded',
-    data: {},
+    data: { name: name || '' },
     locale,
   }).catch((err) => console.error('[notify] exam.graded failed:', err.message));
 
@@ -408,6 +408,8 @@ const publishGrades = async (req, res) => {
     // (best-effort; locale from UserPreferences, single source of truth).
     const studentIds = recipients.map((g) => g.student);
     let emailByStudent = new Map();
+    let nameByStudent = new Map();
+    let prefsByStudent = new Map();
     let localeByStudent = new Map();
     try {
       const [contacts, locales] = await Promise.all([
@@ -415,6 +417,8 @@ const publishGrades = async (req, res) => {
         require('../../settings').service.getPreferredLanguages(studentIds),
       ]);
       emailByStudent = new Map(contacts.map((c) => [String(c._id), c.email]));
+      nameByStudent  = new Map(contacts.map((c) => [String(c._id), c.firstName]));
+      prefsByStudent = new Map(contacts.map((c) => [String(c._id), c.notificationPrefs]));
       localeByStudent = locales;
     } catch (err) {
       console.error('[notify] exam.graded contact/locale lookup failed:', err.message);
@@ -424,6 +428,8 @@ const publishGrades = async (req, res) => {
       g.schoolCampus,
       emailByStudent.get(String(g.student)),
       localeByStudent.get(String(g.student)),
+      nameByStudent.get(String(g.student)),
+      prefsByStudent.get(String(g.student)),
     ));
 
     return sendSuccess(res, 200, `${result.modifiedCount} grade(s) published.`, {

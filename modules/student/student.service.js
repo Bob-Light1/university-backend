@@ -254,17 +254,18 @@ const getStudentNamesByIds = (studentIds, campusId) =>
   studentRepo.getStudentNamesByIds(studentIds, campusId);
 
 /**
- * Notification contact details of a batch of students (email/phone).
- * Consumed by notification emitters (result/exam) to enable the
- * email channel without them touching the Student model.
- * @returns {Promise<Array<{_id, email, phone}>>}
+ * Notification contact details of a batch of students (email/phone/prefs).
+ * Consumed by notification emitters (result/exam) to enable the external
+ * channels AND honour the student's notification preferences, without them
+ * touching the Student model.
+ * @returns {Promise<Array<{_id, email, phone, firstName, notificationPrefs}>>}
  */
 const getStudentContacts = (studentIds) =>
   studentRepo.getStudentContactsByIds(studentIds);
 
 /**
  * Contact details of a single student (convenience for unit emitters).
- * @returns {Promise<{_id, email, phone}|null>}
+ * @returns {Promise<{_id, email, phone, firstName, notificationPrefs}|null>}
  */
 const getStudentContact = async (studentId) => {
   const [contact] = await studentRepo.getStudentContactsByIds([studentId]);

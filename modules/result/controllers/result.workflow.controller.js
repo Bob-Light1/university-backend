@@ -50,10 +50,13 @@ const notifyResultPublished = async (studentId, campusId) => {
       require('../../settings').service.getPreferredLanguage(studentId),
     ]);
     await notification.notify({
-      recipient: { id: studentId, model: 'Student', campusId, email: contact?.email },
-      channels: ['inapp', 'email'], // email inerte sans SMTP → skipped
+      recipient: {
+        id: studentId, model: 'Student', campusId,
+        email: contact?.email, prefs: contact?.notificationPrefs,
+      },
+      channels: ['inapp', 'email'], // email inert without SMTP → skipped
       template: 'result.published',
-      data: {},
+      data: { name: contact?.firstName || '' },
       locale,
     });
   } catch (err) {

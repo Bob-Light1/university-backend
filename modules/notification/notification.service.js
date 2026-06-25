@@ -35,7 +35,10 @@ const contactFor = (channel, recipient) => {
  * Sends a multi-channel notification to a recipient.
  *
  * @param {Object} params
- * @param {Object} params.recipient   { id, model, email?, phone?, campusId?, locale? }
+ * @param {Object} params.recipient   { id, model, email?, phone?, campusId?, locale?, prefs? }
+ *   `prefs` ({ inapp, email, whatsapp }) — when supplied, external channels the
+ *   recipient opted out of are dropped (in-app is never gated). Transactional
+ *   emitters omit it so their delivery is never suppressed.
  * @param {string[]} [params.channels] subset of ['inapp','email','whatsapp'] (default ['inapp'])
  * @param {string} params.template     template key (see templates/index.js)
  * @param {Object} [params.data]       render variables
@@ -51,9 +54,20 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
     throw new Error(`notify: unknown template '${template}'`);
   }
 
-  const requested = (Array.isArray(chans) && chans.length ? chans : ['inapp'])
+  let requested = (Array.isArray(chans) && chans.length ? chans : ['inapp'])
     .filter((c) => CHANNELS.includes(c));
   if (!requested.length) throw new Error('notify: no valid channel requested');
+
+  // Honour the recipient's notification preferences when the caller supplies them.
+  // Per the facade rule (§3) the foundation never queries the recipient's model —
+  // the emitter passes `prefs` in alongside the contact details. The in-app inbox
+  // is the baseline channel and is NEVER gated; only external channels (email /
+  // whatsapp) can be opted out of. Transactional emitters omit `prefs` on purpose.
+  const prefs = recipient.prefs;
+  if (prefs && typeof prefs === 'object') {
+    requested = requested.filter((c) => c === 'inapp' || prefs[c] !== false);
+    if (!requested.length) requested = ['inapp']; // always keep an inbox copy
+  }
 
   const useLocale = locale || recipient.locale || templates.DEFAULT_LOCALE;
   const maxAttempts = config.notification.maxAttempts;
@@ -138,29 +152,51 @@ const getLog = ({ campusFilter, channel, status, recipientId, search, page = 1, 
   return repo.paginateLog({ campusFilter, channel, status, recipientId, search, skip, limit });
 };
 
-/** Manually replays a send (admin). @returns {Promise<string>} resulting status */
+/**
+ * Manually replays a send (admin). Idempotent on terminal states: an already
+ * delivered (`sent`/`read`) row is NOT re-sent, preventing duplicate emails /
+ * WhatsApp messages from an accidental double click.
+ * @returns {Promise<string>} resulting status
+ */
 const retryOne = async (id) => {
   const doc = await repo.findById(id);
   if (!doc) throw new Error('Notification not found');
-  if (doc.channel === 'inapp') return 'sent';
+  if (doc.channel === 'inapp') return doc.status === 'read' ? 'read' : 'sent';
+  if (doc.status === 'sent' || doc.status === 'read') return doc.status;
   return deliver(doc);
 };
 
 // ── Cron: flush pending / recoverable-failure external sends ───────────────────
 
+// Re-entrancy guard: prevents a second invocation from replaying the same rows
+// when a batch outlasts the cron interval (node-cron does not serialize runs).
+// NOTE: this guards a single process only. Under horizontal scaling, several
+// instances can still claim the same rows — a DB-level atomic claim (cf. the
+// academic-print worker) would be required to make the retry multi-instance safe.
+let retryJobRunning = false;
+
 const runRetryJob = async () => {
-  const batch = await repo.findDeliverable(50);
-  let sent = 0, failed = 0, skipped = 0;
-  for (const doc of batch) {
-    const r = await deliver(doc);
-    if (r === 'sent') sent += 1;
-    else if (r === 'failed') failed += 1;
-    else skipped += 1;
+  if (retryJobRunning) {
+    console.warn('📨 [notifications] retry skipped: previous run still in progress');
+    return { processed: 0, sent: 0, failed: 0, skipped: 0, skippedRun: true };
   }
-  if (batch.length) {
-    console.log(`📨 [notifications] retry: ${sent} sent, ${failed} failed, ${skipped} skipped`);
+  retryJobRunning = true;
+  try {
+    const batch = await repo.findDeliverable(50);
+    let sent = 0, failed = 0, skipped = 0;
+    for (const doc of batch) {
+      const r = await deliver(doc);
+      if (r === 'sent') sent += 1;
+      else if (r === 'failed') failed += 1;
+      else skipped += 1;
+    }
+    if (batch.length) {
+      console.log(`📨 [notifications] retry: ${sent} sent, ${failed} failed, ${skipped} skipped`);
+    }
+    return { processed: batch.length, sent, failed, skipped };
+  } finally {
+    retryJobRunning = false;
   }
-  return { processed: batch.length, sent, failed, skipped };
 };
 
 module.exports = {
