@@ -39,24 +39,29 @@ beforeEach(() => {
 });
 
 describe('findByCodeAndType', () => {
-  test('filtre sur { code, type } et renvoie un objet simple', async () => {
-    await repo.findByCodeAndType('A1', 'LANGUAGE');
+  test('filtre sur { code, type } normalisés (trim + uppercase)', async () => {
+    await repo.findByCodeAndType(' a1 ', ' language ');
     expect(Level.findOne).toHaveBeenCalledWith({ code: 'A1', type: 'LANGUAGE' });
   });
 });
 
-describe('listActive', () => {
-  test('filtre status=active, tri order croissant', async () => {
+describe('list', () => {
+  test('filtre status=active par défaut, tri order croissant', async () => {
     const q = Level.find.getMockImplementation()();
     Level.find.mockReturnValueOnce(q);
-    await repo.listActive();
+    await repo.list();
     expect(Level.find).toHaveBeenCalledWith({ status: 'active' });
     expect(q.sort).toHaveBeenCalledWith({ order: 1 });
   });
 
   test('ajoute le filtre type quand fourni', async () => {
-    await repo.listActive({ type: 'ACADEMIC' });
+    await repo.list({ type: 'ACADEMIC' });
     expect(Level.find).toHaveBeenCalledWith({ status: 'active', type: 'ACADEMIC' });
+  });
+
+  test('inclut les archivés (pas de filtre status) quand includeArchived', async () => {
+    await repo.list({ includeArchived: true });
+    expect(Level.find).toHaveBeenCalledWith({});
   });
 });
 

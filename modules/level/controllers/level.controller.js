@@ -1,201 +1,201 @@
-const levelRepo = require("../level.repository");
+'use strict';
 
 /**
- * Create a new level
- * @route POST /api/levels
- * @access ADMIN / DIRECTOR
+ * @file level.controller.js — HTTP layer for the academic-level domain.
+ * @description CRUD + archive/restore for `Level` documents. Levels are a
+ * global (non campus-scoped) reference collection shared across all campuses,
+ * so no campus filter applies here. Persistence is delegated to the repository;
+ * this layer only handles input validation and response shaping.
  */
-exports.createLevel = async (req, res) => {
+
+const levelRepo = require('../level.repository');
+const {
+  sendSuccess,
+  sendCreated,
+  sendError,
+  sendNotFound,
+  sendConflict,
+  asyncHandler,
+  handleDuplicateKeyError,
+} = require('../../../shared/utils/response-helpers');
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
+
+const LEVEL_TYPES = ['LANGUAGE', 'ACADEMIC', 'PROFESSIONAL'];
+
+/**
+ * Parse and validate the `order` field.
+ * @returns {{ value: number } | { error: string }}
+ */
+const parseOrder = (raw) => {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) {
+    return { error: 'Order must be an integer greater than or equal to 1' };
+  }
+  return { value };
+};
+
+/**
+ * Create a new level.
+ * @route POST /api/level
+ * @access ADMIN / DIRECTOR / CAMPUS_MANAGER
+ */
+exports.createLevel = asyncHandler(async (req, res) => {
+  const { name, code, type, order, description } = req.body;
+
+  // Presence validation (the model enforces enums/required as last line of defense).
+  if (!name || !code || order === undefined || order === null || order === '') {
+    return sendError(res, 400, 'Name, code and order are required');
+  }
+  if (type !== undefined && !LEVEL_TYPES.includes(type)) {
+    return sendError(res, 400, 'Invalid level type');
+  }
+
+  const parsedOrder = parseOrder(order);
+  if (parsedOrder.error) return sendError(res, 400, parsedOrder.error);
+
+  const resolvedType = type || 'LANGUAGE';
+
+  // Pre-check uniqueness (code, type) for a clean 409 before hitting the index.
+  const exists = await levelRepo.findByCodeAndType(code, resolvedType);
+  if (exists) {
+    return sendConflict(res, 'A level with this code already exists for this type');
+  }
+
   try {
-    const { name, code, type, order, description } = req.body;
-
-    // Basic validation
-    if (!name || !code || !order) {
-      return res.status(400).json({
-        success: false,
-        message: "Name, code and order are required",
-      });
-    }
-
-    // Check for existing level with same code & type
-    const exists = await levelRepo.findByCodeAndType(code, type);
-    if (exists) {
-      return res.status(409).json({
-        success: false,
-        message: "A level with this code already exists",
-      });
-    }
-
     const level = await levelRepo.create({
       name,
       code,
-      type,
-      order,
+      type: resolvedType,
+      order: parsedOrder.value,
       description,
     });
-
-    res.status(201).json({
-      success: true,
-      data: level,
-    });
+    return sendCreated(res, 'Level created successfully', level);
   } catch (error) {
-    console.error("Create level error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to create level",
-    });
+    // Race condition or a stricter pre-existing index: surface as a 409.
+    if (error.code === 11000) return handleDuplicateKeyError(res, error);
+    throw error;
   }
-};
+});
 
 /**
- * Get all active levels
- * Supports filtering by type
- * @route GET /api/levels
+ * Get all levels, sorted by ascending order.
+ * Supports filtering by `type` and including archived levels.
+ * @route GET /api/level
  * @access AUTHENTICATED
  */
-exports.getLevels = async (req, res) => {
-  try {
-    const { type } = req.query;
+exports.getLevels = asyncHandler(async (req, res) => {
+  const { type, includeArchived } = req.query;
 
-    const levels = await levelRepo.listActive({ type });
-
-    res.status(200).json({
-      success: true,
-      count: levels.length,
-      data: levels,
-    });
-  } catch (error) {
-    console.error("Get levels error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch levels",
-    });
+  if (type !== undefined && !LEVEL_TYPES.includes(type)) {
+    return sendError(res, 400, 'Invalid level type');
   }
-};
+
+  const levels = await levelRepo.list({
+    type,
+    includeArchived: includeArchived === 'true' || includeArchived === true,
+  });
+
+  return sendSuccess(res, 200, 'Levels retrieved successfully', levels, {
+    count: levels.length,
+  });
+});
 
 /**
- * Get a single level by ID
- * @route GET /api/levels/:id
+ * Get a single level by ID.
+ * @route GET /api/level/:id
  * @access AUTHENTICATED
  */
-exports.getLevelById = async (req, res) => {
-  try {
-    const level = await levelRepo.findById(req.params.id);
+exports.getLevelById = asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return sendError(res, 400, 'Invalid level ID');
+  }
 
-    if (!level) {
-      return res.status(404).json({
-        success: false,
-        message: "Level not found",
-      });
+  const level = await levelRepo.findById(req.params.id);
+  if (!level) return sendNotFound(res, 'Level');
+
+  return sendSuccess(res, 200, 'Level retrieved successfully', level);
+});
+
+/**
+ * Update level information (partial update).
+ * @route PUT /api/level/update/:id
+ * @access ADMIN / DIRECTOR / CAMPUS_MANAGER
+ */
+exports.updateLevel = asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return sendError(res, 400, 'Invalid level ID');
+  }
+
+  const { name, code, type, order, description, status } = req.body;
+
+  // Build the set of fields actually provided (partial update semantics).
+  const fields = {};
+  if (name !== undefined) fields.name = name;
+  if (code !== undefined) fields.code = code;
+  if (type !== undefined) {
+    if (!LEVEL_TYPES.includes(type)) return sendError(res, 400, 'Invalid level type');
+    fields.type = type;
+  }
+  if (order !== undefined) {
+    const parsedOrder = parseOrder(order);
+    if (parsedOrder.error) return sendError(res, 400, parsedOrder.error);
+    fields.order = parsedOrder.value;
+  }
+  if (description !== undefined) fields.description = description;
+  if (status !== undefined) {
+    if (!['active', 'archived'].includes(status)) {
+      return sendError(res, 400, 'Invalid status');
     }
-
-    res.status(200).json({
-      success: true,
-      data: level,
-    });
-  } catch (error) {
-    console.error("Get level by ID error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch level",
-    });
+    fields.status = status;
   }
-};
 
-/**
- * Update level information
- * @route PUT /api/levels/:id
- * @access ADMIN / DIRECTOR
- */
-exports.updateLevel = async (req, res) => {
+  if (Object.keys(fields).length === 0) {
+    return sendError(res, 400, 'No valid fields provided for update');
+  }
+
   try {
-    const { name, code, type, order, description, status } = req.body;
-
-    // Build the set of fields actually provided (partial update semantics).
-    const fields = {};
-    if (name !== undefined) fields.name = name;
-    if (code !== undefined) fields.code = code;
-    if (type !== undefined) fields.type = type;
-    if (order !== undefined) fields.order = order;
-    if (description !== undefined) fields.description = description;
-    if (status !== undefined) fields.status = status;
-
     const level = await levelRepo.updateById(req.params.id, fields);
-    if (!level) {
-      return res.status(404).json({
-        success: false,
-        message: "Level not found",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: level,
-    });
+    if (!level) return sendNotFound(res, 'Level');
+    return sendSuccess(res, 200, 'Level updated successfully', level);
   } catch (error) {
-    console.error("Update level error:", error);
-
-    // Handle duplicate key error
-    if (error.code === 11000) {
-      return res.status(409).json({
-        success: false,
-        message: "Duplicate level code",
-      });
-    }
-
-    res.status(500).json({
-      success: false,
-      message: "Failed to update level",
-    });
+    if (error.code === 11000) return handleDuplicateKeyError(res, error);
+    throw error;
   }
-};
+});
 
 /**
- * Soft delete a level (archive)
- * @route DELETE /api/levels/:id
- * @access ADMIN / DIRECTOR
+ * Soft delete a level (archive).
+ * @route DELETE /api/level/delete/:id
+ * @access ADMIN / DIRECTOR / CAMPUS_MANAGER
  */
-exports.deleteLevel = async (req, res) => {
-  try {
-    const level = await levelRepo.setStatus(req.params.id, "archived");
-
-    if (!level) {
-      return res.status(404).json({
-        success: false,
-        message: "Level not found",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      message: "Level archived successfully",
-    });
-  } catch (error) {
-    console.error("Delete level error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Failed to delete level",
-    });
+exports.deleteLevel = asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return sendError(res, 400, 'Invalid level ID');
   }
-};
 
-exports.restoreLevel = async (req, res) => {
-  try {
-    const level = await levelRepo.findById(req.params.id);
+  const level = await levelRepo.setStatus(req.params.id, 'archived');
+  if (!level) return sendNotFound(res, 'Level');
 
-    if (!level) {
-      return res.status(404).json({ success: false, message: "Level not found" });
-    }
+  return sendSuccess(res, 200, 'Level archived successfully');
+});
 
-    if (level.status !== 'archived') {
-      return res.status(400).json({ success: false, message: "Level is not archived" });
-    }
-
-    await levelRepo.setStatus(req.params.id, 'active');
-
-    res.status(200).json({ success: true, message: "Level restored successfully" });
-  } catch (error) {
-    console.error("Restore level error:", error);
-    res.status(500).json({ success: false, message: "Failed to restore level" });
+/**
+ * Restore an archived level.
+ * @route PATCH /api/level/:id/restore
+ * @access ADMIN / DIRECTOR / CAMPUS_MANAGER
+ */
+exports.restoreLevel = asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) {
+    return sendError(res, 400, 'Invalid level ID');
   }
-};
+
+  const level = await levelRepo.findById(req.params.id);
+  if (!level) return sendNotFound(res, 'Level');
+
+  if (level.status !== 'archived') {
+    return sendError(res, 400, 'Level is not archived');
+  }
+
+  await levelRepo.setStatus(req.params.id, 'active');
+  return sendSuccess(res, 200, 'Level restored successfully');
+});

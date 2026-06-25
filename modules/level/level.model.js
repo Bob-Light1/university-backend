@@ -11,11 +11,12 @@ const levelSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Unique technical code (useful for APIs & consistency)
+    // Technical code (useful for APIs & consistency).
+    // Uniqueness is enforced per (code, type) via the compound index below,
+    // matching the repository's findByCodeAndType uniqueness check.
     code: {
       type: String,
       required: true,
-      unique: true,
       uppercase: true,
       trim: true,
     },
@@ -40,6 +41,7 @@ const levelSchema = new mongoose.Schema(
     // Optional description
     description: {
       type: String,
+      trim: true,
       maxlength: 255,
     },
 
@@ -56,7 +58,11 @@ const levelSchema = new mongoose.Schema(
   }
 );
 
-// Avoid duplicates by type + code
-levelSchema.index({ code: 1, type: 1}, { unique: true });
+// Enforce uniqueness of a code within a given type (e.g. "A1" can exist once
+// per level type). This is the single source of truth for level uniqueness.
+levelSchema.index({ code: 1, type: 1 }, { unique: true });
+
+// Supports the common listing query: filter by status/type, sort by order.
+levelSchema.index({ status: 1, type: 1, order: 1 });
 
 module.exports = mongoose.model("Level", levelSchema);

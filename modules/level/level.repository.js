@@ -18,10 +18,15 @@ const Level = require('./level.model');
 
 /**
  * Looks up a level by (code, type) — used for the uniqueness check.
+ * Normalizes `code`/`type` the same way the schema setters do (trim +
+ * uppercase) so the pre-check matches what is actually stored.
  * @returns {Promise<Object|null>} plain object or null
  */
 const findByCodeAndType = (code, type) =>
-  Level.findOne({ code, type }).lean();
+  Level.findOne({
+    code: String(code).trim().toUpperCase(),
+    type: String(type).trim().toUpperCase(),
+  }).lean();
 
 /**
  * Creates a level.
@@ -31,13 +36,15 @@ const findByCodeAndType = (code, type) =>
 const create = (data) => Level.create(data);
 
 /**
- * Lists active levels, sorted by ascending `order`, optionally filtered
- * by type.
- * @param {{ type?: string }} [opts]
+ * Lists levels, sorted by ascending `order`, optionally filtered by type.
+ * Archived levels are excluded unless `includeArchived` is set (needed by the
+ * management UI to surface and restore archived levels).
+ * @param {{ type?: string, includeArchived?: boolean }} [opts]
  * @returns {Promise<Object[]>}
  */
-const listActive = ({ type } = {}) => {
-  const filter = { status: 'active' };
+const list = ({ type, includeArchived = false } = {}) => {
+  const filter = {};
+  if (!includeArchived) filter.status = 'active';
   if (type) filter.type = type;
   return Level.find(filter).sort({ order: 1 }).lean();
 };
@@ -78,7 +85,7 @@ const setStatus = async (id, status) => {
 module.exports = {
   findByCodeAndType,
   create,
-  listActive,
+  list,
   findById,
   updateById,
   setStatus,
