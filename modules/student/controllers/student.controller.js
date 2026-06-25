@@ -107,6 +107,7 @@ const bulkController = new GenericBulkController(Student, {
   importValidators: importConfig.validators,
   importTransformer: importConfig.transformer,
   defaultPassword: importConfig.defaultPassword,
+  activation: { userModel: 'Student' },
   maxImportErrors: importConfig.maxErrors,
 });
 

@@ -66,8 +66,10 @@ const parentSchema = new mongoose.Schema(
     // ── CONTACT / AUTHENTICATION ──────────────────────────────────────────
     email: {
       type:     String,
-      required: [true, 'Email is required'],
+      // Optional: account activation falls back to an offline code when a
+      // parent has no email (see modules/account).
       unique:   true,
+      sparse:   true,
       lowercase: true,
       trim:     true,
       match:    [
@@ -180,7 +182,7 @@ const parentSchema = new mongoose.Schema(
     status: {
       type:    String,
       enum:    {
-        values:  ['active', 'inactive', 'suspended', 'archived'],
+        values:  ['pending', 'active', 'inactive', 'suspended', 'archived'],
         message: '{VALUE} is not a valid status',
       },
       default: 'active',

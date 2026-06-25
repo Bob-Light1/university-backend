@@ -76,6 +76,10 @@ const teacherConfig = {
   entityName: 'Teacher',
   folderName: 'teachers',
 
+  // Account-activation onboarding: no default password; the teacher sets their
+  // own via the activation link/code (see modules/account).
+  activation: { userModel: 'Teacher' },
+
   searchFields: [
     'firstName',
     'lastName',
@@ -269,19 +273,8 @@ const teacherConfig = {
     const classIds   = (teacher.classes || []).map((id) => id.toString());
     const managerOf  = fields.classManagerOf || null;
 
-    // Welcome notification (in-app + email, inert without SMTP). Independent
-    // of the class synchronisation below: fire-and-forget, never fails.
-    require('../notification').service.notify({
-      recipient: {
-        id:       teacher._id,
-        model:    'Teacher',
-        email:    teacher.email,
-        campusId: teacher.schoolCampus,
-      },
-      channels: ['inapp', 'email'],
-      template: 'account.welcome',
-      data:     { name: teacher.firstName },
-    }).catch((err) => console.error('[notify] account.welcome (teacher) failed:', err.message));
+    // The activation notification (account.activate) is sent by the generic
+    // controller when the activation token is issued — no welcome notify here.
 
     try {
       // 1. Add teacher to Class.teachers[] for all assigned classes

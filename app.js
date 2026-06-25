@@ -213,6 +213,7 @@ const gaetRouter              = require('./modules/gaet').routes;
 const settingsRouter          = require('./modules/settings').routes;
 const notificationRouter      = require('./modules/notification').routes;
 const financeRouter           = require('./modules/finance').routes;
+const accountRouter           = require('./modules/account').routes;
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -236,6 +237,7 @@ app.use('/api/gaet',          gaetRouter);
 app.use('/api/settings',      settingsRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/finance',       financeRouter);
+app.use('/api/account',       accountRouter);
 
 // ========================================
 // 404 HANDLER

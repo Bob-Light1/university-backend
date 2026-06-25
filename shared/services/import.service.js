@@ -3,6 +3,7 @@ const csv = require('csv-parser');
 const { createReadStream } = require('fs');
 const ExcelJS = require('exceljs');
 const bcrypt = require('bcrypt');
+const crypto = require('crypto');
 
 /**
  * IMPORT SERVICE
@@ -195,9 +196,16 @@ class ImportService {
       status: row.status || 'active',
     };
 
-    // Handle password
-    const password = row.password || this.entityConfig.defaultPassword || 'Default@123';
-    data.password = await bcrypt.hash(password, 12);
+    // Handle password / status
+    if (this.entityConfig.activation) {
+      // Activation onboarding: no default password — the user sets their own
+      // via the activation link/code. Store an unusable random placeholder.
+      data.status   = 'pending';
+      data.password = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
+    } else {
+      const password = row.password || this.entityConfig.defaultPassword || 'Default@123';
+      data.password = await bcrypt.hash(password, 12);
+    }
 
     // Additional entity-specific fields
     if (row.matricule) data.matricule = row.matricule;
@@ -279,7 +287,34 @@ class ImportService {
 
           // Create entity (if not dry-run)
           if (!dryRun) {
-            await this.Model.create(entityData);
+            const created = await this.Model.create(entityData);
+
+            // Activation onboarding: issue a token per row. The activation email
+            // is sent when present; the offline code is collected so the admin
+            // can relay it to users without an email address.
+            if (this.entityConfig.activation) {
+              try {
+                const act = await require('../../modules/account').service.issueActivationToken({
+                  userModel: this.entityConfig.activation.userModel,
+                  userId:    created._id,
+                  campusId:  created.schoolCampus,
+                  email:     created.email || null,
+                  name:      created.firstName || '',
+                  locale:    created.preferredLanguage,
+                });
+                results.activations = results.activations || [];
+                results.activations.push({
+                  row:           rowNumber,
+                  name:          `${created.firstName} ${created.lastName}`.trim(),
+                  identifier:    created.username || created.email || '',
+                  email:         created.email || null,
+                  code:          act.code,
+                  activationUrl: act.activationUrl,
+                });
+              } catch (actErr) {
+                results.warnings.push(`Row ${rowNumber}: account created but activation link could not be issued (${actErr.message})`);
+              }
+            }
           }
 
           results.imported++;

@@ -53,6 +53,8 @@ class GenericBulkController {
       validators: config.importValidators || {},
       transformer: config.importTransformer,
       defaultPassword: config.defaultPassword || 'Default@123',
+      // Opt-in account-activation onboarding (no default password on import).
+      activation: config.activation || null,
       maxErrors: config.maxImportErrors || 100,
     });
   }

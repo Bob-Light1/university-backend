@@ -13,6 +13,10 @@ const studentConfig = {
   entityName: 'Student',
   folderName: 'students',
 
+  // Account-activation onboarding: no default password; the student sets their
+  // own via the activation link/code (see modules/account).
+  activation: { userModel: 'Student' },
+
   searchFields: [
     'firstName',
     'lastName',
@@ -157,26 +161,6 @@ const studentConfig = {
       }
     },
   
-   /**
-   * After create hook - Post-creation actions
-   */
-   afterCreate: async (student) => {
-    // Welcome notification: in-app + email (the latter inert → skipped
-    // as long as SMTP is not configured). Fire-and-forget: never impacts
-    // account creation (the generic controller already runs it outside the transaction).
-    require('../notification').service.notify({
-      recipient: {
-        id:       student._id,
-        model:    'Student',
-        email:    student.email,
-        campusId: student.schoolCampus,
-      },
-      channels: ['inapp', 'email'],
-      template: 'account.welcome',
-      data:     { name: student.firstName },
-    }).catch((err) => console.error('[notify] account.welcome (student) failed:', err.message));
-  },
-
   /**
    * Before update hook - Validate updates
    */

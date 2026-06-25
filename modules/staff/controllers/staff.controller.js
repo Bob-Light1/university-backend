@@ -20,6 +20,7 @@
  * assigned StaffRole — no DB lookup needed per request by requirePermission.
  */
 
+const crypto   = require('crypto');
 const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
@@ -168,6 +169,7 @@ const createStaff = async (req, res) => {
 
     delete body.lastLogin;
     delete body.role;
+    delete body.status;
 
     // Validate subRole belongs to the same campus
     if (body.subRole) {
@@ -178,27 +180,26 @@ const createStaff = async (req, res) => {
       if (!roleDoc) return sendError(res, 404, 'StaffRole not found on this campus.');
     }
 
-    if (!body.password) body.password = 'Staff@123';
+    // The account starts 'pending' with an unusable placeholder password.
+    // The staff member sets their own password through the activation flow.
+    body.status   = 'pending';
+    body.password = crypto.randomBytes(24).toString('hex');
 
     const staff = await staffRepo.create(body);
 
-    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget.
-    require('../../notification').service.notify({
-      recipient: {
-        id:       staff._id,
-        model:    'Staff',
-        email:    staff.email,
-        campusId: staff.schoolCampus,
-      },
-      channels: ['inapp', 'email'],
-      template: 'account.welcome',
-      data:     { name: staff.firstName },
-    }).catch((err) => console.error('[notify] account.welcome (staff) failed:', err.message));
+    const activation = await require('../../account').service.issueActivationToken({
+      userModel: 'Staff',
+      userId:    staff._id,
+      campusId:  staff.schoolCampus,
+      email:     staff.email || null,
+      name:      staff.firstName,
+      createdBy: req.user.id,
+    });
 
     const doc = staff.toObject({ virtuals: true });
     delete doc.password;
 
-    return sendSuccess(res, 201, 'Staff member created successfully.', doc);
+    return sendSuccess(res, 201, 'Staff member created. Share the activation link or code with the staff member.', { ...doc, activation });
 
   } catch (err) {
     if (err.code === 11000) {
@@ -390,17 +391,24 @@ const updateStaffStatus = async (req, res) => {
 const resetStaffPassword = async (req, res) => {
   try {
     const { id } = req.params;
-    const { newPassword = 'Staff@123' } = req.body;
 
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid staff ID format.');
 
     const staff = await staffRepo.findOneScopedLean({ ...getCampusFilter(req), _id: id });
     if (!staff) return sendNotFound(res, 'Staff');
 
-    const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await staffRepo.updatePassword(staff._id, hashed);
+    // Secure reset: re-issue an activation link/code so the staff member sets a
+    // new password themselves — no default or plaintext password is generated.
+    const activation = await require('../../account').service.issueActivationToken({
+      userModel: 'Staff',
+      userId:    staff._id,
+      campusId:  staff.schoolCampus,
+      email:     staff.email || null,
+      name:      staff.firstName,
+      createdBy: req.user.id,
+    });
 
-    return sendSuccess(res, 200, 'Staff password reset successfully.');
+    return sendSuccess(res, 200, 'A password-reset link has been issued. Share the link or code with the staff member.', activation);
 
   } catch (err) {
     if (err.statusCode === 403) return sendError(res, 403, err.message);

@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 const { cleanupUploadedFile } = require('../middleware/upload');
@@ -37,6 +38,10 @@ class GenericEntityController {
     this.statsFacets    = config.statsFacets    || null;
     this.statsFormatter = config.statsFormatter || null;
     this.buildExtraFilters = config.buildExtraFilters || null;
+    // Opt-in account-activation mode: { userModel: 'Student' | 'Teacher' | ... }.
+    // When set, create() ignores any supplied password (the user sets their own
+    // via the activation flow), treats email as optional, and starts 'pending'.
+    this.activation     = config.activation     || null;
   }
 
   // ─────────────────────────────────────────────
@@ -121,24 +126,36 @@ class GenericEntityController {
 
       // ── 2. Extract authentication fields ───────
       const { email, username, password, ...rest } = fields;
+      const activationMode = this.activation;
 
       // ── 3. Validate required fields ─────────────
-      if (!email || !username || !password) {
-        await safeAbort();
-        return sendError(res, 400, 'Email, username, and password are required');
-      }
-
-      if (!isValidEmail(email)) {
-        await safeAbort();
-        return sendError(res, 400, 'Invalid email format');
-      }
-
-      const passwordValidation = validatePasswordStrength(password);
-      if (!passwordValidation.valid) {
-        await safeAbort();
-        return sendError(res, 400, 'Password does not meet requirements', {
-          errors: passwordValidation.errors
-        });
+      if (activationMode) {
+        // Activation flow: the admin supplies no password (the user sets their
+        // own via the activation link/code) and email is optional.
+        if (!username) {
+          await safeAbort();
+          return sendError(res, 400, 'Username is required');
+        }
+        if (email && !isValidEmail(email)) {
+          await safeAbort();
+          return sendError(res, 400, 'Invalid email format');
+        }
+      } else {
+        if (!email || !username || !password) {
+          await safeAbort();
+          return sendError(res, 400, 'Email, username, and password are required');
+        }
+        if (!isValidEmail(email)) {
+          await safeAbort();
+          return sendError(res, 400, 'Invalid email format');
+        }
+        const passwordValidation = validatePasswordStrength(password);
+        if (!passwordValidation.valid) {
+          await safeAbort();
+          return sendError(res, 400, 'Password does not meet requirements', {
+            errors: passwordValidation.errors
+          });
+        }
       }
 
       // ── 4. Hook beforeCreate ─────────────────────────
@@ -167,7 +184,7 @@ class GenericEntityController {
 
       // ── 5. Uniqueness of email / username ─────────────
       const [existingEmail, existingUser] = await Promise.all([
-        this.Model.findOne({ email: email.toLowerCase() }).session(session),
+        email ? this.Model.findOne({ email: email.toLowerCase() }).session(session) : null,
         this.Model.findOne({ username: username.toLowerCase() }).session(session),
       ]);
 
@@ -190,20 +207,24 @@ class GenericEntityController {
       }
 
       // ── 7. Hash the password ──────────────────────
+      // In activation mode the admin supplies no password: store an unusable
+      // random placeholder; the user sets their own via the activation flow.
+      const plainPassword  = activationMode ? crypto.randomBytes(24).toString('hex') : password;
       const salt           = await bcrypt.genSalt(SALT_ROUNDS);
-      const hashedPassword = await bcrypt.hash(password, salt);
+      const hashedPassword = await bcrypt.hash(plainPassword, salt);
 
       const profileImage = uploadedFile ? uploadedFile.path : null;
 
       // ── 8. Create the document ──────────────────────
       const entityData = {
         ...rest,
-        email:        email.toLowerCase(),
         username:     username.toLowerCase(),
         password:     hashedPassword,
         schoolCampus: campusId,
         profileImage,
       };
+      if (email) entityData.email = email.toLowerCase();
+      if (activationMode) entityData.status = 'pending';
 
       const entity      = new this.Model(entityData);
       const savedEntity = await entity.save({ session });
@@ -221,12 +242,30 @@ class GenericEntityController {
         );
       }
 
-      // ── 11. Populate & response ───────────────────────
+      // ── 11. Issue the activation token (activation mode only) ──────────
+      // Sends account.activate (when an email exists) and returns the link +
+      // offline code ONCE so the admin can relay it to users without email.
+      let activation = null;
+      if (activationMode) {
+        activation = await require('../../modules/account').service.issueActivationToken({
+          userModel: activationMode.userModel,
+          userId:    savedEntity._id,
+          campusId:  savedEntity.schoolCampus,
+          email:     savedEntity.email || null,
+          name:      savedEntity.firstName || '',
+          locale:    savedEntity.preferredLanguage,
+          createdBy: req.user.id,
+        });
+      }
+
+      // ── 12. Populate & response ───────────────────────
       let populatedEntity = await this.Model.findById(savedEntity._id).select('-password');
       populatedEntity     = await this._populate(populatedEntity);
 
-      // FIX typo: populatedEntity.toObject() (the dot was missing)
-      return sendCreated(res, `${this.entityName} created successfully`, populatedEntity.toObject());
+      const responsePayload = populatedEntity.toObject();
+      if (activation) responsePayload.activation = activation;
+
+      return sendCreated(res, `${this.entityName} created successfully`, responsePayload);
 
     } catch (error) {
       await safeAbort();

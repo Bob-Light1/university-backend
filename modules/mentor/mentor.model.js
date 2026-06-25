@@ -103,7 +103,7 @@ const mentorSchema = new mongoose.Schema(
     // ─── Status & audit ───────────────────────────────────────────────────────
     status: {
       type:    String,
-      enum:    ['active', 'inactive', 'suspended', 'archived'],
+      enum:    ['pending', 'active', 'inactive', 'suspended', 'archived'],
       default: 'active',
       index:   true,
     },

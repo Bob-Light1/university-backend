@@ -87,6 +87,75 @@ module.exports = {
     },
   },
 
+  'account.activate': {
+    inapp: {
+      subject: {
+        en: 'Activate your account',
+        fr: 'Activez votre compte',
+        es: 'Activa tu cuenta',
+        ar: 'فعّل حسابك',
+        'zh-CN': '激活您的账户',
+        de: 'Konto aktivieren',
+        pt: 'Ative a sua conta',
+        it: 'Attiva il tuo account',
+        ru: 'Активируйте свою учётную запись',
+        ja: 'アカウントを有効化してください',
+      },
+      body: {
+        en: 'Hello {name}, please activate your account and set your password: {link}',
+        fr: 'Bonjour {name}, activez votre compte et définissez votre mot de passe : {link}',
+        es: 'Hola {name}, activa tu cuenta y define tu contraseña: {link}',
+        ar: 'مرحبًا {name}، فعّل حسابك وعيّن كلمة المرور: {link}',
+        'zh-CN': '您好 {name}，请激活您的账户并设置密码：{link}',
+        de: 'Hallo {name}, aktivieren Sie Ihr Konto und legen Sie Ihr Passwort fest: {link}',
+        pt: 'Olá {name}, ative a sua conta e defina a sua palavra-passe: {link}',
+        it: 'Ciao {name}, attiva il tuo account e imposta la password: {link}',
+        ru: 'Здравствуйте, {name}! Активируйте учётную запись и задайте пароль: {link}',
+        ja: '{name} さん、アカウントを有効化してパスワードを設定してください：{link}',
+      },
+    },
+    email: {
+      subject: {
+        en: 'Activate your account',
+        fr: 'Activez votre compte',
+        es: 'Activa tu cuenta',
+        ar: 'فعّل حسابك',
+        'zh-CN': '激活您的账户',
+        de: 'Aktivieren Sie Ihr Konto',
+        pt: 'Ative a sua conta',
+        it: 'Attiva il tuo account',
+        ru: 'Активируйте свою учётную запись',
+        ja: 'アカウントを有効化してください',
+      },
+      body: {
+        en: 'Hello {name},\n\nAn account has been created for you. Click the link below to set your password and activate it:\n\n{link}\n\nThis link expires in 72 hours. If you did not expect this email, please ignore it.',
+        fr: 'Bonjour {name},\n\nUn compte a été créé pour vous. Cliquez sur le lien ci-dessous pour définir votre mot de passe et l\'activer :\n\n{link}\n\nCe lien expire dans 72 heures. Si vous n\'attendiez pas cet e-mail, ignorez-le.',
+        es: 'Hola {name},\n\nSe ha creado una cuenta para ti. Haz clic en el enlace para definir tu contraseña y activarla:\n\n{link}\n\nEste enlace caduca en 72 horas. Si no esperabas este correo, ignóralo.',
+        ar: 'مرحبًا {name}،\n\nتم إنشاء حساب لك. انقر على الرابط أدناه لتعيين كلمة المرور وتفعيله:\n\n{link}\n\nتنتهي صلاحية هذا الرابط خلال 72 ساعة. إذا لم تكن تتوقع هذا البريد، فتجاهله.',
+        'zh-CN': '您好 {name}，\n\n我们已为您创建账户。请点击以下链接设置密码并激活：\n\n{link}\n\n此链接将在 72 小时后失效。如果您并未预期收到此邮件，请忽略。',
+        de: 'Hallo {name},\n\nFür Sie wurde ein Konto erstellt. Klicken Sie auf den folgenden Link, um Ihr Passwort festzulegen und es zu aktivieren:\n\n{link}\n\nDieser Link läuft in 72 Stunden ab. Falls Sie diese E-Mail nicht erwartet haben, ignorieren Sie sie bitte.',
+        pt: 'Olá {name},\n\nFoi criada uma conta para si. Clique na ligação abaixo para definir a sua palavra-passe e ativá-la:\n\n{link}\n\nEsta ligação expira em 72 horas. Se não esperava este e-mail, ignore-o.',
+        it: 'Ciao {name},\n\nÈ stato creato un account per te. Clicca sul link qui sotto per impostare la password e attivarlo:\n\n{link}\n\nQuesto link scade tra 72 ore. Se non ti aspettavi questa e-mail, ignorala.',
+        ru: 'Здравствуйте, {name}!\n\nДля вас создана учётная запись. Нажмите на ссылку ниже, чтобы задать пароль и активировать её:\n\n{link}\n\nСсылка действует 72 часа. Если вы не ожидали это письмо, проигнорируйте его.',
+        ja: '{name} さん、\n\nアカウントが作成されました。下のリンクをクリックしてパスワードを設定し、有効化してください：\n\n{link}\n\nこのリンクは 72 時間で失効します。心当たりのない場合は、このメールを無視してください。',
+      },
+    },
+    whatsapp: {
+      body: {
+        en: 'Hello {name}, activate your account and set your password: {link}',
+        fr: 'Bonjour {name}, activez votre compte et définissez votre mot de passe : {link}',
+        es: 'Hola {name}, activa tu cuenta y define tu contraseña: {link}',
+        ar: 'مرحبًا {name}، فعّل حسابك وعيّن كلمة المرور: {link}',
+        'zh-CN': '您好 {name}，激活账户并设置密码：{link}',
+        de: 'Hallo {name}, aktivieren Sie Ihr Konto und legen Sie Ihr Passwort fest: {link}',
+        pt: 'Olá {name}, ative a sua conta e defina a sua palavra-passe: {link}',
+        it: 'Ciao {name}, attiva il tuo account e imposta la password: {link}',
+        ru: 'Здравствуйте, {name}! Активируйте учётную запись и задайте пароль: {link}',
+        ja: '{name} さん、アカウントを有効化してパスワードを設定してください：{link}',
+      },
+    },
+  },
+
   'result.published': {
     inapp: {
       subject: {

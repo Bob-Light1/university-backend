@@ -18,6 +18,7 @@
  * Campus isolation: CAMPUS_MANAGER is always scoped to req.user.campusId.
  */
 
+const crypto   = require('crypto');
 const bcrypt   = require('bcrypt');
 const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
@@ -155,29 +156,31 @@ const createMentor = async (req, res) => {
 
     delete body.lastLogin;
     delete body.role;
+    delete body.status;
 
-    // Default password if not provided
-    if (!body.password) body.password = 'Mentor@123';
+    // The account starts 'pending' with an unusable placeholder password.
+    // The mentor sets their own password through the activation flow — no
+    // default password is ever issued (see modules/account).
+    body.status   = 'pending';
+    body.password = crypto.randomBytes(24).toString('hex');
 
     const mentor = await mentorRepo.create(body);
 
-    // Welcome notification (in-app + inert email without SMTP). Fire-and-forget.
-    require('../../notification').service.notify({
-      recipient: {
-        id:       mentor._id,
-        model:    'Mentor',
-        email:    mentor.email,
-        campusId: mentor.schoolCampus,
-      },
-      channels: ['inapp', 'email'],
-      template: 'account.welcome',
-      data:     { name: mentor.firstName },
-    }).catch((err) => console.error('[notify] account.welcome (mentor) failed:', err.message));
+    // Issue the activation token: sends account.activate (when an email exists)
+    // and returns the link + offline code ONCE for the admin to relay.
+    const activation = await require('../../account').service.issueActivationToken({
+      userModel: 'Mentor',
+      userId:    mentor._id,
+      campusId:  mentor.schoolCampus,
+      email:     mentor.email || null,
+      name:      mentor.firstName,
+      createdBy: req.user.id,
+    });
 
     const doc = mentor.toObject({ virtuals: true });
     delete doc.password;
 
-    return sendSuccess(res, 201, 'Mentor created successfully.', doc);
+    return sendSuccess(res, 201, 'Mentor created. Share the activation link or code with the mentor.', { ...doc, activation });
 
   } catch (err) {
     if (err.code === 11000) {
@@ -331,7 +334,6 @@ const updateMentorStatus = async (req, res) => {
 const resetMentorPassword = async (req, res) => {
   try {
     const { id } = req.params;
-    const { newPassword = 'Mentor@123' } = req.body;
 
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid mentor ID format.');
 
@@ -339,10 +341,18 @@ const resetMentorPassword = async (req, res) => {
     const mentor = await mentorRepo.findOneScopedLean(campusFilter);
     if (!mentor) return sendNotFound(res, 'Mentor');
 
-    const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await mentorRepo.updatePassword(mentor._id, hashed);
+    // Secure reset: re-issue an activation link/code so the mentor sets a new
+    // password themselves — no default or plaintext password is ever generated.
+    const activation = await require('../../account').service.issueActivationToken({
+      userModel: 'Mentor',
+      userId:    mentor._id,
+      campusId:  mentor.schoolCampus,
+      email:     mentor.email || null,
+      name:      mentor.firstName,
+      createdBy: req.user.id,
+    });
 
-    return sendSuccess(res, 200, 'Mentor password reset successfully.');
+    return sendSuccess(res, 200, 'A password-reset link has been issued. Share the link or code with the mentor.', activation);
 
   } catch (err) {
     if (err.statusCode === 403) return sendError(res, 403, err.message);

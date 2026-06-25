@@ -54,8 +54,10 @@ const studentSchema = new mongoose.Schema(
     // **CONTACT INFORMATION**
     email: {
       type: String,
-      required: [true, 'Email is required'],
+      // Optional: not every student has an email. Account activation falls back
+      // to an offline code delivered by the admin (see modules/account).
       unique: true,
+      sparse: true,
       lowercase: true,
       trim: true,
       match: [
@@ -144,7 +146,7 @@ const studentSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: {
-        values: ['active', 'inactive', 'suspended', 'archived'],
+        values: ['pending', 'active', 'inactive', 'suspended', 'archived'],
         message: '{VALUE} is not a valid status'
       },
       default: 'active',

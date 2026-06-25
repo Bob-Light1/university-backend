@@ -124,27 +124,32 @@ const createParent = async (req, res) => {
       body.children = toArray(body.children) ?? [];
     }
 
+    // The account starts 'pending' with an unusable placeholder password.
+    // The parent sets their own password through the activation flow — no
+    // default password is ever issued (see modules/account).
+    delete body.status;
+    body.status   = 'pending';
+    body.password = crypto.randomBytes(24).toString('hex');
+
     const parent = await parentRepo.create(body);
 
-    // Notification de bienvenue (in-app + email inerte sans SMTP). Fire-and-forget.
-    require('../../notification').service.notify({
-      recipient: {
-        id:       parent._id,
-        model:    'Parent',
-        email:    parent.email,
-        campusId: parent.schoolCampus,
-      },
-      channels: ['inapp', 'email'],
-      template: 'account.welcome',
-      data:     { name: parent.firstName },
-      locale:   parent.preferredLanguage,
-    }).catch((err) => console.error('[notify] account.welcome (parent) failed:', err.message));
+    // Issue the activation token: sends account.activate (when an email exists)
+    // and returns the link + offline code ONCE for the admin to relay.
+    const activation = await require('../../account').service.issueActivationToken({
+      userModel: 'Parent',
+      userId:    parent._id,
+      campusId:  parent.schoolCampus,
+      email:     parent.email || null,
+      name:      parent.firstName,
+      locale:    parent.preferredLanguage,
+      createdBy: req.user.id,
+    });
 
     auditLog(req, 'CREATE_PARENT', parent._id);
 
     const populated = await parentRepo.findByIdForResponse(parent._id);
 
-    return sendSuccess(res, 201, 'Parent account created successfully.', populated);
+    return sendSuccess(res, 201, 'Parent account created. Share the activation link or code with the parent.', { ...(populated.toObject ? populated.toObject() : populated), activation });
 
   } catch (error) {
     if (error.code === 11000) return handleDuplicateKeyError(res, error);
