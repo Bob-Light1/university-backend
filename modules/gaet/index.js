@@ -1,6 +1,6 @@
 /**
- * @file index.js — FAÇADE du module GAET (Génération Automatique d'Emplois du Temps)
- * Seul point d'entrée public du module — voir MODULAR_MONOLITH_MIGRATION.md §3.
+ * @file index.js — FACADE of the GAET module (Automatic Timetable Generation).
+ * @description Sole public entry point of the module — see MODULAR_MONOLITH_MIGRATION.md §3.
  */
 
 const routes  = require('./gaet.routes');

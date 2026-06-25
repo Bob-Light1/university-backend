@@ -116,6 +116,23 @@ const listStudentIds = ({ classIds, campusId, excludeArchived = false }) => {
 };
 
 /**
+ * Sets the mentor back-reference on a set of campus-scoped students.
+ * Used by mentor.controller to keep Student.mentor in sync with Mentor.students[].
+ * @param {{studentIds: Array, mentorId: string|ObjectId, campusId: string|ObjectId}} params
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const assignMentor = ({ studentIds, mentorId, campusId }) =>
+  studentRepo.setMentorForStudents(studentIds, mentorId, campusId);
+
+/**
+ * Clears the mentor back-reference for students currently linked to this mentor.
+ * @param {{studentIds: Array, mentorId: string|ObjectId, campusId: string|ObjectId}} params
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const unassignMentor = ({ studentIds, mentorId, campusId }) =>
+  studentRepo.clearMentorForStudents(studentIds, mentorId, campusId);
+
+/**
  * Paginated listing of students for the staff portal (populated class,
  * alphabetical sort). `search` must already be escaped by the caller.
  * @returns {Promise<{docs: Array, total: number}>}
@@ -394,6 +411,8 @@ module.exports = {
   validateStudentBelongsToCampus,
   countStudents,
   listStudentIds,
+  assignMentor,
+  unassignMentor,
   listStudentsForStaff,
   listStudentsForMentor,
   listStudentsForCampusDashboard,

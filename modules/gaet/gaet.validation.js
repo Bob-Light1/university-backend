@@ -206,6 +206,30 @@ const validateTeacherPreferences = (prefs, errors) => {
 
 // ── ACADEMIC CONTEXT VALIDATOR (shared by both middlewares) ───────────────────
 
+/**
+ * Validates the optional semesterStartDate: when provided it must be a real
+ * calendar date whose year falls within the academic year span (start or end).
+ */
+const validateSemesterStartDate = (body, errors) => {
+  if (body.semesterStartDate === undefined || body.semesterStartDate === null || body.semesterStartDate === '') {
+    return; // optional
+  }
+
+  const date = new Date(body.semesterStartDate);
+  if (Number.isNaN(date.getTime())) {
+    fail(errors, 'semesterStartDate', 'semesterStartDate must be a valid date (e.g. "2024-09-02").');
+    return;
+  }
+
+  if (ACADEMIC_YEAR_RE.test(body.academicYear || '')) {
+    const [start, end] = body.academicYear.split('-').map(Number);
+    const year = date.getUTCFullYear();
+    if (year !== start && year !== end) {
+      fail(errors, 'semesterStartDate', `semesterStartDate must fall within the academic year (${start} or ${end}).`);
+    }
+  }
+};
+
 const validateAcademicContext = (body, errors) => {
   if (!body.academicYear) {
     fail(errors, 'academicYear', 'academicYear is required (format: YYYY-YYYY).');
@@ -236,6 +260,7 @@ const validateConstraintBody = (req, res, next) => {
   const { body } = req;
 
   validateAcademicContext(body, errors);
+  validateSemesterStartDate(body, errors);
 
   if (body.timeSlots !== undefined)          validateTimeSlots(body.timeSlots, errors);
   if (body.courseRequirements !== undefined)  validateCourseRequirements(body.courseRequirements, errors);

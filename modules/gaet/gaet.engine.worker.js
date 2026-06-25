@@ -13,9 +13,12 @@
  *       and verify all hard constraints. Tracks best partial on limit.
  *    3. Score soft constraints on the final assignment.
  *
- *  Guards:
- *    MAX_ITERATIONS = 50 000 iterations before falling back to best partial.
- *    MAX_DURATION_MS = 8 000 ms wall-clock timeout (same fallback).
+ *  Guards (overridable via env for large/professional deployments):
+ *    MAX_ITERATIONS  — GAET_MAX_ITERATIONS  (default 50 000) backtracking steps
+ *                      before falling back to the best partial assignment.
+ *    MAX_DURATION_MS — GAET_MAX_DURATION_MS (default 8 000) wall-clock timeout
+ *                      in ms (same fallback). Raise these for campuses with many
+ *                      course requirements; lower them on constrained hardware.
  */
 
 const { workerData, parentPort } = require('worker_threads');
@@ -25,8 +28,8 @@ const { timeRangesOverlap } = require('../../shared/utils/schedule.base');
 const GaetConstraintModel  = require('./gaet-constraint.model');
 const { ROOM_TYPE }        = GaetConstraintModel;
 
-const MAX_ITERATIONS  = 50_000;
-const MAX_DURATION_MS = 8_000;
+const MAX_ITERATIONS  = Math.max(1000, parseInt(process.env.GAET_MAX_ITERATIONS, 10)  || 50_000);
+const MAX_DURATION_MS = Math.max(1000, parseInt(process.env.GAET_MAX_DURATION_MS, 10) || 8_000);
 
 // ─────────────────────────────────────────────
 // PHASE 1 — CONSTRAINT DENSITY SORT
@@ -244,20 +247,33 @@ function buildQualityReport(assignment, allToPlace, constraint, durationMs) {
   const totalSessions  = allToPlace.length;
   const placedSessions = assignment.length;
 
-  const placedCrIds = new Set(assignment.map(a => a.crId));
+  // Count required vs placed sessions PER course requirement so a course that is
+  // only partially placed (e.g. 1 of 3 weekly sessions) is reported as unplaced
+  // rather than silently treated as fully scheduled.
+  const neededByCr = new Map();
+  for (const { cr } of allToPlace) {
+    const id = cr._id.toString();
+    neededByCr.set(id, (neededByCr.get(id) || 0) + 1);
+  }
 
-  const unplacedCrIds = new Set(
-    allToPlace
-      .filter(({ cr }) => !placedCrIds.has(cr._id.toString()))
-      .map(({ cr }) => cr._id.toString())
-  );
+  const placedByCr = new Map();
+  for (const a of assignment) {
+    placedByCr.set(a.crId, (placedByCr.get(a.crId) || 0) + 1);
+  }
 
   const crMap = new Map(constraint.courseRequirements.map(cr => [cr._id.toString(), cr]));
 
-  const unplacedCourses = [...unplacedCrIds].map(id => ({
-    courseRequirementRef: crMap.get(id)._id,
-    reason: 'No valid slot/room combination found within constraints or iteration limit.',
-  }));
+  const unplacedCourses = [];
+  for (const [id, needed] of neededByCr) {
+    const placed = placedByCr.get(id) || 0;
+    if (placed >= needed) continue;
+    unplacedCourses.push({
+      courseRequirementRef: crMap.get(id)._id,
+      reason: placed === 0
+        ? 'No valid slot/room combination found within constraints or iteration limit.'
+        : `Only ${placed}/${needed} weekly session(s) could be placed (${needed - placed} missing).`,
+    });
+  }
 
   const hardPct  = totalSessions > 0 ? Math.round((placedSessions / totalSessions) * 100) : 0;
   const softScore = scoreAssignment(assignment, constraint);

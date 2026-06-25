@@ -5,6 +5,7 @@ const path = require('path');
 
 const { shutdownPool }         = require('./modules/document').service;
 const { shutdownAcademicPool } = require('./modules/academic-print').service;
+const { shutdownQueue: shutdownGaetQueue } = require('./modules/gaet').service;
 
 // ========================================
 // ENVIRONMENT VALIDATION
@@ -79,9 +80,9 @@ const gracefulShutdown = async (signal) => {
   console.log(`\n⚠️ ${signal} received. Starting graceful shutdown...`);
 
   try {
-    // Close Puppeteer pools
-    await Promise.all([shutdownPool(), shutdownAcademicPool()]).catch(() => {});
-    console.log('✅ Puppeteer pools closed');
+    // Close Puppeteer pools + GAET generation queue
+    await Promise.all([shutdownPool(), shutdownAcademicPool(), shutdownGaetQueue()]).catch(() => {});
+    console.log('✅ Puppeteer pools + GAET queue closed');
 
     // Close MongoDB connection
     await mongoose.connection.close();

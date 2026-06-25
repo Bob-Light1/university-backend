@@ -24,6 +24,7 @@ const { timeRangesOverlap } = require('../../shared/utils/schedule.base');
  * @property {'TEACHER_DOUBLE_BOOKING'|'ROOM_DOUBLE_BOOKING'|'CLASS_DOUBLE_BOOKING'} type
  * @property {string} day
  * @property {number} startHour
+ * @property {number} endHour
  * @property {string} [teacherId]  - for TEACHER conflicts
  * @property {string} [roomName]   - for ROOM conflicts
  * @property {string} [classId]    - for CLASS conflicts
@@ -87,6 +88,7 @@ const detectConflicts = (generatedSessions, courseRequirements) => {
           type:      'TEACHER_DOUBLE_BOOKING',
           day:       a.day,
           startHour: a.startHour,
+          endHour:   a.endHour,
           teacherId: teacherA,
           sessionA:  a.id,
           sessionB:  b.id,
@@ -98,6 +100,7 @@ const detectConflicts = (generatedSessions, courseRequirements) => {
           type:      'ROOM_DOUBLE_BOOKING',
           day:       a.day,
           startHour: a.startHour,
+          endHour:   a.endHour,
           roomName:  a.roomName,
           sessionA:  a.id,
           sessionB:  b.id,
@@ -109,6 +112,7 @@ const detectConflicts = (generatedSessions, courseRequirements) => {
           type:      'CLASS_DOUBLE_BOOKING',
           day:       a.day,
           startHour: a.startHour,
+          endHour:   a.endHour,
           classId:   classA,
           sessionA:  a.id,
           sessionB:  b.id,

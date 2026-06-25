@@ -47,6 +47,27 @@ const countStudents = (filter) => Student.countDocuments(filter);
 /** Ids of the enrolled students (source of truth: Student.studentClass). */
 const listStudentIds = (filter) => Student.find(filter, { _id: 1 }).lean();
 
+/**
+ * Sets the mentor back-reference on a set of campus-scoped students.
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const setMentorForStudents = (studentIds, mentorId, campusId) =>
+  Student.updateMany(
+    { _id: { $in: studentIds }, schoolCampus: campusId },
+    { $set: { mentor: mentorId } }
+  );
+
+/**
+ * Clears the mentor back-reference, but only for students currently pointing
+ * to this mentor (avoids clobbering a concurrent re-assignment).
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const clearMentorForStudents = (studentIds, mentorId, campusId) =>
+  Student.updateMany(
+    { _id: { $in: studentIds }, schoolCampus: campusId, mentor: mentorId },
+    { $set: { mentor: null } }
+  );
+
 /** Current class reference of a student of a campus. */
 const getStudentClassRef = (studentId, campusId) =>
   Student.findOne({ _id: studentId, schoolCampus: campusId })
@@ -663,6 +684,8 @@ module.exports = {
   findStudentCampusRef,
   countStudents,
   listStudentIds,
+  setMentorForStudents,
+  clearMentorForStudents,
   getStudentClassRef,
   getStudentsCampusRefs,
   getStudentForDocument,

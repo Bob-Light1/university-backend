@@ -126,8 +126,9 @@ const studentSchema = new mongoose.Schema(
 
     mentor: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'Teacher',
-      default: null
+      ref: 'Mentor',
+      default: null,
+      index: true,
     },
 
     // **ADDITIONAL ACADEMIC INFO**

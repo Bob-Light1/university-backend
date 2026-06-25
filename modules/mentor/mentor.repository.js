@@ -98,6 +98,17 @@ const applyStudentAssignment = (id, updateOp) =>
     .populate('students', 'firstName lastName email matricule studentClass status profileImage')
     .lean({ virtuals: true });
 
+/**
+ * Removes the given students from every OTHER mentor of the same campus.
+ * Enforces the single-mentor invariant: a student belongs to one mentor at a time.
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const detachStudentsFromOtherMentors = (studentIds, keepMentorId, campusId) =>
+  Mentor.updateMany(
+    { _id: { $ne: keepMentorId }, schoolCampus: campusId, students: { $in: studentIds } },
+    { $pull: { students: { $in: studentIds } } }
+  );
+
 // ── API inter-modules (ancien mentor.service) ─────────────────────────────────
 
 /** Compteur de mentors d'un campus (status = valeur ou objet $ne). */
@@ -120,13 +131,13 @@ const listForCampusService = async ({ campusId, status, search, skip, limit }) =
   if (status) filter.status = status;
   else filter.status = { $ne: 'archived' };
   if (search) {
-    const fields = ['firstName', 'lastName', 'email', 'phone', 'specialization', 'matricule'];
+    const fields = ['firstName', 'lastName', 'email', 'phone', 'specialization', 'username'];
     filter.$or = fields.map((f) => ({ [f]: { $regex: escapeRegex(search), $options: 'i' } }));
   }
 
   const [mentors, total] = await Promise.all([
     Mentor.find(filter)
-      .populate('assignedStudents', 'firstName lastName matricule')
+      .populate('students', 'firstName lastName matricule')
       .select('-password')
       .sort({ createdAt: -1 })
       .skip(skip).limit(limit).lean(),
@@ -148,6 +159,7 @@ module.exports = {
   updatePassword,
   deleteById,
   applyStudentAssignment,
+  detachStudentsFromOtherMentors,
   countByCampus,
   aggregateAssignedStudents,
   listForCampusService,

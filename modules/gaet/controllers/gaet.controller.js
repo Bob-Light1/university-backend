@@ -32,13 +32,16 @@
  *    DELETE /generated/:constraintId      → cancelGenerated
  */
 
-const path            = require('path');
-const { Worker }      = require('worker_threads');
-
-const { GAET_STATUS } = require('../gaet-constraint.model'); // constante (enum)
+const { GAET_STATUS } = require('../gaet-constraint.model'); // status enum constant
 const gaetRepo        = require('../gaet.repository');
+const { enqueueGeneration } = require('../gaet.queue');
 
-const { SCHEDULE_STATUS, SESSION_TYPE } = require('../../../shared/utils/schedule.base');
+const { SCHEDULE_STATUS, SESSION_TYPE, SEMESTER } = require('../../../shared/utils/schedule.base');
+
+// Number of weekly occurrences materialised per published session.
+// A full-year timetable spans roughly twice a single semester.
+const WEEKS_PER_SEMESTER = 18;
+const WEEKS_PER_YEAR     = 36;
 
 const {
   resolveSessionParticipants,
@@ -100,13 +103,18 @@ const getWriteCampusFilter = (req, res) => {
 const WEEKDAY_TO_JS = { SU: 0, MO: 1, TU: 2, WE: 3, TH: 4, FR: 5, SA: 6 };
 
 /**
- * Returns the next Date on the given weekday (starting from tomorrow)
- * with the given hour set (fractional hour supported, e.g. 9.5 → 09:30).
+ * Returns the first Date on the given weekday on/after the anchor date, with the
+ * given hour set (fractional hour supported, e.g. 9.5 → 09:30).
+ *
+ * @param {string} weekday  - GAET WEEKDAY enum value (MO…SU)
+ * @param {number} hour     - hour of day (fractional allowed)
+ * @param {Date|null} anchor - semester start date; when null, anchors to tomorrow
+ *                             so a published timetable still lands in the future.
  */
-const nextWeekdayDate = (weekday, hour) => {
+const firstWeekdayDate = (weekday, hour, anchor = null) => {
   const target = WEEKDAY_TO_JS[weekday];
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
+  const d = anchor ? new Date(anchor) : new Date();
+  if (!anchor) d.setDate(d.getDate() + 1); // no start date → start from tomorrow
   d.setHours(0, 0, 0, 0);
   while (d.getDay() !== target) d.setDate(d.getDate() + 1);
   const h = Math.floor(hour);
@@ -240,7 +248,7 @@ const getConflicts = asyncHandler(async (req, res) => {
 const createOrUpdateConstraints = asyncHandler(async (req, res) => {
   const campusFilter = getWriteCampusFilter(req, res);
   if (!campusFilter) return;
-  const { academicYear, semester, timeSlots, courseRequirements, roomRegistry, teacherPreferences } = req.body;
+  const { academicYear, semester, semesterStartDate, timeSlots, courseRequirements, roomRegistry, teacherPreferences } = req.body;
 
   const existing = await gaetRepo.findByYearSemester(campusFilter, academicYear, semester);
 
@@ -274,7 +282,18 @@ const createOrUpdateConstraints = asyncHandler(async (req, res) => {
       return sendError(res, 422, 'One or more teacherId values do not belong to your campus.');
   }
 
+  // Campus isolation: teacherPreferences may reference teachers independently of
+  // courseRequirements — validate their ownership too (same boundary as above).
+  if (teacherPreferences !== undefined && teacherPreferences.length > 0) {
+    const campusId       = String(req.user.campusId);
+    const prefTeacherIds = [...new Set(teacherPreferences.map(tp => tp.teacherId))];
+    const prefTeacherCount = await countTeachersOnCampus(prefTeacherIds, campusId);
+    if (prefTeacherCount !== prefTeacherIds.length)
+      return sendError(res, 422, 'One or more teacherPreferences.teacherId values do not belong to your campus.');
+  }
+
   const $set = { status: GAET_STATUS.DRAFT };
+  if (semesterStartDate  !== undefined) $set.semesterStartDate  = semesterStartDate || null;
   if (timeSlots          !== undefined) $set.timeSlots          = timeSlots;
   if (courseRequirements !== undefined) $set.courseRequirements = courseRequirements;
   if (roomRegistry       !== undefined) $set.roomRegistry       = roomRegistry;
@@ -349,41 +368,27 @@ const generateSchedule = asyncHandler(async (req, res) => {
     return sendError(res, 422, 'Cannot generate: no rooms defined. Add roomRegistry first.');
   }
 
-  // Capture userId now — the closure below executes asynchronously after the response is sent
+  // Capture userId now — the job runs asynchronously after the response is sent.
   const actorId        = req.user.id;
   const currentVersion = constraint.generationVersion || 0;
 
-  const worker = new Worker(
-    path.join(__dirname, '../gaet.engine.worker.js'),
-    { workerData: { constraintId: constraint._id.toString() } }
-  );
+  // Hand the job to the bounded queue. A global concurrency cap (and an optional
+  // BullMQ/Redis backend) live in gaet.queue.js — the controller no longer spawns
+  // worker threads directly, so a burst of generations cannot saturate the CPU.
+  try {
+    await enqueueGeneration({
+      constraintId:      constraint._id.toString(),
+      actorId,
+      generationVersion: currentVersion + 1,
+    });
+  } catch (err) {
+    console.error('[GAET] Failed to enqueue generation job:', err.message);
+    // Could not queue the job — roll the constraint back so the manager can retry.
+    await gaetRepo.restoreStatus(constraint._id, originalStatus);
+    return sendError(res, 503, 'Generation service is temporarily unavailable. Please try again shortly.');
+  }
 
-  worker.on('message', async (result) => {
-    try {
-      await gaetRepo.applyWorkerResult(constraint._id, {
-        status:            result.status,
-        sessions:          result.sessions,
-        report:            result.report,
-        generatedBy:       actorId,
-        generationVersion: currentVersion + 1,
-      });
-    } catch (err) {
-      console.error('[GAET] Failed to persist worker result:', err.message);
-    }
-  });
-
-  worker.on('error', async (err) => {
-    console.error('[GAET] Worker runtime error:', err.message);
-    try {
-      await gaetRepo.markFailed(constraint._id);
-    } catch (_) {}
-  });
-
-  worker.on('exit', (code) => {
-    if (code !== 0) console.error(`[GAET] Worker exited with non-zero code: ${code}`);
-  });
-
-  return sendSuccess(res, 202, 'Generation started. Poll GET /api/gaet/status/:id for updates.', {
+  return sendSuccess(res, 202, 'Generation queued. Poll GET /api/gaet/status/:id for updates.', {
     constraintId: constraint._id,
     status:       GAET_STATUS.GENERATING,
   });
@@ -408,22 +413,39 @@ const publishSchedule = asyncHandler(async (req, res) => {
   const campusFilter = getWriteCampusFilter(req, res);
   if (!campusFilter) return;
 
-  const constraint = await gaetRepo.findForPublish(constraintId, campusFilter);
-  if (!constraint) return sendError(res, 404, 'Constraint not found.');
+  // Atomically claim the timetable for publication (GENERATED|PARTIALLY_GENERATED → PUBLISHED).
+  // Returns the pre-update doc (with its full payload) — or null if another
+  // request already claimed it or the status does not allow publication. This
+  // makes the endpoint idempotent under concurrent / double-clicked requests.
+  const constraint = await gaetRepo.claimForPublish(constraintId, campusFilter, req.user.id);
 
-  if (!constraint.isPublishable) {
+  if (!constraint) {
+    const existing = await gaetRepo.findInCampus(constraintId, campusFilter);
+    if (!existing) return sendError(res, 404, 'Constraint not found.');
+    if (existing.status === GAET_STATUS.PUBLISHED) {
+      return sendError(res, 409, 'Timetable is already published.');
+    }
     return sendError(
       res, 409,
-      `Cannot publish from status "${constraint.status}". Status must be GENERATED or PARTIALLY_GENERATED.`
+      `Cannot publish from status "${existing.status}". Status must be GENERATED or PARTIALLY_GENERATED.`
     );
   }
 
+  // Status before we optimistically set PUBLISHED — restored if publication fails.
+  const originalStatus = constraint.status;
+
   if (!constraint.generatedSessions?.length) {
+    await gaetRepo.restorePublishStatus(constraintId, originalStatus);
     return sendError(res, 422, 'No generated sessions to publish.');
   }
 
   const campusId    = constraint.schoolCampus.toString();
   const { academicYear, semester } = constraint;
+  const recurrenceCount = semester === SEMESTER.ANNUAL ? WEEKS_PER_YEAR : WEEKS_PER_SEMESTER;
+
+  // Anchor published sessions to the configured semester start date (first
+  // teaching day) when present; otherwise fall back to "tomorrow".
+  const anchorDate = constraint.semesterStartDate ? new Date(constraint.semesterStartDate) : null;
 
   const crMap = new Map(
     constraint.courseRequirements.map(cr => [cr._id.toString(), cr])
@@ -455,8 +477,8 @@ const publishSchedule = asyncHandler(async (req, res) => {
       }
 
       const { day, startHour, endHour } = session.slot;
-      const startTime = nextWeekdayDate(day, startHour);
-      const endTime   = nextWeekdayDate(day, endHour);
+      const startTime = firstWeekdayDate(day, startHour, anchorDate);
+      const endTime   = firstWeekdayDate(day, endHour, anchorDate);
 
       const ss = await createScheduleSession({
         schoolCampus:      campusId,
@@ -475,7 +497,7 @@ const publishSchedule = asyncHandler(async (req, res) => {
         recurrence: {
           frequency: 'WEEKLY',
           byDay:     [day],
-          count:     18,
+          count:     recurrenceCount,
         },
         status:      SCHEDULE_STATUS.PUBLISHED,
         publishedAt: new Date(),
@@ -490,6 +512,9 @@ const publishSchedule = asyncHandler(async (req, res) => {
   }
 
   if (created.length === 0) {
+    // Nothing could be materialised — roll the constraint back to its pre-publish
+    // status so the campus manager can fix the data and retry.
+    await gaetRepo.restorePublishStatus(constraintId, originalStatus);
     return sendError(
       res, 422,
       `Publication failed: 0 sessions could be created (${errors.length} error(s)). Fix constraints and retry.`,
@@ -497,8 +522,7 @@ const publishSchedule = asyncHandler(async (req, res) => {
     );
   }
 
-  await gaetRepo.markPublished(constraintId, req.user.id);
-
+  // The constraint was already marked PUBLISHED atomically by claimForPublish.
   return sendSuccess(res, 200, `Published ${created.length} session(s) successfully.`, {
     published: created.length,
     skipped:   errors.length,

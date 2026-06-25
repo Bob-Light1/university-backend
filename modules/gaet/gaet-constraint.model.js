@@ -159,6 +159,13 @@ const GaetConstraintSchema = new Schema(
       required: true,
     },
 
+    // First teaching day of the semester. Published sessions are anchored to the
+    // first occurrence of their weekday on/after this date so the generated
+    // StudentSchedule/TeacherSchedule align with the real academic calendar.
+    // Optional for backward compatibility: when absent, publication falls back to
+    // the next occurrence of each weekday from "tomorrow".
+    semesterStartDate: { type: Date, default: null },
+
     // ── INPUT — CONSTRAINTS ─────────────────
     timeSlots:          [TimeSlotSchema],
     teacherPreferences: [TeacherPreferenceSchema],

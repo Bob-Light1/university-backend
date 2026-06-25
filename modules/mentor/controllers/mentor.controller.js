@@ -521,6 +521,31 @@ const assignStudents = async (req, res) => {
 
     const updated = await mentorRepo.applyStudentAssignment(mentor._id, updateOp);
 
+    // Keep the Student.mentor back-reference and the single-mentor invariant in
+    // sync with Mentor.students[]. Best-effort: the primary write already
+    // succeeded, so we log inconsistencies rather than failing the request.
+    try {
+      if (mode === 'add' || mode === 'replace') {
+        // A student belongs to a single mentor: detach from any other mentor first.
+        await mentorRepo.detachStudentsFromOtherMentors(uniqueIds, mentor._id, campusOid);
+        await studentService.assignMentor({ studentIds: uniqueIds, mentorId: mentor._id, campusId: campusOid });
+
+        if (mode === 'replace') {
+          // Clear the back-reference for students dropped from the previous set.
+          const keep    = new Set(uniqueIds.map(String));
+          const removed = (mentor.students ?? []).filter((sid) => !keep.has(String(sid)));
+          if (removed.length) {
+            await studentService.unassignMentor({ studentIds: removed, mentorId: mentor._id, campusId: campusOid });
+          }
+        }
+      } else {
+        // remove
+        await studentService.unassignMentor({ studentIds: uniqueIds, mentorId: mentor._id, campusId: campusOid });
+      }
+    } catch (syncErr) {
+      console.error('⚠️ assignStudents back-reference sync failed:', syncErr.message);
+    }
+
     const verb = mode === 'add' ? 'added to' : mode === 'remove' ? 'removed from' : 'set for';
     return sendSuccess(res, 200, `Students ${verb} mentor.`, {
       mentor:  updated,

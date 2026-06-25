@@ -48,10 +48,6 @@ const findByYearSemester = (campusFilter, academicYear, semester) =>
 const findInCampus = (id, campusFilter) =>
   GaetConstraint.findOne({ _id: id, ...campusFilter }).lean();
 
-/** Constraint for publishing (read-only, virtual isPublishable included). */
-const findForPublish = (id, campusFilter) =>
-  GaetConstraint.findOne({ _id: id, ...campusFilter }).lean({ virtuals: true });
-
 /** Read by id (generation worker). */
 const findByIdLean = (id) => GaetConstraint.findById(id).lean();
 
@@ -91,7 +87,9 @@ const applyWorkerResult = (id, { status, sessions, report, generatedBy, generati
       status,
       generatedSessions:   sessions || [],
       qualityReport:       report   || null,
-      generatedAt:         new Date(),
+      // A FAILED run produced no timetable — leave generatedAt unset so the
+      // "generated on" stamp only reflects a real (full/partial) generation.
+      generatedAt:         status === GAET_STATUS.FAILED ? null : new Date(),
       generatedBy,
       generatingStartedAt: null,
       generationVersion,
@@ -106,6 +104,38 @@ const markFailed = (id) =>
 const markPublished = (id, publishedBy) =>
   GaetConstraint.findByIdAndUpdate(id, {
     $set: { status: GAET_STATUS.PUBLISHED, publishedAt: new Date(), publishedBy },
+  });
+
+/**
+ * Atomically claims a generated (unpublished) timetable for publication.
+ *
+ * Transitions GENERATED | PARTIALLY_GENERATED → PUBLISHED in a single
+ * findOneAndUpdate and returns the document BEFORE the update (new:false) so
+ * the caller still has the full courseRequirements / generatedSessions payload
+ * needed to materialise the schedule. Returns null when the current status
+ * does not allow publication — which also makes the endpoint idempotent under
+ * concurrent / double-clicked requests (only the first claim wins).
+ *
+ * @returns {Promise<Object|null>} pre-update lean doc (with virtuals) or null
+ */
+const claimForPublish = (id, campusFilter, publishedBy) =>
+  GaetConstraint.findOneAndUpdate(
+    {
+      _id: id, ...campusFilter,
+      status: { $in: [GAET_STATUS.GENERATED, GAET_STATUS.PARTIALLY_GENERATED] },
+    },
+    { $set: { status: GAET_STATUS.PUBLISHED, publishedAt: new Date(), publishedBy } },
+    { new: false },
+  ).lean({ virtuals: true });
+
+/**
+ * Reverts a failed publication: restores the original status and clears the
+ * publication stamps set optimistically by claimForPublish.
+ */
+const restorePublishStatus = (id, originalStatus) =>
+  GaetConstraint.findByIdAndUpdate(id, {
+    $set:   { status: originalStatus },
+    $unset: { publishedAt: '', publishedBy: '' },
   });
 
 /**
@@ -152,7 +182,6 @@ module.exports = {
   findConflictsView,
   findByYearSemester,
   findInCampus,
-  findForPublish,
   findByIdLean,
   upsert,
   claimForGeneration,
@@ -160,6 +189,8 @@ module.exports = {
   applyWorkerResult,
   markFailed,
   markPublished,
+  claimForPublish,
+  restorePublishStatus,
   cancel,
   recoverZombies,
 };

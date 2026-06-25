@@ -88,7 +88,8 @@ router.get(
 
 /**
  * GET /api/gaet/conflicts/:constraintId
- * Returns unplacedCourses with reasons from the qualityReport.
+ * Returns the residual conflict report (independent second-pass overlap detection)
+ * plus the unplacedCourses list from the quality report.
  */
 router.get(
   '/conflicts/:constraintId',
