@@ -224,7 +224,7 @@ router.get(
 router.put(
   '/commission-config',
   authenticate,
-  authorize(['ADMIN', 'CAMPUS_MANAGER']),
+  authorize(MGR_ROLES),
   commissionCtrl.updateCommissionConfig
 );
 
@@ -254,14 +254,14 @@ router.patch(
 router.delete(
   '/:id',
   authenticate,
-  authorize(['ADMIN', 'CAMPUS_MANAGER']),
+  authorize(MGR_ROLES),
   crudCtrl.archivePartner
 );
 
 router.patch(
   '/:id/restore',
   authenticate,
-  authorize(['ADMIN', 'CAMPUS_MANAGER']),
+  authorize(MGR_ROLES),
   crudCtrl.restorePartner
 );
 

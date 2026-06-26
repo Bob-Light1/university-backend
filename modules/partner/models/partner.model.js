@@ -31,14 +31,20 @@ const ConventionSchema = new mongoose.Schema(
   {
     startDate: { type: Date, default: null },
     endDate:   { type: Date, default: null },
-    type:      { type: String, trim: true, default: null },
-    amount:    { type: Number, min: 0, default: null },
+    // Commercial terms of the partnership agreement (set via the manager form).
+    commissionType: {
+      type:    String,
+      enum:    { values: ['FIXED', 'PERCENTAGE'], message: '{VALUE} is not a valid commission type' },
+      default: null,
+    },
+    commissionValue: { type: Number, min: 0, default: null },
     currency:  { type: String, trim: true, uppercase: true, default: 'XAF' },
     status:    {
       type:    String,
       enum:    ['draft', 'active', 'expired', 'terminated'],
       default: 'draft',
     },
+    notes:       { type: String, trim: true, default: null },
     documentUrl: { type: String, trim: true, default: null },
   },
   { _id: false }

@@ -61,6 +61,52 @@ const buildCampusFilter = (req) => {
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * Builds a CSV cell, neutralizing spreadsheet formula injection.
+ * A leading =, +, -, @, tab or CR is prefixed with a single quote so Excel /
+ * Google Sheets treat it as text (OWASP CSV Injection).
+ */
+const csvCell = (value) => {
+  const s = String(value ?? '');
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
+/**
+ * Normalizes a convention sub-document from the client: drops empty-string fields
+ * so optional Date / Number / enum fields don't trip casting or enum validation.
+ * Returns null when nothing meaningful is provided.
+ */
+const normalizeConvention = (conv) => {
+  if (!conv || typeof conv !== 'object') return null;
+  const out = {};
+  for (const key of ['startDate', 'endDate', 'commissionType', 'currency', 'status', 'notes', 'documentUrl']) {
+    if (conv[key] !== undefined && conv[key] !== null && conv[key] !== '') out[key] = conv[key];
+  }
+  if (conv.commissionValue !== undefined && conv.commissionValue !== null && conv.commissionValue !== '') {
+    out.commissionValue = conv.commissionValue;
+  }
+  return Object.keys(out).length ? out : null;
+};
+
+/**
+ * Normalizes a per-partner commission override. Returns null when no ruleType is
+ * selected (engine falls back to the campus config). Keeps only the amount
+ * relevant to the chosen rule.
+ */
+const normalizeCommissionConfig = (cfg) => {
+  if (!cfg || typeof cfg !== 'object' || !cfg.ruleType) return null;
+  if (!['FIXED', 'PERCENTAGE'].includes(cfg.ruleType)) return null;
+  const out = { ruleType: cfg.ruleType };
+  if (cfg.ruleType === 'FIXED') {
+    out.fixedAmount = Number(cfg.fixedAmount) || 0;
+  } else {
+    out.percentage = Number(cfg.percentage) || 0;
+  }
+  if (cfg.currency) out.currency = cfg.currency;
+  return out;
+};
+
 const generatePartnerQR = async (referralLink, campusId, partnerCode) => {
   const qrDir = path.join(UPLOAD_BASE, campusId.toString(), 'partners', 'qr');
   await fs.mkdir(qrDir, { recursive: true });
@@ -184,7 +230,19 @@ const updatePartner = asyncHandler(async (req, res) => {
 
   const updates = {};
   for (const [key, val] of Object.entries(req.body)) {
-    if (!PROTECTED.includes(key)) updates[key] = val;
+    // Normalize empty strings to null so optional enum fields (gender,
+    // institutionType, commercialType, channelType…) don't fail enum validation.
+    if (!PROTECTED.includes(key)) updates[key] = val === '' ? null : val;
+  }
+
+  // Convention is a nested sub-document — sanitize its own empty-string fields.
+  if (updates.convention !== undefined) {
+    updates.convention = normalizeConvention(updates.convention);
+  }
+
+  // Per-partner commission override — null clears it (back to campus default).
+  if (updates.commissionConfig !== undefined) {
+    updates.commissionConfig = normalizeCommissionConfig(updates.commissionConfig);
   }
 
   if (Object.keys(updates).length === 0) {
@@ -334,14 +392,21 @@ const downloadKit = asyncHandler(async (req, res) => {
 
   if (type === 'message') {
     // Pre-composed WhatsApp message template
-    const campusName = 'Notre Campus'; // TODO: populate campus name
+    const campus = await require('../../campus').service.getCampusName(partner.schoolCampus).catch(() => null);
+    const campusName = campus?.campus_name || 'our school';
     const message = `Bonjour ! Je m'appelle ${partner.firstName} ${partner.lastName} et je vous invite à vous pré-inscrire à ${campusName}.\n\nUtilisez mon lien : ${partner.referralLink}\n\nOu mon code : ${partner.partnerCode}`;
     return sendSuccess(res, 200, 'Message template retrieved.', { message });
   }
 
   if (type === 'pdf') {
-    // TODO P2: Generate the PDF flyer via puppeteer-core (same pattern as academic-pdf.service.js)
-    return sendError(res, 501, 'PDF flyer generation not yet implemented in this build.');
+    const campus = await require('../../campus').service.getCampusName(partner.schoolCampus).catch(() => null);
+    const pdfBuffer = await require('../partner.pdf.service').generatePartnerFlyerPdf(
+      partner,
+      { campusName: campus?.campus_name },
+    );
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="kit_${partner.partnerCode}.pdf"`);
+    return res.end(pdfBuffer);
   }
 
   return sendError(res, 400, "type must be 'qr', 'pdf', or 'message'.");
@@ -381,7 +446,7 @@ const exportPartners = asyncHandler(async (req, res) => {
     const headers = Object.keys(rows[0] || {});
     const csvRows = [
       headers.join(','),
-      ...rows.map((r) => headers.map((h) => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(',')),
+      ...rows.map((r) => headers.map((h) => csvCell(r[h])).join(',')),
     ];
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="partners_export.csv"');

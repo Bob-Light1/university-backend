@@ -288,6 +288,13 @@ const aggregateLeadConversionStats = (matchFilter) =>
     } },
   ]);
 
+/** Lead counts grouped by pipeline status ($match provided, KPI summary). */
+const aggregateLeadStatusStats = (matchFilter) =>
+  PartnerLead.aggregate([
+    { $match: matchFilter },
+    { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+
 /** Number of leads (non honeypot) per partner, for a list of ids. */
 const aggregateLeadCountsByPartner = (ids) =>
   PartnerLead.aggregate([
@@ -467,6 +474,7 @@ module.exports = {
   getLeadContact,
   listLeadsForExport,
   aggregateLeadConversionStats,
+  aggregateLeadStatusStats,
   aggregateLeadCountsByPartner,
   aggregateEnrolledCountsByPartner,
   listRecentLeadsForPartner,

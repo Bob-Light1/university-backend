@@ -61,6 +61,16 @@ const hashIp = (ip) => crypto.createHash('sha256').update(ip || '').digest('hex'
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * Builds a CSV cell, neutralizing spreadsheet formula injection (OWASP).
+ * A leading =, +, -, @, tab or CR is prefixed with a single quote.
+ */
+const csvCell = (value) => {
+  const s = String(value ?? '');
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
 // Transitions de statut valides dans le pipeline
 const VALID_TRANSITIONS = {
   new:               ['contacted', 'rejected', 'abandoned'],
@@ -108,7 +118,8 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
   }
 
   let amount = 0;
-  const currency = config.currency || 'XAF';
+  // Partner-level override uses `currency`; campus-level config uses `defaultCurrency`.
+  const currency = config.currency || config.defaultCurrency || 'XAF';
 
   if (config.ruleType === 'FIXED') {
     amount = config.fixedAmount || 0;
@@ -319,12 +330,19 @@ const listLeads = asyncHandler(async (req, res) => {
   const pageNum  = Math.max(1, parseInt(page,  10) || 1);
   const limitNum = Math.max(1, Math.min(parseInt(limit, 10) || 20, 100));
 
-  const { data: leads, total } = await partnerRepo.paginateLeads(filter, {
-    skip: (pageNum - 1) * limitNum,
-    limit: limitNum,
-  });
+  // summaryFilter: same scope without the status filter so KPIs stay stable
+  // across status views (mirrors the commission list pattern).
+  const summaryFilter = { ...filter };
+  delete summaryFilter.status;
 
-  return sendPaginated(res, 200, 'Leads retrieved.', leads, { total, page: pageNum, limit: limitNum });
+  const [{ data: leads, total }, statusStats] = await Promise.all([
+    partnerRepo.paginateLeads(filter, { skip: (pageNum - 1) * limitNum, limit: limitNum }),
+    partnerRepo.aggregateLeadStatusStats(summaryFilter),
+  ]);
+
+  const summary = Object.fromEntries(statusStats.map((s) => [s._id, s.count]));
+
+  return sendPaginated(res, 200, 'Leads retrieved.', leads, { total, page: pageNum, limit: limitNum, summary });
 });
 
 // ── GET ONE LEAD ──────────────────────────────────────────────────────────────
@@ -455,7 +473,7 @@ const exportLeads = asyncHandler(async (req, res) => {
     const headers = Object.keys(rows[0] || {});
     const csv = [
       headers.join(','),
-      ...rows.map((r) => headers.map((h) => `"${String(r[h] || '').replace(/"/g, '""')}"`).join(',')),
+      ...rows.map((r) => headers.map((h) => csvCell(r[h])).join(',')),
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');

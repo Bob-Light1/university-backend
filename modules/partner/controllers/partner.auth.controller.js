@@ -92,6 +92,42 @@ const generatePartnerQR = async (referralLink, campusId, partnerCode) => {
 
 const isGlobalRole = (role) => role === 'ADMIN' || role === 'DIRECTOR';
 
+/**
+ * Normalizes a convention sub-document coming from the client: drops empty-string
+ * fields so optional Date / Number / enum fields don't trip Mongoose casting or
+ * enum validation. Returns null when nothing meaningful is provided.
+ */
+const normalizeConvention = (conv) => {
+  if (!conv || typeof conv !== 'object') return null;
+  const out = {};
+  for (const key of ['startDate', 'endDate', 'commissionType', 'currency', 'status', 'notes', 'documentUrl']) {
+    if (conv[key] !== undefined && conv[key] !== null && conv[key] !== '') out[key] = conv[key];
+  }
+  if (conv.commissionValue !== undefined && conv.commissionValue !== null && conv.commissionValue !== '') {
+    out.commissionValue = conv.commissionValue;
+  }
+  return Object.keys(out).length ? out : null;
+};
+
+/**
+ * Normalizes a per-partner commission override. Returns null when no ruleType is
+ * selected (the engine then falls back to the campus-level config). Keeps only
+ * the amount relevant to the chosen rule so a stale percentage/fixedAmount from a
+ * previous selection is never persisted.
+ */
+const normalizeCommissionConfig = (cfg) => {
+  if (!cfg || typeof cfg !== 'object' || !cfg.ruleType) return null;
+  if (!['FIXED', 'PERCENTAGE'].includes(cfg.ruleType)) return null;
+  const out = { ruleType: cfg.ruleType };
+  if (cfg.ruleType === 'FIXED') {
+    out.fixedAmount = Number(cfg.fixedAmount) || 0;
+  } else {
+    out.percentage = Number(cfg.percentage) || 0;
+  }
+  if (cfg.currency) out.currency = cfg.currency;
+  return out;
+};
+
 // ── REGISTER ──────────────────────────────────────────────────────────────────
 
 /**
@@ -169,8 +205,8 @@ const register = async (req, res) => {
       channelType:      channelType     || null,
       tier:             tier            || 'bronze',
       contacts:         contacts        || [],
-      convention:       convention      || null,
-      commissionConfig: commissionConfig || null,
+      convention:       normalizeConvention(convention),
+      commissionConfig: normalizeCommissionConfig(commissionConfig),
       socialLinks:      socialLinks     || null,
       partnerCode,
       referralLink,
@@ -305,7 +341,8 @@ const resetPassword = async (req, res) => {
 
     if (!token)       return sendError(res, 400, 'Reset token is required.');
     if (!newPassword) return sendError(res, 400, 'newPassword is required.');
-    if (newPassword.length < 8) return sendError(res, 400, 'Password must be at least 8 characters.');
+    const pwCheck = validatePasswordStrength(newPassword);
+    if (!pwCheck.valid) return sendError(res, 400, pwCheck.errors[0]);
 
     let decoded;
     try {
@@ -376,7 +413,11 @@ const updateMyProfile = async (req, res) => {
     const allowed = ['bio', 'phone', 'socialLinks', 'contacts', 'organization', 'gender'];
     const updates = {};
     for (const key of allowed) {
-      if (req.body[key] !== undefined) updates[key] = req.body[key];
+      if (req.body[key] !== undefined) {
+        // Normalize empty strings to null so optional enum fields (e.g. gender)
+        // don't trip Mongoose enum validation with '' (which is not a valid value).
+        updates[key] = req.body[key] === '' ? null : req.body[key];
+      }
     }
 
     if (Object.keys(updates).length === 0) {

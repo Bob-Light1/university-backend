@@ -55,6 +55,16 @@ const buildCampusFilter = (req) => {
 
 const PAYMENT_CHANNELS = ['momo_mtn', 'momo_orange', 'bank_transfer', 'cash', 'other'];
 
+/**
+ * Builds a CSV cell, neutralizing spreadsheet formula injection (OWASP).
+ * A leading =, +, -, @, tab or CR is prefixed with a single quote.
+ */
+const csvCell = (value) => {
+  const s = String(value ?? '');
+  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
+  return `"${safe.replace(/"/g, '""')}"`;
+};
+
 // ── LIST COMMISSIONS ──────────────────────────────────────────────────────────
 
 const listCommissions = asyncHandler(async (req, res) => {
@@ -138,7 +148,7 @@ const validateCommission = asyncHandler(async (req, res) => {
 
 const markPaid = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { paymentChannel, paymentRef, paidAt } = req.body;
+  const { paymentChannel, paymentRef, paidAt, notes } = req.body;
 
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid commission ID.');
 
@@ -159,13 +169,18 @@ const markPaid = asyncHandler(async (req, res) => {
     return sendError(res, 400, `Cannot mark as paid: commission must be validated first (current status: '${commission.status}').`);
   }
 
-  const updated = await partnerRepo.updateCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter, {
+  const set = {
     status:         'paid',
     paymentChannel,
     paymentRef:     paymentRef?.trim() || null,
     paidAt:         paidAt ? new Date(paidAt) : new Date(),
     paidBy:         req.user.id,
-  });
+  };
+  if (notes?.trim()) {
+    set.notes = (commission.notes ? commission.notes + '\n' : '') + `[PAYMENT] ${notes.trim()}`;
+  }
+
+  const updated = await partnerRepo.updateCommissionScoped(new mongoose.Types.ObjectId(id), campusFilter, set);
 
   // TODO P2: Notify partner (WhatsApp + in-app + generate PDF receipt via puppeteer-core)
 
@@ -262,7 +277,7 @@ const exportCommissions = asyncHandler(async (req, res) => {
     const headers = Object.keys(rows[0] || {});
     const csv = [
       headers.join(','),
-      ...rows.map((r) => headers.map((h) => `"${String(r[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+      ...rows.map((r) => headers.map((h) => csvCell(r[h])).join(',')),
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
@@ -370,8 +385,15 @@ const downloadReceipt = asyncHandler(async (req, res) => {
 
   if (!commission) return sendNotFound(res, 'Commission receipt');
 
-  // TODO P2: Generate PDF receipt via puppeteer-core (same pattern as academic-pdf.service.js)
-  return sendError(res, 501, 'PDF receipt generation not yet implemented in this build.');
+  const campus = await campusService().getCampusName(req.user.campusId).catch(() => null);
+  const pdfBuffer = await require('../partner.pdf.service').generateCommissionReceiptPdf(
+    commission,
+    { campusName: campus?.campus_name },
+  );
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="receipt_${commission._id}.pdf"`);
+  return res.end(pdfBuffer);
 });
 
 // ── EXPORTS ───────────────────────────────────────────────────────────────────
