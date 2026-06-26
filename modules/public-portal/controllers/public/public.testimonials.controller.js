@@ -2,14 +2,14 @@
 
 /**
  * @file public.testimonials.controller.js
- * @description Témoignages publiés pour un campus (spec §4.6 / §7.5).
+ * @description Published testimonials for a campus (spec §4.6 / §7.5).
  *
- * Route : GET /api/public/testimonials?campusSlug=...&limit=6
- * Renvoie uniquement les témoignages isPublished, triés par order croissant.
- * Citation bilingue ({fr, en}) transmise telle quelle — le portail choisit la langue.
+ * Route: GET /api/public/testimonials?campusSlug=...&limit=6
+ * Returns only the isPublished testimonials, sorted by ascending order.
+ * Bilingual quote ({fr, en}) passed through as-is — the portal selects the language.
  */
 
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 const repo = require('../../public-portal.repository');
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');

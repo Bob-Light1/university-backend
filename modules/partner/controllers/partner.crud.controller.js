@@ -11,7 +11,6 @@
  *  PUT    /api/partners/:id            → updatePartner
  *  PATCH  /api/partners/:id/status     → toggleStatus
  *  DELETE /api/partners/:id            → archivePartner   (soft-delete)
- *  POST   /api/partners/:id/qr-code    → regenerateQR
  *  GET    /api/partners/:id/kit        → downloadKit
  *  GET    /api/partners/:id/commission-summary → getCommissionSummary
  *
@@ -23,8 +22,6 @@
  */
 
 const mongoose = require('mongoose');
-const path     = require('path');
-const fs       = require('fs').promises;
 const QRCode   = require('qrcode');
 
 const partnerRepo = require('../partner.repository');
@@ -39,11 +36,7 @@ const {
   sendForbidden,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
-
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-const UPLOAD_BASE  = process.env.UPLOAD_DIR
-  ? path.join(process.env.UPLOAD_DIR)
-  : path.join(__dirname, '..', '..', 'uploads');
+const { buildReferralUrl } = require('../../../shared/utils/referral');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
@@ -105,25 +98,6 @@ const normalizeCommissionConfig = (cfg) => {
   }
   if (cfg.currency) out.currency = cfg.currency;
   return out;
-};
-
-const generatePartnerQR = async (referralLink, campusId, partnerCode) => {
-  const qrDir = path.join(UPLOAD_BASE, campusId.toString(), 'partners', 'qr');
-  await fs.mkdir(qrDir, { recursive: true });
-
-  const fileName = `qr_${partnerCode.toLowerCase()}.png`;
-  const filePath = path.join(qrDir, fileName);
-
-  const buffer = await QRCode.toBuffer(referralLink, {
-    type:                 'png',
-    width:                300,
-    errorCorrectionLevel: 'M',
-    margin:               2,
-    color: { dark: '#000000', light: '#FFFFFF' },
-  });
-
-  await fs.writeFile(filePath, buffer);
-  return fileName;
 };
 
 // ── LIST PARTNERS ─────────────────────────────────────────────────────────────
@@ -333,30 +307,6 @@ const restorePartner = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Partner restored.', updated);
 });
 
-// ── REGENERATE QR ─────────────────────────────────────────────────────────────
-
-const regenerateQR = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid partner ID.');
-
-  const campusFilter = buildCampusFilter(req);
-  const partner = await partnerRepo.findPartnerDocByIdScoped(new mongoose.Types.ObjectId(id), campusFilter);
-
-  if (!partner) return sendNotFound(res, 'Partner');
-  if (!partner.partnerCode) return sendError(res, 400, 'Partner has no partnerCode — cannot generate QR.');
-
-  const qrCodeFileName = await generatePartnerQR(
-    partner.referralLink,
-    partner.schoolCampus,
-    partner.partnerCode
-  );
-
-  partner.qrCodeFileName = qrCodeFileName;
-  await partnerRepo.savePartnerDoc(partner);
-
-  return sendSuccess(res, 200, 'QR code regenerated.', { qrCodeFileName });
-});
-
 // ── DOWNLOAD KIT (PDF flyer + QR) ────────────────────────────────────────────
 
 const downloadKit = asyncHandler(async (req, res) => {
@@ -373,20 +323,13 @@ const downloadKit = asyncHandler(async (req, res) => {
   if (!partner.partnerCode) return sendError(res, 400, 'Partner has no partnerCode.');
 
   if (type === 'qr') {
-    const qrFilePath = path.join(
-      UPLOAD_BASE,
-      partner.schoolCampus.toString(),
-      'partners', 'qr',
-      partner.qrCodeFileName || `qr_${partner.partnerCode.toLowerCase()}.png`
+    // Generated on the fly from the partnerCode — no disk, survives redeploys.
+    const buffer = await QRCode.toBuffer(
+      buildReferralUrl(partner.partnerCode, { src: 'qr' }),
+      { type: 'png', width: 300, errorCorrectionLevel: 'M', margin: 2, color: { dark: '#000000', light: '#FFFFFF' } }
     );
-    try {
-      await fs.access(qrFilePath);
-    } catch {
-      return sendError(res, 404, 'QR file not found. Please regenerate it.');
-    }
     res.setHeader('Content-Type', 'image/png');
     res.setHeader('Content-Disposition', `attachment; filename="kit_${partner.partnerCode}.png"`);
-    const buffer = await fs.readFile(qrFilePath);
     return res.end(buffer);
   }
 
@@ -394,7 +337,7 @@ const downloadKit = asyncHandler(async (req, res) => {
     // Pre-composed WhatsApp message template
     const campus = await require('../../campus').service.getCampusName(partner.schoolCampus).catch(() => null);
     const campusName = campus?.campus_name || 'our school';
-    const message = `Bonjour ! Je m'appelle ${partner.firstName} ${partner.lastName} et je vous invite à vous pré-inscrire à ${campusName}.\n\nUtilisez mon lien : ${partner.referralLink}\n\nOu mon code : ${partner.partnerCode}`;
+    const message = `Hi! I'm ${partner.firstName} ${partner.lastName} and I'd like to invite you to pre-register at ${campusName}.\n\nUse my link: ${partner.referralLink}\n\nOr my code: ${partner.partnerCode}`;
     return sendSuccess(res, 200, 'Message template retrieved.', { message });
   }
 
@@ -498,7 +441,6 @@ module.exports = {
   toggleStatus,
   archivePartner,
   restorePartner,
-  regenerateQR,
   downloadKit,
   exportPartners,
   getCommissionSummary,

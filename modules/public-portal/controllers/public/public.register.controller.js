@@ -26,19 +26,33 @@
  */
 
 const partnerService = require('../../../partner').service; // partner module facade (§3)
+const { enqueueIngestion } = require('../../public-portal.queue');
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
 const {
   asyncHandler,
   sendSuccess,
-  sendCreated,
   sendError,
   sendNotFound,
 } = require('../../../../shared/utils/response-helpers');
+const { firstLengthViolation } = require('../../../../shared/utils/validation-helpers');
 
 // Same validation rule as the Partner model — ERP consistency.
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// Synchronous input bounds for the deferred lead write. Enforced here so an
+// oversized payload is rejected with a 400 up front, rather than failing in the
+// ingestion worker after a 202 has already been returned.
+const LEAD_BOUNDS = {
+  firstName:       80,
+  lastName:        80,
+  email:           160,
+  phone:           30,
+  programInterest: 120,
+  city:            80,
+  country:         80,
+};
 
 const publicPreRegister = asyncHandler(async (req, res) => {
   const {
@@ -65,6 +79,19 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'A valid email address is required.');
   }
 
+  const tooLong = firstLengthViolation([
+    { field: 'firstName',       value: firstName,       max: LEAD_BOUNDS.firstName },
+    { field: 'lastName',        value: lastName,        max: LEAD_BOUNDS.lastName },
+    { field: 'email',           value: normalizedEmail, max: LEAD_BOUNDS.email },
+    { field: 'phone',           value: phone,           max: LEAD_BOUNDS.phone },
+    { field: 'programInterest', value: programInterest, max: LEAD_BOUNDS.programInterest },
+    { field: 'city',            value: city,            max: LEAD_BOUNDS.city },
+    { field: 'country',         value: country,         max: LEAD_BOUNDS.country },
+  ]);
+  if (tooLong) {
+    return sendError(res, 400, `${tooLong.field} must not exceed ${tooLong.max} characters.`);
+  }
+
   let partner   = null;
   let campusId  = null;
   let resolvedCode = null;
@@ -80,8 +107,10 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     campusId     = partner.schoolCampus;
     resolvedCode = partner.partnerCode;
 
-    // 2. SELF_REFERRAL
-    if (normalizedEmail === partner.email?.toLowerCase()) {
+    // 2. SELF_REFERRAL — the partner registers with their own code (email OR phone)
+    const partnerPhoneDigits = String(partner.phone || '').replace(/\D/g, '');
+    if (normalizedEmail === partner.email?.toLowerCase()
+      || (partnerPhoneDigits && partnerPhoneDigits === String(phone || '').replace(/\D/g, ''))) {
       return sendError(res, 422, 'Self-referral is not allowed.');
     }
   } else {
@@ -102,29 +131,35 @@ const publicPreRegister = asyncHandler(async (req, res) => {
   const normalizedPhone = phone?.trim() || null;
   const detectedSource  = source || (resolvedCode ? 'referral_link' : 'direct');
 
-  // 3 + 4. Silent DEDUPLICATION (first-touch) then creation with
-  // IP_BURST detection — business logic carried by the partner module.
-  const { leadId, status, created } = await partnerService.upsertPreRegistrationLead({
-    campusId,
-    partner,
-    partnerCode:     resolvedCode,
-    firstName:       firstName.trim(),
-    lastName:        lastName.trim(),
-    email:           normalizedEmail,
-    phone:           normalizedPhone,
-    programInterest: programInterest?.trim() || null,
-    city:            city?.trim() || null,
-    country:         country?.trim() || null,
-    source:          detectedSource,
-    utmParams:       utmParams || null,
-    ipAddressHash:   req.ipHash,
-    notifyNextBatch: !!notifyNextBatch,
+  // 3 + 4. Persistence is deferred to the ingestion queue: silent DEDUPLICATION
+  // (first-touch) then creation with IP_BURST detection run in the worker via the
+  // partner module (see public-portal.queue.js). Resolution above stayed
+  // synchronous so an invalid code / self-referral is surfaced immediately.
+  // Only partner._id is needed downstream, so we forward it as a primitive.
+  await enqueueIngestion({
+    type: 'pre-register',
+    payload: {
+      campusId,
+      partnerId:       partner?._id || null,
+      partnerCode:     resolvedCode,
+      firstName:       firstName.trim(),
+      lastName:        lastName.trim(),
+      email:           normalizedEmail,
+      phone:           normalizedPhone,
+      programInterest: programInterest?.trim() || null,
+      city:            city?.trim() || null,
+      country:         country?.trim() || null,
+      source:          detectedSource,
+      utmParams:       utmParams || null,
+      ipAddressHash:   req.ipHash,
+      notifyNextBatch: !!notifyNextBatch,
+    },
   });
 
-  if (!created) {
-    return sendSuccess(res, 200, 'Pre-registration received successfully.', { leadId, status });
-  }
-  return sendCreated(res, 'Pre-registration received successfully.', { leadId, status });
+  // 202 Accepted — the lead is queued for persistence (or written inline when no
+  // Redis is configured). The portal treats any 2xx as success and does not read
+  // the lead id back.
+  return sendSuccess(res, 202, 'Pre-registration received successfully.');
 });
 
 module.exports = { publicPreRegister };

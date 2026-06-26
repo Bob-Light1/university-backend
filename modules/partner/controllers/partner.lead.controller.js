@@ -25,8 +25,11 @@
 
 const crypto   = require('crypto');
 const mongoose = require('mongoose');
+const QRCode   = require('qrcode');
 
 const partnerRepo = require('../partner.repository');
+const partnerService = require('../partner.service');
+const { buildReferralUrl } = require('../../../shared/utils/referral');
 // Lazy require toward the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const getCampusCommissionConfig = (...args) => require('../../campus').service.getCampusCommissionConfig(...args);
 
@@ -58,6 +61,9 @@ const buildCampusFilter = (req) => {
 };
 
 const hashIp = (ip) => crypto.createHash('sha256').update(ip || '').digest('hex');
+
+/** Strips a phone to its digits for format-agnostic equality comparison. */
+const phoneDigits = (p) => String(p || '').replace(/\D/g, '');
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -159,7 +165,11 @@ const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
 // ── PUBLIC : RESOLVE CODE ─────────────────────────────────────────────────────
 
 /**
- * Résout un partnerCode → branding campus pour la page de pré-inscription.
+ * Resolves a partnerCode → campus branding for a referral landing.
+ *
+ * Public and keyed by a guessable code, so it exposes only campus branding and
+ * the normalized code — never the partner's identity (PII). Rate-limited in the
+ * router to deter code enumeration.
  *
  * @route  GET /api/partners/public/resolve/:code
  * @access PUBLIC
@@ -174,16 +184,82 @@ const resolveCode = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, 200, 'Partner code resolved.', {
     partnerCode: partner.partnerCode,
-    partnerName: `${partner.firstName} ${partner.lastName}`,
     campus:      partner.schoolCampus,
   });
 });
 
-// ── PUBLIC : PRE-REGISTER ─────────────────────────────────────────────────────
+// ── PUBLIC : QR CODE (live) ───────────────────────────────────────────────────
 
 /**
- * Soumission pré-inscription prospect via lien affilié.
- * Rate-limited : 10 req/h/IP (appliqué dans le router).
+ * Streams the partner's referral QR code as a PNG, generated on the fly from the
+ * partnerCode. The QR encodes only a public marketing URL (no secret), so the
+ * route is public — which lets it be used directly as an <img> src. Nothing is
+ * written to disk, so it survives redeploys and works across instances.
+ *
+ * @route  GET /api/partners/public/qr/:code
+ * @access PUBLIC
+ */
+const streamReferralQr = asyncHandler(async (req, res) => {
+  const { code } = req.params;
+  if (!code?.trim()) return sendError(res, 400, 'Partner code is required.');
+
+  // Validate the code maps to an active partner before spending CPU on a QR.
+  const partner = await partnerRepo.findActivePartnerByCodeForResolve(code);
+  if (!partner) return sendNotFound(res, 'Partner code');
+
+  const target = buildReferralUrl(partner.partnerCode, { src: 'qr' });
+
+  const buffer = await QRCode.toBuffer(target, {
+    type:                 'png',
+    width:                300,
+    errorCorrectionLevel: 'M',
+    margin:               2,
+    color: { dark: '#000000', light: '#FFFFFF' },
+  });
+
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  return res.end(buffer);
+});
+
+// ── PUBLIC : REFERRAL HIT TRACKING ────────────────────────────────────────────
+
+/**
+ * Records a top-of-funnel referral hit (a `/r/{code}` scan or click) as an
+ * atomic counter increment on the partner. `?src=qr` marks a scanned QR; anything
+ * else counts as a shared-link click. Called server-side from the portal's
+ * redirector (non-blocking), so it always answers 204 quickly and never leaks
+ * whether the code exists. Rate-limited in the router to bound bot inflation.
+ *
+ * @route  POST /api/partners/public/track/:code
+ * @access PUBLIC
+ */
+const trackReferralHit = asyncHandler(async (req, res) => {
+  const { code } = req.params;
+  if (code?.trim()) {
+    const isQr = String(req.query.src || '').toLowerCase() === 'qr';
+    // Fire-and-forget: analytics must never delay or fail the beacon response.
+    partnerRepo.incrementReferralHit(code, isQr).catch(() => {});
+  }
+  return res.status(204).end();
+});
+
+// ── PUBLIC : PRE-REGISTER (DEPRECATED) ────────────────────────────────────────
+
+/**
+ * Affiliate pre-registration (legacy endpoint).
+ *
+ * @deprecated The canonical funnel is the public portal — POST /api/public/pre-register.
+ * The ERP `/register` page now redirects there, so nothing first-party calls this
+ * route anymore. It is retained only as a thin, back-compatible alias for any
+ * previously printed/shared link that still posts here. It delegates persistence
+ * to the SAME `partnerService.upsertPreRegistrationLead` the portal uses, so the
+ * anti-fraud semantics are now identical: silent first-touch deduplication (no
+ * more 409 reject) and IP_BURST detection over a 10-minute window. Synchronous
+ * input validation, partner resolution and self-referral checks stay here so a
+ * bad code is surfaced immediately.
+ *
+ * Rate-limited: 10 req/h/IP (applied in the router).
  *
  * @route  POST /api/partners/public/pre-register
  * @access PUBLIC
@@ -191,7 +267,7 @@ const resolveCode = asyncHandler(async (req, res) => {
 const publicPreRegister = asyncHandler(async (req, res) => {
   const {
     firstName, lastName, email, phone,
-    programInterest, source,
+    programInterest, source, city, country,
     utm_source, utm_medium, utm_campaign,
   } = req.body;
 
@@ -205,7 +281,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     return sendSuccess(res, 200, 'Pre-registration received.');
   }
 
-  // Validation champs obligatoires
+  // Required-field validation
   if (!firstName?.trim()) return sendError(res, 400, 'firstName is required.');
   if (!lastName?.trim())  return sendError(res, 400, 'lastName is required.');
   if (!email?.trim())     return sendError(res, 400, 'email is required.');
@@ -219,67 +295,40 @@ const publicPreRegister = asyncHandler(async (req, res) => {
 
   if (!partner) return sendError(res, 404, 'Invalid or inactive referral code.');
 
-  const campusId = partner.schoolCampus;
-
-  // 2. SELF_REFERRAL — the partner pre-registers themselves
-  if (normalizedEmail === partner.email?.toLowerCase()) {
+  // 2. SELF_REFERRAL — the partner pre-registers themselves (email OR phone)
+  const partnerPhone = phoneDigits(partner.phone);
+  if (normalizedEmail === partner.email?.toLowerCase()
+    || (partnerPhone && phoneDigits(phone) === partnerPhone)) {
     return sendError(res, 422, 'Self-referral is not allowed.');
   }
 
-  // 3. DUPLICATE_LEAD — same email OR same phone on the same campus
-  const dupOr = [{ email: normalizedEmail }];
-  if (phone?.trim()) dupOr.push({ phone: phone.trim() });
+  // 3 + 4. Persistence (first-touch dedup + IP_BURST) delegated to the shared
+  // service — the single source of truth also used by the public portal queue.
+  const utmParams = (utm_source || utm_medium || utm_campaign)
+    ? { utm_source, utm_medium, utm_campaign }
+    : null;
 
-  const duplicate = await partnerRepo.findActiveLeadByContact({ campusId, dupOr });
-  if (duplicate) {
-    return sendError(res, 409, 'A registration with this email or phone already exists for this campus.');
-  }
-
-  // 4. IP_BURST — >5 leads from the same IP hash within 1 hour
-  const rawIp  = req.ip || req.connection?.remoteAddress || '';
-  const ipHash = hashIp(rawIp);
-  const fraudFlags = [];
-
-  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-  const ipBurstCount = await partnerRepo.countRecentLeadsByIp({ ipAddressHash: ipHash, since: oneHourAgo });
-
-  if (ipBurstCount >= 5) {
-    fraudFlags.push('IP_BURST');
-  }
-
-  // Detect source from the request context
-  const detectedSource = source || (req.query.ref ? 'referral_link' : 'manual_code');
-
-  const lead = await partnerRepo.createLead({
-    schoolCampus:    campusId,
-    partner:         partner._id,
+  const { leadId, status } = await partnerService.upsertPreRegistrationLead({
+    campusId:        partner.schoolCampus,
+    partner:         { _id: partner._id },
     partnerCode:     normalizedCode,
     firstName:       firstName.trim(),
     lastName:        lastName.trim(),
     email:           normalizedEmail,
     phone:           phone?.trim() || null,
     programInterest: programInterest?.trim() || null,
-    source:          detectedSource,
-    status:          'new',
-    statusHistory:   [{ status: 'new', changedBy: null, changedAt: new Date(), note: 'Pre-registration submitted.' }],
-    utmParams:       (utm_source || utm_medium || utm_campaign)
-                       ? { utm_source, utm_medium, utm_campaign }
-                       : null,
-    ipAddressHash:   ipHash,
-    honeypotTripped: false,
-    fraudFlags,
+    city:            city?.trim() || null,
+    country:         country?.trim() || null,
+    source:          source || 'referral_link',
+    utmParams,
+    ipAddressHash:   hashIp(req.ip || req.connection?.remoteAddress || ''),
+    notifyNextBatch: false,
   });
 
-  // Update partner's lastActivityAt (fire-and-forget)
-  partnerRepo.touchActivity(partner._id).catch(() => {});
-
-  // TODO P2: Notifier Campus Manager (WhatsApp + in-app) — nouveau lead
-  // TODO P2: Notifier Partner (in-app) — nouveau lead dans le pipeline
-
   return sendCreated(res, 'Pre-registration received successfully.', {
-    leadId:      lead._id,
+    leadId,
     partnerCode: normalizedCode,
-    status:      lead.status,
+    status,
   });
 });
 
@@ -488,6 +537,8 @@ const exportLeads = asyncHandler(async (req, res) => {
 
 module.exports = {
   resolveCode,
+  streamReferralQr,
+  trackReferralHit,
   publicPreRegister,
   listLeads,
   getLead,

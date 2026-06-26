@@ -27,6 +27,13 @@ const router = express.Router();
 // Rate limiter dedicated to pre-registration: 10 req/h/IP (spec v2.0 §3.6)
 const preRegisterLimiter = createCustomLimiter(60, 10, 'Too many pre-registration attempts. Please try again in 1 hour.');
 
+// Rate limiter for the referral-hit beacon: 60 hits/min/IP. Generous enough for
+// real scans/clicks while bounding how far a bot can inflate the counters.
+const trackLimiter = createCustomLimiter(1, 60, 'Too many requests.');
+
+// Rate limiter for code resolution: 30/min/IP — deters partnerCode enumeration.
+const resolveLimiter = createCustomLimiter(1, 30, 'Too many requests.');
+
 const MGR_ROLES    = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 const PARTNER_ROLE = ['PARTNER'];
 
@@ -40,7 +47,13 @@ router.post('/auth/reset-password/:token',             authCtrl.resetPassword);
 router.post('/public/pre-register', preRegisterLimiter, leadCtrl.publicPreRegister);
 
 // Resolve partnerCode → campus branding
-router.get('/public/resolve/:code', leadCtrl.resolveCode);
+router.get('/public/resolve/:code', resolveLimiter, leadCtrl.resolveCode);
+
+// Live referral QR (PNG) — public, generated on the fly (usable as <img> src)
+router.get('/public/qr/:code', leadCtrl.streamReferralQr);
+
+// Referral hit tracking (scan/click) — public beacon from the portal redirector
+router.post('/public/track/:code', trackLimiter, leadCtrl.trackReferralHit);
 
 // ── PARTNER PORTAL ROUTES ─────────────────────────────────────────────────────
 // All these routes require a valid JWT with role PARTNER
@@ -263,13 +276,6 @@ router.patch(
   authenticate,
   authorize(MGR_ROLES),
   crudCtrl.restorePartner
-);
-
-router.post(
-  '/:id/qr-code',
-  authenticate,
-  authorize(MGR_ROLES),
-  crudCtrl.regenerateQR
 );
 
 router.get(

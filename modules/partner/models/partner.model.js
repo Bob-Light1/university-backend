@@ -13,6 +13,8 @@
 const mongoose = require('mongoose');
 const bcrypt   = require('bcrypt');
 
+const { buildReferralUrl } = require('../../../shared/utils/referral');
+
 const SALT_ROUNDS = 12;
 
 // ── SUB-SCHEMAS ───────────────────────────────────────────────────────────────
@@ -223,14 +225,22 @@ const partnerSchema = new mongoose.Schema(
       // index declared below via partnerSchema.index({ partnerCode: 1 }, { unique: true, sparse: true })
     },
 
-    referralLink: {
-      type:    String,
-      default: null,
-    },
+    // referralLink and the QR are NOT stored — both are derived from partnerCode
+    // (referralLink via the virtual below; the QR generated on the fly by
+    // GET /partners/public/qr/:code). This keeps them re-pointable via the portal
+    // base URL and avoids serving a stale persisted value or a lost disk file.
 
-    qrCodeFileName: {
-      type:    String,
-      default: null,
+    // ── REFERRAL TRAFFIC COUNTERS ─────────────────────────────────────────
+    // Top-of-funnel counters incremented on each `/r/{code}` hit (the portal's
+    // short-link redirector). Unlike lead/conversion counts — which are derived
+    // on the fly from the Lead collection — a click/scan is a transient event
+    // with no other store, so a cheap atomic $inc here is the idiomatic place to
+    // keep it (no per-hit documents, safe at high scan volume). Directional
+    // metric: bots can inflate it despite rate-limiting.
+    referralStats: {
+      linkClicks:        { type: Number, default: 0, min: 0 }, // hits without ?src=qr (shared links)
+      qrScans:           { type: Number, default: 0, min: 0 }, // hits with ?src=qr (scanned codes)
+      lastReferralHitAt: { type: Date, default: null },
     },
 
     // ── ADDITIONAL CONTACTS (institutional) ───────────────────────────────
@@ -290,6 +300,12 @@ partnerSchema.index({ schoolCampus: 1, firstName: 1, lastName: 1 });
 
 partnerSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`;
+});
+
+// Public referral link — derived from partnerCode so it is always built against
+// the current portal base URL (never a stale persisted value).
+partnerSchema.virtual('referralLink').get(function () {
+  return buildReferralUrl(this.partnerCode);
 });
 
 // ── PRE-SAVE ──────────────────────────────────────────────────────────────────

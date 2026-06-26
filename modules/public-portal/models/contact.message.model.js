@@ -21,24 +21,29 @@ const contactMessageSchema = new mongoose.Schema(
       index: true,
     },
 
-    // Sender identity
+    // Sender identity. Lengths are bounded — this is a public, unauthenticated
+    // write endpoint, so a direct API caller must not be able to store oversized
+    // values (storage abuse / DoS).
     name: {
-      type:     String,
-      required: [true, 'Name is required'],
-      trim:     true,
+      type:      String,
+      required:  [true, 'Name is required'],
+      trim:      true,
+      maxlength: [120, 'Name must not exceed 120 characters'],
     },
 
     email: {
       type:      String,
       lowercase: true,
       trim:      true,
+      maxlength: [160, 'Email must not exceed 160 characters'],
       default:   null,
     },
 
     phone: {
-      type:    String,
-      trim:    true,
-      default: null,
+      type:      String,
+      trim:      true,
+      maxlength: [30, 'Phone must not exceed 30 characters'],
+      default:   null,
     },
 
     // Message content
@@ -52,9 +57,10 @@ const contactMessageSchema = new mongoose.Schema(
     },
 
     message: {
-      type:     String,
-      required: [true, 'Message is required'],
-      trim:     true,
+      type:      String,
+      required:  [true, 'Message is required'],
+      trim:      true,
+      maxlength: [2000, 'Message must not exceed 2000 characters'],
     },
 
     // Workflow

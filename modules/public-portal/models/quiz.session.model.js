@@ -7,6 +7,13 @@
  * Before pre-registration : sessionToken identifies the participant anonymously.
  * After pre-registration  : lead (ObjectId) is set, sessionToken is kept.
  * period 'YYYY-MM'        : used to filter the monthly leaderboard.
+ *
+ * Server-issued lifecycle (anti-cheat): a `pending` session is created when the
+ * questions are served, storing the exact `servedQuestionIds`. Submission scores
+ * against that stored set — the client can never shrink the denominator — and
+ * flips the session to `completed`. Abandoned `pending` sessions carry an
+ * `expiresAt` and are reaped by a TTL index; completed sessions set it to null
+ * so the leaderboard keeps them.
  */
 
 const mongoose = require('mongoose');
@@ -43,22 +50,51 @@ const quizSessionSchema = new mongoose.Schema(
       default: null,
     },
 
-    // Display name for the leaderboard, e.g. 'Awa M. — Douala'
+    // Lifecycle: 'pending' once questions are served, 'completed' after scoring.
+    // Default 'completed' keeps any legacy/direct creation backward-compatible.
+    status: {
+      type:    String,
+      enum:    ['pending', 'completed'],
+      default: 'completed',
+    },
+
+    // The exact question set served to this session — the authoritative
+    // scoring denominator. The client cannot enlarge or shrink it at submit.
+    servedQuestionIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref:  'QuizQuestion',
+      },
+    ],
+
+    // TTL anchor: set on pending sessions (reaped if never submitted), cleared
+    // to null on completion so finished sessions are retained for the leaderboard.
+    expiresAt: {
+      type:    Date,
+      default: null,
+    },
+
+    // Display name for the leaderboard, e.g. 'Awa M. — Douala'.
+    // Bounded length — this value is surfaced on the public leaderboard, so a
+    // direct API caller must not be able to store an oversized/abusive label.
     displayName: {
       type:    String,
       trim:    true,
+      maxlength: [60, 'displayName must not exceed 60 characters'],
       default: null,
     },
 
     city: {
       type:    String,
       trim:    true,
+      maxlength: [80, 'city must not exceed 80 characters'],
       default: null,
     },
 
     country: {
       type:    String,
       trim:    true,
+      maxlength: [80, 'country must not exceed 80 characters'],
       default: null,
     },
 
@@ -117,6 +153,9 @@ const quizSessionSchema = new mongoose.Schema(
 quizSessionSchema.index({ schoolCampus: 1, period: 1, score: -1 });
 quizSessionSchema.index({ schoolCampus: 1, period: 1, category: 1, score: -1 });
 quizSessionSchema.index({ sessionToken: 1 }, { unique: true });
+// TTL: reap abandoned `pending` sessions. expireAfterSeconds:0 means "expire at
+// the date stored in expiresAt"; docs with expiresAt:null are never collected.
+quizSessionSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 const QuizSession = mongoose.model('QuizSession', quizSessionSchema);
 module.exports = QuizSession;

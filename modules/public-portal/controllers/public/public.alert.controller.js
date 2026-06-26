@@ -10,11 +10,15 @@
  */
 
 const { asyncHandler, sendSuccess, sendError } = require('../../../../shared/utils/response-helpers');
-const partnerService = require('../../../partner').service; // partner module facade (§3)
+const { firstLengthViolation } = require('../../../../shared/utils/validation-helpers');
+const { enqueueIngestion } = require('../../public-portal.queue');
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+// Synchronous input bounds for the deferred lead write (see the ingestion queue).
+const ALERT_BOUNDS = { email: 160, phone: 30, programInterest: 120 };
 
 const submitAlert = asyncHandler(async (req, res) => {
   const {
@@ -38,6 +42,15 @@ const submitAlert = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Invalid email address.');
   }
 
+  const tooLong = firstLengthViolation([
+    { field: 'email',           value: normalizedEmail,         max: ALERT_BOUNDS.email },
+    { field: 'phone',           value: normalizedPhone,         max: ALERT_BOUNDS.phone },
+    { field: 'programInterest', value: programInterest?.trim(), max: ALERT_BOUNDS.programInterest },
+  ]);
+  if (tooLong) {
+    return sendError(res, 400, `${tooLong.field} must not exceed ${tooLong.max} characters.`);
+  }
+
   const defaultSlug = process.env.DEFAULT_CAMPUS_SLUG ?? '';
   const slug = campusSlug?.trim() || defaultSlug;
 
@@ -46,16 +59,21 @@ const submitAlert = asyncHandler(async (req, res) => {
     return sendError(res, 404, 'Campus not found.');
   }
 
-  // Existing lead → notifyNextBatch=true; otherwise a minimal lead is created (partner module).
-  const { leadId, created } = await partnerService.registerSessionAlert({
-    campusId:        campus._id,
-    email:           normalizedEmail,
-    phone:           normalizedPhone,
-    programInterest: programInterest?.trim() || null,
-    ipAddressHash:   req.ipHash,
+  // Persistence deferred to the ingestion queue: existing lead → notifyNextBatch
+  // = true; otherwise a minimal lead is created (partner module, in the worker).
+  // 202 Accepted — the portal treats any 2xx as success.
+  await enqueueIngestion({
+    type: 'alert',
+    payload: {
+      campusId:        campus._id,
+      email:           normalizedEmail,
+      phone:           normalizedPhone,
+      programInterest: programInterest?.trim() || null,
+      ipAddressHash:   req.ipHash,
+    },
   });
 
-  return sendSuccess(res, created ? 201 : 200, 'Alert registered.', { leadId });
+  return sendSuccess(res, 202, 'Alert registered.');
 });
 
 module.exports = { submitAlert };

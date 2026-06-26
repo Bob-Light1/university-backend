@@ -45,19 +45,35 @@ const normCode = (code) => String(code).toUpperCase().trim();
 /** ACTIVE partner by referral code (cross-module service). */
 const findActivePartnerByCode = (code) =>
   Partner.findOne({ partnerCode: normCode(code), status: 'active' })
-    .select('_id email schoolCampus partnerCode').lean();
+    .select('_id email phone schoolCampus partnerCode').lean();
 
-/** Same + populated campus branding (public pre-registration page). */
+/** Campus branding only (public referral landing) — no partner identity (PII). */
 const findActivePartnerByCodeForResolve = (code) =>
   Partner.findOne({ partnerCode: normCode(code), status: 'active' })
-    .select('partnerCode firstName lastName schoolCampus')
+    .select('partnerCode schoolCampus')
     .populate('schoolCampus', 'campus_name logo primaryColor')
     .lean();
 
 /** Same + commission config (public pre-registration submission). */
 const findActivePartnerForPreRegister = (code) =>
   Partner.findOne({ partnerCode: normCode(code), status: 'active' })
-    .select('_id email schoolCampus partnerCode commissionConfig tier').lean();
+    .select('_id email phone schoolCampus partnerCode commissionConfig tier').lean();
+
+/**
+ * Atomically records a referral-link hit on an active partner (top-of-funnel
+ * scan/click counter). Increments qrScans when scanned (`isQr`), else linkClicks.
+ * @param {string} code — partnerCode
+ * @param {boolean} isQr — hit carried ?src=qr
+ * @returns {Promise<boolean>} true when an active partner matched the code
+ */
+const incrementReferralHit = async (code, isQr) => {
+  const field = isQr ? 'referralStats.qrScans' : 'referralStats.linkClicks';
+  const { matchedCount } = await Partner.updateOne(
+    { partnerCode: normCode(code), status: 'active' },
+    { $inc: { [field]: 1 }, $set: { 'referralStats.lastReferralHitAt': new Date() } },
+  );
+  return matchedCount > 0;
+};
 
 // ── PARTNER : auth ─────────────────────────────────────────────────────────────
 
@@ -147,10 +163,6 @@ const paginatePartners = async (filter, { skip, limit }) => {
 const findPartnerByIdScoped = (id, campusFilter) =>
   Partner.findOne({ _id: id, ...campusFilter }).select(SAFE).lean({ virtuals: true });
 
-/** Campus-scoped partner document (regenerateQR: mutation + save). @returns {Promise<Document|null>} */
-const findPartnerDocByIdScoped = (id, campusFilter) =>
-  Partner.findOne({ _id: id, ...campusFilter });
-
 /** Campus-scoped partner for the kit (no password, virtuals). */
 const findPartnerForKit = (id, campusFilter) =>
   Partner.findOne({ _id: id, ...campusFilter }).select('-password').lean({ virtuals: true });
@@ -162,9 +174,6 @@ const findPartnerSummaryFields = (id, campusFilter) =>
 /** A partner's commission/tier config (commission engine). */
 const findPartnerForCommission = (partnerId) =>
   Partner.findById(partnerId).select('commissionConfig tier schoolCampus').lean();
-
-/** Regenerates the QR: applies qrCodeFileName via save (cf. findPartnerDocByIdScoped). */
-const savePartnerDoc = (partner) => partner.save();
 
 /** Updates a scoped partner (manager fields, runValidators). */
 const updatePartnerScoped = (id, campusFilter, updates) =>
@@ -293,6 +302,21 @@ const aggregateLeadStatusStats = (matchFilter) =>
   PartnerLead.aggregate([
     { $match: matchFilter },
     { $group: { _id: '$status', count: { $sum: 1 } } },
+  ]);
+
+/**
+ * Lead totals grouped by attribution source ($match provided): total and
+ * enrolled per source (qr_code | referral_link | manual_code | direct). Powers
+ * the QR-vs-link conversion KPIs on the partner and manager dashboards.
+ */
+const aggregateLeadSourceStats = (matchFilter) =>
+  PartnerLead.aggregate([
+    { $match: matchFilter },
+    { $group: {
+      _id:      '$source',
+      total:    { $sum: 1 },
+      enrolled: { $sum: { $cond: [{ $eq: ['$status', 'enrolled'] }, 1, 0] } },
+    } },
   ]);
 
 /** Number of leads (non honeypot) per partner, for a list of ids. */
@@ -430,6 +454,7 @@ module.exports = {
   findActivePartnerByCode,
   findActivePartnerByCodeForResolve,
   findActivePartnerForPreRegister,
+  incrementReferralHit,
   // partner — auth
   findPartnerByEmail,
   findPartnerByEmailExcluding,
@@ -449,11 +474,9 @@ module.exports = {
   // partner — CRUD
   paginatePartners,
   findPartnerByIdScoped,
-  findPartnerDocByIdScoped,
   findPartnerForKit,
   findPartnerSummaryFields,
   findPartnerForCommission,
-  savePartnerDoc,
   updatePartnerScoped,
   setPartnerStatusScoped,
   restorePartnerScoped,
@@ -475,6 +498,7 @@ module.exports = {
   listLeadsForExport,
   aggregateLeadConversionStats,
   aggregateLeadStatusStats,
+  aggregateLeadSourceStats,
   aggregateLeadCountsByPartner,
   aggregateEnrolledCountsByPartner,
   listRecentLeadsForPartner,

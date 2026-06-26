@@ -178,6 +178,25 @@ const sanitizeInput = (input) => {
 };
 
 /**
+ * Returns the first field whose trimmed string value exceeds its max length, or
+ * null when every value is within bounds. Empty/nullish values pass (presence is
+ * validated separately). Useful at the input layer to reject oversized payloads
+ * BEFORE persistence — especially on public, deferred-write endpoints where a
+ * downstream model ValidationError would otherwise fail silently in a worker.
+ *
+ * @param {Array<{ field: string, value: * , max: number }>} specs
+ * @returns {{ field: string, max: number }|null}
+ */
+const firstLengthViolation = (specs) => {
+  for (const { field, value, max } of specs) {
+    if (typeof value === 'string' && value.trim().length > max) {
+      return { field, max };
+    }
+  }
+  return null;
+};
+
+/**
  * Validate date is not in the future
  * @param {Date} date - Date to validate
  * @returns {Boolean}
@@ -217,4 +236,5 @@ module.exports = {
   sanitizeInput,
   isDateNotFuture,
   escapeRegex,
+  firstLengthViolation,
 };

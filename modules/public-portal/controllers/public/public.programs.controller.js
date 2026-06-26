@@ -2,13 +2,13 @@
 
 /**
  * @file public.programs.controller.js
- * @description Liste des formations disponibles pour un campus.
+ * @description List of programs available for a campus.
  *
- * Route : GET /api/public/programs?campusSlug=...
- * Utilisé dans le formulaire de pré-inscription pour alimenter le dropdown.
+ * Route: GET /api/public/programs?campusSlug=...
+ * Used by the pre-registration form to populate the program dropdown.
  */
 
-// Require paresseux vers la facade campus (hub) — voir MODULAR_MONOLITH_MIGRATION.md
+// Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 

@@ -345,8 +345,11 @@ const getPartnerDashboard = asyncHandler(async (req, res) => {
   const partnerId  = new mongoose.Types.ObjectId(req.user.id);
   const campusId   = new mongoose.Types.ObjectId(req.user.campusId);
 
-  const [leadStats, commissionStats, recentLeads, recentCommissions] = await Promise.all([
-    partnerRepo.aggregateLeadConversionStats({ partner: partnerId, schoolCampus: campusId, honeypotTripped: false }),
+  const leadMatch = { partner: partnerId, schoolCampus: campusId, honeypotTripped: false };
+
+  const [leadStats, sourceStats, commissionStats, recentLeads, recentCommissions] = await Promise.all([
+    partnerRepo.aggregateLeadConversionStats(leadMatch),
+    partnerRepo.aggregateLeadSourceStats(leadMatch),
     partnerRepo.aggregateCommissionStatusStats({ partner: partnerId, schoolCampus: campusId }),
     partnerRepo.listRecentLeadsForPartner({ partnerId, campusId, limit: 5 }),
     partnerRepo.listRecentCommissionsForPartner({ partnerId, campusId, limit: 3 }),
@@ -357,6 +360,15 @@ const getPartnerDashboard = asyncHandler(async (req, res) => {
     commissionStats.map((c) => [c._id, { count: c.count, totalAmount: c.totalAmt }])
   );
 
+  // Lead totals by attribution source (QR vs link vs manual vs direct) — drives
+  // the partner's referral-performance breakdown. Null `_id` (legacy/unknown) is
+  // folded into 'direct' so the shape stays stable for the UI.
+  const sourceBreakdown = sourceStats.map((s) => ({
+    source:   s._id || 'direct',
+    total:    s.total,
+    enrolled: s.enrolled,
+  }));
+
   return sendSuccess(res, 200, 'Dashboard data retrieved.', {
     kpis: {
       totalLeads:          leads.total,
@@ -366,6 +378,7 @@ const getPartnerDashboard = asyncHandler(async (req, res) => {
       validatedCommissions: commByStatus.validated?.totalAmount || 0,
       paidCommissions:     commByStatus.paid?.totalAmount       || 0,
     },
+    sourceBreakdown,
     recentLeads,
     recentCommissions,
   });

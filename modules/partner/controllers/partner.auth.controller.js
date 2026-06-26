@@ -16,16 +16,14 @@
  *
  * Invariants:
  * • campusId always from the JWT — never from URL params.
- * • QR code: generated server-side, stored in uploads/{campusId}/partners/qr/.
+ * • Referral link & QR are derived from partnerCode (see shared/utils/referral);
+ *   the QR is generated on the fly, never stored on disk.
  * • Password: bcrypt 12 rounds via pre-save hook (register) or manually (changeMyPassword).
  * • JWT payload: { id, role:'PARTNER', campusId, partnerCode, partnerType }
  */
 
 const bcrypt  = require('bcrypt');
 const jwt     = require('jsonwebtoken');
-const QRCode  = require('qrcode');
-const path    = require('path');
-const fs      = require('fs').promises;
 const mongoose = require('mongoose');
 
 const partnerRepo = require('../partner.repository');
@@ -36,15 +34,12 @@ const {
   sendNotFound,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId, validatePasswordStrength } = require('../../../shared/utils/validation-helpers');
+const { buildReferralUrl } = require('../../../shared/utils/referral');
 const { getLoginPrefs } = require('../../settings').service;
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
-
-const UPLOAD_BASE = process.env.UPLOAD_DIR
-  ? path.join(process.env.UPLOAD_DIR)
-  : path.join(__dirname, '..', '..', 'uploads');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
@@ -64,30 +59,6 @@ const buildPartnerResponse = (partner) => {
   // the front-end (ProtectedRoute) resolves the authorizations correctly.
   obj.role = 'PARTNER';
   return obj;
-};
-
-/**
- * Generates the QR PNG for a partner's referralLink.
- * Stored under uploads/{campusId}/partners/qr/qr_{partnerCode}.png
- * Returns the file name.
- */
-const generatePartnerQR = async (referralLink, campusId, partnerCode) => {
-  const qrDir = path.join(UPLOAD_BASE, campusId.toString(), 'partners', 'qr');
-  await fs.mkdir(qrDir, { recursive: true });
-
-  const fileName = `qr_${partnerCode.toLowerCase()}.png`;
-  const filePath = path.join(qrDir, fileName);
-
-  const buffer = await QRCode.toBuffer(referralLink, {
-    type:                 'png',
-    width:                300,
-    errorCorrectionLevel: 'M',
-    margin:               2,
-    color: { dark: '#000000', light: '#FFFFFF' },
-  });
-
-  await fs.writeFile(filePath, buffer);
-  return fileName;
 };
 
 const isGlobalRole = (role) => role === 'ADMIN' || role === 'DIRECTOR';
@@ -184,9 +155,8 @@ const register = async (req, res) => {
       year
     );
 
-    // referralLink + QR
-    const referralLink    = `${FRONTEND_URL}/register?ref=${partnerCode}`;
-    const qrCodeFileName  = await generatePartnerQR(referralLink, campusId, partnerCode);
+    // referralLink and the QR are both derived from partnerCode at read time
+    // (virtual + GET /partners/public/qr/:code) — nothing is generated or stored here.
 
     // Create the partner (the pre-save hook hashes the password)
     const partner = await partnerRepo.createPartner({
@@ -209,8 +179,6 @@ const register = async (req, res) => {
       commissionConfig: normalizeCommissionConfig(commissionConfig),
       socialLinks:      socialLinks     || null,
       partnerCode,
-      referralLink,
-      qrCodeFileName,
       createdBy:        req.user.id,
       status:           'active',
     });

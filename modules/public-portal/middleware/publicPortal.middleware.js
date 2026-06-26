@@ -11,8 +11,9 @@
  * This middleware must be mounted BEFORE JWT authentication middlewares
  * since these routes are public (no JWT required).
  *
- * Known limitation: X-Portal-Key is visible in browser JS.
- * Real protection = restricted CORS + rate limiting on the ERP side.
+ * The X-Portal-Key is held server-side by the Next.js portal proxy and never
+ * reaches the browser. Defense in depth = restricted CORS + per-visitor rate
+ * limiting (keyed off the portal-forwarded client IP, see resolvePortalClientIp).
  */
 
 const crypto = require('crypto');
@@ -26,6 +27,51 @@ const safeEqual = (a, b) => {
   const bufB = Buffer.from(String(b));
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
+};
+
+/**
+ * Resolves the real visitor IP for /api/public/* requests.
+ *
+ * The portal — the only legitimate caller, already authenticated by the
+ * X-Portal-Key check above — forwards the original client IP in `X-Real-IP`
+ * and as the first entry of `X-Forwarded-For`. Without honoring it, Express
+ * `req.ip` resolves to the portal's egress IP (the actual TCP peer behind the
+ * single trusted proxy hop), which would collapse every visitor onto one
+ * rate-limit bucket and trip IP_BURST fraud detection for everyone. We
+ * therefore prefer the portal-supplied header and fall back to `req.ip`.
+ *
+ * @param {import('express').Request} req
+ * @returns {string}
+ */
+const resolvePortalClientIp = (req) => {
+  const realIp = req.headers['x-real-ip'];
+  if (typeof realIp === 'string' && realIp.trim()) {
+    return realIp.trim();
+  }
+
+  const forwarded = req.headers['x-forwarded-for'];
+  if (typeof forwarded === 'string' && forwarded.trim()) {
+    return forwarded.split(',')[0].trim();
+  }
+
+  return req.ip || req.connection?.remoteAddress || '';
+};
+
+/**
+ * True when the portal forwarded the real visitor IP (client-proxied call).
+ * Server-side rendering reads hit the ERP directly from the portal egress IP
+ * with no such header — read limiters skip those so SSR is never throttled.
+ *
+ * @param {import('express').Request} req
+ * @returns {boolean}
+ */
+const hasForwardedClientIp = (req) => {
+  const realIp    = req.headers['x-real-ip'];
+  const forwarded = req.headers['x-forwarded-for'];
+  return Boolean(
+    (typeof realIp === 'string' && realIp.trim()) ||
+    (typeof forwarded === 'string' && forwarded.trim()),
+  );
 };
 
 const publicPortalMiddleware = (req, res, next) => {
@@ -42,11 +88,16 @@ const publicPortalMiddleware = (req, res, next) => {
     return sendError(res, 401, 'Missing or invalid portal key.');
   }
 
-  // Hash the IP — controllers read req.ipHash, never req.ip directly
-  const rawIp  = req.ip || req.connection?.remoteAddress || '';
-  req.ipHash   = hashIp(rawIp);
+  // Resolve the real visitor IP (see resolvePortalClientIp). Both the hashed IP
+  // (controllers read req.ipHash, never req.ip) and the public rate limiters
+  // (which read req.portalClientIp) are keyed off this value.
+  req.portalClientIp        = resolvePortalClientIp(req);
+  req.ipHash                = hashIp(req.portalClientIp);
+  req.hasForwardedClientIp  = hasForwardedClientIp(req);
 
   next();
 };
 
 module.exports = publicPortalMiddleware;
+module.exports.resolvePortalClientIp = resolvePortalClientIp;
+module.exports.hasForwardedClientIp  = hasForwardedClientIp;

@@ -65,7 +65,9 @@ const getLeaderboard = asyncHandler(async (req, res) => {
 
   const ranked = entries.map((entry, idx) => ({
     rank:        idx + 1,
-    displayName: entry.displayName || 'Anonyme',
+    // null when the participant gave no pseudonym — the portal renders a
+    // locale-aware "Anonymous" fallback (the board serves 8 languages).
+    displayName: entry.displayName || null,
     city:        entry.city || null,
     country:     entry.country || null,
     score:       entry.score,

@@ -175,12 +175,19 @@ const findActivePublicCompetition = (filter) =>
 // QUIZ SESSION
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Creates a submitted quiz session (score validation in pre-save). */
+/** Creates a quiz session (pending at serve time, or a completed record). */
 const createQuizSession = (payload) => QuizSession.create(payload);
 
 /** Session by submission token (anti-double-submission), lean. */
 const findQuizSessionByToken = (sessionToken) =>
   QuizSession.findOne({ sessionToken }).lean();
+
+/** Non-lean session by token — loaded to score and flip pending → completed. */
+const findQuizSessionForWriteByToken = (sessionToken) =>
+  QuizSession.findOne({ sessionToken });
+
+/** Persists a quiz session doc (triggers schema validation in pre-save). */
+const saveQuizSessionDoc = (doc) => doc.save();
 
 /**
  * Best completed sessions for a period/campus (cron closing).
@@ -256,6 +263,8 @@ module.exports = {
   // QuizSession
   createQuizSession,
   findQuizSessionByToken,
+  findQuizSessionForWriteByToken,
+  saveQuizSessionDoc,
   findTopQuizSessions,
   findLeaderboardEntries,
   // QuizQuestion

@@ -20,6 +20,8 @@
 const { PDFDocument, StandardFonts, rgb } = require('pdf-lib');
 const QRCode = require('qrcode');
 
+const { buildReferralUrl } = require('../../shared/utils/referral');
+
 // ── Palette (mirrors theme/partnerTokens BRAND_ORANGE) ─────────────────────────
 const BRAND = rgb(1, 0.498, 0.243); // #ff7f3e
 const DARK  = rgb(0.13, 0.13, 0.13);
@@ -125,10 +127,12 @@ const generatePartnerFlyerPdf = async (partner, { campusName } = {}) => {
   page.drawText(safe(campusName || 'Join our school'), { x: M, y: height - 55, size: 20, font: bold, color: WHITE });
   page.drawText('Pre-register today with my referral', { x: M, y: height - 80, size: 12, font, color: WHITE });
 
-  // QR code (generated from the referral link)
-  const link = partner.referralLink || '';
-  if (link) {
-    const qrBuffer = await QRCode.toBuffer(link, { type: 'png', width: 600, margin: 1, errorCorrectionLevel: 'M' });
+  // QR code — encodes the `src=qr` variant so scans are attributable; the link
+  // shown as text below stays the plain (clickable) referral URL.
+  const link    = partner.referralLink || '';
+  const qrTarget = buildReferralUrl(partner.partnerCode, { src: 'qr' });
+  if (qrTarget) {
+    const qrBuffer = await QRCode.toBuffer(qrTarget, { type: 'png', width: 600, margin: 1, errorCorrectionLevel: 'M' });
     const qrImg = await doc.embedPng(qrBuffer);
     const qrSize = 240;
     page.drawImage(qrImg, { x: (width - qrSize) / 2, y: height - 400, width: qrSize, height: qrSize });

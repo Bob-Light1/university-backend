@@ -10,7 +10,9 @@
  */
 
 const { runCompetitionClosingJob } = require('./competition.closing.cron');
+const { shutdownIngestionQueue }   = require('./public-portal.queue');
 
 module.exports = {
   runCompetitionClosingJob,
+  shutdownIngestionQueue,
 };

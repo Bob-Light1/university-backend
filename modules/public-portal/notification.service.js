@@ -67,7 +67,7 @@ function getAtSmsClient() {
  * @param {string} [opts.prizeDescription]
  * @returns {Promise<boolean>} true on success, false on skip/error
  */
-async function sendWinnerEmail({ toEmail, firstName, rank, brandName, period, prizeDescription }) {
+async function sendWinnerEmail({ toEmail, firstName, rank, brandName, period, prizeDescription, lang = 'fr' }) {
   const client = getResendClient();
   if (!client) {
     console.log('[Notification] Email skipped — Resend not configured.');
@@ -75,8 +75,20 @@ async function sendWinnerEmail({ toEmail, firstName, rank, brandName, period, pr
   }
 
   const fromEmail = process.env.RESEND_FROM_EMAIL || `notifications@${brandName?.toLowerCase().replace(/\s+/g, '')}.com`;
-  const subject   = `🏆 Félicitations, ${firstName} ! Vous avez gagné au quiz ${period} — ${brandName}`;
-  const html = `
+
+  const subject = lang === 'en'
+    ? `🏆 Congratulations, ${firstName}! You won the ${period} quiz — ${brandName}`
+    : `🏆 Félicitations, ${firstName} ! Vous avez gagné au quiz ${period} — ${brandName}`;
+
+  const html = lang === 'en'
+    ? `
+    <h2>Congratulations, ${firstName}!</h2>
+    <p>You finished <strong>${rank}</strong> in the monthly <strong>${brandName}</strong> quiz for ${period}.</p>
+    ${prizeDescription ? `<p>Your reward: <strong>${prizeDescription}</strong></p>` : ''}
+    <p>Our team will contact you shortly to hand over your prize.</p>
+    <p>Keep it up!<br><em>The ${brandName} team</em></p>
+  `
+    : `
     <h2>Félicitations, ${firstName} !</h2>
     <p>Vous avez terminé <strong>${rank}</strong> au quiz mensuel de <strong>${brandName}</strong> pour la période ${period}.</p>
     ${prizeDescription ? `<p>Votre récompense : <strong>${prizeDescription}</strong></p>` : ''}
@@ -106,14 +118,16 @@ async function sendWinnerEmail({ toEmail, firstName, rank, brandName, period, pr
  * @param {string} opts.period
  * @returns {Promise<boolean>} true on success, false on skip/error
  */
-async function sendWinnerSms({ toPhone, firstName, rank, brandName, period }) {
+async function sendWinnerSms({ toPhone, firstName, rank, brandName, period, lang = 'fr' }) {
   const smsClient = getAtSmsClient();
   if (!smsClient) {
     console.log('[Notification] SMS skipped — Africa\'s Talking not configured.');
     return false;
   }
 
-  const message = `Félicitations ${firstName} ! Vous êtes ${rank} au quiz ${brandName} (${period}). Notre équipe vous contacte bientôt pour votre prix.`;
+  const message = lang === 'en'
+    ? `Congratulations ${firstName}! You are ${rank} in the ${brandName} quiz (${period}). Our team will contact you soon about your prize.`
+    : `Félicitations ${firstName} ! Vous êtes ${rank} au quiz ${brandName} (${period}). Notre équipe vous contacte bientôt pour votre prix.`;
 
   const opts = {
     to:      [toPhone],
@@ -132,9 +146,12 @@ async function sendWinnerSms({ toPhone, firstName, rank, brandName, period }) {
 
 // ── Rank label helper ─────────────────────────────────────────────────────────
 
-function rankLabel(rank) {
-  if (rank === 1) return '1er / 1st';
-  return `${rank}ème / ${rank}${rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th'}`;
+function rankLabel(rank, lang = 'fr') {
+  if (lang === 'en') {
+    const suffix = rank === 1 ? 'st' : rank === 2 ? 'nd' : rank === 3 ? 'rd' : 'th';
+    return `${rank}${suffix}`;
+  }
+  return rank === 1 ? '1er' : `${rank}ème`;
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -152,6 +169,19 @@ async function notifyWinners(competition, brandName = 'AcadERP') {
   // belongs to the partner module).
   const { getLeadContact } = require('../partner').service;
   const period = competition.period;
+
+  // Notification language = the campus operating language (fr default). Leads
+  // carry no locale, so the campus default is the best available signal for a
+  // globally deployed institution.
+  let lang = 'fr';
+  try {
+    const campus = await require('../campus').service
+      .getActiveCampusById(competition.schoolCampus, 'defaultLanguage');
+    if (campus?.defaultLanguage === 'en') lang = 'en';
+  } catch {
+    // Campus unresolved — fall back to French.
+  }
+
   let notified = 0;
   let skipped  = 0;
 
@@ -161,7 +191,7 @@ async function notifyWinners(competition, brandName = 'AcadERP') {
       continue;
     }
 
-    const label = rankLabel(winner.rank);
+    const label = rankLabel(winner.rank, lang);
     let emailSent = false;
     let smsSent   = false;
 
@@ -171,7 +201,12 @@ async function notifyWinners(competition, brandName = 'AcadERP') {
 
       if (lead) {
         const prizeItem = competition.prizes?.find((p) => p.rank === winner.rank);
-        const prizeDesc = prizeItem?.description?.fr ?? null;
+        // Prefer the description in the notification language, fall back to the
+        // other locale so a winner is never sent an empty reward line.
+        const prizeDesc = prizeItem?.description?.[lang]
+          ?? prizeItem?.description?.fr
+          ?? prizeItem?.description?.en
+          ?? null;
 
         if (lead.email) {
           emailSent = await sendWinnerEmail({
@@ -181,6 +216,7 @@ async function notifyWinners(competition, brandName = 'AcadERP') {
             brandName,
             period,
             prizeDescription: prizeDesc,
+            lang,
           });
         }
 
@@ -191,6 +227,7 @@ async function notifyWinners(competition, brandName = 'AcadERP') {
             rank:      label,
             brandName,
             period,
+            lang,
           });
         }
       }
