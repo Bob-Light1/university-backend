@@ -193,4 +193,53 @@ describe('remindBalance', () => {
     expect(await finance.remindBalance('x', {})).toBeNull();
     expect(notification.notify).not.toHaveBeenCalled();
   });
+
+  test('relance manuelle horodate la cadence (touchReminded)', async () => {
+    repo.findFeeById.mockResolvedValue({ student: 's', schoolCampus: 'c', amountDue: 100, amountPaid: 0, currency: 'XAF', balance: 100 });
+    await finance.remindBalance('fee-1', {});
+    expect(repo.touchReminded).toHaveBeenCalledWith('fee-1', expect.any(Date));
+  });
+});
+
+describe('runOverdueJob', () => {
+  const overdueFee = (id) => ({
+    _id: id, student: 's', schoolCampus: 'c',
+    amountDue: 100, amountPaid: 0, currency: 'XAF', dueDate: new Date('2020-01-01'), balance: 100,
+  });
+
+  test('transitionne en masse puis relance chaque dette due (claim atomique)', async () => {
+    repo.markPastDueOverdue.mockResolvedValue({ modifiedCount: 3 });
+    repo.findRemindableOverdueFees.mockResolvedValue([{ _id: 'a' }, { _id: 'b' }]);
+    repo.claimFeeForReminder.mockImplementation((id) => Promise.resolve(overdueFee(id)));
+
+    const res = await finance.runOverdueJob();
+
+    expect(repo.markPastDueOverdue).toHaveBeenCalledWith(expect.any(Date));
+    expect(repo.claimFeeForReminder).toHaveBeenCalledWith('a', expect.any(Date), expect.any(Date));
+    expect(repo.claimFeeForReminder).toHaveBeenCalledWith('b', expect.any(Date), expect.any(Date));
+    expect(notification.notify).toHaveBeenCalledTimes(2);
+    expect(res).toEqual({ transitioned: 3, reminded: 2 });
+  });
+
+  test('une dette déjà relancée par une autre instance (claim → null) n\'est pas notifiée', async () => {
+    repo.markPastDueOverdue.mockResolvedValue({ modifiedCount: 0 });
+    repo.findRemindableOverdueFees.mockResolvedValue([{ _id: 'a' }, { _id: 'b' }]);
+    repo.claimFeeForReminder.mockImplementation((id) => Promise.resolve(id === 'a' ? overdueFee(id) : null));
+
+    const res = await finance.runOverdueJob();
+
+    expect(notification.notify).toHaveBeenCalledTimes(1);
+    expect(res.reminded).toBe(1);
+  });
+
+  test('aucune dette en retard → rien à faire', async () => {
+    repo.markPastDueOverdue.mockResolvedValue({ modifiedCount: 0 });
+    repo.findRemindableOverdueFees.mockResolvedValue([]);
+
+    const res = await finance.runOverdueJob();
+
+    expect(repo.claimFeeForReminder).not.toHaveBeenCalled();
+    expect(notification.notify).not.toHaveBeenCalled();
+    expect(res).toEqual({ transitioned: 0, reminded: 0 });
+  });
 });

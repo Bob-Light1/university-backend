@@ -73,6 +73,12 @@ const studentFeeSchema = new mongoose.Schema(
       index: true,
     },
 
+    // Overdue-reminder cadence (dunning): set each time a balance reminder is sent
+    // for this debt, so the nightly sweep re-reminds at most once per window and
+    // never spams a student night after night.
+    lastRemindedAt: { type: Date, default: null },
+    reminderCount:  { type: Number, default: 0 },
+
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -110,5 +116,7 @@ studentFeeSchema.pre('save', function (next) {
 
 // List/dashboard: quickly find a campus's open debts.
 studentFeeSchema.index({ schoolCampus: 1, status: 1 });
+// Overdue-reminder sweep: find overdue debts due for a (re)reminder.
+studentFeeSchema.index({ status: 1, lastRemindedAt: 1 });
 
 module.exports = mongoose.model('StudentFee', studentFeeSchema);

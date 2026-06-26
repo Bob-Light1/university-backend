@@ -112,11 +112,13 @@ describe('notify', () => {
 });
 
 describe('runRetryJob', () => {
-  test('rejoue chaque envoi récupérable et agrège les statuts', async () => {
-    repo.findDeliverable.mockResolvedValue([
-      { _id: 'a', channel: 'email', to: 'a@b.c', subject: 's', body: 'b' },
-      { _id: 'b', channel: 'whatsapp', to: '+237', subject: null, body: 'b' },
-    ]);
+  const docA = { _id: 'a', channel: 'email', to: 'a@b.c', subject: 's', body: 'b' };
+  const docB = { _id: 'b', channel: 'whatsapp', to: '+237', subject: null, body: 'b' };
+
+  test('balaie les sending bloqués, claime puis rejoue chaque ligne et agrège les statuts', async () => {
+    repo.requeueStaleSending.mockResolvedValue({ modifiedCount: 0 });
+    repo.findDeliverable.mockResolvedValue([{ _id: 'a' }, { _id: 'b' }]);
+    repo.claimForSend.mockImplementation((id) => Promise.resolve(id === 'a' ? docA : docB));
     channels.get.mockImplementation((name) =>
       name === 'email'
         ? makeChannel()
@@ -124,11 +126,27 @@ describe('runRetryJob', () => {
     );
 
     const res = await service.runRetryJob();
+    expect(repo.requeueStaleSending).toHaveBeenCalledWith(expect.any(Date));
+    expect(repo.claimForSend).toHaveBeenCalledWith('a');
+    expect(repo.claimForSend).toHaveBeenCalledWith('b');
     expect(res.processed).toBe(2);
     expect(res.sent).toBe(1);
     expect(res.failed).toBe(1);
     expect(repo.markSent).toHaveBeenCalledWith('a');
     expect(repo.markFailed).toHaveBeenCalledWith('b', '429');
+  });
+
+  test('une ligne déjà claimée par une autre instance (claim → null) est ignorée', async () => {
+    repo.requeueStaleSending.mockResolvedValue({ modifiedCount: 0 });
+    repo.findDeliverable.mockResolvedValue([{ _id: 'a' }, { _id: 'b' }]);
+    repo.claimForSend.mockImplementation((id) => Promise.resolve(id === 'a' ? docA : null));
+    channels.get.mockImplementation(() => makeChannel());
+
+    const res = await service.runRetryJob();
+    expect(res.processed).toBe(1);
+    expect(res.sent).toBe(1);
+    expect(repo.markSent).toHaveBeenCalledWith('a');
+    expect(repo.markSent).not.toHaveBeenCalledWith('b');
   });
 });
 

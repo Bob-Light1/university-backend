@@ -228,19 +228,70 @@ const softDeleteFee = (id, extra = {}) =>
   ).lean({ virtuals: true });
 
 /**
- * Past-due debts still unpaid (overdue sweep / reminders).
+ * Bulk-transitions every past-due unpaid debt (`pending`/`partial`) to `overdue`
+ * in a single atomic write — no per-document save, no arbitrary cap, so a spike of
+ * newly-overdue debts is never silently dropped. Mirrors `computeStatus` (a past-due
+ * debt with a remaining balance is `overdue`).
  * @param {Date} now
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const markPastDueOverdue = (now) =>
+  StudentFee.updateMany(
+    {
+      isDeleted: false,
+      dueDate: { $ne: null, $lt: now },
+      status: { $in: ['pending', 'partial'] },
+      $expr: { $lt: ['$amountPaid', '$amountDue'] }, // remaining balance > 0
+    },
+    { $set: { status: 'overdue' } }
+  );
+
+/**
+ * Overdue debts due for a (re)reminder: never reminded, or last reminded before
+ * `cutoff` (the dunning cadence window). Oldest due date first for fairness and
+ * deterministic ordering across batches.
+ * @param {Date} cutoff
  * @param {number} limit
  * @returns {Promise<Object[]>}
  */
-const findOverdueFees = (now, limit = 100) =>
+const findRemindableOverdueFees = (cutoff, limit = 200) =>
   StudentFee.find({
     isDeleted: false,
-    dueDate: { $ne: null, $lt: now },
-    status: { $in: ['pending', 'partial'] },
+    status: 'overdue',
+    $or: [{ lastRemindedAt: null }, { lastRemindedAt: { $lt: cutoff } }],
   })
+    .sort({ dueDate: 1 })
     .limit(limit)
-    .lean({ virtuals: true });
+    .select('_id')
+    .lean();
+
+/**
+ * Atomically claims an overdue debt for a reminder (stamps `lastRemindedAt`,
+ * bumps `reminderCount`) only if it is still due for one. Returns the claimed fee
+ * (lean, with virtual `balance`) or null if another instance already reminded it —
+ * makes the nightly sweep multi-instance safe (no duplicate reminder).
+ * @param {string|ObjectId} feeId
+ * @param {Date} cutoff
+ * @param {Date} now
+ * @returns {Promise<Object|null>}
+ */
+const claimFeeForReminder = (feeId, cutoff, now) =>
+  StudentFee.findOneAndUpdate(
+    {
+      _id: feeId,
+      status: 'overdue',
+      $or: [{ lastRemindedAt: null }, { lastRemindedAt: { $lt: cutoff } }],
+    },
+    { $set: { lastRemindedAt: now }, $inc: { reminderCount: 1 } },
+    { new: true }
+  ).lean({ virtuals: true });
+
+/** Stamps a manual reminder (admin endpoint) — unconditional, bumps the counter. */
+const touchReminded = (feeId, now) =>
+  StudentFee.updateOne(
+    { _id: feeId },
+    { $set: { lastRemindedAt: now }, $inc: { reminderCount: 1 } }
+  );
 
 // ── FeePayment (payments) ─────────────────────────────────────────────────────
 
@@ -288,7 +339,10 @@ module.exports = {
   incrementAmountPaidGuarded,
   setFeeStatus,
   softDeleteFee,
-  findOverdueFees,
+  markPastDueOverdue,
+  findRemindableOverdueFees,
+  claimFeeForReminder,
+  touchReminded,
   // payments
   createPayment,
   findPaymentsByFee,

@@ -21,13 +21,13 @@ const createMany = (rows) => Notification.insertMany(rows);
 const markSent = (id) =>
   Notification.updateOne(
     { _id: id },
-    { $set: { status: 'sent', sentAt: new Date(), lastError: null }, $inc: { attempts: 1 } }
+    { $set: { status: 'sent', sentAt: new Date(), lastError: null, workerClaimedAt: null }, $inc: { attempts: 1 } }
   );
 
 const markSkipped = (id, reason) =>
   Notification.updateOne(
     { _id: id },
-    { $set: { status: 'skipped', lastError: reason || null } }
+    { $set: { status: 'skipped', lastError: reason || null, workerClaimedAt: null } }
   );
 
 /**
@@ -38,7 +38,7 @@ const markSkipped = (id, reason) =>
 const markFailed = (id, error) =>
   Notification.updateOne(
     { _id: id },
-    { $set: { status: 'failed', lastError: String(error).slice(0, 500) }, $inc: { attempts: 1 } }
+    { $set: { status: 'failed', lastError: String(error).slice(0, 500), workerClaimedAt: null }, $inc: { attempts: 1 } }
   );
 
 // ── In-app inbox ──────────────────────────────────────────────────────────────
@@ -92,6 +92,42 @@ const findDeliverable = (limit = 50) =>
     .limit(limit)
     .lean();
 
+/**
+ * Atomically claims a deliverable row for the retry worker (`pending`/`failed`
+ * under the attempt cap → `sending`). Returns the claimed doc, or null if another
+ * instance already took it — this is what makes the cron multi-instance safe.
+ */
+const claimForSend = (id) =>
+  Notification.findOneAndUpdate(
+    {
+      _id: id,
+      channel: { $in: ['email', 'whatsapp'] },
+      status:  { $in: ['pending', 'failed'] },
+      $expr:   { $lt: ['$attempts', '$maxAttempts'] },
+    },
+    { $set: { status: 'sending', workerClaimedAt: new Date() } },
+    { new: true }
+  ).lean();
+
+/**
+ * Atomically claims a row for a MANUAL admin replay (`pending`/`failed`/`skipped`
+ * → `sending`, ignoring the attempt cap). Excludes `sending` (already in flight)
+ * and terminal `sent`/`read`, so a manual retry never races the cron on a row.
+ */
+const claimForRetry = (id) =>
+  Notification.findOneAndUpdate(
+    { _id: id, channel: { $in: ['email', 'whatsapp'] }, status: { $in: ['pending', 'failed', 'skipped'] } },
+    { $set: { status: 'sending', workerClaimedAt: new Date() } },
+    { new: true }
+  ).lean();
+
+/** Requeues rows abandoned mid-send by a dead worker (`sending` older than `staleBefore` → `failed`). */
+const requeueStaleSending = (staleBefore) =>
+  Notification.updateMany(
+    { status: 'sending', workerClaimedAt: { $lt: staleBefore } },
+    { $set: { status: 'failed', workerClaimedAt: null } }
+  );
+
 const findById = (id) => Notification.findById(id).lean();
 
 // ── Admin log ─────────────────────────────────────────────────────────────────
@@ -124,6 +160,9 @@ module.exports = {
   markRead,
   markAllRead,
   findDeliverable,
+  claimForSend,
+  claimForRetry,
+  requeueStaleSending,
   findById,
   paginateLog,
 };

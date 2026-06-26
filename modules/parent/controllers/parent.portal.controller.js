@@ -263,7 +263,16 @@ const getChildSchedule = async (req, res) => {
       return sendNotFound(res, 'Student');
     }
 
-    const days    = Math.min(30, Math.max(1, parseInt(req.query.days, 10) || 7));
+    const days = Math.min(30, Math.max(1, parseInt(req.query.days, 10) || 7));
+
+    // No class assigned yet → no sessions. Guard against an unbounded query
+    // (a null classId would otherwise match every session on the campus).
+    if (!student.studentClass) {
+      return sendSuccess(res, 200, 'Schedule retrieved successfully.', {
+        total: 0, days, schedule: [],
+      });
+    }
+
     const now     = new Date();
     const endDate = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
@@ -373,6 +382,14 @@ const getChildTeachers = async (req, res) => {
 
     if (!student) {
       return sendNotFound(res, 'Student');
+    }
+
+    // No class assigned yet → no teachers. Guard against an unbounded query
+    // (a null classId would otherwise match every session on the campus).
+    if (!student.studentClass) {
+      return sendSuccess(res, 200, 'Teachers retrieved successfully.', {
+        total: 0, teachers: [],
+      });
     }
 
     // Distinct teachers from published sessions for this class

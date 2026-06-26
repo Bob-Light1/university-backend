@@ -18,7 +18,10 @@ const mongoose = require('mongoose');
  */
 
 const CHANNELS  = ['inapp', 'email', 'whatsapp'];
-const STATUSES  = ['pending', 'sent', 'failed', 'skipped', 'read'];
+// `sending` is a transient claim state: a retry worker atomically flips a row to
+// it before an external send so that, under horizontal scaling, only ONE instance
+// delivers a given row. A stale `sending` (dead worker) is swept back to `failed`.
+const STATUSES  = ['pending', 'sending', 'sent', 'failed', 'skipped', 'read'];
 
 // Aligned with userPreferences.userModel — identifies the recipient type.
 const RECIPIENT_MODELS = [
@@ -51,6 +54,9 @@ const notificationSchema = new mongoose.Schema(
     lastError:   { type: String, default: null },
     sentAt:      { type: Date, default: null },
     readAt:      { type: Date, default: null },
+    // Set when a worker atomically claims this row for sending; used to detect and
+    // requeue rows abandoned by a dead worker (status stuck at `sending`).
+    workerClaimedAt: { type: Date, default: null },
 
     // Optional grouping key (deduplication / threading by the caller).
     groupKey: { type: String, default: null },

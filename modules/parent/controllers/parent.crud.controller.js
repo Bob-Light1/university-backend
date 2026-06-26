@@ -109,11 +109,6 @@ const createParent = async (req, res) => {
     delete body.parentRef;
     delete body.lastLogin;
 
-    // Strip notes for non-admin roles
-    if (!GLOBAL_ROLES.includes(req.user.role) && req.user.role !== 'CAMPUS_MANAGER') {
-      delete body.notes;
-    }
-
     // Profile image uploaded via multer (multipart/form-data)
     if (req.file) {
       body.profileImage = getFileUrl(req.file);
@@ -319,6 +314,19 @@ const updateParentStatus = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
+    // A 'pending' account has no usable password yet — forcing it to 'active'
+    // here would create a login-able status with credentials nobody knows.
+    // Activation (or reset-password) is the only path out of 'pending'.
+    const existing = await parentRepo.findActiveScoped(id, campusFilter);
+    if (!existing) return sendNotFound(res, 'Parent');
+    if (existing.status === 'pending') {
+      return sendError(
+        res,
+        409,
+        'This account is awaiting activation. It will become active automatically once the parent activates it; re-issue an activation link via reset-password if needed.'
+      );
+    }
+
     const parent = await parentRepo.setStatusScoped(id, campusFilter, status);
 
     if (!parent) return sendNotFound(res, 'Parent');
@@ -400,9 +408,12 @@ const updateParentChildren = async (req, res) => {
 
 /**
  * Admin-initiated password reset.
- * Generates a random temporary password, hashes it, and saves.
- * The temp password is returned only in the response body (no email integration here).
- * In production, the temp password should be sent via email/SMS instead.
+ *
+ * Rather than handing out a plaintext temporary password (which would have to
+ * be relayed over an insecure channel), this scrambles the current password,
+ * flips the account back to 'pending', and re-issues an activation token so the
+ * parent chooses their own new password — same secure path as account creation.
+ * The activation link + offline code are returned ONCE for the admin to relay.
  *
  * @route  PATCH /api/parents/:id/reset-password
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
@@ -414,23 +425,26 @@ const resetParentPassword = async (req, res) => {
 
     const campusFilter = getCampusFilter(req);
 
-    const parent = await parentRepo.findActiveScoped(id, campusFilter);
+    // Scramble the existing password so the old credentials stop working
+    // immediately. The value is never disclosed — it is replaced on activation.
+    const placeholder = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), SALT_ROUNDS);
+
+    const parent = await parentRepo.resetForReactivation(id, campusFilter, placeholder);
     if (!parent) return sendNotFound(res, 'Parent');
 
-    // Generate a secure random temporary password
-    const tempPassword = crypto.randomBytes(8).toString('hex'); // 16-char hex string
-    const salt         = await bcrypt.genSalt(SALT_ROUNDS);
-    const hashed       = await bcrypt.hash(tempPassword, salt);
-
-    await parentRepo.updatePassword(id, hashed);
+    const activation = await require('../../account').service.issueActivationToken({
+      userModel: 'Parent',
+      userId:    parent._id,
+      campusId:  parent.schoolCampus,
+      email:     parent.email || null,
+      name:      parent.firstName,
+      locale:    parent.preferredLanguage,
+      createdBy: req.user.id,
+    });
 
     auditLog(req, 'RESET_PARENT_PASSWORD', id);
 
-    // Return temp password — in production, send via email/SMS and omit from response
-    return sendSuccess(res, 200, 'Password reset successfully.', {
-      success:       true,
-      tempPassword,  // TODO: replace with email/SMS delivery in production
-    });
+    return sendSuccess(res, 200, 'Password reset. Share the new activation link or code with the parent.', { activation });
 
   } catch (error) {
     if (error.statusCode === 403) return sendError(res, 403, error.message);

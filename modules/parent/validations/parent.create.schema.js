@@ -55,13 +55,12 @@ const runValidation = (body, isCreate) => {
     req('lastName', 'Last name is required.');
   }
 
-  // email
-  if (body.email !== undefined) {
+  // email (optional — account activation falls back to an offline code when a
+  // parent has no email; see modules/account). Format-checked only when present.
+  if (body.email !== undefined && body.email !== null && String(body.email).trim() !== '') {
     if (!EMAIL_RE.test(String(body.email).trim())) {
       errors.push({ field: 'email', message: 'Please provide a valid email address.' });
     }
-  } else if (isCreate) {
-    req('email', 'Email is required.');
   }
 
   // phone
@@ -73,14 +72,14 @@ const runValidation = (body, isCreate) => {
     req('phone', 'Phone number is required.');
   }
 
-  // password (required only on create)
+  // password — NEVER supplied by the caller. The create controller generates an
+  // unusable placeholder; the parent sets their own through the activation flow
+  // (see modules/account). Format-checked only if present (e.g. admin edit).
   if (body.password !== undefined) {
     const p = String(body.password);
     if (p.length < 8 || p.length > 128) {
       errors.push({ field: 'password', message: 'Password must be 8–128 characters.' });
     }
-  } else if (isCreate) {
-    req('password', 'Password is required.');
   }
 
   // gender

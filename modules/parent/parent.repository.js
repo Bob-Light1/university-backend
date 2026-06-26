@@ -120,6 +120,18 @@ const setChildren = (id, children) =>
   Parent.findByIdAndUpdate(id, { $set: { children } }, { new: true, runValidators: true })
     .select(NO_NOTES_SELECT).populate('children', 'firstName lastName profileImage').lean({ virtuals: true });
 
+/**
+ * Admin-initiated password reset: scrambles the current password and flips the
+ * account back to 'pending' so it can only be re-opened through the activation
+ * flow. Scoped by campus; returns null when not found / out of scope / archived.
+ */
+const resetForReactivation = (id, campusFilter, hashedPlaceholder) =>
+  Parent.findOneAndUpdate(
+    { _id: id, ...campusFilter, status: NOT_ARCHIVED },
+    { $set: { password: hashedPlaceholder, status: 'pending' } },
+    { new: true },
+  ).select('_id firstName email schoolCampus preferredLanguage').lean();
+
 const hardDeleteScoped = (id, campusFilter) =>
   Parent.findOneAndDelete({ _id: id, ...campusFilter });
 
@@ -211,6 +223,7 @@ module.exports = {
   setStatusScoped,
   findActiveScoped,
   setChildren,
+  resetForReactivation,
   hardDeleteScoped,
   archiveScoped,
   restoreScoped,

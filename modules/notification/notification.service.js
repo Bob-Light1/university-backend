@@ -163,17 +163,26 @@ const retryOne = async (id) => {
   if (!doc) throw new Error('Notification not found');
   if (doc.channel === 'inapp') return doc.status === 'read' ? 'read' : 'sent';
   if (doc.status === 'sent' || doc.status === 'read') return doc.status;
-  return deliver(doc);
+  // Atomic claim so a manual replay never races the cron (or another admin) on the
+  // same row. A null claim means the row is already in flight or terminal.
+  const claimed = await repo.claimForRetry(id);
+  if (!claimed) {
+    const current = await repo.findById(id);
+    return current ? current.status : 'sent';
+  }
+  return deliver(claimed);
 };
 
 // ── Cron: flush pending / recoverable-failure external sends ───────────────────
 
-// Re-entrancy guard: prevents a second invocation from replaying the same rows
-// when a batch outlasts the cron interval (node-cron does not serialize runs).
-// NOTE: this guards a single process only. Under horizontal scaling, several
-// instances can still claim the same rows — a DB-level atomic claim (cf. the
-// academic-print worker) would be required to make the retry multi-instance safe.
+// In-process re-entrancy guard: cheap protection against a batch outlasting the
+// cron interval within ONE process (node-cron does not serialize runs). The
+// cross-instance guarantee comes from the per-row atomic claim below.
 let retryJobRunning = false;
+
+// A row stuck in `sending` longer than this was abandoned by a dead worker and is
+// requeued to `failed` so it can be retried. Override via env if sends are slow.
+const STALE_CLAIM_MS = parseInt(process.env.NOTIFICATION_CLAIM_STALE_MS || String(5 * 60 * 1000), 10);
 
 const runRetryJob = async () => {
   if (retryJobRunning) {
@@ -182,18 +191,27 @@ const runRetryJob = async () => {
   }
   retryJobRunning = true;
   try {
-    const batch = await repo.findDeliverable(50);
-    let sent = 0, failed = 0, skipped = 0;
-    for (const doc of batch) {
+    // 1) Recover rows abandoned mid-send by a dead worker (status stuck at `sending`).
+    await repo.requeueStaleSending(new Date(Date.now() - STALE_CLAIM_MS));
+
+    // 2) Claim + deliver. Under horizontal scaling, only the instance that wins the
+    //    atomic claim delivers a given row; the others see null and skip it, so no
+    //    duplicate email / WhatsApp is ever sent.
+    const candidates = await repo.findDeliverable(50);
+    let sent = 0, failed = 0, skipped = 0, processed = 0;
+    for (const cand of candidates) {
+      const doc = await repo.claimForSend(cand._id);
+      if (!doc) continue; // another instance already claimed this row
+      processed += 1;
       const r = await deliver(doc);
       if (r === 'sent') sent += 1;
       else if (r === 'failed') failed += 1;
       else skipped += 1;
     }
-    if (batch.length) {
+    if (processed) {
       console.log(`📨 [notifications] retry: ${sent} sent, ${failed} failed, ${skipped} skipped`);
     }
-    return { processed: batch.length, sent, failed, skipped };
+    return { processed, sent, failed, skipped };
   } finally {
     retryJobRunning = false;
   }

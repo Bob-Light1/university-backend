@@ -261,29 +261,60 @@ function deleteFee(feeId, scope = {}) {
   return financeRepo.softDeleteFee(feeId, scope);
 }
 
-/** (Re)sends a balance reminder for a given debt. @returns {Promise<Object|null>} */
+/** (Re)sends a balance reminder for a given debt (manual admin action). @returns {Promise<Object|null>} */
 async function remindBalance(feeId, scope = {}) {
   const fee = await financeRepo.findFeeById(feeId, scope);
   if (!fee) return null;
-  await notifyBalanceDue(fee);
+  const balance = fee.balance ?? Math.max(0, (fee.amountDue || 0) - (fee.amountPaid || 0));
+  if (balance > 0) {
+    await notifyBalanceDue(fee);
+    await financeRepo.touchReminded(feeId, new Date()); // feeds the nightly cadence
+  }
   return fee;
 }
 
+// Overdue dunning cadence: re-remind an unpaid overdue debt at most once per this
+// window (env-overridable). The `lastRemindedAt` guard is what prevents the nightly
+// sweep from spamming a student night after night for the same unpaid debt.
+const REMINDER_INTERVAL_MS = (parseInt(process.env.FINANCE_REMINDER_INTERVAL_DAYS, 10) || 7) * 24 * 60 * 60 * 1000;
+const OVERDUE_BATCH        = parseInt(process.env.FINANCE_OVERDUE_BATCH, 10) || 200;
+const MAX_OVERDUE_BATCHES  = 1000; // hard safety bound on a single run
+
 /**
- * Cron: moves unpaid past-due debts to `overdue` and sends a reminder.
- * Best-effort (does not interrupt the batch on a send failure).
- * @returns {Promise<{ processed: number }>}
+ * Cron: (1) transition every past-due unpaid debt to `overdue` in one atomic write
+ * (unbounded — no debt is silently skipped beyond a cap), then (2) send a balance
+ * reminder to those due for one per the dunning cadence. Each reminder is claimed
+ * atomically, so under horizontal scaling a debt is reminded at most once.
+ * Best-effort: a send failure never interrupts the sweep (delivery is retried by
+ * the notification module).
+ * @returns {Promise<{ transitioned: number, reminded: number }>}
  */
 async function runOverdueJob() {
-  const due = await financeRepo.findOverdueFees(new Date(), 100);
-  for (const fee of due) {
-    const doc = await financeRepo.getFeeDoc(fee._id);
-    if (!doc) continue;
-    await doc.save(); // pre-save recalculates → overdue
-    await notifyBalanceDue(doc.toObject({ virtuals: true }));
+  const now    = new Date();
+  const cutoff = new Date(now.getTime() - REMINDER_INTERVAL_MS);
+
+  const { modifiedCount: transitioned = 0 } = await financeRepo.markPastDueOverdue(now);
+
+  // Batched cadence sweep. Each claimed debt gets `lastRemindedAt = now`, dropping
+  // out of the next batch's window → the candidate set strictly shrinks and the
+  // loop terminates (the batch cap is a defensive upper bound only).
+  let reminded = 0;
+  for (let i = 0; i < MAX_OVERDUE_BATCHES; i += 1) {
+    const batch = await financeRepo.findRemindableOverdueFees(cutoff, OVERDUE_BATCH);
+    if (!batch.length) break;
+    for (const { _id } of batch) {
+      const claimed = await financeRepo.claimFeeForReminder(_id, cutoff, now);
+      if (!claimed) continue; // another instance already reminded this debt
+      await notifyBalanceDue(claimed);
+      reminded += 1;
+    }
+    if (batch.length < OVERDUE_BATCH) break;
   }
-  if (due.length) console.log(`💸 [finance] overdue sweep: ${due.length} fee(s) processed`);
-  return { processed: due.length };
+
+  if (transitioned || reminded) {
+    console.log(`💸 [finance] overdue sweep: ${transitioned} marked overdue, ${reminded} reminder(s) sent`);
+  }
+  return { transitioned, reminded };
 }
 
 module.exports = {

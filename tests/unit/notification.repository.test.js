@@ -16,12 +16,13 @@ jest.mock('../../modules/notification/models/notification.model', () => {
     return q;
   };
   return {
-    insertMany:     jest.fn((rows) => Promise.resolve(rows.map((r, i) => ({ _id: `n${i}`, ...r })))),
-    find:           jest.fn(() => makeChain([{ _id: '1' }])),
-    findById:       jest.fn(() => ({ lean: jest.fn().mockResolvedValue({ _id: '1' }) })),
-    countDocuments: jest.fn().mockResolvedValue(7),
-    updateOne:      jest.fn().mockResolvedValue({ modifiedCount: 1 }),
-    updateMany:     jest.fn().mockResolvedValue({ modifiedCount: 4 }),
+    insertMany:        jest.fn((rows) => Promise.resolve(rows.map((r, i) => ({ _id: `n${i}`, ...r })))),
+    find:              jest.fn(() => makeChain([{ _id: '1' }])),
+    findById:          jest.fn(() => ({ lean: jest.fn().mockResolvedValue({ _id: '1' }) })),
+    findOneAndUpdate:  jest.fn(() => ({ lean: jest.fn().mockResolvedValue({ _id: '1', status: 'sending' }) })),
+    countDocuments:    jest.fn().mockResolvedValue(7),
+    updateOne:         jest.fn().mockResolvedValue({ modifiedCount: 1 }),
+    updateMany:        jest.fn().mockResolvedValue({ modifiedCount: 4 }),
     CHANNELS: ['inapp', 'email', 'whatsapp'],
   };
 });
@@ -72,11 +73,11 @@ describe('worker de retry', () => {
 });
 
 describe('statuts atomiques', () => {
-  test('markSent passe à sent + horodate + incrémente attempts', async () => {
+  test('markSent passe à sent + horodate + incrémente attempts + libère le claim', async () => {
     await repo.markSent('id1');
     expect(Notification.updateOne).toHaveBeenCalledWith(
       { _id: 'id1' },
-      { $set: { status: 'sent', sentAt: expect.any(Date), lastError: null }, $inc: { attempts: 1 } }
+      { $set: { status: 'sent', sentAt: expect.any(Date), lastError: null, workerClaimedAt: null }, $inc: { attempts: 1 } }
     );
   });
 
@@ -86,6 +87,40 @@ describe('statuts atomiques', () => {
     expect(call.$set.status).toBe('failed');
     expect(call.$set.lastError.length).toBe(500);
     expect(call.$inc).toEqual({ attempts: 1 });
+  });
+});
+
+describe('claim atomique (multi-instance)', () => {
+  test('claimForSend ne prend qu\'un externe récupérable sous le plafond et le passe à sending', async () => {
+    await repo.claimForSend('id1');
+    expect(Notification.findOneAndUpdate).toHaveBeenCalledWith(
+      {
+        _id: 'id1',
+        channel: { $in: ['email', 'whatsapp'] },
+        status:  { $in: ['pending', 'failed'] },
+        $expr:   { $lt: ['$attempts', '$maxAttempts'] },
+      },
+      { $set: { status: 'sending', workerClaimedAt: expect.any(Date) } },
+      { new: true }
+    );
+  });
+
+  test('claimForRetry (manuel) accepte aussi skipped et ignore le plafond', async () => {
+    await repo.claimForRetry('id1');
+    expect(Notification.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: 'id1', channel: { $in: ['email', 'whatsapp'] }, status: { $in: ['pending', 'failed', 'skipped'] } },
+      { $set: { status: 'sending', workerClaimedAt: expect.any(Date) } },
+      { new: true }
+    );
+  });
+
+  test('requeueStaleSending remet à failed les sending abandonnés par un worker mort', async () => {
+    const before = new Date('2020-01-01');
+    await repo.requeueStaleSending(before);
+    expect(Notification.updateMany).toHaveBeenCalledWith(
+      { status: 'sending', workerClaimedAt: { $lt: before } },
+      { $set: { status: 'failed', workerClaimedAt: null } }
+    );
   });
 });
 

@@ -37,6 +37,10 @@ const JWT_SECRET  = process.env.JWT_SECRET;
  * Builds the minimal JWT payload for a parent.
  * IMPORTANT: campusId must be a plain string — populated objects would
  * break buildCampusFilter (isValidObjectId rejects plain objects).
+ *
+ * children[] is intentionally NOT embedded: it can grow to 10 ids and would
+ * go stale the moment an admin re-links a child. Ownership is always re-read
+ * from the database (parentRepo.findOwnership) on every portal request.
  */
 const buildTokenPayload = (parent) => ({
   id:       parent._id,
@@ -45,7 +49,6 @@ const buildTokenPayload = (parent) => ({
               : parent.schoolCampus.toString(),
   role:     'PARENT',
   name:     `${parent.firstName} ${parent.lastName}`,
-  children: parent.children,
 });
 
 /**
