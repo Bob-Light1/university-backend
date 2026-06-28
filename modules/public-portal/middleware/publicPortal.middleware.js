@@ -14,6 +14,13 @@
  * The X-Portal-Key is held server-side by the Next.js portal proxy and never
  * reaches the browser. Defense in depth = restricted CORS + per-visitor rate
  * limiting (keyed off the portal-forwarded client IP, see resolvePortalClientIp).
+ *
+ * Key rotation: the ERP accepts ANY key listed in `PORTAL_API_KEYS` (comma-
+ * separated), falling back to the single `PORTAL_API_KEY` for backward
+ * compatibility. To rotate without downtime: (1) add the new key alongside the
+ * old one in `PORTAL_API_KEYS` and deploy the ERP, (2) switch the portal to the
+ * new key, (3) drop the old key from `PORTAL_API_KEYS`. This bounds the blast
+ * radius of a leaked key — it can be retired immediately without an outage.
  */
 
 const crypto = require('crypto');
@@ -27,6 +34,36 @@ const safeEqual = (a, b) => {
   const bufB = Buffer.from(String(b));
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
+};
+
+/**
+ * Accepted portal keys, parsed once at load. `PORTAL_API_KEYS` (comma-separated)
+ * takes precedence; otherwise the legacy single `PORTAL_API_KEY` is used. Empty
+ * entries and duplicates are dropped.
+ *
+ * @returns {string[]}
+ */
+const parsePortalKeys = () => {
+  const raw = process.env.PORTAL_API_KEYS || process.env.PORTAL_API_KEY || '';
+  return [...new Set(raw.split(',').map((k) => k.trim()).filter(Boolean))];
+};
+
+const ACCEPTED_PORTAL_KEYS = parsePortalKeys();
+
+/**
+ * True when the provided key matches any accepted key. Every candidate is
+ * checked (no short-circuit) so the comparison time does not reveal which slot
+ * matched.
+ *
+ * @param {string} provided
+ * @returns {boolean}
+ */
+const isValidPortalKey = (provided) => {
+  let matched = false;
+  for (const key of ACCEPTED_PORTAL_KEYS) {
+    if (safeEqual(provided, key)) matched = true;
+  }
+  return matched;
 };
 
 /**
@@ -75,16 +112,14 @@ const hasForwardedClientIp = (req) => {
 };
 
 const publicPortalMiddleware = (req, res, next) => {
-  const expectedKey = process.env.PORTAL_API_KEY;
-
-  // Fail-closed: if the key is not configured on the ERP side, deny everything.
-  if (!expectedKey) {
+  // Fail-closed: if no key is configured on the ERP side, deny everything.
+  if (ACCEPTED_PORTAL_KEYS.length === 0) {
     return sendError(res, 503, 'Public portal is not configured.');
   }
 
   const portalKey = req.headers['x-portal-key'];
 
-  if (!portalKey || !safeEqual(portalKey, expectedKey)) {
+  if (!portalKey || !isValidPortalKey(portalKey)) {
     return sendError(res, 401, 'Missing or invalid portal key.');
   }
 
@@ -101,3 +136,4 @@ const publicPortalMiddleware = (req, res, next) => {
 module.exports = publicPortalMiddleware;
 module.exports.resolvePortalClientIp = resolvePortalClientIp;
 module.exports.hasForwardedClientIp  = hasForwardedClientIp;
+module.exports.parsePortalKeys       = parsePortalKeys;
