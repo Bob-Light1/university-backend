@@ -20,7 +20,8 @@ const { parse: csvParse } = require('csv-parse/sync');
 
 const { RESULT_STATUS, EVALUATION_TYPE, SEMESTER } = require('../models/result.model');
 const resultRepo = require('../result.repository');
-const { getClassCampusRef } = require('../../class').service; // class module facade (§3)
+const { getClassCampusRef, isTeacherInClass } = require('../../class').service; // class module facade (§3)
+const { isTeacherOfSubject } = require('../../subject').service; // subject module facade (§3)
 
 const {
   asyncHandler,
@@ -76,9 +77,15 @@ const createResult = asyncHandler(async (req, res) => {
   const resolvedCampus = resolveCampusId(req, campusFromBody);
   if (!resolvedCampus) return sendError(res, 400, 'schoolCampus is required.');
 
+  // A teacher may only attribute a result to themselves — the body teacher is
+  // ignored for TEACHER role (managers/admins may grade on behalf of any teacher).
+  const effectiveTeacher = req.user.role === 'TEACHER' ? req.user.id : teacher;
+
   // IDs validation
-  const idError = validateResultIds({ student, classId, subject, teacher });
+  const idError = validateResultIds({ student, classId, subject, teacher: effectiveTeacher });
   if (idError) return sendError(res, 400, idError);
+  if (gradingScale && !isValidObjectId(gradingScale))
+    return sendError(res, 400, 'Invalid gradingScale.');
 
   // Contextual fields validation
   const ctxError = validateResultContext({ evaluationType, semester, academicYear, score, maxScore });
@@ -92,9 +99,21 @@ const createResult = asyncHandler(async (req, res) => {
     if (!belongs) return sendForbidden(res, 'Student does not belong to your campus.');
   }
 
+  // Pedagogical integrity — the attributed teacher must teach this subject AND be
+  // assigned to this class (mirrors bulkCreateResults; subject↔class is not modelled
+  // directly, so teacher↔subject + teacher↔class is the meaningful proxy).
+  const [teachesSubject, assignedToClass] = await Promise.all([
+    isTeacherOfSubject({ subjectId: subject, teacherId: effectiveTeacher, campusId: resolvedCampus }),
+    isTeacherInClass({ classId, teacherId: effectiveTeacher, campusId: resolvedCampus }),
+  ]);
+  if (!teachesSubject)
+    return sendError(res, 422, 'The selected teacher does not teach this subject. Assign the teacher to the subject first.');
+  if (!assignedToClass)
+    return sendError(res, 422, 'The selected teacher is not assigned to this class. Assign the teacher to the class first.');
+
   try {
     const result = await resultRepo.createResult({
-      student, class: classId, subject, teacher,
+      student, class: classId, subject, teacher: effectiveTeacher,
       score:           Number(score),
       maxScore:        Number(maxScore),
       coefficient:     coefficient != null ? Number(coefficient) : 1,
@@ -147,9 +166,15 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
   const resolvedCampus = resolveCampusId(req, campusFromBody);
   if (!resolvedCampus) return sendError(res, 400, 'schoolCampus is required.');
 
+  // A teacher may only attribute results to themselves — the body teacherId is
+  // ignored for TEACHER role (managers/admins may grade on behalf of any teacher).
+  const effectiveTeacherId = req.user.role === 'TEACHER' ? req.user.id : teacherId;
+
   if (!isValidObjectId(classId))   return sendError(res, 400, 'Invalid classId.');
   if (!isValidObjectId(subjectId)) return sendError(res, 400, 'Invalid subjectId.');
-  if (!isValidObjectId(teacherId)) return sendError(res, 400, 'Invalid teacherId.');
+  if (!isValidObjectId(effectiveTeacherId)) return sendError(res, 400, 'Invalid teacherId.');
+  if (gradingScale && !isValidObjectId(gradingScale))
+    return sendError(res, 400, 'Invalid gradingScale.');
   if (!Array.isArray(entries) || !entries.length)
     return sendError(res, 400, 'results[] must be a non-empty array.');
 
@@ -166,6 +191,20 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
   if (!classDoc) return sendNotFound(res, 'Class');
   if (!isGlobalRole(req.user.role) && classDoc.schoolCampus.toString() !== resolvedCampus.toString())
     return sendForbidden(res, 'Class does not belong to your campus.');
+
+  // Pedagogical integrity — the teacher the grades are attributed to must teach
+  // this subject AND be assigned to this class. (subject↔class is not modelled
+  // directly; teacher↔subject + teacher↔class is the meaningful proxy and also
+  // validates that the subject belongs to the campus.) 422 = well-formed but
+  // semantically invalid, distinct from a malformed-input 400.
+  const [teachesSubject, assignedToClass] = await Promise.all([
+    isTeacherOfSubject({ subjectId, teacherId: effectiveTeacherId, campusId: resolvedCampus }),
+    isTeacherInClass({ classId, teacherId: effectiveTeacherId, campusId: resolvedCampus }),
+  ]);
+  if (!teachesSubject)
+    return sendError(res, 422, 'The selected teacher does not teach this subject. Assign the teacher to the subject first.');
+  if (!assignedToClass)
+    return sendError(res, 422, 'The selected teacher is not assigned to this class. Assign the teacher to the class first.');
 
   /*
    * Build enrollment set from the Student collection directly.
@@ -199,22 +238,30 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
     if (!Number.isFinite(s) || s < 0 || s > Number(maxScore)) {
       errors.push({ index: i, studentId, error: `Score must be 0–${maxScore}.` }); continue;
     }
+    const att = examAttendance || 'present';
+    if (!['present', 'absent', 'excused'].includes(att)) {
+      errors.push({ index: i, studentId, error: 'examAttendance must be present, absent or excused.' }); continue;
+    }
+    const coeffNum = ec != null ? Number(ec) : 1;
+    if (!Number.isFinite(coeffNum) || coeffNum < 0) {
+      errors.push({ index: i, studentId, error: 'coefficient must be a number ≥ 0.' }); continue;
+    }
 
     toInsert.push({
       student:         studentId,
       class:           classId,
       subject:         subjectId,
-      teacher:         teacherId,
+      teacher:         effectiveTeacherId,
       score:           s,
       maxScore:        Number(maxScore),
-      coefficient:     ec != null ? Number(ec) : 1,
+      coefficient:     coeffNum,
       evaluationType,
       evaluationTitle: evaluationTitle.trim(),
       academicYear,
       semester,
       examDate:        examDate || null,
       examPeriod:      examPeriod || null,
-      examAttendance:  examAttendance || 'present',
+      examAttendance:  att,
       teacherRemarks:  teacherRemarks || null,
       strengths:       strengths || null,
       improvements:    improvements || null,
@@ -230,13 +277,19 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
   try {
     inserted = await resultRepo.insertManyResults(toInsert);
   } catch (err) {
-    if (err.code === 11000 || err.name === 'BulkWriteError') {
+    // Partial-failure path for unordered insertMany. The presence of writeErrors
+    // is the reliable signal; the error class is MongoBulkWriteError on the
+    // mongodb v6 driver (the old 'BulkWriteError' name no longer matches).
+    if (err.writeErrors || err.code === 11000 || /BulkWriteError/i.test(err.name || '')) {
       inserted   = err.insertedDocs  || [];
-      duplicates = (err.writeErrors  || []).map((e) => ({
-        index:     e.index,
-        studentId: toInsert[e.index]?.student,
-        error:     'Duplicate result for this evaluation.',
-      }));
+      duplicates = (err.writeErrors  || []).map((e) => {
+        const idx = e.index ?? e.err?.index;
+        return {
+          index:     idx,
+          studentId: toInsert[idx]?.student,
+          error:     'Duplicate result for this evaluation.',
+        };
+      });
     } else {
       throw err;
     }
@@ -329,6 +382,13 @@ const getResults = asyncHandler(async (req, res) => {
     filter.status  = { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] };
   }
 
+  // TEACHERs are scoped to their own results (least privilege). Without this a
+  // teacher could omit the teacherId query param and read every colleague's
+  // grades within the campus, contradicting the documented portal contract.
+  if (req.user.role === 'TEACHER') {
+    filter.teacher = req.user.id;
+  }
+
   const pageNum  = parsePositiveInt(page,  1);
   const limitNum = parsePositiveInt(limit, 50);
 
@@ -414,6 +474,24 @@ const updateResult = asyncHandler(async (req, res) => {
     return sendForbidden(res, 'Only managers can add class manager remarks.');
   }
 
+  // Numeric integrity — the model has no max bound tying score to maxScore, so a
+  // PUT could otherwise persist a score above the maximum (e.g. 999/20). Validate
+  // against the effective values (incoming overrides, else the stored ones).
+  if (req.body.maxScore !== undefined) {
+    const m = Number(req.body.maxScore);
+    if (!Number.isFinite(m) || m < 1) return sendError(res, 400, 'maxScore must be at least 1.');
+  }
+  if (req.body.coefficient !== undefined) {
+    const c = Number(req.body.coefficient);
+    if (!Number.isFinite(c) || c < 0) return sendError(res, 400, 'coefficient cannot be negative.');
+  }
+  if (req.body.score !== undefined) {
+    const s = Number(req.body.score);
+    const effectiveMax = req.body.maxScore !== undefined ? Number(req.body.maxScore) : result.maxScore;
+    if (!Number.isFinite(s) || s < 0) return sendError(res, 400, 'Score cannot be negative.');
+    if (s > effectiveMax) return sendError(res, 400, `Score (${s}) cannot exceed maxScore (${effectiveMax}).`);
+  }
+
   allowed.forEach((field) => {
     if (req.body[field] !== undefined) result[field] = req.body[field];
   });
@@ -444,6 +522,11 @@ const deleteResult = asyncHandler(async (req, res) => {
   if (!isGlobalRole(req.user.role) &&
       result.schoolCampus.toString() !== req.user.campusId?.toString())
     return sendForbidden(res, 'Access denied.');
+
+  // A teacher may only delete their own DRAFT (campus scope alone would let a
+  // teacher delete a colleague's draft in the same campus).
+  if (req.user.role === 'TEACHER' && result.teacher.toString() !== req.user.id)
+    return sendForbidden(res, 'You can only delete your own results.');
 
   if (result.status !== RESULT_STATUS.DRAFT && !isGlobalRole(req.user.role))
     return sendError(res, 400, 'Only DRAFT results can be deleted. Use ADMIN access for published results.');

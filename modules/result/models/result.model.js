@@ -504,6 +504,79 @@ ResultSchema.pre('save', async function () {
   }
 });
 
+// ─── PRE-INSERTMANY ───────────────────────────────────────────────────────────
+
+/**
+ * Mongoose runs NO `save` middleware for `insertMany`, so the bulk-entry and
+ * CSV-import paths (controller `bulkCreateResults`) would otherwise persist
+ * documents WITHOUT:
+ *   • a `reference` — the unique non-sparse index then rejects every doc after
+ *     the first as a duplicate-key error (E11000), breaking whole-class entry.
+ *   • `normalizedScore` / `gradeBand` / `isRetakeEligible` — leaving transcripts,
+ *     analytics and retake lists blank for bulk-entered grades.
+ *   • the absent → score 0 correction.
+ *
+ * This hook replicates the relevant pre('save') logic for each inserted doc.
+ * GradingScale lookups are memoised so a class sharing one scale costs one query.
+ */
+ResultSchema.pre('insertMany', async function (next, docs) {
+  try {
+    if (!Array.isArray(docs) || docs.length === 0) return next();
+
+    const { GradingScale } = require('./grading-scale.model');
+    const scaleCache = new Map();
+
+    for (const doc of docs) {
+      // 1. Atomic unique reference (mirrors pre('save'))
+      if (!doc.reference) {
+        doc.reference = await nextResultRef(new Date().getFullYear());
+      }
+
+      // 2. examAttendance / score consistency — an absent student scores 0
+      if (doc.examAttendance === 'absent' && doc.score !== 0) {
+        doc.score = 0;
+      }
+
+      // 3. Score normalized to 20
+      if (doc.score != null && doc.maxScore) {
+        doc.normalizedScore = parseFloat(((doc.score / doc.maxScore) * 20).toFixed(2));
+      }
+
+      // 4. gradeBand + isRetakeEligible resolution from GradingScale
+      if (doc.gradingScale) {
+        const key = doc.gradingScale.toString();
+        if (!scaleCache.has(key)) {
+          try {
+            scaleCache.set(key, await GradingScale.findById(doc.gradingScale).lean());
+          } catch {
+            scaleCache.set(key, null);
+          }
+        }
+        const scale = scaleCache.get(key);
+        if (scale && doc.maxScore) {
+          const scoreInScale = parseFloat(((doc.score / doc.maxScore) * scale.maxScore).toFixed(4));
+          const band = scale.bands.find((b) => scoreInScale >= b.min && scoreInScale <= b.max);
+          doc.gradeBand = band
+            ? {
+                label:       band.label,
+                letterGrade: band.letterGrade || null,
+                gpa:         band.gpa         ?? null,
+                ectsGrade:   band.ectsGrade   || null,
+                ectsCredits: band.ectsCredits ?? null,
+                color:       band.color        || null,
+              }
+            : null;
+          doc.isRetakeEligible = scoreInScale < scale.passMark;
+        }
+      }
+    }
+
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
 // ─── INSTANCE METHODS ─────────────────────────────────────────────────────────
 
 /**
@@ -664,9 +737,13 @@ ResultSchema.statics.computeGeneralAverage = async function (
       },
     },
     {
+      // Subject average is WEIGHTED by each evaluation's coefficient (e.g. CC 0.4
+      // + Exam 0.6), not a plain mean — the coefficient field is captured at entry
+      // precisely to weight the subject average.
       $group: {
         _id:         '$subject',
-        avgNorm:     { $avg: { $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] } },
+        weightedSum: { $sum: { $multiply: [{ $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] }, { $ifNull: ['$coefficient', 1] }] } },
+        weightTotal: { $sum: { $ifNull: ['$coefficient', 1] } },
         coefficient: { $first: '$coefficient' },
         count:       { $sum: 1 },
       },
@@ -686,7 +763,7 @@ ResultSchema.statics.computeGeneralAverage = async function (
         subjectName: '$subjectDoc.subject_name',
         subjectCode: '$subjectDoc.subject_code',
         coefficient: { $ifNull: ['$subjectDoc.coefficient', '$coefficient'] },
-        average:     { $round: ['$avgNorm', 2] },
+        average:     { $cond: [{ $gt: ['$weightTotal', 0] }, { $round: [{ $divide: ['$weightedSum', '$weightTotal'] }, 2] }, null] },
         count:       1,
       },
     },

@@ -31,7 +31,22 @@ const multer  = require('multer');
 const router  = express.Router();
 
 const { authenticate, authorize } = require('../../shared/middleware/auth');
-const { apiLimiter, uploadLimiter } = require('../../shared/middleware/rate-limiter');
+const { apiLimiter, uploadLimiter, createCustomLimiter } = require('../../shared/middleware/rate-limiter');
+
+// Public, unauthenticated endpoints below sit BEFORE the global apiLimiter, so
+// they need their own limiters or they are wide open to abuse at internet scale.
+// verifyResult: read-only token lookup — guard against token brute-forcing.
+const verifyLimiter = createCustomLimiter(
+  15, 30,
+  'Too many verification attempts. Please try again later.',
+  { prefix: 'result-verify' }
+);
+// signTranscript: an unauthenticated write — keep it strict.
+const signLimiter = createCustomLimiter(
+  60, 10,
+  'Too many signature attempts. Please try again later.',
+  { prefix: 'result-sign' }
+);
 
 // Multer memory — CSV parsed without disk storage
 const csvUpload = multer({
@@ -86,14 +101,14 @@ const {
  * Authenticity verification of a transcript via QR Code.
  * Without authentication — zero-trust endpoint.
  */
-router.get('/verify/:token', verifyResult);
+router.get('/verify/:token', verifyLimiter, verifyResult);
 
 /**
  * POST /api/results/final-transcripts/:id/sign
  * Digital signature of the transcript by the parent.
  * Accessible without teacher authentication (the parent identifies with signedBy).
  */
-router.post('/final-transcripts/:id/sign', signTranscript);
+router.post('/final-transcripts/:id/sign', signLimiter, signTranscript);
 
 // ─── MIDDLEWARE GLOBAL ────────────────────────────────────────────────────────
 

@@ -33,6 +33,14 @@ const isTeacherLinkedToAnyCourse = (courseIds, teacherId) =>
 
 const getSubjectCampusRef = (subjectId) => subjectRepo.getCampusRef(subjectId);
 
+/**
+ * True if a teacher teaches a subject within a campus (subject ↔ teacher link).
+ * Consumed by result.crud for pedagogical-integrity checks on grade entry.
+ * @param {{ subjectId, teacherId, campusId }} p
+ * @returns {Promise<boolean>}
+ */
+const isTeacherOfSubject = async (p) => Boolean(await subjectRepo.teacherOfSubject(p));
+
 const getSubjectsCampusRefs = (subjectIds, opts) => subjectRepo.getCampusRefsByIds(subjectIds, opts);
 
 const resolveSubjectForSchedule = (subjectId, campusId) =>
@@ -46,5 +54,6 @@ module.exports = {
   isTeacherLinkedToAnyCourse,
   getSubjectCampusRef,
   getSubjectsCampusRefs,
+  isTeacherOfSubject,
   resolveSubjectForSchedule,
 };

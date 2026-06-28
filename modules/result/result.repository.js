@@ -174,7 +174,9 @@ const aggregateStudentTranscript = (matchFilter) =>
             improvements:    '$improvements',
           },
         },
-        subjectAvg:   { $avg: { $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] } },
+        // Weighted by each evaluation's coefficient (mirrors computeGeneralAverage).
+        subjectWeightedSum: { $sum: { $multiply: [{ $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] }, { $ifNull: ['$coefficient', 1] }] } },
+        subjectWeightTotal: { $sum: { $ifNull: ['$coefficient', 1] } },
         subjectCoeff: { $first: '$coefficient' },
       },
     },
@@ -193,7 +195,7 @@ const aggregateStudentTranscript = (matchFilter) =>
             subjectName: '$subjectDoc.subject_name',
             subjectCode: '$subjectDoc.subject_code',
             coefficient: { $ifNull: ['$subjectDoc.coefficient', '$subjectCoeff'] },
-            average:     { $round: ['$subjectAvg', 2] },
+            average:     { $cond: [{ $gt: ['$subjectWeightTotal', 0] }, { $round: [{ $divide: ['$subjectWeightedSum', '$subjectWeightTotal'] }, 2] }, null] },
             evaluations: '$evaluations',
           },
         },
@@ -376,6 +378,17 @@ const findTranscriptForStudentPopulated = ({ studentId, academicYear, semester }
 /** Transcript doc by id for writing (validation / signature). */
 const findTranscriptForWrite = (id) => FinalTranscript.findById(id);
 
+/**
+ * Minimal transcript projection of a lock scope, for class ranking.
+ * `matchFilter` provided by the caller (academicYear/semester + campus scope).
+ */
+const listTranscriptsForRanking = (matchFilter) =>
+  FinalTranscript.find(matchFilter).select('_id class generalAverage').lean();
+
+/** Bulk-applies precomputed classRank/classTotal to transcripts. */
+const bulkSetTranscriptRanks = (ops) =>
+  ops && ops.length ? FinalTranscript.bulkWrite(ops) : Promise.resolve({ modifiedCount: 0 });
+
 /** Persists a transcript doc (triggers the save hooks). */
 const saveTranscriptDoc = (doc) => doc.save();
 
@@ -462,6 +475,8 @@ module.exports = {
   generateTranscriptForStudent,
   findTranscriptForStudentPopulated,
   findTranscriptForWrite,
+  listTranscriptsForRanking,
+  bulkSetTranscriptRanks,
   saveTranscriptDoc,
   listStudentTranscripts,
   findTranscriptForSignature,

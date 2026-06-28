@@ -44,7 +44,7 @@ const getCampusRefsByIds = (subjectIds, { session } = {}) =>
  * sorted by subject_name.
  * @returns {Promise<{data: Object[], total: number}>}
  */
-const paginate = async ({ baseFilter, includeArchived, status, category, search, skip, limit }) => {
+const paginate = async ({ baseFilter, includeArchived, status, category, search, teacher, skip, limit }) => {
   const filter = { ...baseFilter };
   if (includeArchived !== true) {
     filter.status = { $ne: 'archived' };
@@ -52,6 +52,7 @@ const paginate = async ({ baseFilter, includeArchived, status, category, search,
     filter.status = status;
   }
   if (category) filter.category = category;
+  if (teacher) filter.teachers = teacher;   // subjects taught by this teacher
   if (search) {
     const rx = { $regex: escapeRegex(search), $options: 'i' };
     filter.$or = [{ subject_name: rx }, { subject_code: rx }];
@@ -147,6 +148,10 @@ const existsTeacherLinkedToCourse = async (courseIds, teacherId) => {
 const getCampusRef = (subjectId) =>
   Subject.findById(subjectId).select('schoolCampus').lean();
 
+/** True if `teacherId` teaches `subjectId` within the campus. */
+const teacherOfSubject = ({ subjectId, teacherId, campusId }) =>
+  Subject.exists({ _id: subjectId, schoolCampus: campusId, teachers: teacherId });
+
 /**
  * Denormalized subject{} shape for schedules (campus-isolated).
  * @returns {Promise<Object|null>}
@@ -187,5 +192,6 @@ module.exports = {
   existsTeacherLinkedToCourse,
   getCampusRef,
   getCampusRefsByIds,
+  teacherOfSubject,
   resolveForSchedule,
 };

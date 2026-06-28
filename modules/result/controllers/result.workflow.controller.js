@@ -390,13 +390,66 @@ const lockSemester = asyncHandler(async (req, res) => {
     }
   }
 
+  // ── 3. Class ranking (classRank / classTotal) ─────────────────────────────
+  // Competition ranking by generalAverage within each class (ties share a rank:
+  // 1, 2, 2, 4). A classId is campus-specific, so grouping by class also isolates
+  // campuses when an ADMIN/DIRECTOR locks across the whole network.
+  // Wrapped so a ranking failure never rolls back the lock or the transcripts.
+  let ranksApplied = 0;
+  try {
+    const rankMatch = { academicYear, semester, ...campusFilter };
+    const transcripts = await resultRepo.listTranscriptsForRanking(rankMatch);
+
+    const byClass = new Map();
+    for (const t of transcripts) {
+      const key = t.class?.toString();
+      if (!key) continue;
+      if (!byClass.has(key)) byClass.set(key, []);
+      byClass.get(key).push(t);
+    }
+
+    const ops = [];
+    for (const list of byClass.values()) {
+      const ranked = list
+        .filter((t) => t.generalAverage != null)
+        .sort((a, b) => b.generalAverage - a.generalAverage);
+      const classTotal = ranked.length;
+
+      let rank = 0;
+      let prevAvg = null;
+      let seen = 0;
+      for (const t of ranked) {
+        seen += 1;
+        if (t.generalAverage !== prevAvg) {
+          rank = seen;            // competition ranking: skip after ties
+          prevAvg = t.generalAverage;
+        }
+        ops.push({
+          updateOne: {
+            filter: { _id: t._id },
+            update: { $set: { classRank: rank, classTotal } },
+          },
+        });
+      }
+    }
+
+    if (ops.length) {
+      const r = await resultRepo.bulkSetTranscriptRanks(ops);
+      ranksApplied = r.modifiedCount ?? ops.length;
+    }
+  } catch (err) {
+    console.error('[lockSemester] class ranking failed:', err.message);
+  }
+
   return sendSuccess(res, 200,
     `Semester ${semester} ${academicYear} locked. ${modifiedCount} result(s) locked, ` +
-    `${transcriptsGenerated} transcript(s) generated, ${transcriptErrors} error(s).`,
+    `${transcriptsGenerated} transcript(s) generated, ${transcriptErrors} error(s), ` +
+    `${ranksApplied} rank(s) computed.`,
     {
       modifiedCount,
       transcriptsGenerated,
       transcriptErrors,
+      ranksApplied,
     }
   );
 });

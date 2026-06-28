@@ -177,6 +177,14 @@ const existsInCampus = (classId, campusId) =>
 const findManagedBy = (teacherId, campusId) =>
   Class.findOne({ classManager: teacherId, schoolCampus: campusId }).select('_id').lean();
 
+/** True if `teacherId` is the manager of, or assigned to, `classId` in the campus. */
+const teacherInClass = ({ classId, teacherId, campusId }) =>
+  Class.exists({
+    _id:          classId,
+    schoolCampus: campusId,
+    $or:          [{ classManager: teacherId }, { teachers: teacherId }],
+  });
+
 const getName = (classId) => Class.findById(classId).select('className').lean();
 
 const getNameInCampus = (classId, campusId) =>
@@ -208,6 +216,6 @@ module.exports = {
   countOnCampus, countByCampus, listForCampusDashboard, resolveForSchedule,
   findForCourseLink, findForDocumentList, getCampusRef, getCampusRefForValidation,
   getCampusRefsByIds,
-  existsInCampus, findManagedBy, getName, getNameInCampus, findForBulk,
+  existsInCampus, findManagedBy, teacherInClass, getName, getNameInCampus, findForBulk,
   addTeacherToClasses, removeTeacherFromClasses, setClassManager, clearClassManager,
 };

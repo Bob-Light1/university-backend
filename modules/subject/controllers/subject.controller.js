@@ -103,6 +103,7 @@ exports.getSubjects = async (req, res) => {
       status,
       category,
       search,
+      teacher,
       page = 1,
       limit = 50,
       includeArchived,
@@ -110,6 +111,10 @@ exports.getSubjects = async (req, res) => {
 
     // Build campus filter based on user role
     const baseFilter = buildCampusFilter(req.user, campusId);
+
+    // Optional teacher scope (subjects taught by this teacher). Ignored when the
+    // value is not a valid ObjectId so a malformed param cannot break the query.
+    const teacherFilter = teacher && isValidObjectId(teacher) ? teacher : undefined;
 
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = Math.min(parseInt(limit, 10) || 50, 100); // Max 100
@@ -121,6 +126,7 @@ exports.getSubjects = async (req, res) => {
       status,
       category,
       search,
+      teacher: teacherFilter,
       skip,
       limit: limitNum,
     });

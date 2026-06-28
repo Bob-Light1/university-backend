@@ -22,6 +22,13 @@ const getClassCampusRefForValidation = (classId, opts) => classRepo.getCampusRef
 const getClassesCampusRefs = (classIds, opts) => classRepo.getCampusRefsByIds(classIds, opts);
 const classExistsInCampus = (classId, campusId) => classRepo.existsInCampus(classId, campusId);
 const findClassManagedBy = (teacherId, campusId) => classRepo.findManagedBy(teacherId, campusId);
+/**
+ * True if a teacher is the manager of, or assigned to, a class within a campus
+ * (class ↔ teacher link). Consumed by result.crud for grade-entry integrity.
+ * @param {{ classId, teacherId, campusId }} p
+ * @returns {Promise<boolean>}
+ */
+const isTeacherInClass = async (p) => Boolean(await classRepo.teacherInClass(p));
 const getClassName = (classId) => classRepo.getName(classId);
 const getClassNameInCampus = (classId, campusId) => classRepo.getNameInCampus(classId, campusId);
 const findClassForBulk = (id, session) => classRepo.findForBulk(id, session);
@@ -44,6 +51,7 @@ module.exports = {
   getClassNameInCampus,
   classExistsInCampus,
   findClassManagedBy,
+  isTeacherInClass,
   findClassForBulk,
   addTeacherToClasses,
   removeTeacherFromClasses,

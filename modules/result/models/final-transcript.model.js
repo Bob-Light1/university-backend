@@ -298,7 +298,9 @@ FinalTranscriptSchema.statics.generateForStudent = async function ({
     {
       $group: {
         _id:         '$subject',
-        avgNorm:     { $avg: { $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] } },
+        // Weighted by each evaluation's coefficient (mirrors computeGeneralAverage).
+        weightedSum: { $sum: { $multiply: [{ $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] }, { $ifNull: ['$coefficient', 1] }] } },
+        weightTotal: { $sum: { $ifNull: ['$coefficient', 1] } },
         coefficient: { $first: '$coefficient' },
         evaluations: {
           $push: {
@@ -330,7 +332,7 @@ FinalTranscriptSchema.statics.generateForStudent = async function ({
         subjectName: '$subjectDoc.subject_name',
         subjectCode: '$subjectDoc.subject_code',
         coefficient: { $ifNull: ['$subjectDoc.coefficient', '$coefficient'] },
-        average:     { $round: ['$avgNorm', 2] },
+        average:     { $cond: [{ $gt: ['$weightTotal', 0] }, { $round: [{ $divide: ['$weightedSum', '$weightTotal'] }, 2] }, null] },
         evaluations: 1,
       },
     },
