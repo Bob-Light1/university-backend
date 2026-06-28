@@ -35,6 +35,12 @@ const UserPreferencesSchema = new Schema(
       type: String,
       default: null, // e.g. 'fr-CM', 'en-NG'
       trim: true,
+      maxlength: 35,
+      validate: {
+        // Allow null/empty (unset) or a BCP-47-ish tag: 'fr', 'fr-CM', 'zh-CN'.
+        validator: (loc) => loc == null || loc === '' || /^[a-z]{2}(-[A-Za-z]{2,4})?$/.test(loc),
+        message: 'Invalid locale tag',
+      },
     },
     timezone: {
       type: String,
@@ -67,10 +73,9 @@ const UserPreferencesSchema = new Schema(
   { timestamps: true }
 );
 
-// ── Campus isolation middleware ────────────────────────────────────────────────
-UserPreferencesSchema.pre('find', function () {
-  if (this._campusFilter) this.where({ campusId: this._campusFilter });
-});
+// Note: no campus-isolation query hook is needed here — every UserPreferences
+// query is keyed by the caller's own `userId` (derived from the JWT, never from
+// the request body), so cross-campus leakage is structurally impossible.
 
 // ── Expose supported values as statics for use in controllers ─────────────────
 UserPreferencesSchema.statics.SUPPORTED_LANGUAGES = SUPPORTED_LANGUAGES;

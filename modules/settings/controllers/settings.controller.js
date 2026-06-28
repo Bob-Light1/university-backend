@@ -22,6 +22,10 @@ const SUPPORTED_LANGUAGES  = settingsRepo.getSupportedLanguages();
 const SUPPORTED_TIMEZONES  = require('../models/timezone-whitelist');
 const SUPPORTED_GRADE_FMTS = ['FRACTION', 'PERCENT', 'LETTER', 'GPA'];
 const SUPPORTED_DATE_FMTS  = ['DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD'];
+const SUPPORTED_THEMES     = ['light', 'dark', 'system'];
+
+// BCP-47-ish locale tag: 'fr', 'fr-CM', 'en-NG', 'zh-CN' (language [+ region]).
+const LOCALE_PATTERN = /^[a-z]{2}(-[A-Za-z]{2,4})?$/;
 
 // ── Helper: build campus defaults for a new UserPreferences doc ───────────────
 async function buildDefaultsFromCampus(campusId) {
@@ -93,10 +97,18 @@ const updateSettings = asyncHandler(async (req, res) => {
   if (dateFormat && !SUPPORTED_DATE_FMTS.includes(dateFormat)) {
     return sendError(res, 400, `Unsupported dateFormat: ${dateFormat}`);
   }
+  if (theme && !SUPPORTED_THEMES.includes(theme)) {
+    return sendError(res, 400, `Unsupported theme: ${theme}`);
+  }
+  // preferredLocale: null/'' clears it; otherwise it must be a valid locale tag.
+  const clearsLocale = preferredLocale === null || preferredLocale === '';
+  if (preferredLocale !== undefined && !clearsLocale && !LOCALE_PATTERN.test(preferredLocale)) {
+    return sendError(res, 400, `Invalid locale: ${preferredLocale}`);
+  }
 
   const update = {};
   if (preferredLanguage !== undefined) update.preferredLanguage = preferredLanguage;
-  if (preferredLocale   !== undefined) update.preferredLocale   = preferredLocale;
+  if (preferredLocale   !== undefined) update.preferredLocale   = clearsLocale ? null : preferredLocale;
   if (timezone          !== undefined) update.timezone          = timezone;
   if (gradeFormat       !== undefined) update.gradeFormat       = gradeFormat;
   if (dateFormat        !== undefined) update.dateFormat        = dateFormat;
@@ -147,4 +159,18 @@ const getLanguage = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getSettings, updateSettings, upsertSettings, getLanguage };
+// ── GET /api/settings/options ─────────────────────────────────────────────────
+// Reference enums consumed by the frontend (timezone picker, grade/date format,
+// theme). Single source of truth — prevents the frontend from hard-coding and
+// drifting from these whitelists.
+const getOptions = asyncHandler(async (req, res) => {
+  return sendSuccess(res, 200, 'Settings options retrieved.', {
+    languages:    SUPPORTED_LANGUAGES,
+    timezones:    SUPPORTED_TIMEZONES,
+    gradeFormats: SUPPORTED_GRADE_FMTS,
+    dateFormats:  SUPPORTED_DATE_FMTS,
+    themes:       SUPPORTED_THEMES,
+  });
+});
+
+module.exports = { getSettings, updateSettings, upsertSettings, getLanguage, getOptions };

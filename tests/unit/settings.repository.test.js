@@ -24,7 +24,7 @@ const repo = require('../../modules/settings/settings.repository');
 
 beforeEach(() => jest.clearAllMocks());
 
-const UPSERT_OPTS = { upsert: true, new: true, setDefaultsOnInsert: true };
+const UPSERT_OPTS = { upsert: true, new: true, setDefaultsOnInsert: true, runValidators: true };
 
 describe('lectures', () => {
   test('findByUserId : findOne({ userId }) en lean', async () => {
@@ -72,6 +72,26 @@ describe('upserts', () => {
       { $set: set, $setOnInsert: insertDoc },
       UPSERT_OPTS,
     );
+  });
+
+  test('upsertOnInsert : absorbs the unique-index race (E11000) by retrying once', async () => {
+    const dup = Object.assign(new Error('E11000 duplicate key'), { code: 11000 });
+    const ok  = { userId: 'u1', preferredLanguage: 'fr' };
+    UserPreferences.findOneAndUpdate
+      .mockReturnValueOnce({ lean: () => Promise.reject(dup) })
+      .mockReturnValueOnce({ lean: () => Promise.resolve(ok) });
+
+    const res = await repo.upsertOnInsert('u1', { userId: 'u1', userModel: 'Admin' });
+    expect(res).toEqual(ok);
+    expect(UserPreferences.findOneAndUpdate).toHaveBeenCalledTimes(2);
+  });
+
+  test('upsertOnInsert : rethrows non-duplicate errors without retry', async () => {
+    const boom = Object.assign(new Error('network down'), { code: 'ECONNRESET' });
+    UserPreferences.findOneAndUpdate.mockReturnValueOnce({ lean: () => Promise.reject(boom) });
+
+    await expect(repo.upsertOnInsert('u1', { userId: 'u1', userModel: 'Admin' })).rejects.toThrow('network down');
+    expect(UserPreferences.findOneAndUpdate).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -7,12 +7,15 @@ const {
   updateSettings,
   upsertSettings,
   getLanguage,
+  getOptions,
 } = require('./controllers/settings.controller');
 
 // All settings routes require authentication
 router.use(authenticate);
 
+// Named routes before '/' (Express conflict prevention).
 router.get('/language', getLanguage);
+router.get('/options',  getOptions);
 router.get('/',         getSettings);
 router.patch('/',       updateSettings);
 router.post('/',        upsertSettings);
