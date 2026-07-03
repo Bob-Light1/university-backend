@@ -184,7 +184,9 @@ const getSessionById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await studentRepo.findPublishedSessionById(id);
+  // Campus isolation: scoped roles (STUDENT/TEACHER/CAMPUS_MANAGER) may only
+  // read sessions on their own campus; ADMIN/DIRECTOR are cross-campus.
+  const session = await studentRepo.findPublishedSessionById(id, buildCampusFilter(req));
 
   if (!session) return sendError(res, 404, 'Session not found or not yet published.');
   return sendSuccess(res, 200, 'Session fetched.', session);
@@ -235,7 +237,8 @@ const getAttendanceForSession = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
 
-  const session = await studentRepo.findSessionAttendanceInfo(id);
+  // Campus isolation: scoped roles are locked to their own campus.
+  const session = await studentRepo.findSessionAttendanceInfo(id, buildCampusFilter(req));
 
   if (!session) return sendError(res, 404, 'Session not found.');
 

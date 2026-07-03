@@ -275,7 +275,9 @@ studentSchema.methods.canLogin = function () {
 
 // Get student's campus info
 studentSchema.methods.getCampusInfo = async function () {
-  await this.populate('schoolCampus', 'campus_name location').execPopulate();
+  // Mongoose 6+ removed Document.prototype.execPopulate(); populate() now
+  // returns a promise directly.
+  await this.populate('schoolCampus', 'campus_name location');
   return this.schoolCampus;
 };
 

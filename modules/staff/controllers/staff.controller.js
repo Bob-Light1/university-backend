@@ -290,6 +290,7 @@ const updateStaff = async (req, res) => {
     delete body.schoolCampus;
     delete body.role;
     delete body.lastLogin;
+    delete body.status;  // status transitions go through the dedicated /status, /restore and DELETE endpoints
     delete body.subRole; // use assignRole endpoint instead
 
     const campusFilter = { ...getCampusFilter(req), _id: id };

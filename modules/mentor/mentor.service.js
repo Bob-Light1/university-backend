@@ -7,6 +7,7 @@
  */
 
 const mentorRepo = require('./mentor.repository');
+const studentService = require('../student').service; // student module facade (§3)
 
 /**
  * Statistiques mentors d'un campus pour le dashboard campus.
@@ -17,15 +18,17 @@ const mentorRepo = require('./mentor.repository');
  * @returns {Promise<{ total:number, active:number, studentsAssigned:number }>}
  */
 async function getCampusStats(campusId, campusOid) {
-  const [total, active, studentsAgg] = await Promise.all([
+  // studentsAssigned now derives from Student.mentor (single source of truth):
+  // students on this campus who currently have a mentor assigned.
+  const [total, active, studentsAssigned] = await Promise.all([
     mentorRepo.countByCampus(campusId, { $ne: 'archived' }),
     mentorRepo.countByCampus(campusId, 'active'),
-    mentorRepo.aggregateAssignedStudents(campusOid),
+    studentService.countStudents({ campusId: campusOid, hasMentor: true, excludeArchived: true }),
   ]);
   return {
     total,
     active,
-    studentsAssigned: studentsAgg[0]?.total ?? 0,
+    studentsAssigned,
   };
 }
 

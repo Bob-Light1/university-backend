@@ -338,6 +338,15 @@ const reviewPostponement = asyncHandler(async (req, res) => {
   const session = await teacherRepo.findScheduleByPostponementRequest(requestId);
   if (!session) return sendError(res, 404, 'Postponement request not found.');
 
+  // Campus isolation: a Campus Manager can only review requests on their own
+  // campus. The lookup above is unscoped (keyed on the request _id), so enforce
+  // the boundary here — never trust a cross-campus requestId.
+  const { role, campusId } = req.user;
+  const isGlobal = ['ADMIN', 'DIRECTOR'].includes(role);
+  if (!isGlobal && session.schoolCampus?.toString() !== String(campusId)) {
+    return sendError(res, 404, 'Postponement request not found.');
+  }
+
   const request = session.postponementRequests.id(requestId);
   if (request.status !== 'PENDING') {
     return sendError(res, 400, 'This request has already been reviewed.');
@@ -417,7 +426,7 @@ const getPendingPostponements = asyncHandler(async (req, res) => {
           lastName:  session.teacher?.lastName,
           email:     session.teacher?.email,
         },
-        subject:       session.subject?.name,
+        subject:       session.subject?.subject_name,
         sessionStart:  session.startTime,
         sessionEnd:    session.endTime,
         reason:        preq.reason,

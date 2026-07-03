@@ -423,6 +423,13 @@ const deleteMentor = async (req, res) => {
     const mentor = await mentorRepo.deleteById(id);
     if (!mentor) return sendNotFound(res, 'Mentor');
 
+    // Detach the mentor from any students still assigned to it, so no
+    // Student.mentor reference is left dangling after the hard delete.
+    await studentService.detachAllFromMentor({
+      mentorId: mentor._id,
+      campusId: mentor.schoolCampus,
+    });
+
     return sendSuccess(res, 200, 'Mentor permanently deleted.');
 
   } catch (err) {
@@ -518,48 +525,24 @@ const assignStudents = async (req, res) => {
       return sendError(res, 400, 'No eligible students found for the provided IDs / classes.');
     }
 
-    // Apply mode
-    let updateOp;
-    if (mode === 'add') {
-      updateOp = { $addToSet: { students: { $each: uniqueIds } } };
-    } else if (mode === 'remove') {
-      updateOp = { $pullAll: { students: uniqueIds } };
-    } else {
-      // replace
-      updateOp = { $set: { students: uniqueIds } };
-    }
+    // Apply the assignment against Student.mentor — the single source of truth —
+    // in one atomic transaction. The single-mentor invariant is enforced by the
+    // scalar field itself (assigning overwrites any previous mentor), so no
+    // detach-from-other-mentors step and no back-reference array to keep in sync.
+    const { affected, total } = await studentService.applyMentorAssignment({
+      mentorId:   mentor._id,
+      campusId:   campusOid,
+      studentIds: uniqueIds,
+      mode,
+    });
 
-    const updated = await mentorRepo.applyStudentAssignment(mentor._id, updateOp);
-
-    // Keep the Student.mentor back-reference and the single-mentor invariant in
-    // sync with Mentor.students[]. Best-effort: the primary write already
-    // succeeded, so we log inconsistencies rather than failing the request.
-    try {
-      if (mode === 'add' || mode === 'replace') {
-        // A student belongs to a single mentor: detach from any other mentor first.
-        await mentorRepo.detachStudentsFromOtherMentors(uniqueIds, mentor._id, campusOid);
-        await studentService.assignMentor({ studentIds: uniqueIds, mentorId: mentor._id, campusId: campusOid });
-
-        if (mode === 'replace') {
-          // Clear the back-reference for students dropped from the previous set.
-          const keep    = new Set(uniqueIds.map(String));
-          const removed = (mentor.students ?? []).filter((sid) => !keep.has(String(sid)));
-          if (removed.length) {
-            await studentService.unassignMentor({ studentIds: removed, mentorId: mentor._id, campusId: campusOid });
-          }
-        }
-      } else {
-        // remove
-        await studentService.unassignMentor({ studentIds: uniqueIds, mentorId: mentor._id, campusId: campusOid });
-      }
-    } catch (syncErr) {
-      console.error('⚠️ assignStudents back-reference sync failed:', syncErr.message);
-    }
+    // Re-read the mentor with its live roster (virtual populate) for the response.
+    const updated = await mentorRepo.findByIdWithStudents(mentor._id);
 
     const verb = mode === 'add' ? 'added to' : mode === 'remove' ? 'removed from' : 'set for';
     return sendSuccess(res, 200, `Students ${verb} mentor.`, {
       mentor:  updated,
-      summary: { affected: uniqueIds.length, total: updated.students.length },
+      summary: { affected, total },
     });
 
   } catch (err) {

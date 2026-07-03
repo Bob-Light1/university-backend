@@ -48,25 +48,45 @@ const countStudents = (filter) => Student.countDocuments(filter);
 const listStudentIds = (filter) => Student.find(filter, { _id: 1 }).lean();
 
 /**
- * Sets the mentor back-reference on a set of campus-scoped students.
+ * Assigns the mentor to a set of campus-scoped students. `$set` overwrites any
+ * previous mentor, so the "one mentor per student" invariant is enforced by
+ * construction — no need to detach from other mentors.
  * @returns {Promise<{ modifiedCount: number }>}
  */
-const setMentorForStudents = (studentIds, mentorId, campusId) =>
+const setMentorForStudents = (studentIds, mentorId, campusId, { session } = {}) =>
   Student.updateMany(
     { _id: { $in: studentIds }, schoolCampus: campusId },
-    { $set: { mentor: mentorId } }
+    { $set: { mentor: mentorId } },
+    { session: session ?? null }
   );
 
 /**
- * Clears the mentor back-reference, but only for students currently pointing
- * to this mentor (avoids clobbering a concurrent re-assignment).
+ * Clears the mentor reference, but only for students currently pointing to this
+ * mentor (avoids clobbering a concurrent re-assignment).
  * @returns {Promise<{ modifiedCount: number }>}
  */
-const clearMentorForStudents = (studentIds, mentorId, campusId) =>
+const clearMentorForStudents = (studentIds, mentorId, campusId, { session } = {}) =>
   Student.updateMany(
     { _id: { $in: studentIds }, schoolCampus: campusId, mentor: mentorId },
-    { $set: { mentor: null } }
+    { $set: { mentor: null } },
+    { session: session ?? null }
   );
+
+/**
+ * Clears the mentor reference for every student of this mentor on the campus
+ * EXCEPT those in `keepStudentIds` (the "replace" assignment mode).
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const clearMentorExceptForStudents = (mentorId, keepStudentIds, campusId, { session } = {}) =>
+  Student.updateMany(
+    { schoolCampus: campusId, mentor: mentorId, _id: { $nin: keepStudentIds } },
+    { $set: { mentor: null } },
+    { session: session ?? null }
+  );
+
+/** Ids of the students currently assigned to a mentor on a campus. */
+const listStudentIdsForMentor = (mentorId, campusId) =>
+  Student.find({ mentor: mentorId, schoolCampus: campusId }, { _id: 1 }).lean();
 
 /** Current class reference of a student of a campus. */
 const getStudentClassRef = (studentId, campusId) =>
@@ -91,15 +111,16 @@ const getStudentProfileRef = (studentId) =>
     .lean();
 
 /**
- * Students that are candidates for exam eligibility (Mongoose documents,
- * historical `currentClass` field).
+ * Students that are candidates for exam eligibility (Mongoose documents).
+ * Enrollment source of truth is `studentClass` (the Student model has no
+ * `currentClass` field — the previous name silently matched zero students).
  */
 const listStudentsForExamEligibility = ({ classIds, campusId }) =>
   Student.find({
-    currentClass: { $in: classIds },
+    studentClass: { $in: classIds },
     schoolCampus: campusId || { $exists: true },
     status:       { $ne: 'archived' },
-  }).select('_id currentClass');
+  }).select('_id studentClass');
 
 /** Student of a campus with the print fields (card/certificate). */
 const getStudentForPrint = (studentId, campusId) =>
@@ -363,15 +384,19 @@ const listClassPublishedSessionsByStart = ({ classId, campusId, gte, gt, lte, li
   return q.lean();
 };
 
-/** Detail of a published session (student access). */
-const findPublishedSessionById = (id) =>
-  StudentSchedule.findOne({ _id: id, isDeleted: false, status: 'PUBLISHED' })
+/**
+ * Detail of a published session (student access).
+ * `campusFilter` (composed by the caller) enforces campus isolation for
+ * scoped roles; ADMIN/DIRECTOR pass an empty filter for cross-campus reads.
+ */
+const findPublishedSessionById = (id, campusFilter = {}) =>
+  StudentSchedule.findOne({ _id: id, isDeleted: false, status: 'PUBLISHED', ...campusFilter })
     .select('-__v')
     .lean();
 
-/** Roll-call summary of a session (by id, not deleted). */
-const findSessionAttendanceInfo = (id) =>
-  StudentSchedule.findOne({ _id: id, isDeleted: false })
+/** Roll-call summary of a session (by id, not deleted), campus-isolated. */
+const findSessionAttendanceInfo = (id, campusFilter = {}) =>
+  StudentSchedule.findOne({ _id: id, isDeleted: false, ...campusFilter })
     .select('reference subject startTime endTime attendance')
     .lean();
 
@@ -493,7 +518,10 @@ const summarizeAttendanceTotals = ({ campusId, classIds }) => {
       $group: {
         _id:     null,
         total:   { $sum: 1 },
-        present: { $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } },
+        // `status` is a Boolean (true = present). Comparing to the string
+        // 'present' always yielded 0, so campus/mentor dashboards reported a 0%
+        // attendance rate regardless of the real data.
+        present: { $sum: { $cond: [{ $eq: ['$status', true] }, 1, 0] } },
       },
     },
   ]);
@@ -686,6 +714,8 @@ module.exports = {
   listStudentIds,
   setMentorForStudents,
   clearMentorForStudents,
+  clearMentorExceptForStudents,
+  listStudentIdsForMentor,
   getStudentClassRef,
   getStudentsCampusRefs,
   getStudentForDocument,

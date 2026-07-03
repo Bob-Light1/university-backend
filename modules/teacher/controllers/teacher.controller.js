@@ -20,7 +20,7 @@ const { deleteFile } = require('../../../shared/utils/file-upload');
 const teacherConfig = require('../teacher.config');
 const { getLoginPrefs } = require('../../settings').service;
 
-const SALT_ROUNDS    = 10;
+const SALT_ROUNDS    = 12; // platform standard (matches profile.service, generic-entity.controller, other modules)
 const TEACHEAR_FOLDER = 'teachers';
 const JWT_SECRET      = process.env.JWT_SECRET;
 

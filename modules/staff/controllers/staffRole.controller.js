@@ -92,12 +92,18 @@ const createStaffRole = async (req, res) => {
 const getAllStaffRoles = async (req, res) => {
   try {
     const campusFilter = getCampusFilter(req);
-    const { page = 1, limit = 50, search, isActive } = req.query;
+    const { page = 1, limit = 50, search, isActive, campusId } = req.query;
+
+    // Scoped roles are pinned to their own campus by campusFilter (query is ignored
+    // for security). A global role (ADMIN/DIRECTOR) may narrow the listing to a
+    // single campus via ?campusId when browsing that campus's settings.
+    const campusScope = campusFilter.schoolCampus
+      ?? (campusId && isValidObjectId(campusId) ? campusId : undefined);
 
     const skip = (Number(page) - 1) * Number(limit);
     const { data: docs, total } = await staffRoleRepo.paginate({
       // buildCampusFilter utilise `schoolCampus` — StaffRole utilise `campus`
-      campusScope: campusFilter.schoolCampus,
+      campusScope,
       isActive:    isActive !== undefined ? isActive === 'true' : undefined,
       search,
       skip,

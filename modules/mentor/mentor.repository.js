@@ -68,10 +68,14 @@ const findOneScoped = (scopeFilter) =>
 /** Raw read within the scope (preconditions: _id, schoolCampus). */
 const findOneScopedLean = (scopeFilter) => Mentor.findOne(scopeFilter).lean();
 
-/** Authenticated mentor's data: students/classes/campus (readonly). */
+/**
+ * Authenticated mentor's classes + campus (readonly scope).
+ * The student roster is NOT read here — it derives from Student.mentor and is
+ * resolved separately via studentService.listStudentIdsForMentor.
+ */
 const findAssignmentsFor = (id, campusId) =>
   Mentor.findOne({ _id: id, schoolCampus: campusId })
-    .select('students classes schoolCampus')
+    .select('classes schoolCampus')
     .lean();
 
 /** Scoped update (PUT). @returns {Promise<Object|null>} */
@@ -91,36 +95,22 @@ const updatePassword = (id, hashedPassword) =>
 /** Permanent deletion. */
 const deleteById = (id) => Mentor.findByIdAndDelete(id);
 
-/** Applies the student assignment (add/remove/replace), students populated. */
-const applyStudentAssignment = (id, updateOp) =>
-  Mentor.findByIdAndUpdate(id, updateOp, { new: true })
+/**
+ * Reads a mentor with its live roster populated (post-assignment response).
+ * `students` is the virtual populate over Student.mentor.
+ */
+const findByIdWithStudents = (id) =>
+  Mentor.findById(id)
     .select(RESPONSE_SELECT)
+    .populate('schoolCampus', 'campus_name')
     .populate('students', 'firstName lastName email matricule studentClass status profileImage')
     .lean({ virtuals: true });
-
-/**
- * Removes the given students from every OTHER mentor of the same campus.
- * Enforces the single-mentor invariant: a student belongs to one mentor at a time.
- * @returns {Promise<{ modifiedCount: number }>}
- */
-const detachStudentsFromOtherMentors = (studentIds, keepMentorId, campusId) =>
-  Mentor.updateMany(
-    { _id: { $ne: keepMentorId }, schoolCampus: campusId, students: { $in: studentIds } },
-    { $pull: { students: { $in: studentIds } } }
-  );
 
 // ── API inter-modules (ancien mentor.service) ─────────────────────────────────
 
 /** Compteur de mentors d'un campus (status = valeur ou objet $ne). */
 const countByCampus = (campusId, status) =>
   Mentor.countDocuments({ schoolCampus: campusId, status });
-
-/** Total assigned students (campus dashboard). */
-const aggregateAssignedStudents = (campusOid) =>
-  Mentor.aggregate([
-    { $match: { schoolCampus: campusOid, status: { $ne: 'archived' } } },
-    { $group: { _id: null, total: { $sum: { $size: '$students' } } } },
-  ]);
 
 /**
  * Liste paginée pour le dashboard campus (assignedStudents peuplés).
@@ -158,9 +148,7 @@ module.exports = {
   setStatusScoped,
   updatePassword,
   deleteById,
-  applyStudentAssignment,
-  detachStudentsFromOtherMentors,
+  findByIdWithStudents,
   countByCampus,
-  aggregateAssignedStudents,
   listForCampusService,
 };

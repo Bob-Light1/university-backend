@@ -83,20 +83,25 @@ const validateStudentBelongsToCampus = async (studentId, campusId) => {
  *   campusId?:        string|ObjectId,
  *   studentIds?:      Array,           - restricted to these _id
  *   studentClassIds?: Array,           - restricted to these classes (studentClass)
+ *   mentorId?:        string|ObjectId, - assigned to this mentor
+ *   hasMentor?:       boolean,         - mentor set (true) / unset (false)
  *   status?:          string,          - exact value (e.g. 'active')
  *   excludeArchived?: boolean,         - status ≠ 'archived'
  *   createdSince?:    Date,
  * }} params
  * @returns {Promise<number>}
  */
-const countStudents = ({ campusId, studentIds, studentClassIds, status, excludeArchived, createdSince } = {}) => {
+const countStudents = ({ campusId, studentIds, studentClassIds, mentorId, hasMentor, status, excludeArchived, createdSince } = {}) => {
   const filter = {};
-  if (campusId)        filter.schoolCampus = campusId;
-  if (studentIds)      filter._id          = { $in: studentIds };
-  if (studentClassIds) filter.studentClass = { $in: studentClassIds };
-  if (status)          filter.status       = status;
-  else if (excludeArchived) filter.status  = { $ne: 'archived' };
-  if (createdSince)    filter.createdAt    = { $gte: createdSince };
+  if (campusId)             filter.schoolCampus = campusId;
+  if (studentIds)           filter._id          = { $in: studentIds };
+  if (studentClassIds)      filter.studentClass = { $in: studentClassIds };
+  if (mentorId)             filter.mentor       = mentorId;
+  else if (hasMentor === true)  filter.mentor   = { $ne: null };
+  else if (hasMentor === false) filter.mentor   = null;
+  if (status)               filter.status       = status;
+  else if (excludeArchived) filter.status       = { $ne: 'archived' };
+  if (createdSince)         filter.createdAt     = { $gte: createdSince };
   return studentRepo.countStudents(filter);
 };
 
@@ -116,8 +121,7 @@ const listStudentIds = ({ classIds, campusId, excludeArchived = false }) => {
 };
 
 /**
- * Sets the mentor back-reference on a set of campus-scoped students.
- * Used by mentor.controller to keep Student.mentor in sync with Mentor.students[].
+ * Assigns the mentor to a set of campus-scoped students (idempotent).
  * @param {{studentIds: Array, mentorId: string|ObjectId, campusId: string|ObjectId}} params
  * @returns {Promise<{ modifiedCount: number }>}
  */
@@ -125,12 +129,71 @@ const assignMentor = ({ studentIds, mentorId, campusId }) =>
   studentRepo.setMentorForStudents(studentIds, mentorId, campusId);
 
 /**
- * Clears the mentor back-reference for students currently linked to this mentor.
+ * Clears the mentor reference for students currently linked to this mentor.
  * @param {{studentIds: Array, mentorId: string|ObjectId, campusId: string|ObjectId}} params
  * @returns {Promise<{ modifiedCount: number }>}
  */
 const unassignMentor = ({ studentIds, mentorId, campusId }) =>
   studentRepo.clearMentorForStudents(studentIds, mentorId, campusId);
+
+/**
+ * Clears the mentor reference on EVERY student of this mentor on the campus.
+ * Used when a mentor is permanently deleted to avoid dangling Student.mentor refs.
+ * @param {{mentorId: string|ObjectId, campusId: string|ObjectId}} params
+ * @returns {Promise<{ modifiedCount: number }>}
+ */
+const detachAllFromMentor = ({ mentorId, campusId }) =>
+  studentRepo.clearMentorExceptForStudents(mentorId, [], campusId);
+
+/**
+ * Ids of the students currently assigned to a mentor (mentor self-service scope).
+ * `Student.mentor` is the single source of truth for the mentor↔student link.
+ * @param {{mentorId: string|ObjectId, campusId: string|ObjectId}} params
+ * @returns {Promise<Array<ObjectId>>}
+ */
+const listStudentIdsForMentor = async ({ mentorId, campusId }) => {
+  const docs = await studentRepo.listStudentIdsForMentor(mentorId, campusId);
+  return docs.map((d) => d._id);
+};
+
+/**
+ * Applies a mentor assignment against `Student.mentor` (the single source of
+ * truth) in ONE atomic transaction. No back-reference array is maintained on
+ * the Mentor side — "students of a mentor" is derived from Student.mentor.
+ *
+ * Modes:
+ *   - add     → assign the mentor to `studentIds` (overwrites any prior mentor).
+ *   - remove  → clear the mentor for `studentIds` currently linked to it.
+ *   - replace → the mentor's roster becomes exactly `studentIds`.
+ *
+ * @param {{
+ *   mentorId:   string|ObjectId,
+ *   campusId:   string|ObjectId,
+ *   studentIds: Array<ObjectId>,   - already validated + campus-scoped by the caller
+ *   mode:       'add'|'remove'|'replace'
+ * }} params
+ * @returns {Promise<{ affected: number, total: number }>}
+ */
+const applyMentorAssignment = async ({ mentorId, campusId, studentIds, mode }) => {
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      if (mode === 'add') {
+        await studentRepo.setMentorForStudents(studentIds, mentorId, campusId, { session });
+      } else if (mode === 'remove') {
+        await studentRepo.clearMentorForStudents(studentIds, mentorId, campusId, { session });
+      } else { // replace
+        await studentRepo.clearMentorExceptForStudents(mentorId, studentIds, campusId, { session });
+        await studentRepo.setMentorForStudents(studentIds, mentorId, campusId, { session });
+      }
+    });
+  } finally {
+    await session.endSession();
+  }
+
+  const total = await studentRepo.countStudents({ mentor: mentorId, schoolCampus: campusId });
+  return { affected: studentIds.length, total };
+};
 
 /**
  * Paginated listing of students for the staff portal (populated class,
@@ -216,10 +279,9 @@ const getStudentProfileRef = (studentId) =>
 
 /**
  * Students candidate for an exam session's eligibility.
- * NB: filters on `currentClass` (legacy field for exam eligibility),
- * not `studentClass` — behavior preserved as-is.
+ * Filters on `studentClass` (the enrollment field on the Student model).
  * @param {{classIds: Array<string>, campusId?: string|ObjectId}} params
- * @returns {Promise<Array>} Mongoose documents (_id, currentClass)
+ * @returns {Promise<Array>} Mongoose documents (_id, studentClass)
  */
 const listStudentsForExamEligibility = ({ classIds, campusId }) =>
   studentRepo.listStudentsForExamEligibility({ classIds, campusId });
@@ -332,8 +394,6 @@ const summarizeStudentAttendance = (params) =>
 
 /**
  * Attendance totals of a campus (or of a mentor's classes).
- * NB: the `status === 'present'` (string) comparison is legacy and
- * preserved as-is.
  * @param {{campusId: ObjectId, classIds?: Array}} params
  * @returns {Promise<Array<{total, present}>>}
  */
@@ -414,6 +474,9 @@ module.exports = {
   listStudentIds,
   assignMentor,
   unassignMentor,
+  detachAllFromMentor,
+  listStudentIdsForMentor,
+  applyMentorAssignment,
   listStudentsForStaff,
   listStudentsForMentor,
   listStudentsForCampusDashboard,

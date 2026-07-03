@@ -20,7 +20,7 @@ const {
   escapeRegex,
 } = require('../utils/validation-helpers');
 
-const SALT_ROUNDS = 10;
+const SALT_ROUNDS = 12; // platform standard (matches profile.service, models, per-module controllers)
 
 class GenericEntityController {
   constructor(config) {

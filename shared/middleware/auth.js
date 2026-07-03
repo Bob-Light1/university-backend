@@ -375,7 +375,16 @@ const requirePermission = (key) => (req, res, next) => {
   }
 
   const perms = req.user.permissions;
-  if (!Array.isArray(perms) || !perms.includes(key)) {
+
+  // `<resource>.manage` is strictly more privileged than `<resource>.read`, so a
+  // manage grant also satisfies a read requirement. This keeps the backend aligned
+  // with the frontend PermissionGate, which grants on `anyOf: ['x.read', 'x.manage']`.
+  const readSatisfiedByManage =
+    Array.isArray(perms) &&
+    key.endsWith('.read') &&
+    perms.includes(`${key.slice(0, -'.read'.length)}.manage`);
+
+  if (!Array.isArray(perms) || (!perms.includes(key) && !readSatisfiedByManage)) {
     return res.status(403).json({
       success: false,
       message: `Access denied. Missing permission: ${key}`,

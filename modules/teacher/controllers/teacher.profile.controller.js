@@ -24,7 +24,7 @@ const userFilter = (req) => ({
 
 const POPULATE = [
   { path: 'schoolCampus', select: 'campus_name' },
-  { path: 'department',   select: 'department_name' },
+  { path: 'department',   select: 'name' },
 ];
 
 const ALLOWED_PROFILE_FIELDS = ['phone', 'emergencyContact'];

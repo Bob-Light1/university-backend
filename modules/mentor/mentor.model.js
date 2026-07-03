@@ -29,9 +29,13 @@ const mentorSchema = new mongoose.Schema(
       index:    true,
     },
 
-    // ─── Classes and students under this mentor's care ────────────────────────
-    classes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Classes', index: true }],
-    students: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Student', index: true }],
+    // ─── Classes under this mentor's care ─────────────────────────────────────
+    classes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Class', index: true }],
+
+    // NB: the mentor↔student link is NOT stored here. `Student.mentor` is the
+    // single source of truth; the `students` virtual below derives the roster
+    // from it (see mentor.repository populate('students')). This removes the
+    // dual-write divergence risk and the unbounded-array anti-pattern.
 
     // ─── Personal information ─────────────────────────────────────────────────
     firstName: {
@@ -129,6 +133,14 @@ mentorSchema.index({ firstName: 1, lastName: 1 });
 // ─── Virtuals ─────────────────────────────────────────────────────────────────
 mentorSchema.virtual('fullName').get(function () {
   return `${this.firstName} ${this.lastName}`;
+});
+
+// Roster derived from Student.mentor (single source of truth). Populate on demand
+// with `.populate('students', '<fields>')`; never stored on the mentor document.
+mentorSchema.virtual('students', {
+  ref:          'Student',
+  localField:   '_id',
+  foreignField: 'mentor',
 });
 
 // ─── Pre-save: hash password ──────────────────────────────────────────────────

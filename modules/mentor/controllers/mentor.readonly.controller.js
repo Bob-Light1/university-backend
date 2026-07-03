@@ -10,9 +10,10 @@
  *  GET /api/mentors/me/attendance  → getMyAttendance
  *  GET /api/mentors/me/courses     → getMyCourses
  *
- * Scope contract: a mentor only ever sees data for students and classes
- * listed in their own mentor document (mentor.students[] / mentor.classes[]).
- * Campus isolation is enforced via schoolCampus from JWT.
+ * Scope contract: a mentor only ever sees data for their classes (Mentor.classes[])
+ * and for the students assigned to them (Student.mentor — single source of truth,
+ * resolved via the student facade). Campus isolation is enforced via schoolCampus
+ * from JWT.
  */
 
 const mongoose          = require('mongoose');
@@ -38,17 +39,25 @@ const { escapeRegex } = require('../../../shared/utils/validation-helpers');
 const toOid  = (id) => new mongoose.Types.ObjectId(id);
 
 /**
- * Loads the mentor document to get their students[] and classes[].
- * Returns null and sends 404 if not found.
+ * Resolves the authenticated mentor's scope:
+ *   - classIds   from the mentor document (Mentor.classes[])
+ *   - studentIds from Student.mentor (single source of truth), resolved via
+ *     the student facade — the mentor no longer stores a students[] array.
+ * Returns null and sends 404 if the mentor is not found.
+ * @returns {Promise<{ studentIds: ObjectId[], classIds: ObjectId[] } | null>}
  */
-const loadMentor = async (req, res) => {
-  const mentor = await mentorRepo.findAssignmentsFor(toOid(req.user.id), toOid(req.user.campusId));
+const loadMentorScope = async (req, res) => {
+  const mentorId = toOid(req.user.id);
+  const campusId = toOid(req.user.campusId);
 
+  const mentor = await mentorRepo.findAssignmentsFor(mentorId, campusId);
   if (!mentor) {
     sendNotFound(res, 'Mentor');
     return null;
   }
-  return mentor;
+
+  const studentIds = await studentService.listStudentIdsForMentor({ mentorId, campusId });
+  return { studentIds, classIds: mentor.classes ?? [] };
 };
 
 // ── DASHBOARD ─────────────────────────────────────────────────────────────────
@@ -59,11 +68,10 @@ const loadMentor = async (req, res) => {
  */
 const getDashboard = async (req, res) => {
   try {
-    const mentor = await loadMentor(req, res);
-    if (!mentor) return;
+    const scope = await loadMentorScope(req, res);
+    if (!scope) return;
 
-    const studentIds = mentor.students ?? [];
-    const classIds   = mentor.classes  ?? [];
+    const { studentIds, classIds } = scope;
     const campusId   = toOid(req.user.campusId);
 
     const [
@@ -126,10 +134,10 @@ const getDashboard = async (req, res) => {
  */
 const getMyStudents = async (req, res) => {
   try {
-    const mentor = await loadMentor(req, res);
-    if (!mentor) return;
+    const scope = await loadMentorScope(req, res);
+    if (!scope) return;
 
-    const studentIds = mentor.students ?? [];
+    const { studentIds } = scope;
     if (!studentIds.length) return sendPaginated(res, 200, 'No students assigned.', [], { total: 0, page: 1, limit: 20 });
 
     const { page = 1, limit = 20, search, status, classId } = req.query;
@@ -162,10 +170,10 @@ const getMyStudents = async (req, res) => {
  */
 const getMyResults = async (req, res) => {
   try {
-    const mentor = await loadMentor(req, res);
-    if (!mentor) return;
+    const scope = await loadMentorScope(req, res);
+    if (!scope) return;
 
-    const studentIds = mentor.students ?? [];
+    const { studentIds } = scope;
     if (!studentIds.length) return sendPaginated(res, 200, 'No students assigned.', [], { total: 0, page: 1, limit: 20 });
 
     const {
@@ -204,11 +212,10 @@ const getMyResults = async (req, res) => {
  */
 const getMyAttendance = async (req, res) => {
   try {
-    const mentor = await loadMentor(req, res);
-    if (!mentor) return;
+    const scope = await loadMentorScope(req, res);
+    if (!scope) return;
 
-    const classIds   = mentor.classes  ?? [];
-    const studentIds = mentor.students ?? [];
+    const { studentIds, classIds } = scope;
 
     if (!classIds.length && !studentIds.length) {
       return sendPaginated(res, 200, 'No classes or students assigned.', [], { total: 0, page: 1, limit: 20 });

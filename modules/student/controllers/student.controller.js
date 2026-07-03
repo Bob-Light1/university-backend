@@ -20,7 +20,7 @@ const {
 const { deleteFile } = require('../../../shared/utils/file-upload');
 const { getLoginPrefs } = require('../../settings').service;
 
-const SALT_ROUNDS    = 10;
+const SALT_ROUNDS    = 12; // align with the platform standard (bcrypt cost 12)
 const STUDENT_FOLDER = 'students';
 
 const JWT_SECRET = process.env.JWT_SECRET;
