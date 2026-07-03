@@ -86,12 +86,12 @@ describe('écritures scoped', () => {
     expect(opts).toEqual({ new: true, runValidators: true });
   });
 
-  test('applyStudentAssignment : findByIdAndUpdate op + new', async () => {
-    await repo.applyStudentAssignment('m1', { $set: { students: ['s1'] } });
-    const [id, op, opts] = Mentor.findByIdAndUpdate.mock.calls[0];
-    expect(id).toBe('m1');
-    expect(op).toEqual({ $set: { students: ['s1'] } });
-    expect(opts).toEqual({ new: true });
+  // NOTE: l'attribution mentor↔étudiant ne s'écrit plus ici — Student.mentor est
+  // la source unique (studentService.applyMentorAssignment) ; Mentor.students
+  // n'est qu'un virtual populate.
+  test('updatePassword : findByIdAndUpdate password (hash déjà calculé en amont)', async () => {
+    await repo.updatePassword('m1', 'HASH');
+    expect(Mentor.findByIdAndUpdate).toHaveBeenCalledWith('m1', { password: 'HASH' });
   });
 });
 
@@ -101,10 +101,16 @@ describe('stats (service)', () => {
     expect(Mentor.countDocuments).toHaveBeenCalledWith({ schoolCampus: 'c1', status: { $ne: 'archived' } });
   });
 
-  test('aggregateAssignedStudents : $match campus + $sum $size students', async () => {
-    const out = await repo.aggregateAssignedStudents('oid');
-    const pipeline = Mentor.aggregate.mock.calls[0][0];
-    expect(pipeline[0].$match).toMatchObject({ schoolCampus: 'oid', status: { $ne: 'archived' } });
-    expect(out).toEqual([{ total: 12 }]);
+  // NOTE: studentsAssigned se compte désormais côté student
+  // (studentService.countStudents({ hasMentor: true })) — plus d'agrégat Mentor.
+  test('listForCampusService : défaut exclut archivés + recherche multi-champs échappée', async () => {
+    Mentor.__setLean([{ _id: '1' }]);
+    const out = await repo.listForCampusService({ campusId: 'c1', search: 'a+b', skip: 0, limit: 10 });
+    const filter = Mentor.find.mock.calls[0][0];
+    expect(filter.schoolCampus).toBe('c1');
+    expect(filter.status).toEqual({ $ne: 'archived' });
+    expect(filter.$or).toHaveLength(6);
+    expect(filter.$or[0].firstName).toEqual({ $regex: 'a\\+b', $options: 'i' });
+    expect(out).toEqual({ mentors: [{ _id: '1' }], total: 5 });
   });
 });

@@ -214,6 +214,7 @@ const settingsRouter          = require('./modules/settings').routes;
 const notificationRouter      = require('./modules/notification').routes;
 const financeRouter           = require('./modules/finance').routes;
 const accountRouter           = require('./modules/account').routes;
+const aiModule                = require('./modules/ai'); // Phase 3 gateway — inert without AI_SERVICE_URL
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -238,6 +239,13 @@ app.use('/api/settings',      settingsRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/finance',       financeRouter);
 app.use('/api/account',       accountRouter);
+app.use('/api/ai',            aiModule.routes);
+
+// Internal S2S read API for ai-service (PHASE3_AI_DESIGN.md §4.2/§6.2).
+// Mounted OUTSIDE /api on purpose (no public rate-limiter, no user JWT): the
+// reverse proxy MUST NOT publish the /internal prefix. The S2S JWT verified on
+// every request is the authority; network isolation is defense in depth only.
+app.use('/internal/ai',       aiModule.internalRoutes);
 
 // ========================================
 // 404 HANDLER

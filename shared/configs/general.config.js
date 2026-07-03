@@ -39,6 +39,16 @@ const config = {
     // Delivery attempts before giving up (external channels only).
     maxAttempts: parseInt(process.env.NOTIFICATION_MAX_ATTEMPTS, 10) || 3,
   },
+  // ── AI gateway (Phase 3 — PHASE3_AI_DESIGN.md §11.1) ───────────────────────
+  // INERT while serviceUrl is empty: /api/ai/* answers 503 AI_DISABLED and no
+  // external call is ever made (dev / CI / tests pass without the ai-service).
+  ai: {
+    serviceUrl:       process.env.AI_SERVICE_URL || '',
+    serviceSecret:    process.env.AI_SERVICE_SECRET || '',
+    requestTimeoutMs: parseInt(process.env.AI_REQUEST_TIMEOUT_MS, 10) || 30000,
+    // Per-user cost guard on /api/ai/* (requests per minute).
+    rateLimitPerMin:  parseInt(process.env.AI_RATE_LIMIT_PER_MIN, 10) || 20,
+  },
 };
 
 module.exports = config;

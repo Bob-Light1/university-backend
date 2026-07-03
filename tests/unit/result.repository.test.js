@@ -194,7 +194,12 @@ describe('result — agrégats (non-régression des pipelines)', () => {
     const [pipeline] = Result.aggregate.mock.calls[0];
     expect(pipeline[0]).toEqual({ $match: match });
     expect(pipeline[1].$group._id).toEqual({ academicYear: '$academicYear', semester: '$semester', subject: '$subject' });
-    expect(pipeline[1].$group.subjectAvg).toEqual({ $avg: { $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] } });
+    // Weighted by coefficient (mirrors computeGeneralAverage) — a plain $avg
+    // would let a quiz weigh as much as a final exam.
+    expect(pipeline[1].$group.subjectWeightedSum).toEqual({
+      $sum: { $multiply: [{ $multiply: [{ $divide: ['$score', '$maxScore'] }, 20] }, { $ifNull: ['$coefficient', 1] }] },
+    });
+    expect(pipeline[1].$group.subjectWeightTotal).toEqual({ $sum: { $ifNull: ['$coefficient', 1] } });
     const lookup = pipeline.find((s) => s.$lookup);
     expect(lookup.$lookup.from).toBe('subjects');
     expect(pipeline[pipeline.length - 1]).toEqual({ $sort: { '_id.academicYear': -1, '_id.semester': 1 } });

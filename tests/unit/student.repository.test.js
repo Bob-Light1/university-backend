@@ -228,11 +228,11 @@ describe('attendance (agrégats — non-régression)', () => {
     expect(pipeline[1].$group.totalSessions).toEqual({ $sum: 1 });
   });
 
-  test('summarizeAttendanceTotals : present comparé à la CHAÎNE "present" (sémantique historique) + classIds optionnel', async () => {
+  test('summarizeAttendanceTotals : present comparé au BOOLÉEN true (status est un Boolean ; la chaîne "present" donnait 0%) + classIds optionnel', async () => {
     await repo.summarizeAttendanceTotals({ campusId: 'c1', classIds: ['k1', 'k2'] });
     const pipeline = StudentAttendance.aggregate.mock.calls[0][0];
     expect(pipeline[0].$match).toEqual({ schoolCampus: 'c1', class: { $in: ['k1', 'k2'] } });
-    expect(pipeline[1].$group.present).toEqual({ $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] } });
+    expect(pipeline[1].$group.present).toEqual({ $sum: { $cond: [{ $eq: ['$status', true] }, 1, 0] } });
   });
 
   test('getAvgAbsenceRateForCampus : double $group (par student puis moyenne du taux)', async () => {

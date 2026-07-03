@@ -390,12 +390,24 @@ describe('document share (liens signés)', () => {
     expect(q.lean).toHaveBeenCalled();
   });
 
-  test('registerShareAccess : $inc downloadCount + $push accessedIps (atomique)', () => {
-    repo.registerShareAccess('s1', '1.2.3.4');
-    expect(DocumentShare.findByIdAndUpdate).toHaveBeenCalledWith('s1', {
-      $inc:  { downloadCount: 1 },
-      $push: { accessedIps: '1.2.3.4' },
-    });
+  test('reserveShareDownload : check-and-increment en UNE op conditionnelle (anti-TOCTOU)', () => {
+    const now = new Date(0);
+    repo.reserveShareDownload('s1', 3, now);
+    expect(DocumentShare.findOneAndUpdate).toHaveBeenCalledWith(
+      { _id: 's1', revoked: false, expiresAt: { $gt: now }, downloadCount: { $lt: 3 } },
+      { $inc: { downloadCount: 1 } },
+      { new: true },
+    );
+  });
+
+  test('releaseShareDownload : $inc -1 (compensation si l\'envoi échoue)', () => {
+    repo.releaseShareDownload('s1');
+    expect(DocumentShare.findByIdAndUpdate).toHaveBeenCalledWith('s1', { $inc: { downloadCount: -1 } });
+  });
+
+  test('recordShareAccessIp : $push accessedIps après téléchargement réussi', () => {
+    repo.recordShareAccessIp('s1', '1.2.3.4');
+    expect(DocumentShare.findByIdAndUpdate).toHaveBeenCalledWith('s1', { $push: { accessedIps: '1.2.3.4' } });
   });
 
   test('revokeShare : findOneAndUpdate(filter, payload, {new:true})', () => {

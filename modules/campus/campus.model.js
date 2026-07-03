@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
+const { AI_PLANS, AI_PLAN_PRESETS } = require('../../shared/constants/ai.constants');
 
 /**
  * Campus Model
@@ -203,6 +204,62 @@ const campusSchema = new mongoose.Schema(
       type: String,
       enum: ['FRACTION', 'PERCENT', 'LETTER', 'GPA'],
       default: 'FRACTION',
+    },
+
+    // AI "Premium" entitlement — per-tenant activation of the Phase 3 AI module
+    // (PHASE3_AI_DESIGN.md §11.3). Enforced by modules/ai middleware; the
+    // { plan, llmProfile } pair travels in the S2S JWT, never in a request body.
+    aiEntitlement: {
+      enabled: {
+        type:    Boolean,
+        default: false,
+      },
+      plan: {
+        type:    String,
+        enum:    Object.values(AI_PLANS),
+        default: AI_PLANS.FREE,
+      },
+      // Named LLM provider profile resolved by ai-service (ADR-5, §6.4bis).
+      // Free-form on purpose: profiles are declared in ai-service env only.
+      llmProfile: {
+        type:    String,
+        trim:    true,
+        default: 'free',
+      },
+      // 0 = unlimited (ADMIN only, §11.3).
+      monthlyTokenBudget: {
+        type:    Number,
+        default: AI_PLAN_PRESETS[AI_PLANS.FREE].monthlyTokenBudget,
+        min:     [0, 'monthlyTokenBudget cannot be negative'],
+      },
+      features: {
+        chat:      { type: Boolean, default: true },
+        search:    { type: Boolean, default: true },
+        analytics: { type: Boolean, default: false },
+        advisors:  { type: Boolean, default: false },
+      },
+      activatedAt: {
+        type:    Date,
+        default: null,
+      },
+    },
+
+    // Append-only audit trail of aiEntitlement mutations (CLAUDE.md §8).
+    // Excluded from standard reads; the admin endpoint selects it explicitly.
+    aiEntitlementAudit: {
+      type: [
+        new mongoose.Schema(
+          {
+            at:        { type: Date, default: Date.now },
+            actorId:   { type: mongoose.Schema.Types.ObjectId, required: true },
+            actorRole: { type: String, required: true },
+            changes:   { type: Object, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+      select:  false,
     },
 
     // Features configuration (for premium features)

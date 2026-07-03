@@ -41,7 +41,7 @@ modules/<domain>/
   *.cron.js / *.worker.js  # background jobs (scheduled from server.js)
 ```
 
-Modules: `admin · campus · student · teacher · parent · mentor · staff · class · level · subject · department · course · result · document · exam · academic-print · partner · announcement · gaet · settings · notification · finance · public-portal`.
+Modules: `admin · campus · student · teacher · parent · mentor · staff · class · level · subject · department · course · result · document · exam · academic-print · partner · announcement · gaet · settings · notification · finance · public-portal · account · ai`.
 
 ---
 
@@ -132,7 +132,9 @@ Response shape: `{ success, message, data, meta }`.
 /api/class          /api/level          /api/subject        /api/department
 /api/results        /api/courses        /api/documents      /api/examination
 /api/print          /api/partners       /api/announcements  /api/gaet
-/api/settings       /api/notifications  /api/finance
+/api/settings       /api/notifications  /api/finance        /api/account
+/api/ai  (Phase 3 gateway — inert without AI_SERVICE_URL)
+/internal/ai  (S2S read API for ai-service — never published by the reverse proxy)
 /api/schedules/student  /api/schedules/teacher
 /api/attendance/student /api/attendance/teacher
 /api  (public-portal: campuses, pre-register, programs, quiz, competition, …)
@@ -156,6 +158,8 @@ Response shape: `{ success, message, data, meta }`.
 **Finance** (`/api/finance`) — fees, expenses, income; nightly overdue-fee detection + reminders.
 
 **Public-portal** (`/api`) — public-facing: pre-registration, programs, quiz/leaderboard, recruitment competitions; monthly competition-closing cron.
+
+**AI** (`/api/ai` + `/internal/ai`) — Phase 3 gateway to the Python `ai-service` (sibling repo). No Mongoose model; per-campus entitlement lives on `Campus.aiEntitlement` (plans/features/budget, `shared/constants/ai.constants.js`). Scope travels in a short-lived S2S JWT (HS256, TTL ≤ 300 s), never in the body. Inert without `AI_SERVICE_URL` (503). Design doc: `docs/architecture/PHASE3_AI_DESIGN.md`.
 
 **Locale** — `middleware/locale/locale.middleware.js` applied globally.
 

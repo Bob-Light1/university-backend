@@ -12,6 +12,8 @@
  *   - getCampusCommissionConfig : commission config (partner.lead).
  *   - getCampusCommissionConfigWithName : config + campus name (partner.commission).
  *   - setCampusCommissionConfig : updates the config (partner.commission).
+ *   - getCampusAiEntitlement    : AI entitlement config (ai gate middleware, admin read).
+ *   - setCampusAiEntitlement    : replaces the AI entitlement + audit entry (admin).
  *   - getActiveCampusBySlug     : public portal resolution by slug (active status).
  *   - getActiveCampusById       : public portal resolution by _id (active status).
  *   - listActivePublicCampuses  : list of public campuses (portal selector).
@@ -35,6 +37,10 @@ const getCampusDocById          = (campusId) => campusRepo.getCampusDocById(camp
 const getCampusCommissionConfig = (campusId) => campusRepo.getCampusCommissionConfig(campusId);
 const getCampusCommissionConfigWithName = (campusId) => campusRepo.getCampusCommissionConfigWithName(campusId);
 const setCampusCommissionConfig = (campusId, cfg) => campusRepo.setCampusCommissionConfig(campusId, cfg);
+const getCampusAiEntitlement    = (campusId) => campusRepo.getCampusAiEntitlement(campusId);
+const getCampusAiEntitlementWithAudit = (campusId) => campusRepo.getCampusAiEntitlementWithAudit(campusId);
+const setCampusAiEntitlement    = (campusId, entitlement, auditEntry) =>
+  campusRepo.setCampusAiEntitlement(campusId, entitlement, auditEntry);
 const getActiveCampusBySlug     = (slug, select) => campusRepo.getActiveCampusBySlug(slug, select);
 const getActiveCampusById       = (campusId, select) => campusRepo.getActiveCampusById(campusId, select);
 const listActivePublicCampuses  = (select) => campusRepo.listActivePublicCampuses(select);
@@ -50,6 +56,9 @@ module.exports = {
   getCampusCommissionConfig,
   getCampusCommissionConfigWithName,
   setCampusCommissionConfig,
+  getCampusAiEntitlement,
+  getCampusAiEntitlementWithAudit,
+  setCampusAiEntitlement,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,

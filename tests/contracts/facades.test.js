@@ -13,7 +13,7 @@
  */
 
 const MODULES = [
-  'academic-print', 'admin', 'announcement', 'campus', 'class', 'course',
+  'academic-print', 'admin', 'ai', 'announcement', 'campus', 'class', 'course',
   'department', 'document', 'exam', 'finance', 'gaet', 'level', 'mentor',
   'notification', 'parent', 'partner', 'public-portal', 'result', 'settings',
   'staff', 'student', 'subject', 'teacher',
@@ -32,7 +32,7 @@ describe('Forme de façade { routes, service } pour chaque module', () => {
 describe('API inter-modules — fonctions de service attendues', () => {
   // [module, [functions exposed and consumed elsewhere]]
   const CONTRACTS = [
-    ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusNotificationContact', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses']],
+    ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusNotificationContact', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses', 'getCampusAiEntitlement', 'getCampusAiEntitlementWithAudit', 'setCampusAiEntitlement']],
     ['class',   ['countClassesOnCampus', 'resolveClassesForSchedule', 'getClassCampusRef', 'findClassForBulk', 'addTeacherToClasses', 'setClassManager']],
     ['subject', ['countSubjectsOnCampus', 'listCampusSubjects', 'getSubjectCampusRef', 'resolveSubjectForSchedule']],
     ['teacher', ['validateTeacherBelongsToCampus', 'countTeachersOnCampus', 'resolveTeacherForSchedule', 'syncTeacherScheduleMirror', 'detectTeacherConflicts']],
@@ -46,6 +46,7 @@ describe('API inter-modules — fonctions de service attendues', () => {
     ['document', ['runRetentionJob', 'generateQrCodeDataUrl', 'listPublishedForCampus']],
     ['parent',  ['removeChildFromAllParents']],
     ['notification', ['notify', 'runRetryJob', 'getInbox', 'getUnreadCount', 'markRead', 'markAllRead']],
+    ['ai',      ['isEnabled', 'forward', 'fetchMonthlyUsage']],
   ];
 
   describe.each(CONTRACTS)('modules/%s.service', (name, fns) => {

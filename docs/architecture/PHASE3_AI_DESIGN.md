@@ -10,10 +10,12 @@
 > les LLM et le RAG, mais **pas** ce backend. Ce document est sa source de vérité.
 > Il doit le lire **en entier** avant d'écrire une ligne.
 >
-> **Statut** : conception approuvée ; **jalon M0 réalisé le 2026-07-03** — les
-> 12 décisions du §15 sont tranchées (D1–D12). Aucun code Phase 3 n'existe
-> encore ; prochain jalon : **M1** (§13). L'état d'avancement est tenu au §18
-> (journal de reprise) — **le lire en premier si vous reprenez le chantier**.
+> **Statut** : conception approuvée ; **M0, M1 et M2 réalisés le 2026-07-03** —
+> décisions D1–D12 tranchées (§15), squelette `ai-service/` livré (dépôt
+> frère : FastAPI, Postgres+pgvector, S2S, Docker, CI) et **module Node `ai`
+> livré** (passerelle inerte + entitlement Campus §11.3). Prochain jalon :
+> **M3** (§13). L'état d'avancement est tenu au §18 (journal de reprise) —
+> **le lire en premier si vous reprenez le chantier**.
 >
 > **Révisions** : v1 (2026-06-18) socle d'architecture. **v2 (2026-06-18)** ajoute
 > les **surfaces frontend & la valeur par persona** (§1.4), le **moteur
@@ -38,6 +40,12 @@
 > **tranchées** (D1–D12, avec justification et condition de révision), le
 > **journal d'avancement §18** est créé (reprise du chantier par un tiers sans
 > contexte), et `docs/architecture/` est sorti du `.gitignore` (D12, §17).
+> **v4.3 (2026-07-03)** clôt le **jalon M1** : dépôt frère `ai-service/` livré
+> (squelette §5.1, S2S §4.2, schéma pgvector `vector(1024)` D2, profils ADR-5,
+> Docker/CI) — détail et vérifications au §18.1. **v4.4 (2026-07-03)** clôt le
+> **jalon M2** : module Node `ai` livré (façade §5.2, routes `/api/ai/*` +
+> `/internal/ai/*`, S2S conforme au contrat M1, inerte sans `AI_SERVICE_URL`),
+> `aiEntitlement` sur `Campus` + endpoints admin audités (§11.3) — détail au §18.1.
 
 ---
 
@@ -1148,8 +1156,10 @@ Chaque jalon est **livrable, testé, et ne casse rien**. « Continue » = jalon 
 | **M5b — Moteur quantitatif + advisors** | `engine/` (forecasting/scoring/anomaly) + advisors Marketing/Finance/Académique, **human-in-the-loop**. | Sorties engine reproductibles & testées ; advisors **proposent** (zéro écriture ERP) ; accès scopé rôle+campus. |
 | **M6 — Durcissement échelle** | Cache/Redis, rate-limit coût, observabilité, eval continue, charge. | Budgets respectés ; métriques tokens/coût ; tests de charge. |
 
-> **État** : **M0 ✅ (2026-07-03)** — décisions écrites au §15. Prochain jalon :
-> **M1**. Le suivi détaillé (qui a fait quoi, comment reprendre) est au **§18**.
+> **État** : **M0 ✅, M1 ✅ et M2 ✅ (2026-07-03)** — décisions au §15,
+> squelette `ai-service/` livré, module Node `ai` + entitlement Campus livrés
+> (journal §18.1). Prochain jalon : **M3**. Le suivi détaillé (qui a fait
+> quoi, comment reprendre) est au **§18**.
 
 ---
 
@@ -1335,31 +1345,35 @@ Deux précautions subsistent :
 |---|---|---|---|
 | 2026-06-18 → 2026-07-03 | Conception (v1 → v4.2) | ✅ | Ce document ; historique des révisions en tête. |
 | 2026-07-03 | **M0 — Cadrage & décisions** | ✅ | §15 : décisions **D1–D12** tranchées ; `.gitignore` ajusté (D12) ; free tiers Groq/Gemini vérifiés à date (D11). |
-| — | M1 — Squelette service + DB | ⬜ à faire | Contenu et critères d'acceptation : tableau §13. |
-| — | M2 → M6 | ⬜ à faire | — |
+| 2026-07-03 | **M1 — Squelette service + DB** | ✅ | Dépôt frère **`ai-service/`** créé (git init, **non commité**) : FastAPI (arborescence §5.1), auth S2S HS256 vérifiée (§4.2, TTL ≤ 300 s, iss/aud dans les deux sens, campusId exigé pour les rôles scopés), schéma Postgres+pgvector via Alembic (`vector(1024)` D2, tables chunks/conversations/messages/analytics_snapshots/usage_monthly, index HNSW+GIN), profils LLM ADR-5 (`mock`/`openai_compatible`/`anthropic`, repli §6.4bis), `/healthz` + `/readyz` (état par profil), endpoints métier montés en 501 avec jalon cible, Dockerfile + docker-compose (D4), CI GitHub Actions (ruff+mypy+pytest 3.10/3.12 + cycle upgrade/downgrade Alembic sur pgvector). **Vérifié en réel** : migration appliquée sur `pgvector/pgvector:pg16`, service booté, 401/501 S2S corrects, et **bascule free→paid démontrée par config seule** (readyz `premium: no_key → ok` en ajoutant la clé d'env, zéro changement de code). 28 tests verts, ruff/mypy 0 erreur. Écart mineur : port hôte compose **5434** (5433 occupé par un Postgres local existant). |
+| 2026-07-03 | **M2 — Module Node `ai` (inerte)** | ✅ | Backend Node : module **`modules/ai/`** livré (24ᵉ module, arborescence §5.2 + `ai.entitlement.middleware.js`) : façade `{ routes, service, internalRoutes }`, routes `/api/ai/*` (chat SSE pass-through, search, conversations, analytics/:report, advisors/:advisor, usage) montées dans `app.js`, **`/internal/ai/*` monté hors `/api`** (ingestables / authorize-citations / aggregates en **501 avec jalon cible**, miroir des stubs M1 côté service) ; S2S conforme au contrat M1 (`ai.s2s.js` : HS256, iss/aud dans les deux sens, TTL ≤ 300 s, claims sub/campusId/role/scope/plan/llmProfile, campusId exigé pour les rôles scopés) ; **inerte sans `AI_SERVICE_URL`** (503 `AI_DISABLED`, zéro appel externe — section `ai` de `general.config.js`) ; **entitlement §11.3** : `Campus.aiEntitlement` + `aiEntitlementAudit` (append-only), constantes `shared/constants/ai.constants.js` (AI_PLANS + presets D10), gate 503/403/403/429 (budget vérifié via ai-service, fail-open documenté, étage 2 = service), `GET /api/ai/usage`, `GET/PUT /api/admin/campuses/:id/ai-entitlement` (ADMIN/DIRECTOR, entrée d'audit à chaque mutation) ; limiteur IA dédié par utilisateur (`AI_RATE_LIMIT_PER_MIN`) + limiteur S2S (backpressure §6.3.1). **Tests** : façade ajoutée aux contrats (`facades.test.js`), unit S2S (8) + entitlement (10), smoke 401/503 inertie — verts ; lint 0 erreur. Écarts : aucun. Notes : (a) client API **frontend non créé** — aucune UI ne consomme `/api/ai` encore ; à synchroniser avec la première surface UI (M3/M4, règle Annexe B) ; (b) usage tokens indisponible avant l'endpoint `usage_monthly` du service (M3) → `GET /api/ai/usage` répond 503 en attendant plutôt que d'inventer des compteurs. |
+| — | M3 → M6 | ⬜ à faire | — |
 
-**État des artefacts au 2026-07-03** : **aucun code Phase 3 n'existe** — ni
-répertoire `ai-service/`, ni module Node `modules/ai/`, ni modification du
-modèle `Campus` (l'`aiEntitlement` du §11.3 sera ajouté en M2). Les seuls
-artefacts sont ce document et la ligne `.gitignore`. Si vous trouvez du code
-Phase 3 dans le dépôt alors que ce journal n'en fait pas mention, le journal
-n'a pas été tenu : reconstituez l'état réel et mettez-le à jour **avant** de
-continuer.
+**État des artefacts au 2026-07-03 (fin M2)** : dépôt frère `ai-service/`
+livré (M1, non commité) ; backend Node : module `modules/ai/`, entitlement
+`Campus` et endpoints admin livrés (M2, non commité). Si vous trouvez du code
+Phase 3 non mentionné ici, le journal n'a pas été tenu : reconstituez l'état
+réel et mettez-le à jour **avant** de continuer.
 
-### 18.2 Pour reprendre (prochain pas = M1)
+### 18.2 Pour reprendre (prochain pas = M3)
 
 1. **Lire dans l'ordre** : §4 (sécurité — obligatoire avant toute ligne de
-   code), §5 (arborescence cible), §6.4/§6.4bis (abstractions et profils),
-   §11 (configuration), Annexe B (contrats d'API figés).
+   code), §6.3/§6.3.1 (pipeline et contrat de débit d'ingestion), §6.4 (piège
+   embeddings + interfaces), §9 (recherche hybride), Annexe B (contrats
+   figés : `/search` et `/internal/ai/ingestables`).
 2. **Contraintes non négociables** (directives porteur, encadré §15) :
-   free-first ; l'ajout ultérieur d'une clé API ne doit demander **aucune
-   modification de code** (critère testé en CI) ; la bascule payante est une
-   donnée de configuration par campus (§11.3), jamais une branche de code.
-3. **Livrer M1 tel que défini au §13** : `ai-service/` FastAPI minimal
-   (arborescence §5.1), Postgres + pgvector avec colonne `vector(1024)` (D2 —
-   provisoire, bench avant tout index de production), migrations, `/healthz`,
-   auth S2S (§4.2), Dockerfile + docker-compose local (D4), CI. **Aucune
-   modification du backend Node en M1** — le module `ai` côté Node est M2.
+   free-first ; embeddings **self-hosted globaux** (D2 : `bge-m3` 1024d,
+   bench vs `e5-base` AVANT tout index de production) ; jamais de PII réelle
+   vers un profil gratuit (D7).
+3. **Livrer M3 tel que défini au §13** : côté Node, implémenter les vrais
+   `/internal/ai/ingestables` (documents GED d'abord — D6, pagination
+   clampée ≤ 200, curseur stable) et `/internal/ai/authorize-citations`
+   (batch) en remplaçant les stubs 501 du module `ai` ; côté service,
+   pipeline d'ingestion (worker + throttle §6.3.1), `EmbeddingsProvider`
+   local, `/search` hybride (vecteur + tsvector + filtres), et **tests de
+   sécurité §4.6** (fuite inter-campus + falsification de scope) **verts et
+   bloquants**. Signal d'ingestion fire-and-forget à la publication d'un
+   document (émetteur côté module `document`, même esprit que notification).
 4. **À la fin du jalon** : ajouter la ligne au §18.1, consigner les écarts
    éventuels aux décisions (avec justification), incrémenter la note de
    révision d'en-tête.

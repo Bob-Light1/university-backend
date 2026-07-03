@@ -130,6 +130,27 @@ const setCampusCommissionConfig = (campusId, cfg) =>
     { new: true, runValidators: true }
   ).select('commissionConfig campus_name').lean();
 
+/** AI entitlement config (modules/ai gate middleware + admin read). */
+const getCampusAiEntitlement = (campusId) =>
+  Campus.findById(campusId).select('aiEntitlement campus_name status').lean();
+
+/** AI entitlement + audit trail (admin console only — audit is select:false elsewhere). */
+const getCampusAiEntitlementWithAudit = (campusId) =>
+  Campus.findById(campusId)
+    .select('aiEntitlement campus_name status +aiEntitlementAudit').lean();
+
+/**
+ * Replaces the embedded AI entitlement and appends an audit entry (append-only,
+ * CLAUDE.md §8). `entitlement` is the FULL next config (merge done by the caller).
+ * @param {Object} auditEntry — { actorId, actorRole, changes }
+ */
+const setCampusAiEntitlement = (campusId, entitlement, auditEntry) =>
+  Campus.findByIdAndUpdate(
+    campusId,
+    { $set: { aiEntitlement: entitlement }, $push: { aiEntitlementAudit: auditEntry } },
+    { new: true, runValidators: true }
+  ).select('aiEntitlement campus_name').lean();
+
 const getActiveCampusBySlug = (campusSlug, select = '_id') =>
   Campus.findOne({ campusSlug, status: 'active' }).select(select).lean();
 
@@ -162,6 +183,9 @@ module.exports = {
   getCampusCommissionConfig,
   getCampusCommissionConfigWithName,
   setCampusCommissionConfig,
+  getCampusAiEntitlement,
+  getCampusAiEntitlementWithAudit,
+  setCampusAiEntitlement,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,

@@ -32,6 +32,7 @@ const A4 = [595.28, 841.89];
 const M  = 50;
 
 // Strip anything outside WinAnsi (Latin-1) — see file header.
+// eslint-disable-next-line no-control-regex -- the Latin-1 range starts at \x00 by design
 const safe = (v) => String(v ?? '').replace(/[^\x00-\xFF]/g, '');
 
 const fmtDate  = (d) => (d ? new Date(d).toISOString().slice(0, 10) : '-');

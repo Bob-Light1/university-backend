@@ -7,6 +7,12 @@
  * touching the DB; /api/health reports 'disconnected' for lack of a connection.
  */
 
+// The ai module must be INERT here: other test files (ai.s2s, ai.entitlement)
+// set AI_* env vars and jest workers share the process env across files.
+delete process.env.AI_SERVICE_URL;
+delete process.env.AI_SERVICE_SECRET;
+
+const jwt = require('jsonwebtoken');
 const request = require('supertest');
 const app = require('../../app');
 
@@ -33,6 +39,40 @@ describe('Garde d authentification (rejet avant accès DB)', () => {
   ])('GET %s sans token → 401', async (route) => {
     const res = await request(app).get(route);
     expect(res.status).toBe(401);
+  });
+});
+
+describe('Module ai — passerelle inerte sans AI_SERVICE_URL (PHASE3_AI_DESIGN.md §11.1)', () => {
+  const userToken = () =>
+    jwt.sign(
+      { id: '0'.repeat(24), role: 'STUDENT', campusId: '1'.repeat(24) },
+      process.env.JWT_SECRET,
+      { issuer: 'school-management-app', expiresIn: '5m' }
+    );
+
+  test.each([
+    ['post', '/api/ai/chat'],
+    ['post', '/api/ai/search'],
+    ['get', '/api/ai/conversations'],
+    ['get', '/api/ai/usage'],
+  ])('%s %s sans token → 401', async (method, route) => {
+    const res = await request(app)[method](route);
+    expect(res.status).toBe(401);
+  });
+
+  test('POST /api/ai/chat authentifié mais IA non configurée → 503 AI_DISABLED (aucun appel externe)', async () => {
+    const res = await request(app)
+      .post('/api/ai/chat')
+      .set('Authorization', `Bearer ${userToken()}`)
+      .send({ message: 'hello' });
+    expect(res.status).toBe(503);
+    expect(res.body.success).toBe(false);
+    expect(res.body.errors).toEqual({ code: 'AI_DISABLED' });
+  });
+
+  test('GET /internal/ai/ingestables → 503 quand l IA est désactivée (API interne inerte)', async () => {
+    const res = await request(app).get('/internal/ai/ingestables');
+    expect(res.status).toBe(503);
   });
 });
 
