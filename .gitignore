@@ -3,7 +3,9 @@ usage_guides
 # User-uploaded files (PII: student/teacher photos, imported documents).
 # Correct path — the previous "/api/uploads/" never matched this folder.
 uploads/
-docs
+# Docs are ignored except architecture design docs (no secrets — Phase 3 D12)
+docs/*
+!docs/architecture/
 oldCode.md
 .env
 .env.*
