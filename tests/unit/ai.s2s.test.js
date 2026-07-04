@@ -61,6 +61,28 @@ describe('signServiceToken (Node → ai-service)', () => {
     expect(claims.plan).toBe('free');
     expect(claims.llmProfile).toBe('free');
   });
+
+  test('carries the M4 claims: language and a non-negative monthlyTokenBudget', () => {
+    const token = signServiceToken({
+      userId: 'u1',
+      campusId: 'c1',
+      role: 'STUDENT',
+      language: 'fr',
+      monthlyTokenBudget: 200000,
+    });
+    const claims = jwt.decode(token);
+    expect(claims.language).toBe('fr');
+    expect(claims.monthlyTokenBudget).toBe(200000);
+
+    // Defaults: 'en' / 0 (unlimited); a negative budget is clamped to 0.
+    const defaults = jwt.decode(signServiceToken({ userId: 'u1', campusId: 'c1', role: 'STUDENT' }));
+    expect(defaults.language).toBe('en');
+    expect(defaults.monthlyTokenBudget).toBe(0);
+    const clamped = jwt.decode(
+      signServiceToken({ userId: 'u1', campusId: 'c1', role: 'STUDENT', monthlyTokenBudget: -5 })
+    );
+    expect(clamped.monthlyTokenBudget).toBe(0);
+  });
 });
 
 describe('verifyServiceToken (ai-service → Node)', () => {

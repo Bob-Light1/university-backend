@@ -10,7 +10,9 @@
  *  - Node → ai-service : iss "erp-backend", aud "ai-service".
  *  - ai-service → Node : iss "ai-service", aud "erp-backend".
  *  - TTL ≤ 300 s (longer tokens are rejected by the receiver).
- *  - Claims: sub (userId), campusId, role, scope, plan, llmProfile.
+ *  - Claims: sub (userId), campusId, role, scope, plan, llmProfile,
+ *    language (user preferred locale, M4), monthlyTokenBudget (campus budget,
+ *    0 = unlimited — re-checked service-side, §11.3 stage 2).
  *
  * The campus/user/role context ALWAYS comes from the verified token — never
  * from the request body (§4.1 rule 1). Scoped roles without a campusId are
@@ -42,9 +44,20 @@ const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];
  * @param {string[]} [ctx.scope]    - Optional capability scope.
  * @param {string} [ctx.plan]       - Entitlement plan (free|standard|premium).
  * @param {string} [ctx.llmProfile] - LLM provider profile name (ADR-5).
+ * @param {string} [ctx.language]   - User preferred locale (chat replies, M4).
+ * @param {number} [ctx.monthlyTokenBudget] - Campus token budget (0 = unlimited).
  * @returns {string} Signed JWT.
  */
-const signServiceToken = ({ userId, campusId, role, scope = [], plan = 'free', llmProfile = 'free' }) => {
+const signServiceToken = ({
+  userId,
+  campusId,
+  role,
+  scope = [],
+  plan = 'free',
+  llmProfile = 'free',
+  language = 'en',
+  monthlyTokenBudget = 0,
+}) => {
   if (!config.ai.serviceSecret) {
     throw new Error('AI_SERVICE_SECRET is not configured');
   }
@@ -56,6 +69,8 @@ const signServiceToken = ({ userId, campusId, role, scope = [], plan = 'free', l
       scope,
       plan,
       llmProfile,
+      language,
+      monthlyTokenBudget: Math.max(Number(monthlyTokenBudget) || 0, 0),
     },
     config.ai.serviceSecret,
     {

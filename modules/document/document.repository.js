@@ -187,6 +187,29 @@ const findDocumentForPdfCache = (id) =>
     .lean();
 
 /**
+ * One page of the AI ingestion feed (§6.3.1 of the Phase 3 design doc).
+ * Stable sort on (updatedAt, _id) — the cursor contract of /internal/ai/ingestables
+ * depends on this ordering. Filter (campus, status, types, cursor) composed by
+ * the facade; body included (text extraction happens in the facade).
+ */
+const findIngestableDocuments = (filter, { limit }) =>
+  Document.find(filter)
+    .sort({ updatedAt: 1, _id: 1 })
+    .limit(limit)
+    .select('title description tags body type category campusId currentVersion accessRoles updatedAt ref')
+    .lean();
+
+/**
+ * Batch read for AI citation re-authorization (§4.5): access-control fields
+ * only, never the body. Soft-deleted documents are excluded here — a revoked
+ * source must disappear from answers.
+ */
+const findCitationDocuments = (ids) =>
+  Document.find({ _id: { $in: ids }, deletedAt: null })
+    .select('title type status campusId accessRoles linkedEntities')
+    .lean();
+
+/**
  * Sum of imported file bytes within a scope (campus storage quota).
  * The caller provides the `$match` already cast to ObjectId. Returns the raw array.
  */
@@ -341,6 +364,8 @@ module.exports = {
   deleteDocumentById,
   // Document — specialized reads
   paginatePublishedForCampus,
+  findIngestableDocuments,
+  findCitationDocuments,
   findExpiredDocuments,
   findDocumentForPdf,
   findDocumentForPdfCache,

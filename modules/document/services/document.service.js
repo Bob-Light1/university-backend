@@ -33,6 +33,18 @@ const {
 
 const { AUDIT_ACTION } = require('../models/document.audit.model');
 
+/**
+ * Fire-and-forget AI ingestion signal (Phase 3 design doc §6.3): notifies
+ * ai-service that a document's publication state or content changed so the
+ * vector index follows (index, reindex or prune — ai-service decides by
+ * re-reading the source). Lazy require (ai lazily requires document back);
+ * never awaited — a response never waits on the AI stack, and the signal is
+ * a no-op when AI is disabled or the campus has not subscribed.
+ */
+const signalAiIngest = (documentId, campusId) => {
+  require('../../ai').service.signalDocumentIngest({ campusId, sourceId: documentId });
+};
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 /** Default retention policies by document type — regulatory obligation */
@@ -429,6 +441,11 @@ const updateDocument = async (documentId, dto, reason, req) => {
     });
 
     await session.commitTransaction();
+
+    // Published content changed → keep the AI index in sync (§6.3).
+    if ([DOCUMENT_STATUS.PUBLISHED, DOCUMENT_STATUS.LOCKED].includes(updated.status)) {
+      signalAiIngest(updated._id, updated.campusId);
+    }
     return updated;
 
   } catch (err) {
@@ -501,6 +518,9 @@ const softDeleteDocument = async (documentId, reason, req) => {
 
     await session.commitTransaction();
 
+    // Deleted source → ai-service prunes its chunks (§6.3 idempotence).
+    signalAiIngest(doc._id, doc.campusId);
+
   } catch (err) {
     await session.abortTransaction();
     throw err;
@@ -543,6 +563,9 @@ const hardDeleteDocument = async (documentId, req) => {
     }], { session });
 
     await session.commitTransaction();
+
+    // Deleted source → ai-service prunes its chunks (§6.3 idempotence).
+    signalAiIngest(doc._id, doc.campusId);
 
   } catch (err) {
     await session.abortTransaction();
@@ -740,6 +763,7 @@ module.exports = {
   autoLockIfOfficial,
   searchDocuments,
   writeAudit,
+  signalAiIngest,
   resolveUserModel,
   computeRetention,
   RETENTION_DEFAULTS,

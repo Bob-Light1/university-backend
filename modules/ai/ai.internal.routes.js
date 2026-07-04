@@ -37,14 +37,14 @@ router.use(s2sLimiter);
 /**
  * @route   GET /internal/ai/ingestables
  * @desc    Cursor-paginated indexable content feed (limit clamped ≤ 200, §6.3.1)
- * @access  S2S (ai-service ingestion worker) — 501 until M3
+ * @access  S2S (ai-service ingestion worker) — campus scope from the token
  */
 router.get('/ingestables', listIngestables);
 
 /**
  * @route   POST /internal/ai/authorize-citations
  * @desc    Batch re-authorization of citations at answer time (§4.5, §6.2)
- * @access  S2S (ai-service RAG) — 501 until M3
+ * @access  S2S (ai-service RAG/search) — user scope from the token
  */
 router.post('/authorize-citations', authorizeCitations);
 

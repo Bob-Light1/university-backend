@@ -10,12 +10,15 @@
 > les LLM et le RAG, mais **pas** ce backend. Ce document est sa source de vérité.
 > Il doit le lire **en entier** avant d'écrire une ligne.
 >
-> **Statut** : conception approuvée ; **M0, M1 et M2 réalisés le 2026-07-03** —
-> décisions D1–D12 tranchées (§15), squelette `ai-service/` livré (dépôt
-> frère : FastAPI, Postgres+pgvector, S2S, Docker, CI) et **module Node `ai`
-> livré** (passerelle inerte + entitlement Campus §11.3). Prochain jalon :
-> **M3** (§13). L'état d'avancement est tenu au §18 (journal de reprise) —
-> **le lire en premier si vous reprenez le chantier**.
+> **Statut** : conception approuvée ; **M0 à M4 réalisés (M0–M3 le 2026-07-03,
+> M4 le 2026-07-04)** — décisions D1–D12 tranchées (§15), squelette
+> `ai-service/` livré (dépôt frère : FastAPI, Postgres+pgvector, S2S, Docker,
+> CI), **module Node `ai` livré** (passerelle inerte + entitlement Campus
+> §11.3), **ingestion + recherche hybride livrées** (Feature 3), **chat RAG
+> SSE livré** (Feature 1) — **tests de sécurité §4.6 verts** (recherche ET
+> chat). Prochain jalon : **M5 — analytics assisté** (§13). L'état
+> d'avancement est tenu au §18 (journal de reprise) — **le lire en premier si
+> vous reprenez le chantier**.
 >
 > **Révisions** : v1 (2026-06-18) socle d'architecture. **v2 (2026-06-18)** ajoute
 > les **surfaces frontend & la valeur par persona** (§1.4), le **moteur
@@ -46,6 +49,20 @@
 > **jalon M2** : module Node `ai` livré (façade §5.2, routes `/api/ai/*` +
 > `/internal/ai/*`, S2S conforme au contrat M1, inerte sans `AI_SERVICE_URL`),
 > `aiEntitlement` sur `Campus` + endpoints admin audités (§11.3) — détail au §18.1.
+> **v4.5 (2026-07-03)** clôt le **jalon M3** : ingestion GED + `/search` hybride
+> livrés de bout en bout (Node : `/internal/ai/ingestables` + `authorize-citations`
+> réels, signal d'ingestion fire-and-forget côté `document` ; service : pipeline
+> §6.3 + `PgVectorStore` hybride RRF + `/ingest`, `/usage`, worker CLI), **tests
+> de sécurité §4.6 verts et bloquants en CI** (suite pgvector réelle). Annexe B
+> précisée (enveloppe `{ success, data }` de l'API interne, param `sourceId`).
+> Détail au §18.1. **v4.6 (2026-07-04)** clôt le **jalon M4** : chat RAG SSE
+> livré (service : `/chat` conforme Annexe B + `/conversations`, retrieval
+> re-autorisé **avant** l'appel LLM §4.5, garde-fous injection §4.1.6, langue
+> utilisateur, comptabilité tokens ; Node : claims S2S `language` +
+> `monthlyTokenBudget` ajoutés au contrat §4.2, `sendPaginated` sur les
+> conversations), **tests §4.6 re-autorisation chat + injection verts**, eval
+> RAG de base en CI, **premier client API frontend** (`aiService.js`).
+> Détail au §18.1.
 
 ---
 
@@ -1156,10 +1173,13 @@ Chaque jalon est **livrable, testé, et ne casse rien**. « Continue » = jalon 
 | **M5b — Moteur quantitatif + advisors** | `engine/` (forecasting/scoring/anomaly) + advisors Marketing/Finance/Académique, **human-in-the-loop**. | Sorties engine reproductibles & testées ; advisors **proposent** (zéro écriture ERP) ; accès scopé rôle+campus. |
 | **M6 — Durcissement échelle** | Cache/Redis, rate-limit coût, observabilité, eval continue, charge. | Budgets respectés ; métriques tokens/coût ; tests de charge. |
 
-> **État** : **M0 ✅, M1 ✅ et M2 ✅ (2026-07-03)** — décisions au §15,
-> squelette `ai-service/` livré, module Node `ai` + entitlement Campus livrés
-> (journal §18.1). Prochain jalon : **M3**. Le suivi détaillé (qui a fait
-> quoi, comment reprendre) est au **§18**.
+> **État** : **M0 ✅, M1 ✅, M2 ✅, M3 ✅ (2026-07-03) et M4 ✅ (2026-07-04)** —
+> décisions au §15, squelette `ai-service/` livré, module Node `ai` +
+> entitlement Campus livrés, ingestion + recherche hybride livrées, **chat RAG
+> SSE + conversations + client API frontend livrés**, tests de sécurité §4.6
+> verts (recherche ET chat, journal §18.1). Prochain jalon : **M5**
+> (analytics assisté). Le suivi détaillé (qui a fait quoi, comment reprendre)
+> est au **§18**.
 
 ---
 
@@ -1347,33 +1367,38 @@ Deux précautions subsistent :
 | 2026-07-03 | **M0 — Cadrage & décisions** | ✅ | §15 : décisions **D1–D12** tranchées ; `.gitignore` ajusté (D12) ; free tiers Groq/Gemini vérifiés à date (D11). |
 | 2026-07-03 | **M1 — Squelette service + DB** | ✅ | Dépôt frère **`ai-service/`** créé (git init, **non commité**) : FastAPI (arborescence §5.1), auth S2S HS256 vérifiée (§4.2, TTL ≤ 300 s, iss/aud dans les deux sens, campusId exigé pour les rôles scopés), schéma Postgres+pgvector via Alembic (`vector(1024)` D2, tables chunks/conversations/messages/analytics_snapshots/usage_monthly, index HNSW+GIN), profils LLM ADR-5 (`mock`/`openai_compatible`/`anthropic`, repli §6.4bis), `/healthz` + `/readyz` (état par profil), endpoints métier montés en 501 avec jalon cible, Dockerfile + docker-compose (D4), CI GitHub Actions (ruff+mypy+pytest 3.10/3.12 + cycle upgrade/downgrade Alembic sur pgvector). **Vérifié en réel** : migration appliquée sur `pgvector/pgvector:pg16`, service booté, 401/501 S2S corrects, et **bascule free→paid démontrée par config seule** (readyz `premium: no_key → ok` en ajoutant la clé d'env, zéro changement de code). 28 tests verts, ruff/mypy 0 erreur. Écart mineur : port hôte compose **5434** (5433 occupé par un Postgres local existant). |
 | 2026-07-03 | **M2 — Module Node `ai` (inerte)** | ✅ | Backend Node : module **`modules/ai/`** livré (24ᵉ module, arborescence §5.2 + `ai.entitlement.middleware.js`) : façade `{ routes, service, internalRoutes }`, routes `/api/ai/*` (chat SSE pass-through, search, conversations, analytics/:report, advisors/:advisor, usage) montées dans `app.js`, **`/internal/ai/*` monté hors `/api`** (ingestables / authorize-citations / aggregates en **501 avec jalon cible**, miroir des stubs M1 côté service) ; S2S conforme au contrat M1 (`ai.s2s.js` : HS256, iss/aud dans les deux sens, TTL ≤ 300 s, claims sub/campusId/role/scope/plan/llmProfile, campusId exigé pour les rôles scopés) ; **inerte sans `AI_SERVICE_URL`** (503 `AI_DISABLED`, zéro appel externe — section `ai` de `general.config.js`) ; **entitlement §11.3** : `Campus.aiEntitlement` + `aiEntitlementAudit` (append-only), constantes `shared/constants/ai.constants.js` (AI_PLANS + presets D10), gate 503/403/403/429 (budget vérifié via ai-service, fail-open documenté, étage 2 = service), `GET /api/ai/usage`, `GET/PUT /api/admin/campuses/:id/ai-entitlement` (ADMIN/DIRECTOR, entrée d'audit à chaque mutation) ; limiteur IA dédié par utilisateur (`AI_RATE_LIMIT_PER_MIN`) + limiteur S2S (backpressure §6.3.1). **Tests** : façade ajoutée aux contrats (`facades.test.js`), unit S2S (8) + entitlement (10), smoke 401/503 inertie — verts ; lint 0 erreur. Écarts : aucun. Notes : (a) client API **frontend non créé** — aucune UI ne consomme `/api/ai` encore ; à synchroniser avec la première surface UI (M3/M4, règle Annexe B) ; (b) usage tokens indisponible avant l'endpoint `usage_monthly` du service (M3) → `GET /api/ai/usage` répond 503 en attendant plutôt que d'inventer des compteurs. |
-| — | M3 → M6 | ⬜ à faire | — |
+| 2026-07-03 | **M3 — Ingestion + recherche (Feature 3)** | ✅ | **Node** : stubs 501 remplacés — `GET /internal/ai/ingestables` réel (façade `document.listAiIngestables` : types D6 non personnels `COURSE_MATERIAL/ADMINISTRATIVE/REPORT/CUSTOM/IMPORTED`, statuts `PUBLISHED/LOCKED`, extraction texte des blocs, tri stable `(updatedAt,_id)`, curseur opaque base64url, limit clampée ≤ 200, param `sourceId` pour l'événementiel) ; `POST /internal/ai/authorize-citations` réel (façade `document.authorizeAiCitations` : miroir exact des règles d'accès — cross-check campus, `accessRoles`, TEACHER=COURSE_MATERIAL de ses cours, STUDENT/PARENT=liaison `linkedEntities`, enfants via nouvelle façade `parent.getChildrenIds`) ; **signal d'ingestion fire-and-forget** (`ai.service.signalDocumentIngest`, skip si campus non souscrit — opt-out D7) émis sur publish/archive/restore/update/soft+hard delete ; `GET /api/ai/usage` désormais opérationnel (compteurs servis par le service). **ai-service** : `ERPClient` httpx réel (S2S, enveloppe `{success,data}`, 429→`ERPRateLimitedError`), `LocalEmbeddingsProvider` (sentence-transformers en extra `[embeddings]`, chargement lazy hors event-loop, garde dimension §6.4), pipeline §6.3 (`services/ingest.py` : chunking déterministe 1200/150, hash, upsert idempotent + prune des versions périmées, `ingest_source` événementiel — source disparue = purge — et `ingest_campus` backfill avec throttle `INGEST_MAX_RPS` + backoff 429 §6.3.1), `PgVectorStore` complet (upsert ON CONFLICT, requête vectorielle, **hybride vecteur+tsvector fusion RRF en un aller SQL**, filtres campus/espace d'embedding/`visibility.roles` obligatoires dans les DEUX branches), routes réelles `/search` (re-autorisation batch à la réponse, **fail-closed** si ERP injoignable, dédup par source, compteur `usage_monthly`), `/ingest` (202, file bornée + consommateur séquentiel dans le lifespan), `/usage` ; worker CLI `python -m workers.ingest_worker --campus …` (backfill heures creuses). **Tests** : Node 607 verts (dont `ai.internal.test.js` : clamp, curseur, falsification de scope, citations) ; service 56 verts dont **suite intégration §4.6 sur pgvector réel (7 tests : fuite inter-campus, falsification de scope, visibilité intra-campus, épinglage du modèle d'embeddings, idempotence/prune, révocation, compteurs)** — **job CI dédié bloquant** ; ruff+mypy 0 erreur ; boot réel vérifié (readyz ready, usage/ingest/search corrects, consommateur survivant à une panne ERP). Écarts : (a) bench D2 = script `scripts/bench_embeddings.py` livré mais **non exécuté** (≈ 2 Go de modèles à télécharger) — à lancer AVANT tout index de production, la colonne reste `vector(1024)` ; (b) client API frontend toujours différé à la première surface UI (M4, note M2) ; (c) programmes/FAQ public-portal (2ᵉ incrément D6) non faits — reportés M4+. |
+| 2026-07-04 | **M4 — Chat RAG (Feature 1)** | ✅ | **ai-service** : `POST /chat` SSE réel conforme Annexe B (`message_start/delta/citations/done/error`, commentaire `:keep-alive` 15 s §6.1) — orchestration en deux phases (`services/chat.py` : `prepare_turn` = tout ce qui peut échouer AVANT le premier octet → erreurs HTTP propres 404/429/503 ; `stream_turn` = séquence SSE, échec amont → événement `error` localisé 10 langues) ; **retrieval re-autorisé AVANT l'appel LLM** (`services/rag.py` : hybride M3 → `authorize-citations` batch → seules les sources autorisées entrent dans le prompt ET les citations — plus fort que filtrer après ; ERP injoignable = **fail-closed** 503) ; garde-fous §4.1.6 (`prompts/chat.py` : préfixe système STABLE cache-friendly §10bis, contexte non fiable délimité en fin de prompt, délimiteurs embarqués strippés, `sanitize_output` sur la réponse persistée) ; langue de réponse via claim S2S `language` ; **re-check budget étage 2** via claim `monthlyTokenBudget` (429 avant l'appel LLM, 0 = illimité) ; historique borné (`CHAT_HISTORY_MAX_MESSAGES=10`) ; persistance `conversations`/`messages` derrière l'abstraction `ConversationStore` (scoping (campus,user) par signature, autre user → 404 sans oracle d'existence) ; `GET /conversations` + `/conversations/:id` réels ; comptabilité tokens dans `usage_monthly` (exacte si l'amont la fournit — Anthropic/OpenAI-compatible —, estimée ~4 chars/token sinon ; providers request-scoped). **Node** : claims S2S `language` (via `settings.getPreferredLanguage`, fallback 'en') + `monthlyTokenBudget` ajoutés au contrat §4.2 **des deux côtés** ; `listConversations` re-enveloppé `sendPaginated` (conformité Annexe B). **Frontend** : premier client API `src/services/aiService.js` (règle Annexe B) — axios pour search/conversations/usage, `streamAiChat` en fetch+ReadableStream (parseur SSE, handlers par événement, `abort()`). **Tests** : service 68 unit verts (dont 22 chat/conversations : séquence SSE, persistance+usage, budget, ownership, **§4.6 re-autorisation chat** — source refusée absente du prompt ET des citations, fail-closed ERP down, falsification de scope body — et **§4.6 injection** — zone unique, délimiteurs strippés, système immuable, sortie assainie) + intégration pgvector 9 verts dont **eval RAG de base** (`tests/integration/test_rag_eval.py` : jeu doré 5 Q→source, plancher recall@3 ≥ 0,8, scoping campus du harnais) ; ruff+mypy 0 erreur ; **boot réel vérifié** (readyz, 2 tours SSE complets avec historique, compteurs 242/8 tokens, déconnexion client = tour non persisté) ; Node 608 verts, lint 0 erreur. Écarts : (a) contrat S2S étendu de 2 claims (`language`, `monthlyTokenBudget`) — précision nécessaire au §11.3 étage 2 et à la langue §7, consignée dans les deux `security` ; (b) réponse partielle non persistée sur déconnexion client (v1 documenté) ; (c) tools/function-calls du chat (§7 « option avancée ») non faits — optionnels, reportés ; (d) programmes/FAQ public-portal (2ᵉ incrément D6) toujours reportés M5+. |
+| — | M5 → M6 | ⬜ à faire | — |
 
-**État des artefacts au 2026-07-03 (fin M2)** : dépôt frère `ai-service/`
-livré (M1, non commité) ; backend Node : module `modules/ai/`, entitlement
-`Campus` et endpoints admin livrés (M2, non commité). Si vous trouvez du code
-Phase 3 non mentionné ici, le journal n'a pas été tenu : reconstituez l'état
-réel et mettez-le à jour **avant** de continuer.
+**État des artefacts au 2026-07-04 (fin M4)** : dépôt frère `ai-service/`
+complet jusqu'à M4 (non commité) ; backend Node : module `modules/ai/` complet
+jusqu'à M4 (non commité) ; frontend : client API `aiService.js` créé, **aucune
+UI ne le consomme encore**. Si vous trouvez du code Phase 3 non mentionné ici,
+le journal n'a pas été tenu : reconstituez l'état réel et mettez-le à jour
+**avant** de continuer.
 
-### 18.2 Pour reprendre (prochain pas = M3)
+### 18.2 Pour reprendre (prochain pas = M5 — analytics assisté)
 
-1. **Lire dans l'ordre** : §4 (sécurité — obligatoire avant toute ligne de
-   code), §6.3/§6.3.1 (pipeline et contrat de débit d'ingestion), §6.4 (piège
-   embeddings + interfaces), §9 (recherche hybride), Annexe B (contrats
-   figés : `/search` et `/internal/ai/ingestables`).
+1. **Lire dans l'ordre** : §8 (Feature 2 — les chiffres viennent de l'ERP,
+   le LLM narre), §6.5 (moteur quantitatif, pour la frontière M5/M5b), §6.2
+   (agrégats via `/internal/ai/aggregates/:name`, stub 501 en place), Annexe B
+   (contrat `/api/ai/analytics/:report` figé : `figures` jamais générées par
+   le LLM, `narrative` dans la langue utilisateur, `snapshotId`).
 2. **Contraintes non négociables** (directives porteur, encadré §15) :
-   free-first ; embeddings **self-hosted globaux** (D2 : `bge-m3` 1024d,
-   bench vs `e5-base` AVANT tout index de production) ; jamais de PII réelle
-   vers un profil gratuit (D7).
-3. **Livrer M3 tel que défini au §13** : côté Node, implémenter les vrais
-   `/internal/ai/ingestables` (documents GED d'abord — D6, pagination
-   clampée ≤ 200, curseur stable) et `/internal/ai/authorize-citations`
-   (batch) en remplaçant les stubs 501 du module `ai` ; côté service,
-   pipeline d'ingestion (worker + throttle §6.3.1), `EmbeddingsProvider`
-   local, `/search` hybride (vecteur + tsvector + filtres), et **tests de
-   sécurité §4.6** (fuite inter-campus + falsification de scope) **verts et
-   bloquants**. Signal d'ingestion fire-and-forget à la publication d'un
-   document (émetteur côté module `document`, même esprit que notification).
+   free-first (D11) ; jamais de PII réelle vers un profil gratuit (D7) ; **le
+   LLM n'invente jamais un chiffre** (ADR-4 — c'est le cœur de M5) ; avant
+   tout index de production, **exécuter le bench D2**
+   (`ai-service/scripts/bench_embeddings.py`, extra `[embeddings]` requis).
+3. **Livrer M5 tel que défini au §13** : côté Node, remplacer le stub 501
+   `GET /internal/ai/aggregates/:name` (lecture via les façades service
+   existantes — presence, moyennes, dropout-risk — scopées campus depuis le
+   JWT S2S) ; côté service, `ERPClient.get_aggregate` réel + `services/
+   analytics.py` (narration sur `figures` ERP, langue via le claim, snapshot
+   Postgres `analytics_snapshots`) + route réelle `/analytics/:report`
+   remplaçant le stub ; côté frontend, étendre `aiService.js` (`analytics`)
+   dans la même tâche (règle Annexe B). Tests : figer les agrégats ERP en
+   non-régression ; aucun chiffre du LLM dans `figures`.
 4. **À la fin du jalon** : ajouter la ligne au §18.1, consigner les écarts
    éventuels aux décisions (avec justification), incrémenter la note de
    révision d'en-tête.
@@ -1480,17 +1505,35 @@ client (fermeture de connexion) aborte l'appel amont.
 
 #### API interne S2S (`/internal/ai/*`)
 
+> **Précision v4.5 (implémentée en M3)** : comme toutes les routes Node, les
+> réponses de l'API interne sont enveloppées `{ success, message, data }`
+> (response-helpers) — les corps ci-dessous sont le contenu de `data`.
+> Le scope campus/user vient exclusivement du JWT S2S (jamais de la query).
+
 ```
-GET  /internal/ai/ingestables?type&updatedAfter&cursor&limit   (limit clampé ≤ 200, §6.3.1)
+GET  /internal/ai/ingestables?type&updatedAfter&cursor&limit&sourceId
+  (limit clampé ≤ 200 §6.3.1 ; sourceId = lecture d'UNE source pour
+   l'ingestion événementielle — absente/dé-publiée → items vide, le service
+   purge ses chunks)
   → { "items": [ { "sourceType", "sourceId", "version", "campusId",
         "visibility": { "roles": ["STUDENT"], "ownerId": null },
         "title", "text", "metadata": { } } ],
       "nextCursor": "opaque | null" }
 
-POST /internal/ai/authorize-citations          (batch, §6.2 — user dérivé du JWT S2S)
+POST /internal/ai/authorize-citations          (batch ≤ 100, §6.2 — user dérivé du JWT S2S)
   { "citations": [ { "sourceType", "sourceId" } ] }
   → { "allowed": [ { "sourceType", "sourceId", "label", "url" } ] }   // sous-ensemble autorisé
 
 GET  /internal/ai/aggregates/:name?params      (agrégats ERP pour analytics/engine —
-                                                scopés campus depuis le JWT S2S)
+                                                scopés campus depuis le JWT S2S ; 501 → M5)
+```
+
+#### API du service IA consommée par Node (S2S, hors reverse-proxy)
+
+```
+POST /ingest   { "sourceType": "document", "sourceId": "<ObjectId> | null" }
+  → 202 { "queued": true }   (null = backfill campus ; campus dérivé du JWT S2S ;
+                              file bornée → 429 ; DB/ERP non configurés → 503)
+GET  /usage    → { "period": "YYYY-MM", "tokensIn", "tokensOut", "requestCount" }
+  (campus du JWT S2S — alimente la jauge GET /api/ai/usage et la garde budget §11.3)
 ```

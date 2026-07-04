@@ -207,6 +207,10 @@ const findForDashboard = (id) =>
 const removeChildFromAll = (studentId) =>
   Parent.updateMany({ children: studentId }, { $pull: { children: studentId } }).exec();
 
+/** Ids of a parent's children (AI citation re-authorization, module ai). */
+const findChildrenIdsOnly = (parentId) =>
+  Parent.findById(parentId).select('children').lean();
+
 module.exports = {
   findByCredential,
   touchLastLogin,
@@ -239,4 +243,5 @@ module.exports = {
   findChildren,
   findForDashboard,
   removeChildFromAll,
+  findChildrenIdsOnly,
 };

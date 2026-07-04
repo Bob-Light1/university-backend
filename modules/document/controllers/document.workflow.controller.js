@@ -77,6 +77,9 @@ const publishDocument = asyncHandler(async (req, res) => {
     });
 
     await session.commitTransaction();
+
+    // Newly published → index it for AI search (fire-and-forget, §6.3).
+    documentService.signalAiIngest(doc._id, doc.campusId);
     return sendSuccess(res, 200, 'Document published successfully', { document: doc });
 
   } catch (err) {
@@ -133,6 +136,9 @@ const archiveDocument = asyncHandler(async (req, res) => {
     });
 
     await session.commitTransaction();
+
+    // No longer published → ai-service prunes its chunks (fire-and-forget, §6.3).
+    documentService.signalAiIngest(doc._id, doc.campusId);
     return sendSuccess(res, 200, 'Document archived successfully', { document: doc });
 
   } catch (err) {
@@ -191,6 +197,9 @@ const restoreDocument = asyncHandler(async (req, res) => {
     });
 
     await session.commitTransaction();
+
+    // Back to draft → ai-service prunes its chunks (fire-and-forget, §6.3).
+    documentService.signalAiIngest(doc._id, doc.campusId);
     return sendSuccess(res, 200, 'Document restored to draft successfully', { document: doc });
 
   } catch (err) {

@@ -12,9 +12,31 @@
  */
 
 const { Readable } = require('node:stream');
-const { sendSuccess, sendError, sendValidationError, asyncHandler } = require('../../shared/utils/response-helpers');
+const {
+  sendSuccess,
+  sendPaginated,
+  sendError,
+  sendValidationError,
+  asyncHandler,
+} = require('../../shared/utils/response-helpers');
 const { AI_ERROR_CODES } = require('../../shared/constants/ai.constants');
 const aiService = require('./ai.service');
+
+/**
+ * Preferred locale of the user, for the S2S `language` claim (M4 — the chat
+ * answers in the user's language). Read through the settings facade; a
+ * failure falls back to 'en' and never blocks the request.
+ * @param {string} userId
+ * @returns {Promise<string>}
+ */
+const resolvePreferredLanguage = async (userId) => {
+  try {
+    // Lazy require: settings is a module hub (same pattern as campus).
+    return await require('../settings').service.getPreferredLanguage(userId);
+  } catch {
+    return 'en';
+  }
+};
 
 /** Parses an upstream JSON body, tolerating empty/non-JSON responses. */
 const safeJson = async (response) => {
@@ -79,6 +101,7 @@ const chat = asyncHandler(async (req, res) => {
       user: req.user,
       entitlement: req.aiEntitlement,
       campusId: req.aiCampusId,
+      language: await resolvePreferredLanguage(req.user.id),
     });
   } catch (error) {
     return sendUpstreamFailure(res, error);
@@ -121,11 +144,35 @@ const search = asyncHandler(async (req, res) => {
   return proxyJson(req, res, '/search', { body: { query: query.trim(), types, limit: clampedLimit } });
 });
 
-/** GET /api/ai/conversations — proxied history list (stored in ai-service). */
+/**
+ * GET /api/ai/conversations — proxied history list (stored in ai-service),
+ * re-wrapped with sendPaginated (Annexe B: data = items, pagination meta).
+ */
 const listConversations = asyncHandler(async (req, res) => {
   const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
-  return proxyJson(req, res, `/conversations?page=${page}&limit=${limit}`, { method: 'GET' });
+
+  let upstream;
+  try {
+    upstream = await aiService.forward(`/conversations?page=${page}&limit=${limit}`, {
+      method: 'GET',
+      user: req.user,
+      entitlement: req.aiEntitlement,
+      campusId: req.aiCampusId,
+    });
+  } catch (error) {
+    return sendUpstreamFailure(res, error);
+  }
+  const { response } = upstream;
+  const payload = await safeJson(response);
+  if (!response.ok) {
+    return sendError(res, response.status, payload?.detail || payload?.message || 'AI service error');
+  }
+  return sendPaginated(res, 200, 'OK', payload?.items || [], {
+    total: payload?.total || 0,
+    page: payload?.page || page,
+    limit: payload?.limit || limit,
+  });
 });
 
 /** GET /api/ai/conversations/:id — proxied conversation detail. */

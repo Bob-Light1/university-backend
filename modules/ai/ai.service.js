@@ -21,16 +21,20 @@ const isEnabled = () => Boolean(config.ai.serviceUrl && config.ai.serviceSecret)
  * Builds the S2S signing context from the authenticated user + resolved
  * campus entitlement (set by the entitlement middleware).
  * @param {Object} user - req.user ({ id, role, campusId }).
- * @param {Object} entitlement - req.aiEntitlement ({ plan, llmProfile }).
+ * @param {Object} entitlement - req.aiEntitlement ({ plan, llmProfile, monthlyTokenBudget }).
  * @param {string|null} [campusId] - Effective campus scope (may differ from
  *   user.campusId for global roles acting on a specific campus).
+ * @param {string} [language] - User preferred locale (drives the chat reply
+ *   language service-side, M4).
  */
-const buildTokenContext = (user, entitlement, campusId = null) => ({
+const buildTokenContext = (user, entitlement, campusId = null, language = 'en') => ({
   userId: user.id,
   campusId: campusId ?? user.campusId ?? '',
   role: user.role,
   plan: entitlement?.plan || 'free',
   llmProfile: entitlement?.llmProfile || 'free',
+  language,
+  monthlyTokenBudget: entitlement?.monthlyTokenBudget || 0,
 });
 
 /**
@@ -48,13 +52,16 @@ const buildTokenContext = (user, entitlement, campusId = null) => ({
  * @param {Object} opts.user - req.user.
  * @param {Object} [opts.entitlement] - req.aiEntitlement.
  * @param {string|null} [opts.campusId] - Effective campus scope override.
+ * @param {string} [opts.language] - User preferred locale (S2S claim, M4).
  * @returns {Promise<{ response: Response, abort: () => void }>}
  */
-const forward = async (path, { method = 'POST', body, user, entitlement, campusId = null } = {}) => {
+const forward = async (path, {
+  method = 'POST', body, user, entitlement, campusId = null, language = 'en',
+} = {}) => {
   if (!isEnabled()) {
     throw new Error('AI service is not configured');
   }
-  const token = signServiceToken(buildTokenContext(user, entitlement, campusId));
+  const token = signServiceToken(buildTokenContext(user, entitlement, campusId, language));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.ai.requestTimeoutMs);
 
@@ -72,6 +79,43 @@ const forward = async (path, { method = 'POST', body, user, entitlement, campusI
     return { response, abort: () => controller.abort() };
   } finally {
     clearTimeout(timer);
+  }
+};
+
+/**
+ * Fire-and-forget ingestion signal towards ai-service (§6.3) — called by the
+ * document module on publication-state changes (same spirit as the
+ * notification emitters). Never throws, never blocks the caller's response.
+ *
+ * The signal is skipped when the campus has not subscribed to AI
+ * (aiEntitlement.enabled = false is the per-campus opt-out, D7) — an
+ * unsubscribed campus must never be indexed.
+ *
+ * @param {Object} p
+ * @param {string|Object} p.campusId - Campus owning the source.
+ * @param {string|Object} p.sourceId - ERP id of the source.
+ * @param {string} [p.sourceType='document']
+ * @returns {Promise<boolean>} true when the signal was accepted upstream.
+ */
+const signalDocumentIngest = async ({ campusId, sourceId, sourceType = 'document' }) => {
+  if (!isEnabled()) return false;
+  try {
+    // Lazy require: campus is a module hub (see the note in its facade).
+    const campus = await require('../campus').service.getCampusAiEntitlement(String(campusId));
+    if (campus?.status !== 'active' || !campus?.aiEntitlement?.enabled) return false;
+
+    const { response } = await forward('/ingest', {
+      body: { sourceType, sourceId: String(sourceId) },
+      // Machine subject: a scoped (non-global) role bound to the campus —
+      // ai-service derives the ingestion scope from this token (§4.2).
+      user: { id: 'system-ingest-signal', role: 'SERVICE', campusId: String(campusId) },
+      entitlement: campus.aiEntitlement,
+      campusId: String(campusId),
+    });
+    return response.ok;
+  } catch (error) {
+    console.warn(`🤖 [ai] ingest signal failed for ${sourceType}:${sourceId}: ${error.message}`);
+    return false;
   }
 };
 
@@ -100,5 +144,6 @@ const fetchMonthlyUsage = async (user, entitlement, campusId) => {
 module.exports = {
   isEnabled,
   forward,
+  signalDocumentIngest,
   fetchMonthlyUsage,
 };
