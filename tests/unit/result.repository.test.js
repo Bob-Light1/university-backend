@@ -218,6 +218,23 @@ describe('result — agrégats (non-régression des pipelines)', () => {
     expect(grp.passingCount).toEqual({ $sum: { $cond: [{ $gte: ['$normalizedScore', 10] }, 1, 0] } });
     expect(grp.atRisk).toEqual({ $sum: { $cond: [{ $gte: ['$dropoutRiskScore', 60] }, 1, 0] } });
   });
+
+  test('aggregateDropoutRiskDistribution : scores null exclus, pire score par étudiant, seuils 30/60 alignés sur atRisk, sortie sans PII', () => {
+    const match = { schoolCampus: 'c1', status: { $in: ['PUBLISHED', 'ARCHIVED'] }, isDeleted: false };
+    repo.aggregateDropoutRiskDistribution(match);
+    const [pipeline] = Result.aggregate.mock.calls[0];
+    expect(pipeline[0]).toEqual({ $match: { ...match, dropoutRiskScore: { $ne: null } } });
+    // One entry per distinct student, keeping the WORST (max) score.
+    expect(pipeline[1].$group).toEqual({ _id: '$student', risk: { $max: '$dropoutRiskScore' } });
+    const grp = pipeline[2].$group;
+    expect(grp.lowRisk).toEqual({ $sum: { $cond: [{ $lt: ['$risk', 30] }, 1, 0] } });
+    expect(grp.moderateRisk).toEqual({ $sum: { $cond: [{ $and: [{ $gte: ['$risk', 30] }, { $lt: ['$risk', 60] }] }, 1, 0] } });
+    expect(grp.highRisk).toEqual({ $sum: { $cond: [{ $gte: ['$risk', 60] }, 1, 0] } });
+    // PII-free projection: counters and average only, no student ids.
+    const project = pipeline[3].$project;
+    expect(Object.keys(project).sort()).toEqual(['_id', 'avgRiskScore', 'highRisk', 'lowRisk', 'moderateRisk', 'studentsAssessed']);
+    expect(project._id).toBe(0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

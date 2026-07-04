@@ -7,8 +7,10 @@
  *    from the query or the body;
  *  - ingestion contract: limit clamped ≤ 200, opaque cursor round-trip;
  *  - citation re-authorization delegates the token identity to the document
- *    facade and only returns the authorized subset.
- * The document facade is mocked (no DB, no network).
+ *    facade and only returns the authorized subset;
+ *  - aggregates (M5, §8): role gate, campus from the token, per-report param
+ *    validation, PII-free figures passed through verbatim.
+ * The document/result/student facades are mocked (no DB, no network).
  */
 
 process.env.AI_SERVICE_SECRET = 'test-s2s-secret';
@@ -21,12 +23,31 @@ jest.mock('../../modules/document', () => ({
   },
 }));
 
+jest.mock('../../modules/result', () => ({
+  service: {
+    getCampusOverviewAggregates: jest.fn(async () => ({ avgNormalized: 12.34, totalPublished: 40 })),
+    getDropoutRiskDistribution: jest.fn(async () => ({ studentsAssessed: 25, highRisk: 3 })),
+    isValidAcademicYear: jest.fn((v) => /^\d{4}-\d{4}$/.test(String(v))),
+    isValidSemester: jest.fn((v) => ['S1', 'S2', 'Annual'].includes(v)),
+  },
+}));
+
+jest.mock('../../modules/student', () => ({
+  service: {
+    summarizeAttendanceTotals: jest.fn(async () => [{ total: 200, present: 180 }]),
+    getAvgAbsenceRateForCampus: jest.fn(async () => [{ avgAbsenceRate: 9.96 }]),
+  },
+}));
+
 const documentFacade = require('../../modules/document');
+const resultFacade = require('../../modules/result');
+const studentFacade = require('../../modules/student');
 const { signServiceToken } = require('../../modules/ai/ai.s2s');
 const {
   authenticateService,
   listIngestables,
   authorizeCitations,
+  getAggregate,
 } = require('../../modules/ai/ai.internal.controller');
 
 const CAMPUS_A = 'a'.repeat(24);
@@ -45,10 +66,11 @@ const incomingToken = (claims = {}) =>
     { algorithm: 'HS256', issuer: 'ai-service', audience: 'erp-backend', expiresIn: 120 },
   );
 
-const mockReq = ({ token = incomingToken(), query = {}, body = {} } = {}) => ({
+const mockReq = ({ token = incomingToken(), query = {}, body = {}, params = {} } = {}) => ({
   header: (name) => (name === 'Authorization' ? `Bearer ${token}` : undefined),
   query,
   body,
+  params,
 });
 
 const mockRes = () => {
@@ -208,5 +230,111 @@ describe('POST /internal/ai/authorize-citations', () => {
     await run(authorizeCitations, mockReq({ body: { citations } }), res);
     expect(res.status).toHaveBeenCalledWith(400);
     expect(documentFacade.service.authorizeAiCitations).not.toHaveBeenCalled();
+  });
+});
+
+describe('GET /internal/ai/aggregates/:name (M5, §8)', () => {
+  // The S2S subject of an analytics call is the END USER (Node re-applies the
+  // role gate of the public route) — a staffing role by default here.
+  const managerToken = (claims = {}) => incomingToken({ role: 'CAMPUS_MANAGER', ...claims });
+
+  test('unknown aggregate → 404, nothing computed', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({ token: managerToken(), params: { name: 'nope' } }), res);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(resultFacade.service.getCampusOverviewAggregates).not.toHaveBeenCalled();
+  });
+
+  test('non-staffing role (STUDENT) → 403 (defense in depth of the route gate)', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: incomingToken({ role: 'STUDENT' }),
+      params: { name: 'class-performance' },
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(resultFacade.service.getCampusOverviewAggregates).not.toHaveBeenCalled();
+  });
+
+  test('token without campus scope → 400 (aggregates are always per campus)', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: incomingToken({ role: 'ADMIN', campusId: '' }),
+      params: { name: 'class-performance' },
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+  });
+
+  test('campus comes from the token; a campusId query param is rejected as unknown (§4.6 falsification)', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'class-performance' },
+      query: { campusId: CAMPUS_B },
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(resultFacade.service.getCampusOverviewAggregates).not.toHaveBeenCalled();
+  });
+
+  test('validated params forwarded with the token campus (class-performance)', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'class-performance' },
+      query: { academicYear: '2025-2026', semester: 'S1' },
+    }), res);
+    expect(resultFacade.service.getCampusOverviewAggregates).toHaveBeenCalledWith({
+      campusId: CAMPUS_A, academicYear: '2025-2026', semester: 'S1',
+    });
+    const { data } = sentPayload(res);
+    expect(data.name).toBe('class-performance');
+    expect(data.figures).toEqual({ avgNormalized: 12.34, totalPublished: 40 });
+    expect(typeof data.computedAt).toBe('string');
+  });
+
+  test('invalid param format → 400 before any facade call', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'dropout-risk' },
+      query: { academicYear: 'not-a-year' },
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(resultFacade.service.getDropoutRiskDistribution).not.toHaveBeenCalled();
+  });
+
+  test('attendance-summary: derived PII-free figures from the student facades', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'attendance-summary' },
+    }), res);
+    expect(studentFacade.service.summarizeAttendanceTotals).toHaveBeenCalledTimes(1);
+    expect(studentFacade.service.getAvgAbsenceRateForCampus).toHaveBeenCalledTimes(1);
+    const { data } = sentPayload(res);
+    expect(data.figures).toEqual({
+      totalSessions: 200,
+      presentCount: 180,
+      absentCount: 20,
+      attendanceRate: 90,
+      avgAbsenceRatePerStudent: 10,
+    });
+  });
+
+  test('attendance-summary on an empty campus: explicit zeros/nulls, never NaN', async () => {
+    studentFacade.service.summarizeAttendanceTotals.mockResolvedValueOnce([]);
+    studentFacade.service.getAvgAbsenceRateForCampus.mockResolvedValueOnce([]);
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'attendance-summary' },
+    }), res);
+    const { data } = sentPayload(res);
+    expect(data.figures).toEqual({
+      totalSessions: 0,
+      presentCount: 0,
+      absentCount: 0,
+      attendanceRate: null,
+      avgAbsenceRatePerStudent: null,
+    });
   });
 });

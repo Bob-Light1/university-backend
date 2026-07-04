@@ -43,6 +43,17 @@ const AI_PLAN_PRESETS = Object.freeze({
   }),
 });
 
+/**
+ * Descriptive analytics reports (Feature 2, M5 — design doc §8). One report =
+ * one deterministic ERP aggregate narrated by the AI; report names are shared
+ * verbatim by the gateway route, the internal aggregates API and ai-service.
+ */
+const AI_ANALYTICS_REPORTS = Object.freeze({
+  CLASS_PERFORMANCE: 'class-performance',
+  ATTENDANCE_SUMMARY: 'attendance-summary',
+  DROPOUT_RISK: 'dropout-risk',
+});
+
 /** Gateway error codes — frozen API contract (design doc Annexe B). */
 const AI_ERROR_CODES = Object.freeze({
   AI_DISABLED: 'AI_DISABLED',                       // 503 — AI_SERVICE_URL not configured
@@ -57,5 +68,6 @@ module.exports = {
   AI_PLANS,
   AI_FEATURES,
   AI_PLAN_PRESETS,
+  AI_ANALYTICS_REPORTS,
   AI_ERROR_CODES,
 };

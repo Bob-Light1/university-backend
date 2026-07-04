@@ -6,7 +6,7 @@
  * ai-service (§6.2). The S2S token is the ONLY identity source: campus, user
  * and role are never read from the query or body (§4.1 rule 1). ERP data is
  * read exclusively through the existing module service facades — never a
- * model. `aggregates` stays a 501 stub until M5.
+ * model.
  *
  * Response shape: like every route of the project, the payloads documented in
  * Annexe B are wrapped in { success, message, data } by the response helpers
@@ -16,6 +16,8 @@
 const {
   sendSuccess,
   sendError,
+  sendNotFound,
+  sendForbidden,
   sendUnauthorized,
   sendValidationError,
   asyncHandler,
@@ -23,6 +25,12 @@ const {
 const { isValidObjectId } = require('../../shared/utils/validation-helpers');
 const { verifyServiceToken } = require('./ai.s2s');
 const aiService = require('./ai.service');
+const {
+  ANALYTICS_ROLES,
+  isKnownAggregate,
+  validateAggregateParams,
+  computeAggregate,
+} = require('./ai.aggregates');
 
 // Lazy facade: document is loaded very early by server.js and lazily requires
 // this module back for the ingestion signal — both sides stay lazy (no cycle).
@@ -166,9 +174,40 @@ const authorizeCitations = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'OK', { allowed });
 });
 
-/** GET /internal/ai/aggregates/:name — deterministic ERP aggregates (§6.5), lands in M5. */
+/**
+ * GET /internal/ai/aggregates/:name — deterministic ERP aggregates for the
+ * AI analytics narration (§8, M5). Campus scope and requesting user come from
+ * the S2S token exclusively; the role gate mirrors the public analytics route
+ * (defense in depth — ai-service forwards the end-user identity). Figures are
+ * PII-free by construction (ai.aggregates registry).
+ */
 const getAggregate = asyncHandler(async (req, res) => {
-  return sendError(res, 501, "'aggregates' is not implemented yet (planned for M5)");
+  const name = String(req.params.name);
+  if (!isKnownAggregate(name)) {
+    return sendNotFound(res, `Unknown aggregate '${name}'`);
+  }
+  if (!ANALYTICS_ROLES.includes(req.s2s.role)) {
+    return sendForbidden(res, 'This role cannot read analytics aggregates');
+  }
+  const campusId = req.s2s.campusId;
+  if (!campusId || !isValidObjectId(campusId)) {
+    return sendError(res, 400, 'Aggregates require a valid campus scope in the S2S token');
+  }
+
+  // Query params are the aggregate params only — campus/user never come from
+  // the query (§4.1 rule 1): any scope-looking key is rejected as unknown.
+  const { errors, params } = validateAggregateParams(name, req.query);
+  if (errors.length > 0) {
+    return sendValidationError(res, errors);
+  }
+
+  const figures = await computeAggregate(name, { campusId, params });
+  return sendSuccess(res, 200, 'OK', {
+    name,
+    params,
+    figures,
+    computedAt: new Date().toISOString(),
+  });
 });
 
 module.exports = {

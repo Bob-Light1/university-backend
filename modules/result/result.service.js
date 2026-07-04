@@ -10,12 +10,17 @@
  *   - parent: listStudentPublishedResults, listStudentResultComments,
  *     getRecentResultsForChild, listStudentTranscripts, signTranscriptByParent
  *   - academic-print: getTranscriptForPrint
+ *   - ai: getCampusOverviewAggregates, getDropoutRiskDistribution,
+ *     isValidSemester, isValidAcademicYear (AI analytics aggregates, M5 —
+ *     PII-free figures only)
  *
  * All persistence goes through result.repository (step 0 pre-Postgres);
  * the service keeps the inter-module API and the building of business filters.
  */
 
+const mongoose = require('mongoose');
 const resultRepo = require('./result.repository');
+const { SEMESTER } = require('./models/result.model');
 
 // ── Results : compteurs ───────────────────────────────────────────────────────
 
@@ -189,6 +194,69 @@ const signTranscriptByParent = async ({ transcriptId, studentId, campusId, paren
 const getTranscriptForPrint = ({ studentId, campusId, academicYear, semester }) =>
   resultRepo.findTranscriptForPrint({ studentId, campusId, academicYear, semester });
 
+// ── AI analytics aggregates (design doc §8, M5) ──────────────────────────────
+// Deterministic campus-scoped figures consumed by /internal/ai/aggregates —
+// the AI narrates these numbers, it never computes any (ADR-4). No PII leaves
+// these facades: counters, rates and distributions only.
+
+/** Academic year filter format accepted by the aggregate facades (model rule). */
+const isValidAcademicYear = (value) => /^\d{4}-\d{4}$/.test(String(value));
+
+/** Semester enum guard (single source of truth: the Result model enum). */
+const isValidSemester = (value) => Object.values(SEMESTER).includes(value);
+
+/**
+ * Campus results overview: status/type/period facets + general stats
+ * (avg normalized score, passing rate, retake-eligible, at-risk, absents).
+ * Same pipeline as GET /api/results/campus/overview — one source of figures.
+ * @param {Object} p
+ * @param {ObjectId|string} p.campusId
+ * @param {string} [p.academicYear] — 'YYYY-YYYY'
+ * @param {string} [p.semester] — SEMESTER enum value
+ * @returns {Promise<Object>} flat figures object (no document, no PII)
+ */
+const getCampusOverviewAggregates = async ({ campusId, academicYear, semester }) => {
+  // Aggregation pipelines do NOT auto-cast (unlike find) — a string campus id
+  // would silently match nothing.
+  const matchFilter = { isDeleted: false, schoolCampus: new mongoose.Types.ObjectId(String(campusId)) };
+  if (academicYear && isValidAcademicYear(academicYear)) matchFilter.academicYear = academicYear;
+  if (semester && isValidSemester(semester)) matchFilter.semester = semester;
+
+  const [facets] = await resultRepo.aggregateCampusOverview(matchFilter);
+  const overview = {
+    byStatus:     Object.fromEntries((facets?.byStatus     || []).map((s) => [s._id, s.count])),
+    byEvalType:   Object.fromEntries((facets?.byEvalType   || []).map((s) => [s._id, s.count])),
+    byExamPeriod: Object.fromEntries((facets?.byExamPeriod || []).map((s) => [s._id, s.count])),
+    ...(facets?.generalStats?.[0] || {}),
+  };
+  delete overview._id;
+  return overview;
+};
+
+/**
+ * Campus dropout-risk distribution over PUBLISHED/ARCHIVED results: one entry
+ * per distinct student (worst score), bucketed low (<30) / moderate (30-59) /
+ * high (≥60 — same threshold as the overview `atRisk` facet).
+ * @param {Object} p
+ * @param {ObjectId|string} p.campusId
+ * @param {string} [p.academicYear], [p.semester]
+ * @returns {Promise<Object>} { studentsAssessed, avgRiskScore, lowRisk, moderateRisk, highRisk }
+ */
+const getDropoutRiskDistribution = async ({ campusId, academicYear, semester }) => {
+  const matchFilter = {
+    // Explicit cast: aggregation pipelines do not auto-cast campus ids.
+    schoolCampus: new mongoose.Types.ObjectId(String(campusId)),
+    status:       { $in: ['PUBLISHED', 'ARCHIVED'] },
+    isDeleted:    false,
+  };
+  if (academicYear && isValidAcademicYear(academicYear)) matchFilter.academicYear = academicYear;
+  if (semester && isValidSemester(semester)) matchFilter.semester = semester;
+
+  const [distribution] = await resultRepo.aggregateDropoutRiskDistribution(matchFilter);
+  return distribution
+    || { studentsAssessed: 0, avgRiskScore: null, lowRisk: 0, moderateRisk: 0, highRisk: 0 };
+};
+
 module.exports = {
   countPublishedResults,
   listCampusResults,
@@ -200,4 +268,9 @@ module.exports = {
   listStudentTranscripts,
   signTranscriptByParent,
   getTranscriptForPrint,
+  // AI analytics aggregates (M5)
+  getCampusOverviewAggregates,
+  getDropoutRiskDistribution,
+  isValidAcademicYear,
+  isValidSemester,
 };

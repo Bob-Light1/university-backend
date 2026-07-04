@@ -20,6 +20,7 @@ const {
   asyncHandler,
 } = require('../../shared/utils/response-helpers');
 const { AI_ERROR_CODES } = require('../../shared/constants/ai.constants');
+const { isKnownAggregate, validateAggregateParams } = require('./ai.aggregates');
 const aiService = require('./ai.service');
 
 /**
@@ -59,7 +60,7 @@ const sendUpstreamFailure = (res, error) => {
  * Forwards a JSON request to ai-service and re-wraps the reply in the project
  * response shape. Upstream error statuses (401/429/501/…) pass through as-is.
  */
-const proxyJson = async (req, res, path, { method = 'POST', body } = {}) => {
+const proxyJson = async (req, res, path, { method = 'POST', body, language } = {}) => {
   let upstream;
   try {
     upstream = await aiService.forward(path, {
@@ -68,6 +69,7 @@ const proxyJson = async (req, res, path, { method = 'POST', body } = {}) => {
       user: req.user,
       entitlement: req.aiEntitlement,
       campusId: req.aiCampusId,
+      ...(language ? { language } : {}),
     });
   } catch (error) {
     return sendUpstreamFailure(res, error);
@@ -185,17 +187,29 @@ const getConversation = asyncHandler(async (req, res) => {
   return proxyJson(req, res, `/conversations/${id}`, { method: 'GET' });
 });
 
-/** POST /api/ai/analytics/:report — descriptive summaries on ERP aggregates (M5). */
+/**
+ * POST /api/ai/analytics/:report — descriptive summary over ERP aggregates
+ * (Annexe B, M5). The report and its params are validated here per report
+ * schema (design §8) against the shared aggregate registry; the narrative
+ * language claim is the user's preferred locale, like the chat.
+ */
 const analytics = asyncHandler(async (req, res) => {
   const report = String(req.params.report);
-  if (!/^[a-z0-9-]{1,64}$/i.test(report)) {
-    return sendValidationError(res, [{ field: 'report', message: 'invalid report name' }]);
+  if (!isKnownAggregate(report)) {
+    return sendError(res, 404, `Unknown analytics report '${report}'`);
   }
-  const params = req.body?.params;
-  if (params !== undefined && (typeof params !== 'object' || params === null || Array.isArray(params))) {
+  const rawParams = req.body?.params;
+  if (rawParams !== undefined && (typeof rawParams !== 'object' || rawParams === null || Array.isArray(rawParams))) {
     return sendValidationError(res, [{ field: 'params', message: 'params must be an object' }]);
   }
-  return proxyJson(req, res, `/analytics/${report}`, { body: { params: params || {} } });
+  const { errors, params } = validateAggregateParams(report, rawParams || {});
+  if (errors.length > 0) {
+    return sendValidationError(res, errors);
+  }
+  return proxyJson(req, res, `/analytics/${report}`, {
+    body: { params },
+    language: await resolvePreferredLanguage(req.user.id),
+  });
 });
 
 /** POST /api/ai/advisors/:advisor — business advisors, human-in-the-loop (M5b). */

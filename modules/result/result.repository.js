@@ -258,6 +258,37 @@ const aggregateCampusOverview = (matchFilter) =>
     },
   ]);
 
+/**
+ * Campus-level dropout risk distribution (AI analytics, design §8/M5).
+ * One row per distinct student (worst score kept), bucketed on the same
+ * threshold as the overview `atRisk` facet (≥ 60 = high). PII-free by
+ * construction: only counters and averages leave this pipeline.
+ * `matchFilter` provided by the caller (campus isolation included).
+ */
+const aggregateDropoutRiskDistribution = (matchFilter) =>
+  Result.aggregate([
+    { $match: { ...matchFilter, dropoutRiskScore: { $ne: null } } },
+    { $group: { _id: '$student', risk: { $max: '$dropoutRiskScore' } } },
+    {
+      $group: {
+        _id:              null,
+        studentsAssessed: { $sum: 1 },
+        avgRiskScore:     { $avg: '$risk' },
+        lowRisk:          { $sum: { $cond: [{ $lt: ['$risk', 30] }, 1, 0] } },
+        moderateRisk:     { $sum: { $cond: [{ $and: [{ $gte: ['$risk', 30] }, { $lt: ['$risk', 60] }] }, 1, 0] } },
+        highRisk:         { $sum: { $cond: [{ $gte: ['$risk', 60] }, 1, 0] } },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        studentsAssessed: 1,
+        avgRiskScore:     { $round: ['$avgRiskScore', 1] },
+        lowRisk: 1, moderateRisk: 1, highRisk: 1,
+      },
+    },
+  ]);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RESULT — specialized lists (controller)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -460,6 +491,7 @@ module.exports = {
   aggregateDistinctStudentsForLock,
   aggregateStudentTranscript,
   aggregateCampusOverview,
+  aggregateDropoutRiskDistribution,
   // Result — specialized lists
   listRetakeResults,
   findResultByVerificationToken,

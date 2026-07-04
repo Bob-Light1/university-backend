@@ -50,8 +50,8 @@ router.post('/authorize-citations', authorizeCitations);
 
 /**
  * @route   GET /internal/ai/aggregates/:name
- * @desc    Deterministic ERP aggregates for analytics/engine (§6.5)
- * @access  S2S (ai-service) — 501 until M5
+ * @desc    Deterministic, PII-free ERP aggregates for the AI analytics (§8)
+ * @access  S2S (ai-service) — end-user identity from the token, staffing roles only
  */
 router.get('/aggregates/:name', getAggregate);
 

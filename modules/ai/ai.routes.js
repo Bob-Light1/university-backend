@@ -24,6 +24,7 @@ const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { createCustomLimiter } = require('../../shared/middleware/rate-limiter');
 const config = require('../../shared/configs/general.config');
 const { requireAiFeature } = require('./ai.entitlement.middleware');
+const { ANALYTICS_ROLES } = require('./ai.aggregates');
 const {
   chat,
   search,
@@ -99,7 +100,7 @@ router.get('/conversations/:id', requireAiFeature('chat'), getConversation);
  */
 router.post(
   '/analytics/:report',
-  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'STAFF', 'TEACHER']),
+  authorize([...ANALYTICS_ROLES]),
   requireAiFeature('analytics'),
   analytics
 );
