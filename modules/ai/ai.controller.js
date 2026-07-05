@@ -20,7 +20,12 @@ const {
   asyncHandler,
 } = require('../../shared/utils/response-helpers');
 const { AI_ERROR_CODES } = require('../../shared/constants/ai.constants');
-const { isKnownAggregate, validateAggregateParams } = require('./ai.aggregates');
+const {
+  isKnownAggregate,
+  isKnownAdvisor,
+  validateAggregateParams,
+  validateAdvisorParams,
+} = require('./ai.aggregates');
 const aiService = require('./ai.service');
 
 /**
@@ -212,17 +217,30 @@ const analytics = asyncHandler(async (req, res) => {
   });
 });
 
-/** POST /api/ai/advisors/:advisor — business advisors, human-in-the-loop (M5b). */
+/**
+ * POST /api/ai/advisors/:advisor — business advisor proposals (Annexe B,
+ * M5b). Strict proposal mode (§6.6): the reply is rendered to a human, the
+ * AI never writes an ERP record. Params are whitelisted per advisor (shared
+ * registry, same validators as analytics); proposals are narrated in the
+ * user's preferred locale, like the chat and the analytics.
+ */
 const advisors = asyncHandler(async (req, res) => {
   const advisor = String(req.params.advisor);
-  if (!/^[a-z0-9-]{1,64}$/i.test(advisor)) {
-    return sendValidationError(res, [{ field: 'advisor', message: 'invalid advisor name' }]);
+  if (!isKnownAdvisor(advisor)) {
+    return sendError(res, 404, `Unknown advisor '${advisor}'`);
   }
-  const params = req.body?.params;
-  if (params !== undefined && (typeof params !== 'object' || params === null || Array.isArray(params))) {
+  const rawParams = req.body?.params;
+  if (rawParams !== undefined && (typeof rawParams !== 'object' || rawParams === null || Array.isArray(rawParams))) {
     return sendValidationError(res, [{ field: 'params', message: 'params must be an object' }]);
   }
-  return proxyJson(req, res, `/advisors/${advisor}`, { body: { params: params || {} } });
+  const { errors, params } = validateAdvisorParams(advisor, rawParams || {});
+  if (errors.length > 0) {
+    return sendValidationError(res, errors);
+  }
+  return proxyJson(req, res, `/advisors/${advisor}`, {
+    body: { params },
+    language: await resolvePreferredLanguage(req.user.id),
+  });
 });
 
 /**

@@ -11,6 +11,7 @@
  * IP_BURST detection, review transitions), never direct model access.
  */
 
+const mongoose = require('mongoose');
 const partnerRepo = require('./partner.repository');
 
 // ── Partner ───────────────────────────────────────────────────────────────────
@@ -247,6 +248,79 @@ const reviewApplication = async ({ id, campusFilter = {}, status, reviewNote, pa
 const deleteApplication = (id, campusFilter = {}) =>
   partnerRepo.deleteApplicationScoped(id, campusFilter);
 
+// ── AI advisor aggregates (M5b — PHASE3_AI_DESIGN.md §6.5/§6.6) ───────────────
+
+/** Weeks of new-lead history fed to the engine's anomaly detection. */
+const FUNNEL_WEEKS_BACK = 8;
+
+/**
+ * Lead funnel figures of a campus, consumed by the AI marketing advisor
+ * through /internal/ai/aggregates (M5b). PII-free by construction: counts by
+ * pipeline status / attribution source, fraud-flag counts and a continuous
+ * weekly new-lead series — never a prospect name, email or id. Honeypot rows
+ * are excluded everywhere (they are bot noise, not prospects).
+ * @param {{ campusId: string|ObjectId }} scope
+ * @returns {Promise<Object>} flat figures
+ */
+const getLeadFunnelAggregates = async ({ campusId }) => {
+  // Aggregation pipelines do NOT auto-cast (unlike find/count) → ObjectId.
+  const campusOid = new mongoose.Types.ObjectId(String(campusId));
+  const match = { schoolCampus: campusOid, honeypotTripped: false };
+
+  const now = new Date();
+  const weekMs = 7 * 24 * 3600 * 1000;
+  const since = new Date(now.getTime() - FUNNEL_WEEKS_BACK * weekMs);
+
+  const [conversion, byStatus, bySource, fraud, weekly] = await Promise.all([
+    partnerRepo.aggregateLeadConversionStats(match),
+    partnerRepo.aggregateLeadStatusStats(match),
+    partnerRepo.aggregateLeadSourceStats(match),
+    partnerRepo.aggregateLeadFraudStats(match),
+    partnerRepo.aggregateLeadWeeklyCounts({ ...match, createdAt: { $gte: since } }),
+  ]);
+
+  const totals = conversion[0] || { total: 0, enrolled: 0 };
+
+  // Continuous weekly series (oldest → current week), zero-filled: the
+  // engine's anomaly detection needs an evenly-spaced series, and a quiet
+  // week is a signal — never a hole.
+  const weeklyBy = new Map(
+    weekly.map((r) => [`${r._id.isoWeekYear}-${r._id.isoWeek}`, r.count])
+  );
+  const isoWeekOf = (date) => {
+    // ISO-8601 week number/year (UTC) — Thursday of the current week decides
+    // the year, mirroring the $isoWeek/$isoWeekYear grouping above.
+    const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+    d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+    const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+    const week = Math.ceil(((d - yearStart) / 86400000 + 1) / 7);
+    return { isoWeekYear: d.getUTCFullYear(), isoWeek: week };
+  };
+  const weeklyNewLeads = [];
+  for (let i = FUNNEL_WEEKS_BACK - 1; i >= 0; i -= 1) {
+    const { isoWeekYear, isoWeek } = isoWeekOf(new Date(now.getTime() - i * weekMs));
+    weeklyNewLeads.push({
+      isoWeekYear,
+      isoWeek,
+      count: weeklyBy.get(`${isoWeekYear}-${isoWeek}`) ?? 0,
+    });
+  }
+
+  return {
+    totalLeads: totals.total,
+    enrolledLeads: totals.enrolled,
+    conversionRate: totals.total > 0
+      ? Math.round((totals.enrolled / totals.total) * 1000) / 10
+      : null,
+    byStatus: Object.fromEntries(byStatus.map((r) => [r._id, r.count])),
+    bySource: Object.fromEntries(
+      bySource.map((r) => [r._id, { total: r.total, enrolled: r.enrolled }])
+    ),
+    fraudFlags: Object.fromEntries(fraud.map((r) => [r._id, r.count])),
+    weeklyNewLeads,
+  };
+};
+
 module.exports = {
   findActivePartnerByCode,
   upsertPreRegistrationLead,
@@ -257,4 +331,5 @@ module.exports = {
   getApplicationById,
   reviewApplication,
   deleteApplication,
+  getLeadFunnelAggregates,
 };

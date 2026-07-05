@@ -54,6 +54,29 @@ const AI_ANALYTICS_REPORTS = Object.freeze({
   DROPOUT_RISK: 'dropout-risk',
 });
 
+/**
+ * Business advisors (Feature §6.6, M5b — decision D9). One advisor = a
+ * deterministic engine pass over ERP aggregates + an LLM narration, in strict
+ * proposal mode (human-in-the-loop, zero ERP write). Names are shared verbatim
+ * by the gateway route and ai-service.
+ */
+const AI_ADVISORS = Object.freeze({
+  FINANCE: 'finance',
+  ACADEMIC: 'academic',
+  MARKETING: 'marketing',
+});
+
+/**
+ * Aggregates served to the advisors on top of the analytics reports (M5b).
+ * Same internal endpoint (GET /internal/ai/aggregates/:name), stricter role
+ * gate (direction roles only, D9) — still PII-free by construction.
+ */
+const AI_ADVISOR_AGGREGATES = Object.freeze({
+  FINANCE_OVERDUE_AGING: 'finance-overdue-aging',
+  FINANCE_CASHFLOW_MONTHLY: 'finance-cashflow-monthly',
+  LEAD_FUNNEL: 'lead-funnel',
+});
+
 /** Gateway error codes — frozen API contract (design doc Annexe B). */
 const AI_ERROR_CODES = Object.freeze({
   AI_DISABLED: 'AI_DISABLED',                       // 503 — AI_SERVICE_URL not configured
@@ -69,5 +92,7 @@ module.exports = {
   AI_FEATURES,
   AI_PLAN_PRESETS,
   AI_ANALYTICS_REPORTS,
+  AI_ADVISORS,
+  AI_ADVISOR_AGGREGATES,
   AI_ERROR_CODES,
 };

@@ -26,7 +26,7 @@ const { isValidObjectId } = require('../../shared/utils/validation-helpers');
 const { verifyServiceToken } = require('./ai.s2s');
 const aiService = require('./ai.service');
 const {
-  ANALYTICS_ROLES,
+  aggregateRoles,
   isKnownAggregate,
   validateAggregateParams,
   computeAggregate,
@@ -176,18 +176,20 @@ const authorizeCitations = asyncHandler(async (req, res) => {
 
 /**
  * GET /internal/ai/aggregates/:name — deterministic ERP aggregates for the
- * AI analytics narration (§8, M5). Campus scope and requesting user come from
- * the S2S token exclusively; the role gate mirrors the public analytics route
- * (defense in depth — ai-service forwards the end-user identity). Figures are
- * PII-free by construction (ai.aggregates registry).
+ * AI analytics narration and the advisors engine (§8 M5, §6.5 M5b). Campus
+ * scope and requesting user come from the S2S token exclusively; the role
+ * gate is per aggregate (analytics = staffing roles mirror, advisor
+ * aggregates = direction roles, D9 — defense in depth, ai-service forwards
+ * the end-user identity). Figures are PII-free by construction
+ * (ai.aggregates registry).
  */
 const getAggregate = asyncHandler(async (req, res) => {
   const name = String(req.params.name);
   if (!isKnownAggregate(name)) {
     return sendNotFound(res, `Unknown aggregate '${name}'`);
   }
-  if (!ANALYTICS_ROLES.includes(req.s2s.role)) {
-    return sendForbidden(res, 'This role cannot read analytics aggregates');
+  if (!aggregateRoles(name).includes(req.s2s.role)) {
+    return sendForbidden(res, 'This role cannot read this aggregate');
   }
   const campusId = req.s2s.campusId;
   if (!campusId || !isValidObjectId(campusId)) {

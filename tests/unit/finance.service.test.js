@@ -243,3 +243,106 @@ describe('runOverdueJob', () => {
     expect(res).toEqual({ transitioned: 0, reminded: 0 });
   });
 });
+
+// ── AI advisor aggregates (M5b — design §6.5/§6.6) ───────────────────────────
+// Non-regression on the FIGURES the advisors engine consumes: campus id cast
+// to ObjectId (pipelines do not auto-cast — M5 real-boot lesson), zero-filled
+// aging bands and a continuous monthly cashflow series (an empty month is an
+// explicit zero, never a hole — the anomaly z-score needs even spacing).
+
+const mongoose = require('mongoose');
+const CAMPUS = 'f'.repeat(24);
+const CAMPUS_OID = new mongoose.Types.ObjectId(CAMPUS);
+
+describe('getOverdueAgingAggregates (M5b)', () => {
+  test('campus casté ObjectId + date de référence fournie au pipeline', async () => {
+    repo.aggregateOverdueAging.mockResolvedValue([]);
+    await finance.getOverdueAgingAggregates({ campusId: CAMPUS });
+    expect(repo.aggregateOverdueAging).toHaveBeenCalledWith(CAMPUS_OID, expect.any(Date));
+  });
+
+  test('bandes zéro-remplies, totaux dérivés, arrondi des rappels moyens', async () => {
+    repo.aggregateOverdueAging.mockResolvedValue([
+      { _id: 0, count: 10, outstanding: 500, avgReminderCount: 1.04 },
+      { _id: 'over90', count: 3, outstanding: 200, avgReminderCount: 4.96 },
+    ]);
+    const figures = await finance.getOverdueAgingAggregates({ campusId: CAMPUS });
+    expect(figures).toEqual({
+      totalCount: 13,
+      totalOutstanding: 700,
+      buckets: [
+        { band: '1-30', count: 10, outstanding: 500, avgReminderCount: 1 },
+        { band: '31-60', count: 0, outstanding: 0, avgReminderCount: 0 },
+        { band: '61-90', count: 0, outstanding: 0, avgReminderCount: 0 },
+        { band: '90+', count: 3, outstanding: 200, avgReminderCount: 5 },
+      ],
+    });
+  });
+
+  test('campus sans impayé : structure stable, zéros explicites', async () => {
+    repo.aggregateOverdueAging.mockResolvedValue([]);
+    const figures = await finance.getOverdueAgingAggregates({ campusId: CAMPUS });
+    expect(figures.totalCount).toBe(0);
+    expect(figures.buckets).toHaveLength(4);
+    expect(figures.buckets.every((b) => b.count === 0 && b.outstanding === 0)).toBe(true);
+  });
+});
+
+describe('getMonthlyCashflowSeries (M5b)', () => {
+  beforeAll(() => {
+    jest.useFakeTimers();
+    jest.setSystemTime(new Date('2026-07-04T10:00:00Z'));
+  });
+  afterAll(() => jest.useRealTimers());
+
+  beforeEach(() => {
+    repo.monthlyIncomeTotals.mockResolvedValue([]);
+    repo.monthlyExpenseTotals.mockResolvedValue([]);
+  });
+
+  test('série continue zéro-remplie, income/expense fusionnés par mois', async () => {
+    repo.monthlyIncomeTotals.mockResolvedValue([
+      { _id: { year: 2026, month: 7 }, total: 100 },
+      { _id: { year: 2026, month: 5 }, total: 80 },
+    ]);
+    repo.monthlyExpenseTotals.mockResolvedValue([
+      { _id: { year: 2026, month: 7 }, total: 60 },
+    ]);
+    const figures = await finance.getMonthlyCashflowSeries({ campusId: CAMPUS, months: '3' });
+    expect(figures).toEqual({
+      months: 3,
+      series: [
+        { year: 2026, month: 5, income: 80, expense: 0, net: 80 },
+        { year: 2026, month: 6, income: 0, expense: 0, net: 0 },
+        { year: 2026, month: 7, income: 100, expense: 60, net: 40 },
+      ],
+    });
+  });
+
+  test('scope : campus casté + borne (year, month) sur le couple dénormalisé', async () => {
+    await finance.getMonthlyCashflowSeries({ campusId: CAMPUS, months: 3 });
+    const match = repo.monthlyIncomeTotals.mock.calls[0][0];
+    expect(match.schoolCampus).toEqual(CAMPUS_OID);
+    expect(match.$or).toEqual([
+      { year: { $gt: 2026 } },
+      { year: 2026, month: { $gte: 5 } },
+    ]);
+    expect(repo.monthlyExpenseTotals).toHaveBeenCalledWith(match);
+  });
+
+  test('months borné [3, 24], 12 par défaut ou si invalide', async () => {
+    const spans = [];
+    for (const months of [undefined, 'abc', '1', '99']) {
+      const { series } = await finance.getMonthlyCashflowSeries({ campusId: CAMPUS, months });
+      spans.push(series.length);
+    }
+    expect(spans).toEqual([12, 12, 3, 24]);
+  });
+
+  test('la fenêtre traverse le passage d\'année sans trou', async () => {
+    const { series } = await finance.getMonthlyCashflowSeries({ campusId: CAMPUS, months: 12 });
+    expect(series[0]).toMatchObject({ year: 2025, month: 8 });
+    expect(series[11]).toMatchObject({ year: 2026, month: 7 });
+    expect(series).toHaveLength(12);
+  });
+});

@@ -293,6 +293,69 @@ const touchReminded = (feeId, now) =>
     { $set: { lastRemindedAt: now }, $inc: { reminderCount: 1 } }
   );
 
+/**
+ * Aging distribution of a campus's overdue debts (AI advisor aggregate, M5b).
+ * PII-free by construction: bucket counters, outstanding totals and average
+ * reminder counts only — never a student id. Buckets are keyed by the lower
+ * bound in days overdue (0 / 31 / 61) plus the $bucket default 'over90'.
+ *
+ * NOTE: aggregation pipelines do NOT auto-cast — the caller passes an ObjectId.
+ * @param {ObjectId} campusOid
+ * @param {Date} now
+ * @returns {Promise<Array<{ _id: number|string, count: number, outstanding: number, avgReminderCount: number }>>}
+ */
+const aggregateOverdueAging = (campusOid, now) =>
+  StudentFee.aggregate([
+    {
+      $match: {
+        schoolCampus: campusOid,
+        status: 'overdue',
+        isDeleted: false,
+        dueDate: { $ne: null },
+      },
+    },
+    {
+      $project: {
+        daysOverdue: {
+          $floor: { $divide: [{ $subtract: [now, '$dueDate'] }, 86400000] },
+        },
+        outstanding: { $subtract: ['$amountDue', '$amountPaid'] },
+        reminderCount: 1,
+      },
+    },
+    {
+      $bucket: {
+        groupBy: '$daysOverdue',
+        boundaries: [0, 31, 61, 91],
+        default: 'over90',
+        output: {
+          count: { $sum: 1 },
+          outstanding: { $sum: '$outstanding' },
+          avgReminderCount: { $avg: '$reminderCount' },
+        },
+      },
+    },
+  ]);
+
+/**
+ * Monthly received-income totals grouped on the denormalized (year, month)
+ * pair (AI advisor aggregate, M5b). `match` is already campus-scoped and
+ * date-bounded by the caller (ObjectId cast included — pipelines do not cast).
+ * @returns {Promise<Array<{ _id: { year: number, month: number }, total: number }>>}
+ */
+const monthlyIncomeTotals = (match) =>
+  Income.aggregate([
+    { $match: { isDeleted: false, status: 'received', ...match } },
+    { $group: { _id: { year: '$year', month: '$month' }, total: { $sum: '$amount' } } },
+  ]);
+
+/** Monthly paid-expense totals — same contract as monthlyIncomeTotals. */
+const monthlyExpenseTotals = (match) =>
+  Expense.aggregate([
+    { $match: { isDeleted: false, status: 'paid', ...match } },
+    { $group: { _id: { year: '$year', month: '$month' }, total: { $sum: '$amount' } } },
+  ]);
+
 // ── FeePayment (payments) ─────────────────────────────────────────────────────
 
 /** Creates a payment line. @returns {Promise<Object>} */
@@ -343,6 +406,10 @@ module.exports = {
   findRemindableOverdueFees,
   claimFeeForReminder,
   touchReminded,
+  // AI advisor aggregates (M5b)
+  aggregateOverdueAging,
+  monthlyIncomeTotals,
+  monthlyExpenseTotals,
   // payments
   createPayment,
   findPaymentsByFee,

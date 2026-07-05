@@ -317,10 +317,101 @@ async function runOverdueJob() {
   return { transitioned, reminded };
 }
 
+// ── AI advisor aggregates (M5b — PHASE3_AI_DESIGN.md §6.5/§6.6) ───────────────
+
+/** Age bands of the overdue aging distribution, keyed by $bucket _id. */
+const AGING_BANDS = Object.freeze([
+  { key: 0, band: '1-30' },
+  { key: 31, band: '31-60' },
+  { key: 61, band: '61-90' },
+  { key: 'over90', band: '90+' },
+]);
+
+/**
+ * Aging distribution of the campus's overdue student debts, consumed by the
+ * AI finance advisor through /internal/ai/aggregates (M5b). PII-free by
+ * construction: per-band counters, outstanding totals and average reminder
+ * counts — never a student id or name. Bands are zero-filled so the engine
+ * output is stable whatever the data (deterministic, testable).
+ * @param {{ campusId: string|ObjectId }} scope
+ * @returns {Promise<Object>} flat figures
+ */
+async function getOverdueAgingAggregates({ campusId }) {
+  const campusOid = new mongoose.Types.ObjectId(String(campusId));
+  const now = new Date();
+  const rows = await financeRepo.aggregateOverdueAging(campusOid, now);
+  const byKey = new Map(rows.map((row) => [row._id, row]));
+  const buckets = AGING_BANDS.map(({ key, band }) => {
+    const row = byKey.get(key);
+    return {
+      band,
+      count: row?.count ?? 0,
+      outstanding: row?.outstanding ?? 0,
+      avgReminderCount: row ? Math.round(row.avgReminderCount * 10) / 10 : 0,
+    };
+  });
+  return {
+    totalCount: buckets.reduce((sum, b) => sum + b.count, 0),
+    totalOutstanding: buckets.reduce((sum, b) => sum + b.outstanding, 0),
+    buckets,
+  };
+}
+
+/**
+ * Monthly cashflow series of the campus over the last `months` months
+ * (received incomes vs paid expenses, denormalized year/month pair), consumed
+ * by the AI finance advisor (M5b). The series is continuous and zero-filled —
+ * a month without records is an explicit zero, never a hole (the engine's
+ * anomaly detection needs an evenly-spaced series).
+ * @param {{ campusId: string|ObjectId, months?: number }} scope
+ * @returns {Promise<Object>} flat figures
+ */
+async function getMonthlyCashflowSeries({ campusId, months = 12 }) {
+  const campusOid = new mongoose.Types.ObjectId(String(campusId));
+  const span = Math.min(Math.max(parseInt(months, 10) || 12, 3), 24);
+
+  // Continuous (year, month) window ending on the current month.
+  const now = new Date();
+  const window = [];
+  for (let i = span - 1; i >= 0; i -= 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    window.push({ year: d.getFullYear(), month: d.getMonth() + 1 });
+  }
+  const from = window[0];
+  // (year, month) lower bound without touching incomeDate/expenseDate formats:
+  // year > from.year OR (year == from.year AND month >= from.month).
+  const periodMatch = {
+    schoolCampus: campusOid,
+    $or: [
+      { year: { $gt: from.year } },
+      { year: from.year, month: { $gte: from.month } },
+    ],
+  };
+
+  const [incomeRows, expenseRows] = await Promise.all([
+    financeRepo.monthlyIncomeTotals(periodMatch),
+    financeRepo.monthlyExpenseTotals(periodMatch),
+  ]);
+  const keyOf = ({ year, month }) => `${year}-${month}`;
+  const incomeBy = new Map(incomeRows.map((r) => [keyOf(r._id), r.total]));
+  const expenseBy = new Map(expenseRows.map((r) => [keyOf(r._id), r.total]));
+
+  return {
+    months: span,
+    series: window.map((period) => {
+      const income = incomeBy.get(keyOf(period)) ?? 0;
+      const expense = expenseBy.get(keyOf(period)) ?? 0;
+      return { ...period, income, expense, net: income - expense };
+    }),
+  };
+}
+
 module.exports = {
   countPendingIncomes,
   countOutstandingFees,
   getFinancialSummary,
+  getOverdueAgingAggregates,
+  getMonthlyCashflowSeries,
   createFee,
   recordPayment,
   getStudentLedger,

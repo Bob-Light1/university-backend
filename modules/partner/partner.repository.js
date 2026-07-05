@@ -319,6 +319,33 @@ const aggregateLeadSourceStats = (matchFilter) =>
     } },
   ]);
 
+/**
+ * Fraud-flag counts ($match provided — AI advisor aggregate, M5b): one row
+ * per flag value (IP_BURST | SELF_REFERRAL | DUPLICATE_LEAD | MANUAL_REVIEW).
+ */
+const aggregateLeadFraudStats = (matchFilter) =>
+  PartnerLead.aggregate([
+    { $match: { ...matchFilter, 'fraudFlags.0': { $exists: true } } },
+    { $unwind: '$fraudFlags' },
+    { $group: { _id: '$fraudFlags', count: { $sum: 1 } } },
+  ]);
+
+/**
+ * New-lead counts per ISO week ($match provided, already date-bounded — AI
+ * advisor aggregate, M5b). Rows: { _id: { isoWeekYear, isoWeek }, count }.
+ */
+const aggregateLeadWeeklyCounts = (matchFilter) =>
+  PartnerLead.aggregate([
+    { $match: matchFilter },
+    { $group: {
+      _id: {
+        isoWeekYear: { $isoWeekYear: '$createdAt' },
+        isoWeek:     { $isoWeek: '$createdAt' },
+      },
+      count: { $sum: 1 },
+    } },
+  ]);
+
 /** Number of leads (non honeypot) per partner, for a list of ids. */
 const aggregateLeadCountsByPartner = (ids) =>
   PartnerLead.aggregate([
@@ -499,6 +526,8 @@ module.exports = {
   aggregateLeadConversionStats,
   aggregateLeadStatusStats,
   aggregateLeadSourceStats,
+  aggregateLeadFraudStats,
+  aggregateLeadWeeklyCounts,
   aggregateLeadCountsByPartner,
   aggregateEnrolledCountsByPartner,
   listRecentLeadsForPartner,

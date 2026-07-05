@@ -39,9 +39,28 @@ jest.mock('../../modules/student', () => ({
   },
 }));
 
+jest.mock('../../modules/finance', () => ({
+  service: {
+    getOverdueAgingAggregates: jest.fn(async () => ({
+      totalCount: 3, totalOutstanding: 200, buckets: [],
+    })),
+    getMonthlyCashflowSeries: jest.fn(async () => ({ months: 6, series: [] })),
+  },
+}));
+
+jest.mock('../../modules/partner', () => ({
+  service: {
+    getLeadFunnelAggregates: jest.fn(async () => ({
+      totalLeads: 60, enrolledLeads: 6, conversionRate: 10,
+    })),
+  },
+}));
+
 const documentFacade = require('../../modules/document');
 const resultFacade = require('../../modules/result');
 const studentFacade = require('../../modules/student');
+const financeFacade = require('../../modules/finance');
+const partnerFacade = require('../../modules/partner');
 const { signServiceToken } = require('../../modules/ai/ai.s2s');
 const {
   authenticateService,
@@ -335,6 +354,82 @@ describe('GET /internal/ai/aggregates/:name (M5, §8)', () => {
       absentCount: 0,
       attendanceRate: null,
       avgAbsenceRatePerStudent: null,
+    });
+  });
+});
+
+describe('GET /internal/ai/aggregates/:name — advisor aggregates (M5b, §6.5/D9)', () => {
+  const managerToken = (claims = {}) => incomingToken({ role: 'CAMPUS_MANAGER', ...claims });
+
+  test('staffing-but-not-direction role (TEACHER) → 403 on an advisor aggregate, 200 on an analytics one', async () => {
+    // Stricter per-aggregate gate: TEACHER passes ANALYTICS_ROLES…
+    const okRes = mockRes();
+    await run(getAggregate, mockReq({
+      token: incomingToken({ role: 'TEACHER' }),
+      params: { name: 'attendance-summary' },
+    }), okRes);
+    expect(okRes.json.mock.calls[0][0].success).toBe(true);
+
+    // …but never ADVISOR_ROLES (D9: direction only).
+    const koRes = mockRes();
+    await run(getAggregate, mockReq({
+      token: incomingToken({ role: 'TEACHER' }),
+      params: { name: 'finance-overdue-aging' },
+    }), koRes);
+    expect(koRes.status).toHaveBeenCalledWith(403);
+    expect(financeFacade.service.getOverdueAgingAggregates).not.toHaveBeenCalled();
+  });
+
+  test('finance-overdue-aging: campus from the token, figures verbatim', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'finance-overdue-aging' },
+    }), res);
+    expect(financeFacade.service.getOverdueAgingAggregates).toHaveBeenCalledWith({
+      campusId: CAMPUS_A,
+    });
+    const { data } = sentPayload(res);
+    expect(data.figures).toEqual({ totalCount: 3, totalOutstanding: 200, buckets: [] });
+  });
+
+  test('finance-cashflow-monthly: months whitelist — valid forwarded, invalid → 400', async () => {
+    const okRes = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'finance-cashflow-monthly' },
+      query: { months: '6' },
+    }), okRes);
+    expect(financeFacade.service.getMonthlyCashflowSeries).toHaveBeenCalledWith({
+      campusId: CAMPUS_A, months: '6',
+    });
+
+    for (const bad of ['2', '25', 'abc']) {
+      const koRes = mockRes();
+      await run(getAggregate, mockReq({
+        token: managerToken(),
+        params: { name: 'finance-cashflow-monthly' },
+        query: { months: bad },
+      }), koRes);
+      expect(koRes.status).toHaveBeenCalledWith(400);
+    }
+    expect(financeFacade.service.getMonthlyCashflowSeries).toHaveBeenCalledTimes(1);
+  });
+
+  test('lead-funnel: no params accepted — any key (even a scope) → 400', async () => {
+    const res = mockRes();
+    await run(getAggregate, mockReq({
+      token: managerToken(),
+      params: { name: 'lead-funnel' },
+      query: { campusId: CAMPUS_B },
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(partnerFacade.service.getLeadFunnelAggregates).not.toHaveBeenCalled();
+
+    const okRes = mockRes();
+    await run(getAggregate, mockReq({ token: managerToken(), params: { name: 'lead-funnel' } }), okRes);
+    expect(partnerFacade.service.getLeadFunnelAggregates).toHaveBeenCalledWith({
+      campusId: CAMPUS_A,
     });
   });
 });
