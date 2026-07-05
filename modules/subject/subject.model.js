@@ -156,18 +156,11 @@ subjectSchema.index({ schoolCampus: 1, status: 1 });
 subjectSchema.index({ subject_name: 1 });
 
 // ========================================
-// PRE-SAVE MIDDLEWARE
+// NORMALIZATION
 // ========================================
-
-// Normalize subject_code to uppercase
-subjectSchema.pre('save', function() {
-  if (this.subject_code) {
-    this.subject_code = this.subject_code.toUpperCase().trim();
-  }
-  if (this.subject_name) {
-    this.subject_name = this.subject_name.trim();
-  }
-});
+// subject_code (uppercase + trim) and subject_name (trim) are normalized by the
+// schema field setters (`uppercase: true` / `trim: true`), which run on every
+// assignment. A dedicated pre('save') hook would be redundant, so none is defined.
 
 // ========================================
 // VIRTUAL FIELDS

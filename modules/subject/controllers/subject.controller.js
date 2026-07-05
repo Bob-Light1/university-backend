@@ -12,6 +12,32 @@ const {
   isValidObjectId,
   buildCampusFilter,
 } = require('../../../shared/utils/validation-helpers');
+const departmentService = require('../../department').service; // department module facade (§3)
+
+/**
+ * Validate that a department reference exists and belongs to the given campus.
+ * Mirrors the teacher module's cross-document department check.
+ *
+ * @param {string} departmentId - Candidate department ObjectId
+ * @param {string} campusId     - Campus the subject belongs to (schoolCampus)
+ * @returns {Promise<{ valid: boolean, error?: string }>}
+ */
+const validateDepartmentInCampus = async (departmentId, campusId) => {
+  if (!isValidObjectId(departmentId)) {
+    return { valid: false, error: 'Invalid department ID format' };
+  }
+  const department = await departmentService.getDepartmentCampusRef(departmentId);
+  if (!department) {
+    return { valid: false, error: 'Selected department does not exist' };
+  }
+  if (department.schoolCampus.toString() !== String(campusId)) {
+    return {
+      valid: false,
+      error: `The selected department "${department.name}" does not belong to this campus`,
+    };
+  }
+  return { valid: true };
+};
 
 /**
  * @desc    Create a new subject
@@ -27,7 +53,8 @@ exports.createSubject = async (req, res) => {
       description,
       coefficient,
       color,
-      category
+      category,
+      department
     } = req.body;
 
     // Validate required fields
@@ -47,6 +74,14 @@ exports.createSubject = async (req, res) => {
       }
     }
 
+    // Optional department — must belong to the same campus when provided
+    if (department) {
+      const deptCheck = await validateDepartmentInCampus(department, schoolCampus);
+      if (!deptCheck.valid) {
+        return sendError(res, 400, deptCheck.error);
+      }
+    }
+
     // Check for duplicate subject code in the same campus
     const existingSubject = await subjectRepo.findDuplicateCode(
       schoolCampus,
@@ -63,9 +98,10 @@ exports.createSubject = async (req, res) => {
       subject_name: subject_name.trim(),
       subject_code: subject_code.toUpperCase().trim(),
       description,
-      coefficient: coefficient || 1,
+      coefficient: coefficient ?? 1,
       color: color || '#1976d2',
-      category: category || 'Other'
+      category: category || 'Other',
+      ...(department ? { department } : {})
     });
 
     // Populate for response
@@ -148,7 +184,7 @@ exports.getSubjects = async (req, res) => {
 /**
  * @desc    Get subject by ID
  * @route   GET /api/subject/:id
- * @access  ADMIN, DIRECTOR,
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER, TEACHER
  */
 exports.getSubjectById = async (req, res) => {
   try {
@@ -166,9 +202,11 @@ exports.getSubjectById = async (req, res) => {
       return sendNotFound(res, 'Subject');
     }
 
-    // Campus isolation check
-    if (req.user.role === 'CAMPUS_MANAGER') {
-      if (subject.schoolCampus._id.toString() !== req.user.campusId) {
+    // Campus isolation check — enforced for every non-global role (CAMPUS_MANAGER,
+    // TEACHER, …). Only ADMIN / DIRECTOR may read subjects across campuses.
+    const isGlobalRole = ['ADMIN', 'DIRECTOR'].includes(req.user.role);
+    if (!isGlobalRole) {
+      if (subject.schoolCampus._id.toString() !== String(req.user.campusId)) {
         return sendError(res, 403, 'You can only access subjects from your own campus');
       }
     }
@@ -215,7 +253,8 @@ exports.updateSubject = async (req, res) => {
       description,
       coefficient,
       color,
-      category
+      category,
+      department
     } = req.body;
 
     // Check for duplicate subject code (if being changed)
@@ -231,6 +270,23 @@ exports.updateSubject = async (req, res) => {
       }
     }
 
+    // Optional department — validated against the subject's own campus. An empty
+    // value (null / '') clears the assignment; a non-empty value must belong to
+    // the subject's campus.
+    if (department !== undefined) {
+      if (department === null || department === '') {
+        // handled below when building the fields set (cleared to null)
+      } else {
+        const deptCheck = await validateDepartmentInCampus(
+          department,
+          existingSubject.schoolCampus,
+        );
+        if (!deptCheck.valid) {
+          return sendError(res, 400, deptCheck.error);
+        }
+      }
+    }
+
     // Build the set of fields actually provided (partial update semantics).
     const fields = {};
     if (subject_name) fields.subject_name = subject_name.trim();
@@ -239,6 +295,9 @@ exports.updateSubject = async (req, res) => {
     if (coefficient !== undefined) fields.coefficient = coefficient;
     if (color) fields.color = color;
     if (category) fields.category = category;
+    if (department !== undefined) {
+      fields.department = (department === null || department === '') ? null : department;
+    }
 
     // Save
     const updatedSubject = await subjectRepo.updateById(subjectId, fields);

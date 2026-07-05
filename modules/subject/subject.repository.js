@@ -8,7 +8,7 @@
  * preparation — see POSTGRES_MIGRATION_ASSESSMENT.md §7.
  *
  * Reads → plain objects (`.lean()`); writes → load→mutate→save (preserves
- * the pre('save') hook and the schema setters).
+ * the schema setters and validators).
  */
 
 const Subject = require('./subject.model');
@@ -27,9 +27,12 @@ const findDuplicateCodeExcept = (campusId, code, exceptId) =>
 /** Raw reference (preconditions: schoolCampus, status, courseRef…). */
 const findByIdLean = (id) => Subject.findById(id).lean();
 
-/** Standard response: campus_name populated. */
+/** Standard response: campus_name + department name populated. */
 const findByIdForResponse = (id) =>
-  Subject.findById(id).populate('schoolCampus', 'campus_name').lean();
+  Subject.findById(id)
+    .populate('schoolCampus', 'campus_name')
+    .populate('department', 'name')
+    .lean();
 
 /** Single-item view: campus_name + location populated. */
 const findByIdDetailed = (id) =>
@@ -60,7 +63,9 @@ const paginate = async ({ baseFilter, includeArchived, status, category, search,
 
   const [data, total] = await Promise.all([
     Subject.find(filter).sort({ subject_name: 1 }).skip(skip).limit(limit)
-      .populate('schoolCampus', 'campus_name').lean(),
+      .populate('schoolCampus', 'campus_name')
+      .populate('department', 'name')
+      .lean(),
     Subject.countDocuments(filter),
   ]);
   return { data, total };
@@ -111,7 +116,7 @@ const listForCampus = ({ campusId, status }) => {
   return Subject.find(filter)
     .populate('department', 'name')
     .populate('teachers',   'firstName lastName')
-    .sort({ name: 1 })
+    .sort({ subject_name: 1 })
     .lean();
 };
 
