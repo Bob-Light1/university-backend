@@ -10,18 +10,22 @@
 > les LLM et le RAG, mais **pas** ce backend. Ce document est sa source de vérité.
 > Il doit le lire **en entier** avant d'écrire une ligne.
 >
-> **Statut** : conception approuvée ; **M0 à M5b réalisés (M0–M3 le 2026-07-03,
-> M4, M5 et M5b le 2026-07-04)** — décisions D1–D12 tranchées (§15), squelette
-> `ai-service/` livré (dépôt frère : FastAPI, Postgres+pgvector, S2S, Docker,
-> CI), **module Node `ai` livré** (passerelle inerte + entitlement Campus
-> §11.3), **ingestion + recherche hybride livrées** (Feature 3), **chat RAG
-> SSE livré** (Feature 1), **analytics assisté livré** (Feature 2 — chiffres
+> **Statut** : conception approuvée ; **M0 à M6 réalisés (M0–M3 le 2026-07-03,
+> M4, M5 et M5b le 2026-07-04, M6 le 2026-07-05)** — décisions D1–D12 tranchées
+> (§15), squelette `ai-service/` livré (dépôt frère : FastAPI, Postgres+pgvector,
+> S2S, Docker, CI), **module Node `ai` livré** (passerelle inerte + entitlement
+> Campus §11.3), **ingestion + recherche hybride livrées** (Feature 3), **chat
+> RAG SSE livré** (Feature 1), **analytics assisté livré** (Feature 2 — chiffres
 > ERP narrés, jamais calculés par le LLM), **moteur quantitatif + advisors
-> livrés** (§6.5/§6.6 — heuristiques D8 versionnées, mode proposition strict)
-> — **tests de sécurité §4.6 verts** (recherche, chat, analytics ET advisors).
-> Prochain jalon : **M6 — durcissement échelle** (§13). L'état d'avancement
-> est tenu au §18 (journal de reprise) — **le lire en premier si vous
-> reprenez le chantier**.
+> livrés** (§6.5/§6.6 — heuristiques D8 versionnées, mode proposition strict),
+> **durcissement échelle livré** (M6 — cache Redis-optionnel, observabilité
+> Prometheus + request-id, budget consolidé + alerting, purge de rétention,
+> eval RAG étendue, harnais de charge) — **tests de sécurité §4.6 verts**
+> (recherche, chat, analytics ET advisors). **Tous les jalons M0→M6 sont
+> réalisés** ; il ne reste que des décisions porteur (D4 hébergement, D10 prix)
+> et deux préalables opérationnels (bench D2 hors-ligne, première surface UI).
+> L'état d'avancement est tenu au §18 (journal de reprise) — **le lire en
+> premier si vous reprenez le chantier**.
 >
 > **Révisions** : v1 (2026-06-18) socle d'architecture. **v2 (2026-06-18)** ajoute
 > les **surfaces frontend & la valeur par persona** (§1.4), le **moteur
@@ -83,7 +87,18 @@
 > **mode proposition strict** — structure, chiffres et actions décidés par
 > l'engine, le LLM ne fait que la prose et retombe sur un texte déterministe
 > si sa sortie JSON est invalide ; frontend : `runAiAdvisor`). Boot réel
-> vérifié de bout en bout. Détail au §18.1.
+> vérifié de bout en bout. Détail au §18.1. **v4.9 (2026-07-05)** clôt le
+> **jalon M6 — durcissement échelle** : cache derrière l'abstraction `Cache`
+> (Redis si `REDIS_URL`, sinon cache mémoire borné — **cost-only : jamais une
+> décision d'autorisation**, seul l'embedding de requête est mis en cache) ;
+> **observabilité** (`/metrics` Prometheus — latence, statut, tokens, **coût USD
+> via table de prix §10bis surchargée par env**, cache, refus budget — +
+> middleware ASGI de request-id propagé Node ↔ service ↔ Node) ; **budget
+> consolidé** (`enforce_budget` unique pour chat/analytics/advisors, alerte WARN
+> à 80 %, métrique de refus) ; **purge de rétention** D7 (tâche périodique) ;
+> **eval RAG étendue** (gold set 5→7) ; **harnais de charge** livré
+> (`scripts/loadtest.py`). Bench D2 toujours non exécuté (réseau du bac à sable ;
+> à lancer hors-ligne avant tout index de prod). Détail au §18.1.
 
 ---
 
@@ -1194,16 +1209,18 @@ Chaque jalon est **livrable, testé, et ne casse rien**. « Continue » = jalon 
 | **M5b — Moteur quantitatif + advisors** | `engine/` (forecasting/scoring/anomaly) + advisors Marketing/Finance/Académique, **human-in-the-loop**. | Sorties engine reproductibles & testées ; advisors **proposent** (zéro écriture ERP) ; accès scopé rôle+campus. |
 | **M6 — Durcissement échelle** | Cache/Redis, rate-limit coût, observabilité, eval continue, charge. | Budgets respectés ; métriques tokens/coût ; tests de charge. |
 
-> **État** : **M0 ✅, M1 ✅, M2 ✅, M3 ✅ (2026-07-03), M4 ✅, M5 ✅ et M5b ✅
-> (2026-07-04)** — décisions au §15, squelette `ai-service/` livré, module
-> Node `ai` + entitlement Campus livrés, ingestion + recherche hybride
-> livrées, **chat RAG SSE + conversations + client API frontend livrés**,
-> **analytics assisté livré** (agrégats ERP narrés, snapshots re-autorisés),
-> **moteur quantitatif + advisors livrés** (heuristiques D8 versionnées,
-> mode proposition strict, human-in-the-loop), tests de sécurité §4.6 verts
-> (recherche, chat, analytics ET advisors, journal §18.1). Prochain jalon :
-> **M6** (durcissement échelle). Le suivi détaillé (qui a fait quoi, comment
-> reprendre) est au **§18**.
+> **État** : **M0 ✅, M1 ✅, M2 ✅, M3 ✅ (2026-07-03), M4 ✅, M5 ✅, M5b ✅
+> (2026-07-04) et M6 ✅ (2026-07-05)** — décisions au §15, squelette
+> `ai-service/` livré, module Node `ai` + entitlement Campus livrés, ingestion +
+> recherche hybride livrées, **chat RAG SSE + conversations + client API frontend
+> livrés**, **analytics assisté livré** (agrégats ERP narrés, snapshots
+> re-autorisés), **moteur quantitatif + advisors livrés** (heuristiques D8
+> versionnées, mode proposition strict, human-in-the-loop), **durcissement
+> échelle livré** (cache Redis-optionnel cost-only, observabilité Prometheus +
+> request-id, budget consolidé + alerting, purge de rétention, eval RAG étendue,
+> harnais de charge), tests de sécurité §4.6 verts (recherche, chat, analytics
+> ET advisors, journal §18.1). **Tous les jalons sont réalisés.** Le suivi
+> détaillé (qui a fait quoi, comment reprendre) est au **§18**.
 
 ---
 
@@ -1395,41 +1412,54 @@ Deux précautions subsistent :
 | 2026-07-04 | **M4 — Chat RAG (Feature 1)** | ✅ | **ai-service** : `POST /chat` SSE réel conforme Annexe B (`message_start/delta/citations/done/error`, commentaire `:keep-alive` 15 s §6.1) — orchestration en deux phases (`services/chat.py` : `prepare_turn` = tout ce qui peut échouer AVANT le premier octet → erreurs HTTP propres 404/429/503 ; `stream_turn` = séquence SSE, échec amont → événement `error` localisé 10 langues) ; **retrieval re-autorisé AVANT l'appel LLM** (`services/rag.py` : hybride M3 → `authorize-citations` batch → seules les sources autorisées entrent dans le prompt ET les citations — plus fort que filtrer après ; ERP injoignable = **fail-closed** 503) ; garde-fous §4.1.6 (`prompts/chat.py` : préfixe système STABLE cache-friendly §10bis, contexte non fiable délimité en fin de prompt, délimiteurs embarqués strippés, `sanitize_output` sur la réponse persistée) ; langue de réponse via claim S2S `language` ; **re-check budget étage 2** via claim `monthlyTokenBudget` (429 avant l'appel LLM, 0 = illimité) ; historique borné (`CHAT_HISTORY_MAX_MESSAGES=10`) ; persistance `conversations`/`messages` derrière l'abstraction `ConversationStore` (scoping (campus,user) par signature, autre user → 404 sans oracle d'existence) ; `GET /conversations` + `/conversations/:id` réels ; comptabilité tokens dans `usage_monthly` (exacte si l'amont la fournit — Anthropic/OpenAI-compatible —, estimée ~4 chars/token sinon ; providers request-scoped). **Node** : claims S2S `language` (via `settings.getPreferredLanguage`, fallback 'en') + `monthlyTokenBudget` ajoutés au contrat §4.2 **des deux côtés** ; `listConversations` re-enveloppé `sendPaginated` (conformité Annexe B). **Frontend** : premier client API `src/services/aiService.js` (règle Annexe B) — axios pour search/conversations/usage, `streamAiChat` en fetch+ReadableStream (parseur SSE, handlers par événement, `abort()`). **Tests** : service 68 unit verts (dont 22 chat/conversations : séquence SSE, persistance+usage, budget, ownership, **§4.6 re-autorisation chat** — source refusée absente du prompt ET des citations, fail-closed ERP down, falsification de scope body — et **§4.6 injection** — zone unique, délimiteurs strippés, système immuable, sortie assainie) + intégration pgvector 9 verts dont **eval RAG de base** (`tests/integration/test_rag_eval.py` : jeu doré 5 Q→source, plancher recall@3 ≥ 0,8, scoping campus du harnais) ; ruff+mypy 0 erreur ; **boot réel vérifié** (readyz, 2 tours SSE complets avec historique, compteurs 242/8 tokens, déconnexion client = tour non persisté) ; Node 608 verts, lint 0 erreur. Écarts : (a) contrat S2S étendu de 2 claims (`language`, `monthlyTokenBudget`) — précision nécessaire au §11.3 étage 2 et à la langue §7, consignée dans les deux `security` ; (b) réponse partielle non persistée sur déconnexion client (v1 documenté) ; (c) tools/function-calls du chat (§7 « option avancée ») non faits — optionnels, reportés ; (d) programmes/FAQ public-portal (2ᵉ incrément D6) toujours reportés M5+. |
 | 2026-07-04 | **M5 — Analytics assisté (Feature 2)** | ✅ | **Node** : stub 501 `GET /internal/ai/aggregates/:name` remplacé — registre `modules/ai/ai.aggregates.js` (3 agrégats = 3 rapports Annexe B, noms partagés `shared/constants/ai.constants.js` `AI_ANALYTICS_REPORTS` : `class-performance`, `attendance-summary`, `dropout-risk`) ; figures via les **façades service existantes uniquement** (result : `getCampusOverviewAggregates` — même pipeline que l'overview campus, une seule source de chiffres — et `getDropoutRiskDistribution` — nouvelle agrégation pire-score-par-étudiant-distinct, buckets <30/30-59/≥60 alignés sur le seuil `atRisk` ; student : `summarizeAttendanceTotals` + `getAvgAbsenceRateForCampus`) ; **SANS PII par construction** (compteurs/taux/distributions, jamais un nom ni un id étudiant — D7/§4.3) ; gate de rôle miroir de la route publique (`ANALYTICS_ROLES`, défense en profondeur — le sujet S2S est l'utilisateur final) ; **params validés DEUX fois avec une seule implémentation** (`validateAggregateParams` : passerelle sur le body, API interne sur la query ; clés inconnues rejetées — un scope glissé en param → 400, jamais ignoré) ; enums/formats dans le module propriétaire (`result.isValidSemester`/`isValidAcademicYear`) ; passerelle `POST /api/ai/analytics/:report` : 404 rapport inconnu, claim `language` (locale préférée, comme le chat). **ai-service** : `ERPClient.get_aggregate` réel ; `services/analytics.py` — **agrégat ERP récupéré À CHAQUE appel AVANT le cache** (même discipline que les citations chat §4.5 : Node re-applique rôle+campus à chaque requête, un snapshot ne répond jamais à une requête que Node refuserait ; ERP injoignable = **fail-closed 503**) ; snapshot (`analytics_snapshots`, `SqlSnapshotStore`, clé campus+report+params JSONB+langue, TTL `ANALYTICS_SNAPSHOT_TTL_SECONDS` défaut 3600 s) réutilisé **seulement si les figures fraîches sont identiques** — le cache n'économise QUE l'appel LLM, jamais l'autorisation ni la fraîcheur des chiffres ; re-check budget étage 2 (429) ; narration `provider.chat` bornée (`ANALYTICS_MAX_OUTPUT_TOKENS` 512), préfixe système stable par langue §10bis (`prompts/analytics.py` : « chaque nombre vient verbatim des figures » — ADR-4), figures en **zone non fiable** + `sanitize_output` ; comptabilité `usage_monthly` ; route réelle `/analytics/:report` (404/422/429/503), stub retiré. **Frontend** : `runAiAnalytics(report, params)` ajouté à `aiService.js` (règle Annexe B — aucune UI ne le consomme encore). **Tests** : Node **631 verts** (+23 : `result.service.test.js` — filtres castés, mise en forme plate, zéros explicites, figures verbatim ; pipeline dropout en non-régression ; `ai.internal.test.js` aggregates — 404, 403 rôle, falsification de scope query, validation params, figures dérivées présence), lint 0 erreur ; service **79 unit verts** (+15 analytics : figures ERP **verbatim**, falsification scope via params, fail-closed, budget, cache LLM-only + **invalidation quand les figures bougent**, clé de cache params+langue, zone non fiable + sortie assainie) + **intégration pgvector 13 verts** (+4 `SqlSnapshotStore` : égalité JSONB indépendante de l'ordre des clés, jamais servi à un autre campus/langue, fenêtre TTL + TTL 0, dernier snapshot) ; ruff+mypy 0 erreur. **Boot réel vérifié** (Node+Atlas+service+Postgres, profil mock) — il a attrapé **2 bugs invisibles aux mocks**, corrigés puis re-testés : (1) **cast ObjectId manquant** dans les façades result (les pipelines d'agrégation ne castent pas → figures vides sur un campus AVEC données) ; (2) **le cache snapshot servait un rôle refusé par Node** (STUDENT servi par le snapshot d'un CAMPUS_MANAGER) → réordonnancement ERP-avant-cache ci-dessus. Rejeu final : figures réelles (4 publiés, moyenne 10,81, passingRate 50 ; présence 31 sessions/80,6 %), STUDENT → 503, rejeu = même `snapshotId` et `requestCount` inchangé. Écarts : (a) frontière M5/M5b respectée — rapports v1 = 3 synthèses descriptives, prévision/scoring = engine M5b ; (b) bench D2 toujours **non exécuté** (avant tout index de prod) ; (c) programmes/FAQ public-portal (2ᵉ incrément D6) toujours reportés. |
 | 2026-07-04 | **M5b — Moteur quantitatif + advisors** | ✅ | **Node** : registre `ai.aggregates.js` étendu de 3 agrégats advisors **sans PII par construction** (constantes partagées `AI_ADVISOR_AGGREGATES` + `AI_ADVISORS` dans `shared/constants/ai.constants.js`) via les **façades des modules propriétaires uniquement** : finance — `getOverdueAgingAggregates` (nouveau pipeline `$bucket` sur jours de retard : bandes 1-30/31-60/61-90/90+ zéro-remplies, count/outstanding/avgReminderCount — jamais un id étudiant) et `getMonthlyCashflowSeries` (séries mensuelles income/expense/net **continues et zéro-remplies** sur le couple dénormalisé (year, month), months borné [3,24]) ; partner — `getLeadFunnelAggregates` (réutilise les stats leads existantes + 2 nouveaux pipelines fraude/`$isoWeek`, série hebdo 8 semaines zéro-remplie, honeypot exclu partout). **Gate de rôle PAR agrégat** (`aggregateRoles(name)` : analytics = staffing, advisors = `ADVISOR_ROLES` D9 — un TEACHER lit `attendance-summary` mais jamais `finance-overdue-aging`) ; passerelle `/api/ai/advisors/:advisor` durcie : 404 advisor inconnu, **whitelist de params par advisor** (même implémentation `validateParams` que les agrégats — finance:{months}, academic:{academicYear,semester}, marketing:{}), claim `language`, route `authorize` sur `ADVISOR_ROLES`. **ai-service** : `engine/` D8 (**`ENGINE_VERSION heuristics-1.0.0`**, pur, sans I/O ni LLM) — `overdue_priority` (part du montant × poids d'ancienneté × historique payeur saturé à 5 rappels, rang déterministe), `dropout_risk_summary` (parts/riskIndex/alertLevel sur la distribution ERP), `zscore_latest` (baseline = série sauf dernier point, règle stdev 0, seuil |z|≥2) ; `advisors/` finance→academic→marketing (ordre D9) composant agrégats **re-lus à CHAQUE appel via Node** (fail-closed 503, même discipline §4.5) + engine + LLM ; **le LLM ne décide RIEN de structurel** : nombre/ordre des propositions, evidence, `suggestedAction` et chiffres viennent de l'engine ; il localise titres et rédige les rationales via une sortie **JSON strict validée** (`_parse_narration` : cardinalité exacte, chaînes non vides, sanitize) et **toute déviation retombe sur la prose déterministe** (figures verbatim — le profil mock exerce ce chemin en CI) ; 0 proposition ⇒ réponse sans appel LLM (0 token) ; miroir de rôle D9 côté service (403) ; re-check budget étage 2 (429) ; comptabilité `usage_monthly` ; route réelle `POST /advisors/:advisor` (404/403/422/429/503), **dernier stub 501 supprimé** (`api/stubs.py` retiré). **Frontend** : `runAiAdvisor(advisor, params)` dans `aiService.js` (règle Annexe B — aucune UI ne le consomme encore). **Tests** : Node **646 verts** (+15 : `finance.service.test.js` — cast ObjectId, bandes zéro-remplies, série continue traversant le passage d'année, bornage months ; `partner.service.test.js` nouveau — scope campus+honeypot sur chaque pipeline, série ISO-8601 continue, zéros explicites ; `ai.internal.test.js` — gate par agrégat TEACHER 200/403, whitelist months, scope en query → 400), lint 0 erreur ; service **102 unit verts** (+23 : `test_engine.py` — **scores épinglés bit à bit**, tout changement d'heuristique force un bump de version ; `test_advisors_api.py` — 401/422/404/403 miroir, fallback déterministe, le LLM ne peut pas changer la cardinalité, falsification de scope via params, fail-closed ERP, budget 429, 0-signal sans LLM, sanitize des délimiteurs, passthrough des filtres academic vers l'écran ERP, marketing backlog/fraude/anomalie) ; ruff+mypy 0 erreur. **Vérifié en réel** : pipelines `$bucket`/`$isoWeek` exécutés sur Atlas (funnel = 1 lead réel matché — preuve du cast ObjectId ; aging sur 2 dettes temporaires marquées puis supprimées, bandes 1-30/90+ correctes) ; boot complet service+Node : `/advisors/finance` → `proposals: []` légitime (campus sans impayés, 0 appel LLM), `/advisors/marketing` → proposition réelle sur le lead réel (fallback mock), STUDENT → 403, advisor inconnu → 404, TEACHER sur agrégat advisor via `/internal/ai` → 403, `usage_monthly` incrémenté. Écarts : (a) §6.5 mentionnait statsmodels/Prophet — v1 = heuristiques déterministes pures **conformément à D8** (pas de dépendance ML ajoutée ; modèles appris = phase ultérieure) ; (b) pas de forecasting dédié en v1 (D8 liste 3 calculs — la « prévision de trésorerie » §6.6 est servie par la série cashflow + anomalie ; réévaluer en M6+) ; (c) bench D2 toujours **non exécuté** (avant tout index de prod) ; (d) programmes/FAQ public-portal (D6, 2ᵉ incrément) toujours reportés. |
-| — | M6 | ⬜ à faire | — |
+| 2026-07-05 | **M6 — Durcissement échelle** | ✅ | **ai-service** : (1) **Cache** derrière l'abstraction `core/cache.py` (`Cache` → `RedisCache` si `REDIS_URL` + extra `[redis]`, sinon `InMemoryTTLCache` borné FIFO, `NullCache` pour TTL 0) — **cost-only par construction** : seul l'embedding de la requête est mis en cache (`embed_query_cached`, clé `emb:sha256(model‖texte)` — model-scopé §6.4), **jamais** une décision d'autorisation ; l'ingestion ne passe pas par le cache (chunks uniques) ; câblé dans `/search` et le retrieval chat (`services/rag.py`) — la re-autorisation §4.5 reste exécutée à chaque appel ; toute panne Redis dégrade en *miss* (jamais en erreur). (2) **Observabilité** (`core/observability.py`) : `/metrics` Prometheus (`ai_requests_total`, `ai_request_duration_seconds`, `ai_llm_tokens_total`, **`ai_llm_cost_usd_total`** via table de prix §10bis surchargeable par `LLM_PRICES_JSON` sans release, `ai_cache_events_total`, `ai_budget_denials_total`) ; **middleware ASGI pur** (streams SSE intacts) qui chronomètre chaque requête, compte les statuts et **propage le request-id** (`X-Request-Id` entrant honoré/minté, re-émis en réponse ET reporté sur les appels `/internal/ai` sortants → corrélation Node ↔ service ↔ Node) ; les providers LLM alimentent tokens+coût+latence via `_record_usage`. (3) **Budget consolidé** : `enforce_budget` unique (`services/usage.py`) remplace les 3 gardes dupliquées de chat/analytics/advisors — refus 429 + `ai_budget_denials_total`, **alerte WARN à 80 %** (`BUDGET_ALERT_RATIO`) comme signal d'alerting log-based ; `BudgetExceededError` déplacée dans `usage.py` (ré-exportée). (4) **Purge de rétention** D7 (`services/retention.py` + tâche périodique dans le lifespan, `RETENTION_SWEEP_INTERVAL_SECONDS`) — supprime les conversations dont la dernière activité dépasse `CONVERSATION_RETENTION_DAYS` (messages en `ON DELETE CASCADE`) ; jamais fatale (une passe qui échoue est loggée). (5) **Eval RAG étendue** (gold set 5→7). (6) **Harnais de charge** `scripts/loadtest.py` (SLO §10bis, sortie non-zéro sur breach). **Node** : `ai.service.js` génère/propague `X-Request-Id` (`crypto.randomUUID` par défaut) sur chaque appel au service. **Compose/env/deps** : service Redis opt-in (`--profile cache`) ; `.env.example` + `docker-compose.yml` documentent cache/budget/observabilité ; `prometheus-client` en base, `redis` en extra. **Tests** : service **137 verts** (+35 : `test_cache.py` — TTL/éviction/NullCache, hit/miss, bypass TTL 0, clé model-scopée ; `test_observability.py` — coût connu/inconnu, override env, fallback JSON invalide, request-id minté/honoré, `/metrics` servi, en-tête écho ; `test_budget.py` — unlimited, sous-seuil, alerte 80 %, refus + métrique ; intégration `test_retention.py` — cascade réelle + cutoff + no-op TTL 0), ruff+mypy 0 erreur ; **Node 538 verts** (module ai) + lint 0 erreur. **Vérifié en réel** : boot service (readyz `ready`, database `ok`, migrations Alembic appliquées sur le Postgres compose) ; **charge `/search` mesurée** (in-process ASGI, chemin réel embed(mock)→pgvector→upsert usage, Postgres compose) — **c=1 p95=89 ms, c=5 p95=418 ms (sous le SLO 500 ms)** ; **à c=20 sur un même campus p95≈2,3 s** → dégradation identifiée : l'UPSERT `usage_monthly` réécrit **une seule ligne (campus, période)** à chaque requête ⇒ **contention de verrou** amplifiée par la charge mono-campus + boucle d'événements unique du harnais (le trafic multi-campus réel dilue ; à confirmer sur cible déployée). Écarts : (a) **bench D2 toujours non exécuté** — l'installation de `sentence-transformers`/torch (~2 Go) échoue faute de réseau dans le bac à sable ; reste un livrable à lancer **hors-ligne avant tout index de prod** (§18.2) ; (b) **SLO chat (TTFT/réponse complète) non mesurés** — exigent un profil LLM réel (clé) + ERP complet, hors de portée du bac à sable ; à exécuter sur la cible après décision D4 ; (c) **contention `usage_monthly` sur campus chaud** à revoir en M6+ (compteur d'adoption déféré/shardé pour `/search`) ; (d) reports historiques inchangés : 2ᵉ incrément D6 (programmes/FAQ), tools/function-calls chat (§7), première surface UI consommant `aiService.js`. |
 
-**État des artefacts au 2026-07-04 (fin M5b)** : dépôt frère `ai-service/`
-complet jusqu'à M5b (non commité, plus aucun stub 501) ; backend Node : module
-`modules/ai/` complet jusqu'à M5b + façades agrégats advisors dans
-finance/partner (non commité) ; frontend : client API `aiService.js` complet
-(`runAiAdvisor` inclus), **aucune UI ne le consomme encore**. Si vous trouvez
-du code Phase 3 non mentionné ici, le journal n'a pas été tenu : reconstituez
-l'état réel et mettez-le à jour **avant** de continuer.
+**État des artefacts au 2026-07-05 (fin M6 — tous jalons réalisés)** : dépôt
+frère `ai-service/` complet (non commité, plus aucun stub 501) — M6 ajoute
+`core/cache.py`, `services/retention.py`, `scripts/loadtest.py`, réécrit
+`core/observability.py` (métriques + request-id) et consolide le budget dans
+`services/usage.py` ; backend Node : module `modules/ai/` complet + façades
+agrégats advisors dans finance/partner (non commité) — M6 ajoute la propagation
+`X-Request-Id` dans `ai.service.js` ; frontend : client API `aiService.js`
+complet (`runAiAdvisor` inclus), **aucune UI ne le consomme encore**. Si vous
+trouvez du code Phase 3 non mentionné ici, le journal n'a pas été tenu :
+reconstituez l'état réel et mettez-le à jour **avant** de continuer.
 
-### 18.2 Pour reprendre (prochain pas = M6 — durcissement échelle)
+### 18.2 Pour reprendre (tous les jalons M0→M6 sont réalisés)
 
-1. **Lire dans l'ordre** : §13 (critères M6 : cache/Redis, rate-limit coût,
-   observabilité, eval continue, tests de charge), §10bis (chiffrage
-   capacité/coût — les métriques M6 doivent le confronter au réel), §6.4bis
-   (profils LLM — la bascule payante reste config-only), D4/§18.3
-   (hébergement de production + résidence UE : **décision porteur requise
-   avant M6**).
-2. **Préalables et contraintes** : **exécuter le bench D2 avant tout index
-   de production** (`ai-service/scripts/bench_embeddings.py`, extra
-   `[embeddings]` requis — livrable, pas option) ; budgets §11.3 respectés
-   (étage 1 Node + étage 2 service déjà en place — M6 ajoute métriques
-   tokens/coût et alerting) ; les invariants §4.6 restent bloquants en CI.
-3. **Reports connus à réévaluer en M6** : 2ᵉ incrément d'ingestion D6
-   (programmes/FAQ public-portal) ; tools/function-calls du chat (§7, option
-   avancée) ; première surface UI consommant `aiService.js` (règle Annexe B —
-   à synchroniser avec le premier écran qui affiche chat/analytics/advisors).
-4. **À la fin du jalon** : ajouter la ligne au §18.1, consigner les écarts
-   éventuels aux décisions (avec justification), incrémenter la note de
-   révision d'en-tête.
+Il ne reste **aucun jalon** ouvert. Les travaux restants sont des **décisions
+porteur** et des **préalables opérationnels** (§18.3), plus des reports connus
+à planifier quand le produit les demandera :
 
-### 18.3 En attente du porteur (ne bloque aucun jalon)
+1. **Préalable bloquant avant le premier index de production** : **exécuter le
+   bench D2** (`ai-service/scripts/bench_embeddings.py`, extra `[embeddings]`).
+   Il n'a **jamais** pu tourner dans les environnements de développement
+   (téléchargement torch ~2 Go bloqué par le réseau) — à lancer **hors-ligne**
+   sur une machine avec accès PyPI/HuggingFace. Tant qu'il n'a pas tranché
+   `bge-m3` (1024d) vs `e5-base` (768d), la colonne `vector(1024)` reste
+   provisoire (D2) : la changer avant qu'un index existe est gratuit, après
+   c'est une réindexation planifiée.
+2. **Vérifications de charge à refaire sur cible déployée** (après D4) : les SLO
+   §10bis **chat** (TTFT, réponse complète) exigent un profil LLM réel + ERP
+   complet — non mesurables en bac à sable. Le harnais `scripts/loadtest.py` est
+   prêt (`--scenario chat`). Rejouer aussi `/search` sous uvicorn multi-workers
+   (embeddings réels en threadpool) pour lever l'artefact de contention
+   `usage_monthly` observé en mono-campus/in-process (cf. §18.1 M6).
+3. **Optimisation identifiée en M6** : l'UPSERT du compteur d'adoption
+   `usage_monthly` sur `/search` réécrit une seule ligne par (campus, période)
+   → contention sur campus chaud. À déférer/sharder si les mesures cible le
+   confirment.
+4. **Reports produit** : 2ᵉ incrément d'ingestion D6 (programmes/FAQ
+   public-portal) ; tools/function-calls du chat (§7, option avancée) ;
+   **première surface UI** consommant `aiService.js` (règle Annexe B — à
+   synchroniser avec le premier écran qui affiche chat/analytics/advisors).
+
+### 18.3 En attente du porteur (ne bloque aucun jalon — tous réalisés)
 
 - **Prix de vente des plans** (D10) — avant le lancement commercial.
-- **Confirmation hébergement de production + résidence** (D4) — avant M6.
+- **Confirmation hébergement de production + résidence UE** (D4) — avant le
+  déploiement (Postgres managé type Neon + conteneur service + Redis managé,
+  §10bis/D4). Débloque les mesures de charge cible du §18.2.
 - **Actions prod héritées d'autres chantiers** (rappel, hors Phase 3) :
   migration d'activation des comptes (cf. §17).
 

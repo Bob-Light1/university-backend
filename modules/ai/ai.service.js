@@ -11,8 +11,12 @@
  * isEnabled() gates every route (503 AI_DISABLED, zero external call).
  */
 
+const crypto = require('crypto');
 const config = require('../../shared/configs/general.config');
 const { signServiceToken } = require('./ai.s2s');
+
+/** Correlation header shared with ai-service (mirrors REQUEST_ID_HEADER). */
+const REQUEST_ID_HEADER = 'X-Request-Id';
 
 /** Whether the AI gateway is configured (§11.1 — empty URL = module inert). */
 const isEnabled = () => Boolean(config.ai.serviceUrl && config.ai.serviceSecret);
@@ -53,15 +57,19 @@ const buildTokenContext = (user, entitlement, campusId = null, language = 'en') 
  * @param {Object} [opts.entitlement] - req.aiEntitlement.
  * @param {string|null} [opts.campusId] - Effective campus scope override.
  * @param {string} [opts.language] - User preferred locale (S2S claim, M4).
- * @returns {Promise<{ response: Response, abort: () => void }>}
+ * @param {string} [opts.requestId] - Correlation id echoed in ai-service logs
+ *   and returned on the response (M6, §10); generated when omitted.
+ * @returns {Promise<{ response: Response, abort: () => void, requestId: string }>}
  */
 const forward = async (path, {
   method = 'POST', body, user, entitlement, campusId = null, language = 'en',
+  requestId,
 } = {}) => {
   if (!isEnabled()) {
     throw new Error('AI service is not configured');
   }
   const token = signServiceToken(buildTokenContext(user, entitlement, campusId, language));
+  const correlationId = requestId || crypto.randomUUID();
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.ai.requestTimeoutMs);
 
@@ -72,11 +80,12 @@ const forward = async (path, {
         Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
         Accept: 'application/json, text/event-stream',
+        [REQUEST_ID_HEADER]: correlationId,
       },
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: controller.signal,
     });
-    return { response, abort: () => controller.abort() };
+    return { response, abort: () => controller.abort(), requestId: correlationId };
   } finally {
     clearTimeout(timer);
   }
