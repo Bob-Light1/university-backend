@@ -20,6 +20,7 @@ const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { makeContentController } = require('./controllers/portal-admin/portal-admin.factory');
 const competitionCtrl          = require('./controllers/portal-admin/competition.admin.controller');
 const applicationCtrl          = require('./controllers/portal-admin/partner.application.admin.controller');
+const { AI_SOURCE_TYPES }      = require('../../shared/constants/ai.constants');
 
 const repo = require('./public-portal.repository');
 
@@ -35,16 +36,20 @@ const testimonialsCtrl = makeContentController(repo.contentRepo('Testimonial'), 
   searchKeys: ['firstName', 'employer', 'program'],
 });
 
+// FAQ + course previews are the PUBLIC AI corpus (§6.3, D6) — their mutations
+// emit an ingestion signal. Testimonials are not indexed (no ingestSourceType).
 const faqCtrl = makeContentController(repo.contentRepo('FaqEntry'), {
-  label:      'FAQ',
-  allowed:    ['question', 'answer', 'category', 'order', 'isPublished'],
-  searchKeys: ['question.fr', 'question.en'],
+  label:           'FAQ',
+  allowed:         ['question', 'answer', 'category', 'order', 'isPublished'],
+  searchKeys:      ['question.fr', 'question.en'],
+  ingestSourceType: AI_SOURCE_TYPES.PORTAL_FAQ,
 });
 
 const coursesCtrl = makeContentController(repo.contentRepo('CoursePreview'), {
-  label:      'Course preview',
-  allowed:    ['program', 'title', 'content', 'videoUrl', 'order', 'isPublished'],
-  searchKeys: ['program', 'title.fr'],
+  label:           'Course preview',
+  allowed:         ['program', 'title', 'content', 'videoUrl', 'order', 'isPublished'],
+  searchKeys:      ['program', 'title.fr'],
+  ingestSourceType: AI_SOURCE_TYPES.PORTAL_PROGRAM,
 });
 
 /** Wires the standard 6-route CRUD surface for a generic content controller. */

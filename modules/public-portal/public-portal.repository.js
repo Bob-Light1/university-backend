@@ -95,6 +95,44 @@ const contentRepo = (name) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AI INGESTION FEED (Phase 3, §6.3.1 — public portal corpus, D6 2nd increment)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const { AI_SOURCE_TYPES } = require('../../shared/constants/ai.constants');
+
+/**
+ * Portal source type → owning model. Only the PUBLIC marketing corpus is
+ * indexable (programmes + FAQ); every other portal model (quiz, sessions,
+ * contact messages) is never vector-indexed.
+ */
+const PORTAL_INGEST_MODELS = Object.freeze({
+  [AI_SOURCE_TYPES.PORTAL_PROGRAM]: CoursePreview,
+  [AI_SOURCE_TYPES.PORTAL_FAQ]:     FaqEntry,
+});
+
+const portalIngestModel = (sourceType) => {
+  const Model = PORTAL_INGEST_MODELS[sourceType];
+  if (!Model) throw new Error(`Not an ingestable portal source type: ${sourceType}`);
+  return Model;
+};
+
+/**
+ * One keyset page of a portal source type, stable (updatedAt, _id) ordering
+ * (mirrors the document ingestion feed). The caller builds the filter
+ * (campus scope, isPublished, cursor) and clamps the limit.
+ */
+const findIngestablePortalSources = (sourceType, filter, { limit }) =>
+  portalIngestModel(sourceType).find(filter).sort({ updatedAt: 1, _id: 1 }).limit(limit).lean();
+
+/**
+ * Portal citation docs by id for answer-time re-authorization (§4.5). The
+ * caller passes the extra filter (isPublished + campus scope) — a source that
+ * stopped being published (or moved campus) is simply not returned.
+ */
+const findPortalCitationDocs = (sourceType, ids, extraFilter = {}) =>
+  portalIngestModel(sourceType).find({ _id: { $in: ids }, ...extraFilter }).lean();
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PUBLIC CONTENT READS (selections restricted to the portal)
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -244,6 +282,9 @@ const createContactMessage = (payload) => ContactMessage.create(payload);
 module.exports = {
   // Generic admin content (factory)
   contentRepo,
+  // AI ingestion feed (public portal corpus, §6.3.1)
+  findIngestablePortalSources,
+  findPortalCitationDocs,
   // Public content reads
   listPublicTestimonials,
   listPublicFaq,

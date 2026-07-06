@@ -93,8 +93,9 @@ const forward = async (path, {
 
 /**
  * Fire-and-forget ingestion signal towards ai-service (§6.3) — called by the
- * document module on publication-state changes (same spirit as the
- * notification emitters). Never throws, never blocks the caller's response.
+ * document module and the public-portal back-office on publication-state
+ * changes (same spirit as the notification emitters). Never throws, never
+ * blocks the caller's response.
  *
  * The signal is skipped when the campus has not subscribed to AI
  * (aiEntitlement.enabled = false is the per-campus opt-out, D7) — an
@@ -103,10 +104,10 @@ const forward = async (path, {
  * @param {Object} p
  * @param {string|Object} p.campusId - Campus owning the source.
  * @param {string|Object} p.sourceId - ERP id of the source.
- * @param {string} [p.sourceType='document']
+ * @param {string} [p.sourceType='document'] - Any AI_INGESTABLE_SOURCE_TYPES value.
  * @returns {Promise<boolean>} true when the signal was accepted upstream.
  */
-const signalDocumentIngest = async ({ campusId, sourceId, sourceType = 'document' }) => {
+const signalIngest = async ({ campusId, sourceId, sourceType = 'document' }) => {
   if (!isEnabled()) return false;
   try {
     // Lazy require: campus is a module hub (see the note in its facade).
@@ -127,6 +128,13 @@ const signalDocumentIngest = async ({ campusId, sourceId, sourceType = 'document
     return false;
   }
 };
+
+/**
+ * Back-compat alias: the document module historically calls
+ * signalDocumentIngest; the signal is source-type agnostic (defaults to
+ * 'document'), so both names point at the same implementation.
+ */
+const signalDocumentIngest = signalIngest;
 
 /**
  * Monthly token usage for a campus (budget gate + /api/ai/usage).
@@ -153,6 +161,7 @@ const fetchMonthlyUsage = async (user, entitlement, campusId) => {
 module.exports = {
   isEnabled,
   forward,
+  signalIngest,
   signalDocumentIngest,
   fetchMonthlyUsage,
 };

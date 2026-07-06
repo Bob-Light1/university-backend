@@ -27,6 +27,23 @@ const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];
 
 const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
+/**
+ * Fire-and-forget AI ingestion signal for an ingestable content resource
+ * (§6.3). Only the PUBLIC corpus (programmes/FAQ) passes an `ingestSourceType`;
+ * Testimonials never signal. Never awaited — the ai-service re-reads the source
+ * and indexes it (published) or prunes it (unpublished/deleted) idempotently,
+ * so a create/update/publish/delete can all reuse the same nudge. Lazy require
+ * keeps the ai module out of the load-order path.
+ */
+const signalIngest = (ingestSourceType, doc) => {
+  if (!ingestSourceType || !doc?.schoolCampus || !doc?._id) return;
+  require('../../../ai').service.signalIngest({
+    campusId: doc.schoolCampus,
+    sourceId: doc._id,
+    sourceType: ingestSourceType,
+  });
+};
+
 const buildCampusFilter = (user) =>
   GLOBAL_ROLES.includes(user.role) ? {} : { schoolCampus: user.campusId };
 
@@ -39,8 +56,11 @@ const resolveCampusId = (user, body) =>
  * @param {string}   opts.label        Human label for messages (e.g. 'Testimonial').
  * @param {string[]} opts.allowed      Body fields accepted on create/update.
  * @param {string[]} [opts.searchKeys] Document paths searched by ?search= (regex).
+ * @param {string}   [opts.ingestSourceType] AI source type for the vectorial
+ *   index (§6.3) — set only for the PUBLIC corpus (programmes/FAQ). Mutations
+ *   then emit a fire-and-forget ingestion signal.
  */
-function makeContentController(repo, { label, allowed, searchKeys = [] }) {
+function makeContentController(repo, { label, allowed, searchKeys = [], ingestSourceType = null }) {
   // ─── CREATE ────────────────────────────────────────────────────────────────
   const create = async (req, res) => {
     try {
@@ -54,6 +74,7 @@ function makeContentController(repo, { label, allowed, searchKeys = [] }) {
       }
 
       const created = await repo.create(doc);
+      signalIngest(ingestSourceType, created);
       return sendCreated(res, `${label} created.`, created);
     } catch (err) {
       if (err.name === 'ValidationError') {
@@ -119,6 +140,7 @@ function makeContentController(repo, { label, allowed, searchKeys = [] }) {
       }
 
       await repo.save(doc);
+      signalIngest(ingestSourceType, doc);
       return sendSuccess(res, 200, `${label} updated.`, doc);
     } catch (err) {
       if (err.name === 'ValidationError') {
@@ -139,6 +161,8 @@ function makeContentController(repo, { label, allowed, searchKeys = [] }) {
 
       doc.isPublished = typeof req.body.isPublished === 'boolean' ? req.body.isPublished : !doc.isPublished;
       await repo.save(doc);
+      // Publish → index, unpublish → prune (ai-service re-reads and decides).
+      signalIngest(ingestSourceType, doc);
 
       return sendSuccess(res, 200, `${label} ${doc.isPublished ? 'published' : 'unpublished'}.`, doc);
     } catch (err) {
@@ -153,6 +177,8 @@ function makeContentController(repo, { label, allowed, searchKeys = [] }) {
       if (!isValidObjectId(req.params.id)) return sendError(res, 400, `Invalid ${label} ID format.`);
       const doc = await repo.findOneAndDelete({ _id: req.params.id, ...buildCampusFilter(req.user) });
       if (!doc) return sendNotFound(res, label);
+      // Deleted source is no longer ingestable → the signal triggers a prune.
+      signalIngest(ingestSourceType, doc);
       return sendSuccess(res, 200, `${label} deleted.`);
     } catch (err) {
       console.error(`delete ${label} error:`, err);

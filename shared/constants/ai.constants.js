@@ -77,6 +77,37 @@ const AI_ADVISOR_AGGREGATES = Object.freeze({
   LEAD_FUNNEL: 'lead-funnel',
 });
 
+/**
+ * Vector-indexable source types (design D6). v1 indexed GED documents only;
+ * the 2nd increment adds the PUBLIC portal corpus (programmes + FAQ) — public
+ * marketing content, zero risk (§6.3). Personal/financial data is NEVER
+ * vector-indexed. These strings are a frozen wire contract shared verbatim
+ * with ai-service (app/core/constants.py mirrors them).
+ */
+const AI_SOURCE_TYPES = Object.freeze({
+  DOCUMENT: 'document',
+  PORTAL_PROGRAM: 'portal-program',
+  PORTAL_FAQ: 'portal-faq',
+});
+
+/** Portal (public) source types served by the public-portal ingestion facade. */
+const AI_PORTAL_SOURCE_TYPES = Object.freeze([
+  AI_SOURCE_TYPES.PORTAL_PROGRAM,
+  AI_SOURCE_TYPES.PORTAL_FAQ,
+]);
+
+/** Every ingestable source type accepted by GET /internal/ai/ingestables. */
+const AI_INGESTABLE_SOURCE_TYPES = Object.freeze([
+  AI_SOURCE_TYPES.DOCUMENT,
+  ...AI_PORTAL_SOURCE_TYPES,
+]);
+
+/** Source types a retrieval (search / chat) may span (Annexe B, §9). */
+const AI_SEARCHABLE_SOURCE_TYPES = Object.freeze([
+  AI_SOURCE_TYPES.DOCUMENT,
+  ...AI_PORTAL_SOURCE_TYPES,
+]);
+
 /** Gateway error codes — frozen API contract (design doc Annexe B). */
 const AI_ERROR_CODES = Object.freeze({
   AI_DISABLED: 'AI_DISABLED',                       // 503 — AI_SERVICE_URL not configured
@@ -95,4 +126,8 @@ module.exports = {
   AI_ADVISORS,
   AI_ADVISOR_AGGREGATES,
   AI_ERROR_CODES,
+  AI_SOURCE_TYPES,
+  AI_PORTAL_SOURCE_TYPES,
+  AI_INGESTABLE_SOURCE_TYPES,
+  AI_SEARCHABLE_SOURCE_TYPES,
 };

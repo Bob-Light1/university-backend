@@ -19,7 +19,7 @@ const {
   sendValidationError,
   asyncHandler,
 } = require('../../shared/utils/response-helpers');
-const { AI_ERROR_CODES } = require('../../shared/constants/ai.constants');
+const { AI_ERROR_CODES, AI_SEARCHABLE_SOURCE_TYPES } = require('../../shared/constants/ai.constants');
 const {
   isKnownAggregate,
   isKnownAdvisor,
@@ -140,15 +140,22 @@ const chat = asyncHandler(async (req, res) => {
 
 /** POST /api/ai/search — Annexe B (query 1..500, limit clamped to 50). */
 const search = asyncHandler(async (req, res) => {
-  const { query, types = ['document'], limit = 10 } = req.body || {};
+  const { query, types, limit = 10 } = req.body || {};
   if (typeof query !== 'string' || query.trim().length < 1 || query.length > 500) {
     return sendValidationError(res, [{ field: 'query', message: 'query must be a string of 1..500 characters' }]);
   }
-  if (!Array.isArray(types) || types.some((t) => typeof t !== 'string')) {
-    return sendValidationError(res, [{ field: 'types', message: 'types must be an array of strings' }]);
+  // Default: search the whole indexed corpus (documents + public portal, D6).
+  // A caller may narrow to a subset, but every value must be a known source type.
+  const requestedTypes = types === undefined ? [...AI_SEARCHABLE_SOURCE_TYPES] : types;
+  if (!Array.isArray(requestedTypes) || requestedTypes.length === 0
+      || requestedTypes.some((t) => !AI_SEARCHABLE_SOURCE_TYPES.includes(t))) {
+    return sendValidationError(res, [{
+      field: 'types',
+      message: `types must be a non-empty subset of [${AI_SEARCHABLE_SOURCE_TYPES.join(', ')}]`,
+    }]);
   }
   const clampedLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 50);
-  return proxyJson(req, res, '/search', { body: { query: query.trim(), types, limit: clampedLimit } });
+  return proxyJson(req, res, '/search', { body: { query: query.trim(), types: requestedTypes, limit: clampedLimit } });
 });
 
 /**

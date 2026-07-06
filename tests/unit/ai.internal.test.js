@@ -23,6 +23,13 @@ jest.mock('../../modules/document', () => ({
   },
 }));
 
+jest.mock('../../modules/public-portal', () => ({
+  service: {
+    listAiIngestables: jest.fn(async () => ({ items: [], nextCursor: null })),
+    authorizeAiCitations: jest.fn(async () => []),
+  },
+}));
+
 jest.mock('../../modules/result', () => ({
   service: {
     getCampusOverviewAggregates: jest.fn(async () => ({ avgNormalized: 12.34, totalPublished: 40 })),
@@ -60,6 +67,7 @@ jest.mock('../../modules/partner', () => ({
 }));
 
 const documentFacade = require('../../modules/document');
+const publicPortalFacade = require('../../modules/public-portal');
 const resultFacade = require('../../modules/result');
 const studentFacade = require('../../modules/student');
 const financeFacade = require('../../modules/finance');
@@ -194,10 +202,39 @@ describe('GET /internal/ai/ingestables', () => {
     expect(res.status).toHaveBeenCalledWith(400);
   });
 
-  test('rejects a non-document type (D6: v1 indexes documents only)', async () => {
+  test('rejects an unknown ingestable type with 422 (D6 whitelist)', async () => {
     const res = mockRes();
     await run(listIngestables, mockReq({ query: { type: 'result' } }), res);
     expect(res.status).toHaveBeenCalledWith(422);
+    expect(documentFacade.service.listAiIngestables).not.toHaveBeenCalled();
+    expect(publicPortalFacade.service.listAiIngestables).not.toHaveBeenCalled();
+  });
+
+  test('routes a portal type to the public-portal facade with the token campus + type', async () => {
+    const res = mockRes();
+    await run(listIngestables, mockReq({ query: { type: 'portal-faq', limit: '50' } }), res);
+    expect(documentFacade.service.listAiIngestables).not.toHaveBeenCalled();
+    expect(publicPortalFacade.service.listAiIngestables).toHaveBeenCalledWith(
+      expect.objectContaining({ campusId: CAMPUS_A, type: 'portal-faq', limit: 50 }),
+    );
+  });
+
+  test('portal cursor round-trips through the public-portal feed', async () => {
+    const updatedAt = new Date('2026-07-04T08:00:00.000Z');
+    publicPortalFacade.service.listAiIngestables.mockResolvedValueOnce({
+      items: [{ sourceId: DOC_ID }],
+      nextCursor: { updatedAt, id: DOC_ID },
+    });
+    const res1 = mockRes();
+    await run(listIngestables, mockReq({ query: { type: 'portal-program' } }), res1);
+    const { nextCursor } = sentPayload(res1).data;
+    expect(typeof nextCursor).toBe('string');
+
+    const res2 = mockRes();
+    await run(listIngestables, mockReq({ query: { type: 'portal-program', cursor: nextCursor } }), res2);
+    expect(publicPortalFacade.service.listAiIngestables).toHaveBeenLastCalledWith(
+      expect.objectContaining({ afterUpdatedAt: updatedAt, afterId: DOC_ID, type: 'portal-program' }),
+    );
   });
 });
 
@@ -218,7 +255,7 @@ describe('POST /internal/ai/authorize-citations', () => {
     );
   });
 
-  test('non-document and malformed source ids are dropped before the facade call', async () => {
+  test('unknown-type and malformed source ids are dropped before the facade call', async () => {
     const req = mockReq({
       body: {
         citations: [
@@ -234,6 +271,34 @@ describe('POST /internal/ai/authorize-citations', () => {
       expect.anything(),
       [DOC_ID],
     );
+    expect(publicPortalFacade.service.authorizeAiCitations).not.toHaveBeenCalled();
+  });
+
+  test('routes portal citations to the public-portal facade grouped by type; merges the two authorized subsets', async () => {
+    const FAQ_ID = 'f'.repeat(24);
+    documentFacade.service.authorizeAiCitations.mockResolvedValueOnce([
+      { sourceType: 'document', sourceId: DOC_ID, label: 'Doc', url: `/documents/${DOC_ID}` },
+    ]);
+    publicPortalFacade.service.authorizeAiCitations.mockResolvedValueOnce([
+      { sourceType: 'portal-faq', sourceId: FAQ_ID, label: 'Q?', url: '' },
+    ]);
+    const res = mockRes();
+    await run(authorizeCitations, mockReq({
+      body: {
+        citations: [
+          { sourceType: 'document', sourceId: DOC_ID },
+          { sourceType: 'portal-faq', sourceId: FAQ_ID },
+        ],
+      },
+    }), res);
+    // The public-portal facade receives the token identity + ids grouped by type.
+    expect(publicPortalFacade.service.authorizeAiCitations).toHaveBeenCalledWith(
+      { userId: USER_ID, role: 'SERVICE', campusId: CAMPUS_A },
+      { 'portal-faq': [FAQ_ID] },
+    );
+    const { allowed } = sentPayload(res).data;
+    expect(allowed).toHaveLength(2);
+    expect(allowed.map((a) => a.sourceType).sort()).toEqual(['document', 'portal-faq']);
   });
 
   test('answers only the authorized subset returned by the facade', async () => {

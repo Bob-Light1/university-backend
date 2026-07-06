@@ -37,10 +37,17 @@ const {
   validateSelfParams,
   computeSelfResource,
 } = require('./ai.self');
+const {
+  AI_SOURCE_TYPES,
+  AI_PORTAL_SOURCE_TYPES,
+  AI_INGESTABLE_SOURCE_TYPES,
+} = require('../../shared/constants/ai.constants');
 
-// Lazy facade: document is loaded very early by server.js and lazily requires
-// this module back for the ingestion signal — both sides stay lazy (no cycle).
+// Lazy facades: document/public-portal are loaded very early by server.js and
+// lazily require this module back for the ingestion signal — both sides stay
+// lazy (no cycle).
 const documentService = () => require('../document').service;
+const publicPortalService = () => require('../public-portal').service;
 
 /** §6.3.1: page size clamp applied server-side — never trust the client. */
 const MAX_INGEST_LIMIT = 200;
@@ -103,9 +110,11 @@ const listIngestables = asyncHandler(async (req, res) => {
     return sendError(res, 400, 'Ingestion requires a campus scope in the S2S token');
   }
 
-  const type = String(req.query.type || 'document');
-  if (type !== 'document') {
-    return sendError(res, 422, `Unsupported ingestable type '${type}' (v1 indexes documents only, D6)`);
+  // D6: documents (GED) + the public portal corpus (programmes/FAQ). Personal
+  // or financial data is never part of this feed (served on demand instead).
+  const type = String(req.query.type || AI_SOURCE_TYPES.DOCUMENT);
+  if (!AI_INGESTABLE_SOURCE_TYPES.includes(type)) {
+    return sendError(res, 422, `Unsupported ingestable type '${type}' (D6)`);
   }
 
   const requested = parseInt(req.query.limit, 10);
@@ -136,13 +145,15 @@ const listIngestables = asyncHandler(async (req, res) => {
     }
   }
 
-  const { items, nextCursor } = await documentService().listAiIngestables({
-    campusId,
-    updatedAfter,
-    ...cursorPosition,
-    limit,
-    sourceId,
-  });
+  // The cursor is opaque and its keyset space is distinct per type — each
+  // facade owns its own (updatedAt, _id) ordering over its own collection.
+  const { items, nextCursor } = type === AI_SOURCE_TYPES.DOCUMENT
+    ? await documentService().listAiIngestables({
+      campusId, updatedAfter, ...cursorPosition, limit, sourceId,
+    })
+    : await publicPortalService().listAiIngestables({
+      campusId, type, updatedAfter, ...cursorPosition, limit, sourceId,
+    });
 
   return sendSuccess(res, 200, 'OK', {
     items,
@@ -164,20 +175,31 @@ const authorizeCitations = asyncHandler(async (req, res) => {
     return sendValidationError(res, [{ field: 'citations', message: `at most ${MAX_CITATIONS} citations per batch` }]);
   }
 
-  // v1: only document sources are indexable (D6) — anything else is denied by
-  // omission (the response only ever contains the authorized subset).
-  const documentIds = citations
-    .filter((c) => c && c.sourceType === 'document' && isValidObjectId(String(c.sourceId || '')))
-    .map((c) => String(c.sourceId));
+  // Group by source type (D6): documents → document facade, the public portal
+  // corpus → public-portal facade. Anything else is denied by omission (the
+  // response only ever contains the authorized subset, §4.5).
+  const documentIds = [];
+  const portalIdsByType = {};
+  for (const c of citations) {
+    if (!c || !isValidObjectId(String(c.sourceId || ''))) continue;
+    if (c.sourceType === AI_SOURCE_TYPES.DOCUMENT) {
+      documentIds.push(String(c.sourceId));
+    } else if (AI_PORTAL_SOURCE_TYPES.includes(c.sourceType)) {
+      (portalIdsByType[c.sourceType] ||= []).push(String(c.sourceId));
+    }
+  }
 
-  const allowed = documentIds.length
-    ? await documentService().authorizeAiCitations(
-      { userId: req.s2s.userId, role: req.s2s.role, campusId: req.s2s.campusId },
-      documentIds,
-    )
-    : [];
+  // The subject is the S2S token identity — an id supplied in the body could
+  // let one user re-authorize against another's scope (§4.6).
+  const ctx = { userId: req.s2s.userId, role: req.s2s.role, campusId: req.s2s.campusId };
+  const [docAllowed, portalAllowed] = await Promise.all([
+    documentIds.length ? documentService().authorizeAiCitations(ctx, documentIds) : [],
+    Object.keys(portalIdsByType).length
+      ? publicPortalService().authorizeAiCitations(ctx, portalIdsByType)
+      : [],
+  ]);
 
-  return sendSuccess(res, 200, 'OK', { allowed });
+  return sendSuccess(res, 200, 'OK', { allowed: [...docAllowed, ...portalAllowed] });
 });
 
 /**

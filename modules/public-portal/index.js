@@ -13,6 +13,6 @@ const service = require('./public-portal.service');
 
 module.exports = {
   routes,   // mounted by server.js:  app.use('/api', routes) → /api/public/* + /api/portal-admin/*
-  service,  // { runCompetitionClosingJob }
+  service,  // { runCompetitionClosingJob, shutdownIngestionQueue, listAiIngestables, authorizeAiCitations }
   // NO model exported. NO controller exported.
 };

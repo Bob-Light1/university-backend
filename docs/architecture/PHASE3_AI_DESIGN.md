@@ -1287,13 +1287,28 @@ architecture 12-factor, tout passe par l'env.
 mesures de charge réelles (M6). *Révision* : nouvelle implémentation de
 `VectorStore`, sans toucher les appelants.
 
-**D6 — Sources indexées en v1 : documents GED uniquement** (métadonnées +
-contenu textuel extrait), via l'API interne (§6.3). Deuxième incrément (fin de
-M3 si le budget temps le permet, sinon M4+) : programmes et FAQ du
-`public-portal` — corpus public, risque nul. **Jamais indexés en vecteur** :
-résultats, finance, données personnelles — ces données sont servies **à la
-demande** par l'API interne (§6.2), qui applique l'autorisation au moment de
-la requête.
+**D6 — Sources indexées : documents GED + corpus public du portail.**
+1ᵉʳ incrément (M3) : documents GED (métadonnées + contenu textuel extrait).
+**2ᵉ incrément — ✅ FAIT (2026-07-06)** : programmes (`CoursePreview`) et FAQ
+(`FaqEntry`) **publiés** du `public-portal` — corpus **public, risque nul**,
+indexés en deux `sourceType` distincts (`portal-program`, `portal-faq`) pour un
+pruning et une re-autorisation propres. Contrat d'ingestion identique à
+`document.listAiIngestables` (façade `publicPortal.listAiIngestables` : filtre
+`isPublished:true` obligatoire — un brouillon ne fuit jamais —, tri stable
+`(updatedAt,_id)`, curseur opaque, `sourceId` pour l'événementiel ; texte
+bilingue {fr,en} concaténé pour le rappel, `visibility.roles = []` = visible à
+tous les rôles du campus). Signal `ai.service.signalIngest` **fire-and-forget**
+émis sur create/update/publish/unpublish/delete des programmes et FAQ.
+Re-autorisation à la réponse **triviale** (`publicPortal.authorizeAiCitations` :
+encore publié + campus cohérent, **aucun gating par utilisateur** — le contenu
+ne porte aucune donnée personnelle). Côté `ai-service` : `sourceType` élargi
+dans `/ingest` et `/search` (rejette tout type inconnu), backfill campus qui
+**itère sur chaque corpus indexable** (`INDEXABLE_SOURCE_TYPES`), retrieval chat
++ `/search` couvrant tout le corpus par défaut (`SEARCHABLE_SOURCE_TYPES`).
+Source unique de vérité : `shared/constants/ai.constants.js`, miroir verbatim
+`ai-service/app/core/constants.py`. **Jamais indexés en vecteur** : résultats,
+finance, données personnelles — ces données sont servies **à la demande** par
+l'API interne (§6.2), qui applique l'autorisation au moment de la requête.
 
 **D7 — Conformité & données sensibles.** (a) **Aucune PII réelle vers un
 profil gratuit** (règle ADR-5) : free tiers = données de seed/démo uniquement ;
@@ -1416,6 +1431,8 @@ Deux précautions subsistent :
 
 | 2026-07-06 | **Incrément produit — Tools/function-calls du chat (§7, option avancée)** | ✅ | Livre l'option §7 « exposer des *function calls* en lecture seule (ex. "quelle est ma moyenne ?") ». **Opt-in** (`CHAT_TOOLS_ENABLED`, défaut `false` → comportement M4 inchangé : vrai streaming token, aucun aller-retour tool). **ai-service** : (1) registre `app/tools/registry.py` — 1 tool v1 `get_my_grades` (rôle `STUDENT`), schéma JSON provider-agnostique, filtres non-identité whitelistés (`academicYear`/`semester`) ; `execute_tool` **ne passe jamais d'id** (le périmètre est le sujet S2S), ignore tout argument d'identité produit par le LLM, et **ne lève jamais** dans le stream (tool inconnu/hors-allowed/mauvais rôle/ERP down → résultat textuel bénin, jamais un chiffre inventé). (2) Boucle agentique bornée `LLMProvider.run_tools` (`max_iterations`, réponse finale forcée sans tools au plafond) + `_complete_with_tools` pour les 3 providers (mock déterministe déclenché par mots-clés ; `openai_compatible` param `tools`/`tool_calls` ; `anthropic` blocs `tool_use`/`tool_result`) ; usage **cumulé** sur toute la boucle (comptabilité §11.3 exacte). (3) `services/chat.py` : décision des tools dans `prepare_turn` (executor lié à l'identité S2S + ERP, jamais exposé au provider), exécution dans `stream_turn` — la boucle est non-streamée, la réponse finale est **chunkée en `delta`** (contrat Annexe B inchangé : `message_start → delta* → citations → done`). (4) `prompts/chat.py` : clause tools **stable** ajoutée seulement si tools actifs (préfixe cache-friendly §10bis préservé). (5) `ERPClient.get_self` → `GET /internal/ai/me/:resource`. **Node** : registre auto-scopé `modules/ai/ai.self.js` (mêmes validateurs que les agrégats, `validateParams` exporté depuis `ai.aggregates.js`) ; endpoint interne `GET /internal/ai/me/:resource` (`getSelfResource`) — **sujet = identité S2S exclusivement** (`req.s2s.userId`/`campusId`), gate de rôle par ressource, toute clé de scope en query rejetée (§4.6) ; façade **ERP-calculée** (ADR-4) `result.service.getStudentGradesSummary` + agrégation `aggregateStudentGradesSummary` (moyenne/passing/best/worst, PII-free, scopée 1 étudiant). **Tests** : service **133 verts** (unit, hors intégration ; +11 : `test_tools.py` 7 — gate rôle, scope sur le token en ignorant l'identité injectée, filtres whitelistés, résultats bénins unknown/hors-allowed/mauvais rôle/ERP down ; `test_chat_tools.py` 4 — tour tool scopé token bout-en-bout + chiffres ERP dans la réponse streamée, non-grade = 0 tool, opt-in off = 0 tool, rôle non-STUDENT = 0 tool), ruff+mypy 0 erreur ; **Node** : `ai.internal.test.js` 29 verts (+5 self-resource : unknown 404, rôle non-propriétaire 403, falsification userId/campusId query 400, filtres validés forwardés avec user+campus du token, format invalide 400) ; suites `ai.*` 49 verts + `result.*` 44 verts, eslint 0 erreur. `.env.example` documente les 2 réglages. Écarts : (a) v1 = **1 seul tool** (`get_my_grades`) ; `get_my_attendance` reporté (le static `getStudentStats` exige année+semestre → fragile sans résolution "période courante" côté ERP) ; (b) tours tool = **streaming chunké** (pas token-vrai) — la boucle agentique est non-streamée (compromis v1 documenté) ; (c) providers payants (`openai_compatible`/`anthropic`) corrects par construction mais **non exercés en bac à sable** (pas de clé/réseau) — validés par mypy + à vérifier sur cible. |
 
+| 2026-07-06 | **Incrément produit — 2ᵉ incrément D6 : corpus public du portail (programmes + FAQ)** | ✅ | Indexe le corpus **public** du `public-portal` (D6, 2ᵉ incrément) — **risque nul, aucune PII**. **Node** : (1) source unique de vérité `shared/constants/ai.constants.js` (`AI_SOURCE_TYPES` = `document`/`portal-program`/`portal-faq`, `AI_PORTAL_SOURCE_TYPES`, `AI_INGESTABLE_SOURCE_TYPES`, `AI_SEARCHABLE_SOURCE_TYPES`), miroir verbatim `ai-service/app/core/constants.py`. (2) Façade `publicPortal.listAiIngestables` — **même contrat** que `document.listAiIngestables` (`isPublished:true` obligatoire → un brouillon ne fuit jamais ; tri stable `(updatedAt,_id)` ; curseur keyset décodé par l'appelant ; `sourceId` pour l'événementiel ; texte bilingue {fr,en} concaténé pour le rappel, titre en langue primaire = label de citation ; `version` = epoch `updatedAt` → prune déterministe ; `visibility.roles=[]` = tous les rôles du campus) sur `CoursePreview` (`portal-program`) et `FaqEntry` (`portal-faq`), via `public-portal.repository` (`findIngestablePortalSources`/`findPortalCitationDocs`, champ campus `schoolCampus`). (3) Passerelle interne dé-gate le param `type` (`AI_INGESTABLE_SOURCE_TYPES`, sinon 422) et **route** vers la bonne façade (document vs portail), curseur opaque à espace distinct par type ; `authorize-citations` groupe par `sourceType` et fusionne les deux sous-ensembles autorisés. (4) Re-autorisation portail **triviale** (`publicPortal.authorizeAiCitations` : encore publié + campus cohérent, **aucun gating par utilisateur** — corpus public) ; global roles ADMIN/DIRECTOR = tout campus. (5) Signal `ai.service.signalIngest` (généralisé depuis `signalDocumentIngest`, alias conservé) **fire-and-forget** émis sur create/update/publish/unpublish/delete des programmes et FAQ (`portal-admin.factory` option `ingestSourceType`). (6) Passerelle `/search` élargit `types` à `AI_SEARCHABLE_SOURCE_TYPES` par défaut et rejette tout type inconnu. **ai-service** : `app/core/constants.py` créé ; `IngestRequest.source_type` / `SearchRequest.types` élargis aux types portail + `field_validator` rejetant l'inconnu ; `rag.retrieve_context` récupère sur **tout** le corpus (`SEARCHABLE_SOURCE_TYPES`) ; backfill campus (`run_queue_consumer`, `source_id=None`) **itère sur `INDEXABLE_SOURCE_TYPES`** (espace de curseur propre par type) ; `PgVectorStore` inchangé (`visibility.roles=[]` déjà = visible à tous — vérifié). **Tests** : Node **663 verts** (nouveau `public-portal.ai.test.js` — contrat ingestable programme/FAQ, `isPublished`+campus, sentinelle limit+1/curseur, type non supporté, autorisation triviale scopée/ADMIN/ids vides ; `ai.internal.test.js` — type inconnu rejeté sans appel façade, routage type portail, round-trip curseur, citations groupées par type fusionnées), eslint 0 erreur ; service **141 unit verts** (`test_search_api.py` — acceptation portail, défaut = corpus complet forwardé au store, scope narrow ; `test_ingest.py` — 2 types portail acceptés/503 vs inconnu 422, `run_queue_consumer` itère chaque corpus indexable ; `test_chat_api.py` — retrieval chat couvre tout le corpus), ruff 0 erreur. **Non commité** (QA porteur). Écarts : aucun — le pipeline ai-service était déjà générique sur `source_type` (seuls 2 gates Pydantic élargis + boucle backfill + `types` du retrieval). |
+
 **État des artefacts au 2026-07-05 (fin M6 — tous jalons réalisés)** : dépôt
 frère `ai-service/` complet (non commité, plus aucun stub 501) — M6 ajoute
 `core/cache.py`, `services/retention.py`, `scripts/loadtest.py`, réécrit
@@ -1451,10 +1468,13 @@ porteur** et des **préalables opérationnels** (§18.3), plus des reports connu
    `usage_monthly` sur `/search` réécrit une seule ligne par (campus, période)
    → contention sur campus chaud. À déférer/sharder si les mesures cible le
    confirment.
-4. **Reports produit** : 2ᵉ incrément d'ingestion D6 (programmes/FAQ
-   public-portal) ; **première surface UI** consommant `aiService.js` (règle
+4. **Reports produit** : **première surface UI** consommant `aiService.js` (règle
    Annexe B — à synchroniser avec le premier écran qui affiche
-   chat/analytics/advisors). *(Tools/function-calls du chat §7 : **FAIT** le
+   chat/analytics/advisors). *(2ᵉ incrément d'ingestion D6 — programmes/FAQ
+   public-portal : **FAIT** le 2026-07-06, corpus public indexé en `portal-program`/
+   `portal-faq`, risque nul ; extension naturelle : ré-indexer d'autres contenus
+   publics du portail — témoignages, actualités — sur le même patron de façade.)*
+   *(Tools/function-calls du chat §7 : **FAIT** le
    2026-07-06 — opt-in `CHAT_TOOLS_ENABLED`, tool v1 `get_my_grades` ; extension
    naturelle : `get_my_attendance` une fois la "période courante" résolue
    côté ERP, et exposition des tools au front quand une UI chat existera.)*
