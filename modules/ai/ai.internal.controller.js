@@ -31,6 +31,12 @@ const {
   validateAggregateParams,
   computeAggregate,
 } = require('./ai.aggregates');
+const {
+  isKnownSelfResource,
+  selfResourceRoles,
+  validateSelfParams,
+  computeSelfResource,
+} = require('./ai.self');
 
 // Lazy facade: document is loaded very early by server.js and lazily requires
 // this module back for the ingestion signal — both sides stay lazy (no cycle).
@@ -212,9 +218,51 @@ const getAggregate = asyncHandler(async (req, res) => {
   });
 });
 
+/**
+ * GET /internal/ai/me/:resource — self-scoped ERP read for the chat tools
+ * (§7). The SUBJECT is the S2S token identity exclusively: `userId` and
+ * `campusId` come from the verified token, never from the query or body — a
+ * user could otherwise read another user's data (§4.1.4). The role gate is
+ * per resource (v1 grades-summary = students only). Figures are ERP-computed
+ * (ADR-4) and PII-free for the caller's own data.
+ */
+const getSelfResource = asyncHandler(async (req, res) => {
+  const name = String(req.params.resource);
+  if (!isKnownSelfResource(name)) {
+    return sendNotFound(res, `Unknown self-resource '${name}'`);
+  }
+  if (!selfResourceRoles(name).includes(req.s2s.role)) {
+    return sendForbidden(res, 'This role cannot read this resource');
+  }
+  const { userId, campusId } = req.s2s;
+  if (!userId || !isValidObjectId(userId)) {
+    return sendError(res, 400, 'Self-resources require a valid user identity in the S2S token');
+  }
+  if (!campusId || !isValidObjectId(campusId)) {
+    return sendError(res, 400, 'Self-resources require a valid campus scope in the S2S token');
+  }
+
+  // Query params are report FILTERS only — user/campus never come from the
+  // query (§4.1 rule 1): any scope-looking key is rejected as unknown.
+  const { errors, params } = validateSelfParams(name, req.query);
+  if (errors.length > 0) {
+    return sendValidationError(res, errors);
+  }
+
+  const figures = await computeSelfResource(name, { userId, campusId, params });
+  return sendSuccess(res, 200, 'OK', {
+    resource: name,
+    subject: 'self',
+    params,
+    figures,
+    computedAt: new Date().toISOString(),
+  });
+});
+
 module.exports = {
   authenticateService,
   listIngestables,
   authorizeCitations,
   getAggregate,
+  getSelfResource,
 };

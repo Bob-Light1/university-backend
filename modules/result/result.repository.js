@@ -289,6 +289,41 @@ const aggregateDropoutRiskDistribution = (matchFilter) =>
     },
   ]);
 
+/**
+ * Self-scoped grade summary of ONE student (AI chat tool §7 — "what is my
+ * average?"). Deterministic ERP figures (ADR-4): the average, the passing
+ * rate and the extrema are computed here, never by the LLM. PII-free by
+ * construction (counters and scores only, no name/id leaves the pipeline).
+ * `matchFilter` is provided already cast by the caller (student + campus).
+ */
+const aggregateStudentGradesSummary = (matchFilter) =>
+  Result.aggregate([
+    { $match: matchFilter },
+    {
+      $group: {
+        _id:            null,
+        published:      { $sum: 1 },
+        average:        { $avg: '$normalizedScore' },
+        passingCount:   { $sum: { $cond: [{ $gte: ['$normalizedScore', 10] }, 1, 0] } },
+        best:           { $max: '$normalizedScore' },
+        worst:          { $min: '$normalizedScore' },
+      },
+    },
+    {
+      $project: {
+        _id: 0,
+        published: 1,
+        average: { $round: ['$average', 2] },
+        passingCount: 1,
+        passingRate: {
+          $round: [{ $multiply: [{ $divide: ['$passingCount', '$published'] }, 100] }, 1],
+        },
+        best:  { $round: ['$best', 2] },
+        worst: { $round: ['$worst', 2] },
+      },
+    },
+  ]);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // RESULT — specialized lists (controller)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -492,6 +527,7 @@ module.exports = {
   aggregateStudentTranscript,
   aggregateCampusOverview,
   aggregateDropoutRiskDistribution,
+  aggregateStudentGradesSummary,
   // Result — specialized lists
   listRetakeResults,
   findResultByVerificationToken,

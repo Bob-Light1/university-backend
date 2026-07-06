@@ -202,6 +202,7 @@ module.exports = {
   isKnownAggregate,
   isKnownAdvisor,
   aggregateRoles,
+  validateParams,
   validateAggregateParams,
   validateAdvisorParams,
   computeAggregate,

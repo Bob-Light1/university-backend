@@ -20,6 +20,7 @@ const {
   listIngestables,
   authorizeCitations,
   getAggregate,
+  getSelfResource,
 } = require('./ai.internal.controller');
 
 const router = express.Router();
@@ -54,5 +55,13 @@ router.post('/authorize-citations', authorizeCitations);
  * @access  S2S (ai-service) — end-user identity from the token, staffing roles only
  */
 router.get('/aggregates/:name', getAggregate);
+
+/**
+ * @route   GET /internal/ai/me/:resource
+ * @desc    Self-scoped ERP read for the chat tools (§7) — the subject is the
+ *          S2S token identity, never a value from the query/body
+ * @access  S2S (ai-service chat tools) — user + campus from the token
+ */
+router.get('/me/:resource', getSelfResource);
 
 module.exports = router;

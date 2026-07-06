@@ -27,6 +27,9 @@ jest.mock('../../modules/result', () => ({
   service: {
     getCampusOverviewAggregates: jest.fn(async () => ({ avgNormalized: 12.34, totalPublished: 40 })),
     getDropoutRiskDistribution: jest.fn(async () => ({ studentsAssessed: 25, highRisk: 3 })),
+    getStudentGradesSummary: jest.fn(async () => ({
+      published: 8, average: 13.5, passingCount: 7, passingRate: 87.5, best: 18, worst: 6,
+    })),
     isValidAcademicYear: jest.fn((v) => /^\d{4}-\d{4}$/.test(String(v))),
     isValidSemester: jest.fn((v) => ['S1', 'S2', 'Annual'].includes(v)),
   },
@@ -67,6 +70,7 @@ const {
   listIngestables,
   authorizeCitations,
   getAggregate,
+  getSelfResource,
 } = require('../../modules/ai/ai.internal.controller');
 
 const CAMPUS_A = 'a'.repeat(24);
@@ -431,5 +435,68 @@ describe('GET /internal/ai/aggregates/:name — advisor aggregates (M5b, §6.5/D
     expect(partnerFacade.service.getLeadFunnelAggregates).toHaveBeenCalledWith({
       campusId: CAMPUS_A,
     });
+  });
+});
+
+describe('GET /internal/ai/me/:resource — self-scoped chat tools (§7)', () => {
+  // The subject is the S2S token identity: the caller's OWN data, resolved
+  // from the token, never from the query/body (§4.1.4).
+  const studentToken = (claims = {}) => incomingToken({ role: 'STUDENT', ...claims });
+
+  test('unknown self-resource → 404, nothing computed', async () => {
+    const res = mockRes();
+    await run(getSelfResource, mockReq({ token: studentToken(), params: { resource: 'nope' } }), res);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(resultFacade.service.getStudentGradesSummary).not.toHaveBeenCalled();
+  });
+
+  test('non-owning role (TEACHER) → 403 (defense in depth)', async () => {
+    const res = mockRes();
+    await run(getSelfResource, mockReq({
+      token: incomingToken({ role: 'TEACHER' }),
+      params: { resource: 'grades-summary' },
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(403);
+    expect(resultFacade.service.getStudentGradesSummary).not.toHaveBeenCalled();
+  });
+
+  test('grades-summary scopes on the token identity; a userId/campusId query is rejected as unknown (§4.6)', async () => {
+    const res = mockRes();
+    await run(getSelfResource, mockReq({
+      token: studentToken(),
+      params: { resource: 'grades-summary' },
+      query: { userId: 'e'.repeat(24), campusId: CAMPUS_B },
+    }), res);
+    // A scope-looking query key is refused (never silently dropped).
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(resultFacade.service.getStudentGradesSummary).not.toHaveBeenCalled();
+  });
+
+  test('validated filters forwarded with the TOKEN user + campus (never a body id)', async () => {
+    const res = mockRes();
+    await run(getSelfResource, mockReq({
+      token: studentToken(),
+      params: { resource: 'grades-summary' },
+      query: { academicYear: '2025-2026', semester: 'S1' },
+    }), res);
+    expect(resultFacade.service.getStudentGradesSummary).toHaveBeenCalledWith({
+      studentId: USER_ID, campusId: CAMPUS_A, academicYear: '2025-2026', semester: 'S1',
+    });
+    const { data } = sentPayload(res);
+    expect(data.resource).toBe('grades-summary');
+    expect(data.subject).toBe('self');
+    expect(data.figures.average).toBe(13.5);
+    expect(typeof data.computedAt).toBe('string');
+  });
+
+  test('invalid filter format → 400 before any facade call', async () => {
+    const res = mockRes();
+    await run(getSelfResource, mockReq({
+      token: studentToken(),
+      params: { resource: 'grades-summary' },
+      query: { academicYear: 'not-a-year' },
+    }), res);
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(resultFacade.service.getStudentGradesSummary).not.toHaveBeenCalled();
   });
 });

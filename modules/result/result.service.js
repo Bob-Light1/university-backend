@@ -242,6 +242,33 @@ const getCampusOverviewAggregates = async ({ campusId, academicYear, semester })
  * @param {string} [p.academicYear], [p.semester]
  * @returns {Promise<Object>} { studentsAssessed, avgRiskScore, lowRisk, moderateRisk, highRisk }
  */
+/**
+ * Self-scoped grade summary of ONE student (AI chat tool §7 — resolves the
+ * caller's own PUBLISHED results only). Deterministic figures computed by the
+ * ERP (ADR-4). The student id and campus are the S2S subject's — never a value
+ * the LLM supplied. Returns a flat, PII-free object.
+ * @param {Object} p
+ * @param {ObjectId|string} p.studentId — the S2S subject (self).
+ * @param {ObjectId|string} p.campusId
+ * @param {string} [p.academicYear], [p.semester]
+ * @returns {Promise<Object>} { published, average, passingCount, passingRate, best, worst }
+ */
+const getStudentGradesSummary = async ({ studentId, campusId, academicYear, semester }) => {
+  const matchFilter = {
+    // Aggregation pipelines do not auto-cast (unlike find).
+    student:      new mongoose.Types.ObjectId(String(studentId)),
+    schoolCampus: new mongoose.Types.ObjectId(String(campusId)),
+    status:       'PUBLISHED',
+    isDeleted:    false,
+  };
+  if (academicYear && isValidAcademicYear(academicYear)) matchFilter.academicYear = academicYear;
+  if (semester && isValidSemester(semester)) matchFilter.semester = semester;
+
+  const [summary] = await resultRepo.aggregateStudentGradesSummary(matchFilter);
+  return summary
+    || { published: 0, average: null, passingCount: 0, passingRate: null, best: null, worst: null };
+};
+
 const getDropoutRiskDistribution = async ({ campusId, academicYear, semester }) => {
   const matchFilter = {
     // Explicit cast: aggregation pipelines do not auto-cast campus ids.
@@ -271,6 +298,7 @@ module.exports = {
   // AI analytics aggregates (M5)
   getCampusOverviewAggregates,
   getDropoutRiskDistribution,
+  getStudentGradesSummary,
   isValidAcademicYear,
   isValidSemester,
 };
