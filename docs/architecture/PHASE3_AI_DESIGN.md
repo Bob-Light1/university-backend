@@ -22,10 +22,13 @@
 > Prometheus + request-id, budget consolidé + alerting, purge de rétention,
 > eval RAG étendue, harnais de charge) — **tests de sécurité §4.6 verts**
 > (recherche, chat, analytics ET advisors). **Tous les jalons M0→M6 sont
-> réalisés** ; il ne reste que des décisions porteur (D4 hébergement, D10 prix)
-> et deux préalables opérationnels (bench D2 hors-ligne, première surface UI).
-> L'état d'avancement est tenu au §18 (journal de reprise) — **le lire en
-> premier si vous reprenez le chantier**.
+> réalisés** ; **décisions porteur D10 (prix) et D4 (hébergement) tranchées le
+> 2026-07-06** (§15/§18.3 : plans 0/99/299 €, Postgres Neon UE, LLM premium
+> Anthropic sous DPA) ; **bench D2 exécuté le 2026-07-07 → bge-m3 (1024d)
+> conservé, colonne `vector(1024)` définitive** (§15/D2). Restent des préalables
+> opérationnels (déploiement + mesures de charge cible, QA visuelle de la
+> première surface UI). L'état d'avancement est tenu au §18 (journal de
+> reprise) — **le lire en premier si vous reprenez le chantier**.
 >
 > **Révisions** : v1 (2026-06-18) socle d'architecture. **v2 (2026-06-18)** ajoute
 > les **surfaces frontend & la valeur par persona** (§1.4), le **moteur
@@ -97,8 +100,16 @@
 > consolidé** (`enforce_budget` unique pour chat/analytics/advisors, alerte WARN
 > à 80 %, métrique de refus) ; **purge de rétention** D7 (tâche périodique) ;
 > **eval RAG étendue** (gold set 5→7) ; **harnais de charge** livré
-> (`scripts/loadtest.py`). Bench D2 toujours non exécuté (réseau du bac à sable ;
-> à lancer hors-ligne avant tout index de prod). Détail au §18.1.
+> (`scripts/loadtest.py`). Détail au §18.1.
+> **v4.10 (2026-07-06)** — hors jalon, **décisions porteur** : D10 (prix des
+> plans : free 0 € / standard 99 € / premium 299 € par campus/mois) et D4
+> (hébergement prod : Postgres Neon UE, LLM premium Anthropic sous DPA, Redis
+> différé) tranchées. Aucun code touché ; §15, §18.1 et §18.3 mis à jour.
+> **v4.11 (2026-07-07)** — hors jalon, **bench D2 exécuté** (corpus jouet,
+> sentence-transformers CPU) : bge-m3 (1024d) recall@1 1.00, e5-base (768d)
+> recall@1 0.83 (recall@3 = 1.00 pour les deux). **Décision porteur : conserver
+> bge-m3, colonne `vector(1024)` définitive** — aucun code touché. §15/D2 et
+> §18.3 mis à jour ; ce préalable opérationnel est clos.
 
 ---
 
@@ -1261,12 +1272,22 @@ s'appuient sur une API interne déjà éprouvée par les deux premières feature
 *Révision* : aucune raison prévisible.
 
 **D2 — Embeddings : `BAAI/bge-m3` (1024 dimensions), self-hosted, global.**
-La colonne vectorielle est donc `vector(1024)`. Choix **provisoire jusqu'au
-bench M1** sur un corpus FR/EN/AR du projet : si `multilingual-e5-base` (768d)
-atteint ≥ 95 % de la qualité de recherche de bge-m3, on le retient pour sa
-légèreté (RAM/latence) et la colonne passe à `vector(768)` avant tout index de
-production. *Révision* : libre tant qu'aucun index de production n'existe ;
-ensuite = réindexation complète planifiée (piège documenté §6.4).
+La colonne vectorielle est donc `vector(1024)`. **Bench exécuté le 2026-07-07**
+(`scripts/bench_embeddings.py`, corpus jouet FR/EN/AR, sentence-transformers CPU) :
+
+| modèle | dim | recall@1 | recall@3 | ms/req |
+|---|---|---|---|---|
+| `BAAI/bge-m3` | 1024 | **1.00** | 1.00 | 129 |
+| `intfloat/multilingual-e5-base` | 768 | 0.83 | 1.00 | 66 |
+
+La règle mécanique (recall@3 ≥ 95 %) désignait e5-base, mais sur ce corpus de 6
+docs les deux saturent recall@3 = 1.00 ; le seul signal discriminant, **recall@1,
+favorise bge-m3 (1.00 vs 0.83)**, et adopter e5-base imposerait le plumbing des
+préfixes `query:`/`passage:` (scission `embed_query`/`embed_documents` + tests).
+**Décision porteur 2026-07-07 : conserver `bge-m3` (1024d)** — top-1 préservé,
+aucun code à changer, coût RAM/stockage assumé (l'hôte D4 est déjà dimensionné
+~2 Go). La colonne reste `vector(1024)`, désormais **définitive**. *Révision* :
+un basculement futur (768d ou autre) = réindexation complète planifiée (§6.4).
 
 **D3 — Profil payant : `claude-sonnet-5` (réponses) + `claude-haiku-4-5`
 (routing/reformulation) + `claude-opus-4-8` (advisors).** Confirme la
@@ -1275,12 +1296,20 @@ recalibrage prévu en M1 sur mesures réelles.
 
 **D4 — Hébergement.** Développement et test (M1→M5) : **docker-compose local**
 (`postgres:16` + pgvector, `ai-service`, Ollama optionnel) — zéro dépense,
-conforme à la directive porteur. Production (décision par défaut, à confirmer
-par le porteur avant M6) : Postgres managé type **Neon** (région **UE**),
-service IA en conteneur Docker (Railway/Render/VPS), Redis managé ajouté en
-M6. Résidence des données : **UE par défaut**, tant que la localisation des
-campus clients n'impose pas autre chose. *Révision* : sans impact code —
-architecture 12-factor, tout passe par l'env.
+conforme à la directive porteur. **Production confirmée par le porteur le
+2026-07-06** : Postgres+pgvector managé **Neon, région UE (Francfort,
+`eu-central-1`)** — c'est le magasin des conversations (PII, rétention D7 12
+mois), d'où l'exigence de résidence UE ; service IA en **conteneur Docker**
+(host à finaliser au déploiement — Scaleway Paris ou VPS Docker ≥ 4 Go RAM pour
+loger le modèle d'embeddings bge-m3 ~2 Go) ; **Redis non requis en pilote**
+(mono-réplica → cache in-process M6), ajouté managé UE au passage multi-réplicas.
+**LLM du tier premium : `anthropic` sous DPA** (Claude, tiering §10bis/D3) — le
+DPA couvre l'engagement no-training / rétention zéro ; le traitement peut rester
+hors UE, arbitrage assumé par le porteur (bascule vers un LLM hébergé UE type
+Mistral possible plus tard **sans modif de code**, profil `openai_compatible`
+§6.4bis). Règle inchangée : **PII réelle jamais vers un free tier** (Groq =
+corpus public/mock uniquement). *Révision* : sans impact code — architecture
+12-factor, tout passe par l'env.
 
 **D5 — Magasin vectoriel : pgvector seul en v1**, derrière l'interface
 `VectorStore` (§6.4). Pas de moteur dédié (Qdrant/Weaviate) avant d'avoir des
@@ -1336,9 +1365,15 @@ confirmé** : aucune écriture ERP par l'IA en v1.
 **D10 — Plans & budgets de tokens.** `free` = 200 000 tokens/mois (défaut
 §11.3), features `{chat, search}` ; `standard` = 1 000 000 tokens/mois,
 + `analytics` ; `premium` = 5 000 000 tokens/mois, + `advisors`. Le découpage
-suit le gradient de valeur (§1.4.2). **Seule sous-décision restante, au
-porteur : le prix de vente des plans** (plancher = coût de revient §10bis) —
-à fixer avant le lancement commercial ; ne bloque aucun jalon M1→M6.
+suit le gradient de valeur (§1.4.2). **Prix de vente tranché par le porteur le
+2026-07-06** (COGS négligeable au plafond — §10bis : ~0,5 $/campus free,
+~3 $ standard, ~15-25 $ premium ; prix fixé à la valeur, pas au coût) :
+`free` = **0 €** (essai / onboarding), `standard` = **99 €/campus/mois**,
+`premium` = **299 €/campus/mois**. Facturation v1 = **add-on forfaitaire par
+campus** (option A). Les gros campus qui saturent leur budget relèvent
+`monthlyTokenBudget` par surcharge d'entitlement (panneau admin) — politique de
+top-up payant à préciser si le besoin se confirme. *Révision* : sans impact
+code (les budgets sont des données d'entitlement §11.3, le prix est hors code).
 
 **D11 — Profil `free` : Groq, modèle `llama-3.3-70b-versatile`** (état vérifié
 au 2026-07 : 30 req/min, 1 000 req/jour, 100 000 tokens/jour ≈ 25 requêtes
@@ -1432,6 +1467,8 @@ Deux précautions subsistent :
 | 2026-07-06 | **Incrément produit — Tools/function-calls du chat (§7, option avancée)** | ✅ | Livre l'option §7 « exposer des *function calls* en lecture seule (ex. "quelle est ma moyenne ?") ». **Opt-in** (`CHAT_TOOLS_ENABLED`, défaut `false` → comportement M4 inchangé : vrai streaming token, aucun aller-retour tool). **ai-service** : (1) registre `app/tools/registry.py` — 1 tool v1 `get_my_grades` (rôle `STUDENT`), schéma JSON provider-agnostique, filtres non-identité whitelistés (`academicYear`/`semester`) ; `execute_tool` **ne passe jamais d'id** (le périmètre est le sujet S2S), ignore tout argument d'identité produit par le LLM, et **ne lève jamais** dans le stream (tool inconnu/hors-allowed/mauvais rôle/ERP down → résultat textuel bénin, jamais un chiffre inventé). (2) Boucle agentique bornée `LLMProvider.run_tools` (`max_iterations`, réponse finale forcée sans tools au plafond) + `_complete_with_tools` pour les 3 providers (mock déterministe déclenché par mots-clés ; `openai_compatible` param `tools`/`tool_calls` ; `anthropic` blocs `tool_use`/`tool_result`) ; usage **cumulé** sur toute la boucle (comptabilité §11.3 exacte). (3) `services/chat.py` : décision des tools dans `prepare_turn` (executor lié à l'identité S2S + ERP, jamais exposé au provider), exécution dans `stream_turn` — la boucle est non-streamée, la réponse finale est **chunkée en `delta`** (contrat Annexe B inchangé : `message_start → delta* → citations → done`). (4) `prompts/chat.py` : clause tools **stable** ajoutée seulement si tools actifs (préfixe cache-friendly §10bis préservé). (5) `ERPClient.get_self` → `GET /internal/ai/me/:resource`. **Node** : registre auto-scopé `modules/ai/ai.self.js` (mêmes validateurs que les agrégats, `validateParams` exporté depuis `ai.aggregates.js`) ; endpoint interne `GET /internal/ai/me/:resource` (`getSelfResource`) — **sujet = identité S2S exclusivement** (`req.s2s.userId`/`campusId`), gate de rôle par ressource, toute clé de scope en query rejetée (§4.6) ; façade **ERP-calculée** (ADR-4) `result.service.getStudentGradesSummary` + agrégation `aggregateStudentGradesSummary` (moyenne/passing/best/worst, PII-free, scopée 1 étudiant). **Tests** : service **133 verts** (unit, hors intégration ; +11 : `test_tools.py` 7 — gate rôle, scope sur le token en ignorant l'identité injectée, filtres whitelistés, résultats bénins unknown/hors-allowed/mauvais rôle/ERP down ; `test_chat_tools.py` 4 — tour tool scopé token bout-en-bout + chiffres ERP dans la réponse streamée, non-grade = 0 tool, opt-in off = 0 tool, rôle non-STUDENT = 0 tool), ruff+mypy 0 erreur ; **Node** : `ai.internal.test.js` 29 verts (+5 self-resource : unknown 404, rôle non-propriétaire 403, falsification userId/campusId query 400, filtres validés forwardés avec user+campus du token, format invalide 400) ; suites `ai.*` 49 verts + `result.*` 44 verts, eslint 0 erreur. `.env.example` documente les 2 réglages. Écarts : (a) v1 = **1 seul tool** (`get_my_grades`) ; `get_my_attendance` reporté (le static `getStudentStats` exige année+semestre → fragile sans résolution "période courante" côté ERP) ; (b) tours tool = **streaming chunké** (pas token-vrai) — la boucle agentique est non-streamée (compromis v1 documenté) ; (c) providers payants (`openai_compatible`/`anthropic`) corrects par construction mais **non exercés en bac à sable** (pas de clé/réseau) — validés par mypy + à vérifier sur cible. |
 
 | 2026-07-06 | **Incrément produit — 2ᵉ incrément D6 : corpus public du portail (programmes + FAQ)** | ✅ | Indexe le corpus **public** du `public-portal` (D6, 2ᵉ incrément) — **risque nul, aucune PII**. **Node** : (1) source unique de vérité `shared/constants/ai.constants.js` (`AI_SOURCE_TYPES` = `document`/`portal-program`/`portal-faq`, `AI_PORTAL_SOURCE_TYPES`, `AI_INGESTABLE_SOURCE_TYPES`, `AI_SEARCHABLE_SOURCE_TYPES`), miroir verbatim `ai-service/app/core/constants.py`. (2) Façade `publicPortal.listAiIngestables` — **même contrat** que `document.listAiIngestables` (`isPublished:true` obligatoire → un brouillon ne fuit jamais ; tri stable `(updatedAt,_id)` ; curseur keyset décodé par l'appelant ; `sourceId` pour l'événementiel ; texte bilingue {fr,en} concaténé pour le rappel, titre en langue primaire = label de citation ; `version` = epoch `updatedAt` → prune déterministe ; `visibility.roles=[]` = tous les rôles du campus) sur `CoursePreview` (`portal-program`) et `FaqEntry` (`portal-faq`), via `public-portal.repository` (`findIngestablePortalSources`/`findPortalCitationDocs`, champ campus `schoolCampus`). (3) Passerelle interne dé-gate le param `type` (`AI_INGESTABLE_SOURCE_TYPES`, sinon 422) et **route** vers la bonne façade (document vs portail), curseur opaque à espace distinct par type ; `authorize-citations` groupe par `sourceType` et fusionne les deux sous-ensembles autorisés. (4) Re-autorisation portail **triviale** (`publicPortal.authorizeAiCitations` : encore publié + campus cohérent, **aucun gating par utilisateur** — corpus public) ; global roles ADMIN/DIRECTOR = tout campus. (5) Signal `ai.service.signalIngest` (généralisé depuis `signalDocumentIngest`, alias conservé) **fire-and-forget** émis sur create/update/publish/unpublish/delete des programmes et FAQ (`portal-admin.factory` option `ingestSourceType`). (6) Passerelle `/search` élargit `types` à `AI_SEARCHABLE_SOURCE_TYPES` par défaut et rejette tout type inconnu. **ai-service** : `app/core/constants.py` créé ; `IngestRequest.source_type` / `SearchRequest.types` élargis aux types portail + `field_validator` rejetant l'inconnu ; `rag.retrieve_context` récupère sur **tout** le corpus (`SEARCHABLE_SOURCE_TYPES`) ; backfill campus (`run_queue_consumer`, `source_id=None`) **itère sur `INDEXABLE_SOURCE_TYPES`** (espace de curseur propre par type) ; `PgVectorStore` inchangé (`visibility.roles=[]` déjà = visible à tous — vérifié). **Tests** : Node **663 verts** (nouveau `public-portal.ai.test.js` — contrat ingestable programme/FAQ, `isPublished`+campus, sentinelle limit+1/curseur, type non supporté, autorisation triviale scopée/ADMIN/ids vides ; `ai.internal.test.js` — type inconnu rejeté sans appel façade, routage type portail, round-trip curseur, citations groupées par type fusionnées), eslint 0 erreur ; service **141 unit verts** (`test_search_api.py` — acceptation portail, défaut = corpus complet forwardé au store, scope narrow ; `test_ingest.py` — 2 types portail acceptés/503 vs inconnu 422, `run_queue_consumer` itère chaque corpus indexable ; `test_chat_api.py` — retrieval chat couvre tout le corpus), ruff 0 erreur. **Non commité** (QA porteur). Écarts : aucun — le pipeline ai-service était déjà générique sur `source_type` (seuls 2 gates Pydantic élargis + boucle backfill + `types` du retrieval). |
+| 2026-07-06 | **Décisions porteur — D10 (prix) & D4 (hébergement)** | ✅ | Aucun code. **D10** tranché : `free` **0 €** / `standard` **99 €** / `premium` **299 €** par campus/mois (add-on forfaitaire, option A) — COGS négligeable au plafond (§10bis), prix à la valeur ; top-up de budget pour gros campus laissé en option. **D4** confirmé : Postgres+pgvector **Neon UE (Francfort)** (magasin des conversations = PII, résidence UE), LLM premium **Anthropic sous DPA** (bascule Mistral UE possible sans code plus tard), **Redis différé** (mono-réplica pilote → cache in-process M6) ; host du conteneur (Scaleway Paris ou VPS ≥ 4 Go) à finaliser au déploiement. §15 (D4/D10) et §18.3 mis à jour. **Ne débloque aucun jalon** (tous réalisés) ; débloque les mesures de charge cible §18.2 une fois déployé. |
+| 2026-07-07 | **Préalable opérationnel — bench D2 exécuté** | ✅ | Aucun code. Réseau désormais ouvert → `scripts/bench_embeddings.py` lancé hors-ligne (venv jetable, torch CPU + sentence-transformers, modèles chargés depuis cache local ; `HF_HUB_OFFLINE=1` pour contourner le rate-limit HF qui bloquait le client). Résultat sur corpus jouet FR/EN/AR (6 docs/12 requêtes) : **bge-m3 (1024d)** recall@1 **1.00** / recall@3 1.00 / 129 ms·req ; **e5-base (768d)** recall@1 **0.83** / recall@3 1.00 / 66 ms·req. La règle recall@3 ≥ 95 % désignait e5-base, mais recall@3 sature à 1.00 pour les deux → seul discriminant recall@1, favorable à bge-m3, et e5-base exigerait le plumbing des préfixes `query:`/`passage:`. **Décision porteur : conserver `bge-m3` (1024d), colonne `vector(1024)` définitive** — aucun code touché. **Préalable §18.2(1) clos** : le premier index de prod peut être construit sans changement de dimension. §15/D2, en-tête (v4.11) et §18.2 mis à jour. |
 
 **État des artefacts au 2026-07-05 (fin M6 — tous jalons réalisés)** : dépôt
 frère `ai-service/` complet (non commité, plus aucun stub 501) — M6 ajoute
@@ -1450,14 +1487,13 @@ Il ne reste **aucun jalon** ouvert. Les travaux restants sont des **décisions
 porteur** et des **préalables opérationnels** (§18.3), plus des reports connus
 à planifier quand le produit les demandera :
 
-1. **Préalable bloquant avant le premier index de production** : **exécuter le
-   bench D2** (`ai-service/scripts/bench_embeddings.py`, extra `[embeddings]`).
-   Il n'a **jamais** pu tourner dans les environnements de développement
-   (téléchargement torch ~2 Go bloqué par le réseau) — à lancer **hors-ligne**
-   sur une machine avec accès PyPI/HuggingFace. Tant qu'il n'a pas tranché
-   `bge-m3` (1024d) vs `e5-base` (768d), la colonne `vector(1024)` reste
-   provisoire (D2) : la changer avant qu'un index existe est gratuit, après
-   c'est une réindexation planifiée.
+1. ~~**Préalable bloquant avant le premier index de production** : exécuter le
+   bench D2~~ — **FAIT le 2026-07-07** (`ai-service/scripts/bench_embeddings.py`,
+   sentence-transformers CPU sur corpus jouet FR/EN/AR). Résultat : `bge-m3`
+   (1024d) recall@1 **1.00** vs `e5-base` (768d) **0.83** (recall@3 = 1.00 pour
+   les deux). **Décision porteur : conserver `bge-m3`, colonne `vector(1024)`
+   définitive** (détail §15/D2). Ce préalable est **clos** ; le premier index de
+   prod peut être construit sans changement de dimension.
 2. **Vérifications de charge à refaire sur cible déployée** (après D4) : les SLO
    §10bis **chat** (TTFT, réponse complète) exigent un profil LLM réel + ERP
    complet — non mesurables en bac à sable. Le harnais `scripts/loadtest.py` est
@@ -1481,10 +1517,14 @@ porteur** et des **préalables opérationnels** (§18.3), plus des reports connu
 
 ### 18.3 En attente du porteur (ne bloque aucun jalon — tous réalisés)
 
-- **Prix de vente des plans** (D10) — avant le lancement commercial.
-- **Confirmation hébergement de production + résidence UE** (D4) — avant le
-  déploiement (Postgres managé type Neon + conteneur service + Redis managé,
-  §10bis/D4). Débloque les mesures de charge cible du §18.2.
+- ~~**Prix de vente des plans** (D10)~~ — **TRANCHÉ le 2026-07-06** : free 0 € /
+  standard 99 € / premium 299 € par campus/mois (add-on forfaitaire). Détail §15
+  (D10). Reste facultatif : politique de top-up de budget pour les gros campus.
+- ~~**Confirmation hébergement de production + résidence UE** (D4)~~ —
+  **CONFIRMÉ le 2026-07-06** : Postgres+pgvector **Neon UE (Francfort)**, LLM
+  premium **Anthropic sous DPA**, Redis différé (mono-réplica). Détail §15 (D4).
+  Sous-décision restante non bloquante : host du conteneur (Scaleway Paris ou VPS
+  ≥ 4 Go) à finaliser au déploiement. Débloque les mesures de charge cible §18.2.
 - **Actions prod héritées d'autres chantiers** (rappel, hors Phase 3) :
   migration d'activation des comptes (cf. §17).
 
