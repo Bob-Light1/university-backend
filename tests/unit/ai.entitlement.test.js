@@ -173,4 +173,14 @@ describe('requireAiFeature — scope comes from the JWT, never the body', () => 
     expect(campusFacade.service.getCampusAiEntitlement).toHaveBeenCalledWith(OTHER_CAMPUS_ID);
     expect(res.status).toHaveBeenCalledWith(403);
   });
+
+  test('400 when a global role sends a malformed ?campusId= (no silent platform fallback)', async () => {
+    const res = mockRes();
+    const req = mockReq({ user: { id: 'a1', role: 'ADMIN' }, query: { campusId: 'not-an-objectid' } });
+    const next = await run(requireAiFeature('chat'), req, res);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(campusFacade.service.getCampusAiEntitlement).not.toHaveBeenCalled();
+    expect(req.aiEntitlement).toBeUndefined();
+  });
 });

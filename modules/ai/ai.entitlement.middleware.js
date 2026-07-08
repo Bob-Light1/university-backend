@@ -14,7 +14,7 @@
  *  - req.aiCampusId    : effective campus scope ('' for global roles without one)
  */
 
-const { sendError, asyncHandler } = require('../../shared/utils/response-helpers');
+const { sendError, sendValidationError, asyncHandler } = require('../../shared/utils/response-helpers');
 const { buildCampusFilter, isValidObjectId } = require('../../shared/utils/validation-helpers');
 const { AI_ERROR_CODES, AI_PLANS } = require('../../shared/constants/ai.constants');
 const { GLOBAL_ROLES } = require('./ai.s2s');
@@ -34,17 +34,27 @@ const PLATFORM_ENTITLEMENT = Object.freeze({
   features: Object.freeze({ chat: true, search: true, analytics: true, advisors: true }),
 });
 
+/** Marker for a malformed ?campusId= — a 400, never a silent scope widening. */
+const INVALID_CAMPUS = Symbol('invalidCampusId');
+
 /**
  * Resolves the campus whose entitlement applies to this request.
  * Scoped roles: always their own campus (buildCampusFilter throws when the
  * JWT carries none — never trust the body, §4.1). Global roles: an optional
  * ?campusId= narrows to a tenant context; without it the platform context applies.
- * @returns {string|null} campusId, or null for the platform context.
+ *
+ * A malformed ?campusId= is rejected rather than ignored: falling back to the
+ * platform context would silently answer a campus-scoped question with a
+ * platform-scoped (and cheaper, zero-cost profile) context.
+ *
+ * @returns {string|null|Symbol} campusId, null for the platform context, or
+ *   INVALID_CAMPUS when a global role sent a malformed campusId.
  */
 const resolveEntitlementCampus = (req) => {
   if (GLOBAL_ROLES.includes(req.user.role)) {
     const requested = req.query.campusId;
-    return requested && isValidObjectId(String(requested)) ? String(requested) : null;
+    if (requested === undefined || requested === null || requested === '') return null;
+    return isValidObjectId(String(requested)) ? String(requested) : INVALID_CAMPUS;
   }
   buildCampusFilter(req.user); // throws when a scoped role has no valid campusId
   return String(req.user.campusId);
@@ -72,6 +82,10 @@ const requireAiFeature = (feature) =>
       return sendError(res, 403, 'No campus is bound to your account', {
         code: AI_ERROR_CODES.AI_NOT_ENABLED,
       });
+    }
+
+    if (campusId === INVALID_CAMPUS) {
+      return sendValidationError(res, [{ field: 'campusId', message: 'campusId must be a valid ObjectId' }]);
     }
 
     // Platform context (global role, no campus targeted).
