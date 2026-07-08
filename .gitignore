@@ -13,5 +13,6 @@ oldCode.md
 *.log
 claude.md
 .claudeignore
+DEPLOY_AI.md
 # Sensitive activation links/codes exported by scripts/migrate-account-activation.js
 account-activation-export-*.csv

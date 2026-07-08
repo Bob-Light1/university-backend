@@ -141,9 +141,13 @@ const updateCampusAiEntitlement = asyncHandler(async (req, res) => {
     monthlyTokenBudget:
       updates.monthlyTokenBudget ??
       (preset ? preset.monthlyTokenBudget : current.monthlyTokenBudget ?? AI_PLAN_PRESETS[AI_PLANS.FREE].monthlyTokenBudget),
-    features:
-      updates.features ??
-      (preset ? { ...preset.features } : { chat: true, search: true, analytics: false, advisors: false, ...current.features }),
+    // Feature flags MERGE onto the base (never wholesale-replace): a partial
+    // `{ features: { advisors: true } }` PUT must not silently disable chat and
+    // search. Base = the new plan preset on a plan switch, else the current set.
+    features: {
+      ...(preset ? preset.features : { chat: true, search: true, analytics: false, advisors: false, ...current.features }),
+      ...updates.features,
+    },
     activatedAt: current.activatedAt ?? null,
   };
   if (next.enabled && !current.enabled) {

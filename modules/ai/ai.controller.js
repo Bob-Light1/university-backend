@@ -135,7 +135,18 @@ const chat = asyncHandler(async (req, res) => {
   req.socket.setTimeout(0);
 
   req.on('close', abort);
-  Readable.fromWeb(response.body).pipe(res);
+
+  // A mid-stream upstream failure (ai-service crash, network drop) OR a client
+  // disconnect — which aborts the fetch and cancels the web stream — surfaces
+  // as an 'error' on the Node stream. Without a listener that is an uncaught
+  // exception that crashes the whole gateway; swallow it and tear the response
+  // down cleanly instead. `.pipe` does not end `res` on error, so end it here.
+  const upstreamStream = Readable.fromWeb(response.body);
+  upstreamStream.on('error', () => {
+    abort();
+    if (!res.writableEnded) res.end();
+  });
+  upstreamStream.pipe(res);
 });
 
 /** POST /api/ai/search — Annexe B (query 1..500, limit clamped to 50). */
@@ -270,6 +281,9 @@ const usage = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'OK', {
     period: counters.period,
     plan: entitlement.plan,
+    // Effective per-campus feature toggles (may override the plan preset — the
+    // hub uses these to decide which tabs to show, not the plan defaults).
+    features: entitlement.features,
     tokensIn,
     tokensOut,
     budget,
