@@ -86,10 +86,42 @@ Response shape: `{ success, message, data, meta }`.
 
 - Campus-scoped: `campusId: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
 - Global collections (`Course`, `Partner`, `GradingScale`): no `campusId`.
-- Soft delete: `isDeleted` + `deletedAt` — never hard delete.
 - Enums: `Object.freeze({})` — exported and reused across backend controllers/validators (the frontend mirrors the same values in its Yup schemas).
 - Auto-increment refs via `counter` model. `{ timestamps: true }` on every schema.
 - Compound indexes at schema level for frequent query patterns.
+
+### 5.1 Soft delete — THREE conventions, one helper
+
+There is **no single soft-delete field** in this codebase. Three conventions coexist, one per family of models. They are all legitimate, but they are **not interchangeable**, and writing the wrong one fails *silently*.
+
+| Family | Marker | Deleted when | Models (13 / 13 / 1) |
+|---|---|---|---|
+| **Actors & configuration** | `status` enum containing `'archived'` | `status === 'archived'` | `Student` `Teacher` `Parent` `Mentor` `Staff` `Class` `Subject` `Course` `Department` `Campus` `Level` `Partner` `Announcement` |
+| **Records & transactions** | `isDeleted` (+ `deletedAt`) | `isDeleted === true` | `Result` `ExamSession` `ExamEnrollment` `ExamGrading` `ExamSubmission` `ExamAppeal` `QuestionBank` `Income` `Expense` `ExpenseCategory` `StudentFee` `StudentSchedule` `TeacherSchedule` |
+| **GED** | `deletedAt` only (no boolean) | `deletedAt !== null` | `Document` — soft-deleted docs **keep** `status: PUBLISHED` |
+
+The other ~29 models (logs, junctions, tokens, snapshots, `Notification`, `PrintJob`, `QuizSession`, `FinalTranscript`, …) have **no** deletion marker — deletion is not a concept for them.
+
+**Never hand-write a not-deleted filter.** Two silent failure modes, both of which return a plausible-looking result set:
+- `{ isDeleted: false }` on `students` matches **nothing** — the field does not exist.
+- `{ status: { $ne: 'archived' } }` on `results` filters **no deletion at all** — `Result.status` is a *workflow* state (`PUBLISHED` / `ARCHIVED`, uppercase); an ARCHIVED result is live.
+
+Derive the filter from the model instead — `shared/utils/soft-delete.js`:
+
+```js
+const { notDeletedFilter, deletedOnlyFilter, softDeletePatch } = require('shared/utils/soft-delete');
+
+Student.find({ ...campusFilter, ...notDeletedFilter(Student) });   // → status: { $ne: 'archived' }
+Result.find({  ...campusFilter, ...notDeletedFilter(Result)  });   // → isDeleted: false
+Document.find({ ...campusFilter, ...notDeletedFilter(Document) }); // → deletedAt: null
+```
+
+A model with no convention **throws** rather than returning `{}` — an empty filter would silently include deleted documents. Fail closed, like `buildCampusFilter()`. `tests/unit/soft-delete.test.js` pins these conventions against the real schemas: change a model's marker and that suite tells you which queries you just broke.
+
+**Hard delete** is allowed **only** on these audited, role-gated paths — everywhere else, soft delete:
+- `DELETE /:id/permanent` on the generic-entity family (**ADMIN** only) — `shared/lib/generic-entity.controller.js`.
+- `hardDeleteDocument()` (**ADMIN / DIRECTOR**) — deletes the document + its versions in a transaction; the **audit records are never deleted**.
+- `ActivationToken` cleanup (`account.service.js`) and TTL-expiring collections — no business data.
 
 ---
 
