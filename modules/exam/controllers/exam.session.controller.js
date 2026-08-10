@@ -274,25 +274,48 @@ const deleteSession = async (req, res) => {
 
 // ─── Status-machine helper ────────────────────────────────────────────────────
 
+/**
+ * Applies a status transition to an ExamSession after validating the request.
+ *
+ * CONTRACT — callers MUST guard with `if (!updated) return;`:
+ *   - returns the updated session document on success;
+ *   - returns **null** when a response has ALREADY been sent to the client.
+ *
+ * The sentinel must stay falsy. `sendError()` / `sendNotFound()` return the Express
+ * `res` object (truthy) for chaining, so `return sendError(...)` would defeat every
+ * caller's guard and lead to a second response on an already-sent request.
+ *
+ * @returns {Promise<Object|null>}
+ */
 const _transition = async (req, res, { fromStatuses, toStatus, extraUpdates = {}, requiredBody = [] }) => {
   const { id } = req.params;
-  if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid session ID.');
+  if (!isValidObjectId(id)) {
+    sendError(res, 400, 'Invalid session ID.');
+    return null;
+  }
 
   const campusFilter = getCampusFilter(req, res);
-  if (!campusFilter) return;
+  if (!campusFilter) return null;
 
   const session = await repo.findSessionByFilter({ _id: id, ...campusFilter, isDeleted: false });
-  if (!session) return sendNotFound(res, 'Exam session');
+  if (!session) {
+    sendNotFound(res, 'Exam session');
+    return null;
+  }
 
   if (!fromStatuses.includes(session.status)) {
-    return sendError(
+    sendError(
       res, 400,
       `Cannot transition from ${session.status} to ${toStatus}. Allowed from: ${fromStatuses.join(', ')}.`
     );
+    return null;
   }
 
   for (const field of requiredBody) {
-    if (!req.body[field]) return sendError(res, 400, `${field} is required.`);
+    if (!req.body[field]) {
+      sendError(res, 400, `${field} is required.`);
+      return null;
+    }
   }
 
   const updated = await repo.applySessionTransition(

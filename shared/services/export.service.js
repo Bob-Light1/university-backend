@@ -1,4 +1,5 @@
 const ExcelJS = require('exceljs');
+const { buildCampusFilter, escapeRegex } = require('../utils/validation-helpers');
 
 /**
  * EXPORT SERVICE
@@ -43,26 +44,40 @@ class ExportService {
   }
 
   /**
-   * Build filter query
+   * Build the export query filter.
+   *
+   * Campus isolation is DERIVED from the caller's role via buildCampusFilter
+   * (CLAUDE.md §2) — never hand-rolled here. The helper consults the role first:
+   * a global role may scope to any campus with `?campusId=`, a scoped role always
+   * gets its own campus whatever it asked for, and a scoped token without a campus
+   * throws (fail closed).
+   *
+   * @param {Object} query - req.query
+   * @param {Object} user  - req.user ({ id, role, campusId })
+   * @returns {Object} Mongo filter, campus-scoped for every non-global role
+   * @throws  {Error}  403-tagged error when a scoped token carries no valid campus
    */
-  buildFilter(query, userRole, userCampusId) {
-    const filter = {};
+  buildFilter(query, user) {
+    let campusFilter;
+    try {
+      campusFilter = buildCampusFilter(user, query.campusId || null);
+    } catch (err) {
+      console.error('[export CampusIsolation] breach prevented:', err.message);
+      const error = new Error('Campus information is missing from your session. Please log in again.');
+      error.statusCode = 403;
+      throw error;
+    }
 
-    // Specific entities by IDs
+    // Specific entities by IDs — an id list NARROWS the result set, it never
+    // authorises it: the campus filter still applies.
     if (query.entityIds) {
-      const ids = Array.isArray(query.entityIds) 
-        ? query.entityIds 
+      const ids = Array.isArray(query.entityIds)
+        ? query.entityIds
         : query.entityIds.split(',');
-      filter._id = { $in: ids };
-      return filter;
+      return { _id: { $in: ids }, ...campusFilter };
     }
 
-    // Campus isolation
-    if (query.campusId) {
-      filter.schoolCampus = query.campusId;
-    } else if (userRole === 'CAMPUS_MANAGER') {
-      filter.schoolCampus = userCampusId;
-    }
+    const filter = { ...campusFilter };
 
     // Class filter
     if (query.classId) {
@@ -79,16 +94,17 @@ class ExportService {
       filter.gender = query.gender;
     }
 
-    // Search
+    // Search — escaped before reaching $regex (ReDoS / pattern injection)
     if (query.search) {
+      const safeSearch = escapeRegex(query.search);
       filter.$or = [
-        { firstName: { $regex: query.search, $options: 'i' } },
-        { lastName: { $regex: query.search, $options: 'i' } },
-        { email: { $regex: query.search, $options: 'i' } },
+        { firstName: { $regex: safeSearch, $options: 'i' } },
+        { lastName: { $regex: safeSearch, $options: 'i' } },
+        { email: { $regex: safeSearch, $options: 'i' } },
       ];
 
       if (query.matricule !== undefined) {
-        filter.$or.push({ matricule: { $regex: query.search, $options: 'i' } });
+        filter.$or.push({ matricule: { $regex: safeSearch, $options: 'i' } });
       }
     }
 
@@ -149,7 +165,7 @@ class ExportService {
    */
   async exportToCSV(query, user) {
     try {
-      const filter = this.buildFilter(query, user.role, user.campusId);
+      const filter = this.buildFilter(query, user);
       const entities = await this.fetchEntities(filter);
 
       if (entities.length === 0) {
@@ -197,7 +213,7 @@ class ExportService {
    */
   async exportToExcel(query, user) {
     try {
-      const filter = this.buildFilter(query, user.role, user.campusId);
+      const filter = this.buildFilter(query, user);
       const entities = await this.fetchEntities(filter);
 
       if (entities.length === 0) {

@@ -291,7 +291,8 @@ class GenericBulkController {
       return res.send(result.data);
     } catch (error) {
       console.error(`❌ CSV Export error:`, error);
-      return sendError(res, 500, error.message || `Failed to export ${this.entityNameLower}s`);
+      // statusCode is set by ExportService.buildFilter on a campus-isolation breach (403).
+      return sendError(res, error.statusCode || 500, error.message || `Failed to export ${this.entityNameLower}s`);
     }
   };
 
@@ -308,7 +309,8 @@ class GenericBulkController {
       return res.send(result.data);
     } catch (error) {
       console.error(`❌ Excel Export error:`, error);
-      return sendError(res, 500, error.message || `Failed to export ${this.entityNameLower}s`);
+      // statusCode is set by ExportService.buildFilter on a campus-isolation breach (403).
+      return sendError(res, error.statusCode || 500, error.message || `Failed to export ${this.entityNameLower}s`);
     }
   };
 
