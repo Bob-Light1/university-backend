@@ -215,6 +215,7 @@ const notificationRouter      = require('./modules/notification').routes;
 const financeRouter           = require('./modules/finance').routes;
 const accountRouter           = require('./modules/account').routes;
 const aiModule                = require('./modules/ai'); // Phase 3 gateway — inert without AI_SERVICE_URL
+const dangerZoneRouter        = require('./shared/lib/hard-delete').routes; // harmonized permanent deletion
 
 app.use('/api/admin', adminRouter);
 app.use('/api/campus', campusRouter);
@@ -240,6 +241,9 @@ app.use('/api/notifications', notificationRouter);
 app.use('/api/finance',       financeRouter);
 app.use('/api/account',       accountRouter);
 app.use('/api/ai',            aiModule.routes);
+// Harmonized permanent deletion (CLAUDE.md §5.2). Every hard delete in the platform
+// clears the same four controls here: ticket, phrase, password, justification.
+app.use('/api/danger-zone',   dangerZoneRouter);
 
 // Internal S2S read API for ai-service (PHASE3_AI_DESIGN.md §4.2/§6.2).
 // Mounted OUTSIDE /api on purpose (no public rate-limiter, no user JWT): the

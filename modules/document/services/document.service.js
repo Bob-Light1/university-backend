@@ -545,6 +545,8 @@ const hardDeleteDocument = async (documentId, req) => {
     if (!doc) throw Object.assign(new Error('Document not found'), { statusCode: 404 });
 
     await repo.deleteVersionsByDocument(documentId, { session });
+    // Share links must go with the document: a surviving token resolves to a removed id.
+    await repo.deleteSharesByDocument(documentId, { session });
     await repo.deleteDocumentById(documentId, { session });
 
     invalidateStorageCache(doc.campusId.toString());

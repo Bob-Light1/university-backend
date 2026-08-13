@@ -17,12 +17,13 @@
 
 const {
   sendSuccess, sendCreated, sendError, sendNotFound,
-  sendForbidden, sendPaginated, asyncHandler,
+  sendPaginated, asyncHandler,
 } = require('../../../shared/utils/response-helpers');
 
 const documentService = require('../services/document.service');
 const storageService  = require('../services/document.storage.service');
 const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
+const hardDelete = require('../../../shared/lib/hard-delete');
 
 // ── Create Document ───────────────────────────────────────────────────────────
 
@@ -141,11 +142,27 @@ const deleteDocument = asyncHandler(async (req, res) => {
   const { reason }   = req.body;
 
   if (isHardDelete) {
-    if (!['ADMIN', 'DIRECTOR'].includes(req.user.role)) {
-      return sendForbidden(res, 'Hard delete requires ADMIN or DIRECTOR role');
+    // Permanent deletion clears the harmonized gate (CLAUDE.md §5.2): ticket from
+    // `GET /api/danger-zone/document/:id/impact`, exact confirmation phrase, operator
+    // password and written justification. The GED teardown itself (version purge, storage
+    // cache, DocumentAudit entry, ai-service re-ingest) still runs in document.service.
+    try {
+      const receipt = await hardDelete.service.execute({
+        entityType: 'document',
+        entityId:   req.params.id,
+        req,
+        confirmation: {
+          ticket:             req.body?.ticket,
+          confirmationPhrase: req.body?.confirmationPhrase,
+          password:           req.body?.password,
+          reason,
+        },
+      });
+
+      return sendSuccess(res, 200, 'Document permanently deleted', receipt);
+    } catch (error) {
+      return hardDelete.respondToError(res, error);
     }
-    await documentService.hardDeleteDocument(req.params.id, req);
-    return sendSuccess(res, 200, 'Document permanently deleted');
   }
 
   await documentService.softDeleteDocument(req.params.id, reason, req);

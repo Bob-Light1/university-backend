@@ -16,11 +16,15 @@ const {
   isSoftDeletable,
 } = require('../../shared/utils/soft-delete');
 
+const mongoose = require('mongoose');
+
 const Student      = require('../../modules/student/models/student.model');
 const Teacher      = require('../../modules/teacher/models/teacher.model');
 const { Result }   = require('../../modules/result/models/result.model'); // exported in an object
 const Document     = require('../../modules/document/models/document.model');
 const Notification = require('../../modules/notification/models/notification.model');
+const Announcement = require('../../modules/announcement/models/announcement.model');
+const { Course }   = require('../../modules/course/course.model'); // exported in an object
 
 describe('soft-delete — convention detection', () => {
   describe('actor / configuration models → status enum', () => {
@@ -59,6 +63,39 @@ describe('soft-delete — convention detection', () => {
     it("does NOT mistake Document's workflow status for a deletion", () => {
       // Soft-deleted documents keep status PUBLISHED (document.service.js:42).
       expect(notDeletedFilter(Document)).not.toHaveProperty('status');
+    });
+  });
+
+  describe('ambiguous schemas → declared, never guessed', () => {
+    /**
+     * Announcement and Course both carry a lowercase 'archived' status enum AND a `deletedAt`
+     * field, and they mean the OPPOSITE things. Inferring from the schema gets one of them
+     * wrong every time, so the answer is declared in STRATEGY_OVERRIDES and pinned here.
+     */
+    it("reads Announcement on deletedAt — 'archived' is its expiry state, not a deletion", () => {
+      // The nightly expiry cron writes status:'archived' on live announcements
+      // (announcement.repository.js), while deleteAnnouncement writes deletedAt.
+      expect(Announcement.schema.path('status').enumValues).toContain('archived');
+      expect(notDeletedFilter(Announcement)).toEqual({ deletedAt: null });
+      expect(deletedOnlyFilter(Announcement)).toEqual({ deletedAt: { $ne: null } });
+      expect(softDeletePatch(Announcement, { at: new Date(0) })).toEqual({ deletedAt: new Date(0) });
+    });
+
+    it('reads Course on status — archiveCourse writes both markers together', () => {
+      expect(Course.schema.path('deletedAt')).toBeDefined();
+      expect(notDeletedFilter(Course)).toEqual({ status: { $ne: 'archived' } });
+    });
+
+    it('throws on an undeclared model carrying both markers rather than picking one', () => {
+      const schema = new mongoose.Schema({
+        status:    { type: String, enum: ['active', 'archived'] },
+        deletedAt: { type: Date, default: null },
+      });
+      const Ambiguous = mongoose.models.__SoftDeleteAmbiguous__
+        || mongoose.model('__SoftDeleteAmbiguous__', schema);
+
+      expect(() => notDeletedFilter(Ambiguous)).toThrow(/cannot be inferred/);
+      expect(() => notDeletedFilter(Ambiguous)).toThrow(/STRATEGY_OVERRIDES/);
     });
   });
 

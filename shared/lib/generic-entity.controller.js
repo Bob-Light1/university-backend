@@ -19,6 +19,11 @@ const {
   buildCampusFilter,
   escapeRegex,
 } = require('../utils/validation-helpers');
+const {
+  notDeletedFilter,
+  softDeletePatch,
+  restorePatch,
+} = require('../utils/soft-delete');
 
 const SALT_ROUNDS = 12; // platform standard (matches profile.service, models, per-module controllers)
 
@@ -311,11 +316,15 @@ class GenericEntityController {
         Object.assign(filter, this.buildExtraFilters(req.query));
       }
 
-      // Conflict between includeArchived / status resolved
+      // Conflict between includeArchived / status resolved.
+      // The not-deleted filter is derived from the model rather than hard-coded: this
+      // controller is generic, but `status: 'archived'` is one convention out of three, and
+      // on a model that marks deletion with `isDeleted` or `deletedAt` a hard-coded status
+      // filter matches nothing and returns a plausible empty list (CLAUDE.md §5.1).
       if (status) {
         filter.status = status;
       } else if (includeArchived !== 'true') {
-        filter.status = { $ne: 'archived' };
+        Object.assign(filter, notDeletedFilter(this.Model));
       }
 
       if (search && this.searchFields.length > 0) {
@@ -543,7 +552,10 @@ class GenericEntityController {
         }
       }
 
-      entity.status = 'archived';
+      // Derived from the model, not hard-coded: assigning `status` on a schema that has no
+      // such path is silently dropped by Mongoose, `save()` resolves, and this route would
+      // report a successful archive that archived nothing.
+      Object.assign(entity, softDeletePatch(this.Model));
       await entity.save();
 
       return sendSuccess(res, 200, `${this.entityName} archived successfully`);
@@ -577,7 +589,7 @@ class GenericEntityController {
         }
       }
 
-      entity.status = 'active';
+      Object.assign(entity, restorePatch(this.Model));
       await entity.save();
 
       return sendSuccess(res, 200, `${this.entityName} restored successfully`);
@@ -614,11 +626,16 @@ class GenericEntityController {
       const customFacets = this.statsFacets ? this.statsFacets(startOfMonth) : {};
       const facets        = { ...baseFacets, ...customFacets };
 
+      // Scope = everything live on the campus, not only `status: 'active'`. Counting the
+      // active ones alone silently dropped `pending` / `inactive` / `suspended` rows from
+      // `totalEntities` — and since the activation flow creates every account as `pending`,
+      // a freshly imported cohort was invisible in the KPI until each user activated. It
+      // also made the `byStatus` facets of department/campus structurally single-valued.
       const statsArray = await this.Model.aggregate([
         {
           $match: {
             schoolCampus: new mongoose.Types.ObjectId(campusId),
-            status:       'active',
+            ...notDeletedFilter(this.Model),
           },
         },
         { $facet: facets },

@@ -215,7 +215,8 @@ const getCampusOverview = asyncHandler(async (req, res) => {
   const campusFilter = getCampusFilter(req, res);
   if (!campusFilter) return; // 403 already sent — campus not resolvable
 
-  const matchFilter  = { isDeleted: false, ...campusFilter };
+  // Deletion is applied by the repository, which owns the model — not restated here.
+  const matchFilter  = { ...campusFilter };
   if (academicYear) matchFilter.academicYear = academicYear;
   if (semester && Object.values(SEMESTER).includes(semester)) matchFilter.semester = semester;
 

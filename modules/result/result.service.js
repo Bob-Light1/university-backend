@@ -218,7 +218,8 @@ const isValidSemester = (value) => Object.values(SEMESTER).includes(value);
 const getCampusOverviewAggregates = async ({ campusId, academicYear, semester }) => {
   // Aggregation pipelines do NOT auto-cast (unlike find) — a string campus id
   // would silently match nothing.
-  const matchFilter = { isDeleted: false, schoolCampus: new mongoose.Types.ObjectId(String(campusId)) };
+  // Deletion is applied by the repository, which owns the model — not restated here.
+  const matchFilter = { schoolCampus: new mongoose.Types.ObjectId(String(campusId)) };
   if (academicYear && isValidAcademicYear(academicYear)) matchFilter.academicYear = academicYear;
   if (semester && isValidSemester(semester)) matchFilter.semester = semester;
 

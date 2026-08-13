@@ -19,7 +19,12 @@
 
 const mongoose = require('mongoose');
 const { isValidObjectId, escapeRegex } = require('../../../shared/utils/validation-helpers');
-const { APPROVAL_STATUS }  = require('../course.model');
+const { Course, APPROVAL_STATUS }  = require('../course.model');
+const { notDeletedFilter, deletedOnlyFilter } = require('../../../shared/utils/soft-delete');
+
+/** Course deletion fragments — derived from the model, see course.repository. */
+const NOT_DELETED  = notDeletedFilter(Course);
+const DELETED_ONLY = deletedOnlyFilter(Course);
 
 // ─── ROLE GUARDS ──────────────────────────────────────────────────────────────
 
@@ -176,7 +181,7 @@ const hasPedagogicalFields = (body) =>
  * @returns {Object} MongoDB filter
  */
 const buildCourseFilter = (query, user) => {
-  const filter = { status: { $ne: 'archived' } };
+  const filter = { ...NOT_DELETED };
 
   // Non-global roles always see latest APPROVED only
   const canSeeAllStatuses = isGlobalRole(user.role);
@@ -195,9 +200,12 @@ const buildCourseFilter = (query, user) => {
     }
     if (user.role === 'ADMIN') {
       if (query.archived === 'true') {
-        filter.status = 'archived';      // ADMIN only — archived view (restore tab)
+        // ADMIN only — archived view (restore tab)
+        Object.assign(filter, DELETED_ONLY);
       } else if (query.includeDeleted === 'true') {
-        delete filter.status;            // ADMIN only — show all including archived
+        // ADMIN only — show all including archived. Drops whichever keys the convention
+        // actually uses, instead of assuming the marker is named `status`.
+        Object.keys(NOT_DELETED).forEach((key) => delete filter[key]);
       }
     }
   }

@@ -10,6 +10,7 @@
  */
 
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
+const { notDeletedFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
 
 const Income          = require('./models/income.model');
 const Expense         = require('./models/expense.model');
@@ -23,6 +24,15 @@ const FeePayment      = require('./models/feePayment.model');
 const STUDENT_FIELDS  = 'firstName lastName matricule';
 const CATEGORY_FIELDS = 'name';
 
+// Deletion fragments derived from each model rather than hard-coded (CLAUDE.md §5.1).
+// These five collections carry money: inside an aggregation `$match`, a marker that does
+// not exist on the schema raises nothing — it returns 0, and a total of 0 reads as a
+// figure rather than as a broken query.
+const INCOME_LIVE   = notDeletedFilter(Income);
+const EXPENSE_LIVE  = notDeletedFilter(Expense);
+const CATEGORY_LIVE = notDeletedFilter(ExpenseCategory);
+const FEE_LIVE      = notDeletedFilter(StudentFee);
+
 // ── Income ────────────────────────────────────────────────────────────────────
 
 /**
@@ -32,20 +42,20 @@ const CATEGORY_FIELDS = 'name';
  * @returns {Promise<number>}
  */
 const countByCampusAndStatus = (campusId, status) =>
-  Income.countDocuments({ schoolCampus: campusId, status, isDeleted: false });
+  Income.countDocuments({ schoolCampus: campusId, status, ...INCOME_LIVE });
 
 /** Creates an income record. @returns {Promise<Object>} */
 const createIncome = (doc) => Income.create(doc);
 
 /** Income by id (not deleted), lean — student identity populated for the detail view. */
 const findIncomeById = (id, extra = {}) =>
-  Income.findOne({ _id: id, isDeleted: false, ...extra })
+  Income.findOne({ _id: id, ...INCOME_LIVE, ...extra })
     .populate('student', STUDENT_FIELDS)
     .lean();
 
 /** Paginated incomes by filter (already campus-scoped by the caller). */
 const paginateIncomes = async ({ filter, skip, limit, sort = { incomeDate: -1 } }) => {
-  const query = { isDeleted: false, ...filter };
+  const query = { ...INCOME_LIVE, ...filter };
   const [data, total] = await Promise.all([
     Income.find(query).populate('student', STUDENT_FIELDS).sort(sort).skip(skip).limit(limit).lean(),
     Income.countDocuments(query),
@@ -55,20 +65,20 @@ const paginateIncomes = async ({ filter, skip, limit, sort = { incomeDate: -1 } 
 
 /** Mongoose document of an income (for mutation via save()). */
 const getIncomeDoc = (id, extra = {}) =>
-  Income.findOne({ _id: id, isDeleted: false, ...extra });
+  Income.findOne({ _id: id, ...INCOME_LIVE, ...extra });
 
 /** Soft-delete of an income. @returns {Promise<Object|null>} */
 const softDeleteIncome = (id, extra = {}) =>
   Income.findOneAndUpdate(
-    { _id: id, isDeleted: false, ...extra },
-    { $set: { isDeleted: true } },
+    { _id: id, ...INCOME_LIVE, ...extra },
+    { $set: softDeletePatch(Income) },
     { new: true },
   ).lean();
 
 /** Sum of received incomes for a campus over an optional period. */
 const sumIncomes = (match) =>
   Income.aggregate([
-    { $match: { isDeleted: false, status: 'received', ...match } },
+    { $match: { ...INCOME_LIVE, status: 'received', ...match } },
     { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
   ]);
 
@@ -79,17 +89,17 @@ const createExpense = (doc) => Expense.create(doc);
 
 /** Expense by id (not deleted), lean — category name populated for display. */
 const findExpenseById = (id, extra = {}) =>
-  Expense.findOne({ _id: id, isDeleted: false, ...extra })
+  Expense.findOne({ _id: id, ...EXPENSE_LIVE, ...extra })
     .populate('expenseCategory', CATEGORY_FIELDS)
     .lean();
 
 /** Mongoose document of an expense (for mutation via save()). */
 const getExpenseDoc = (id, extra = {}) =>
-  Expense.findOne({ _id: id, isDeleted: false, ...extra });
+  Expense.findOne({ _id: id, ...EXPENSE_LIVE, ...extra });
 
 /** Paginated expenses by filter (already campus-scoped by the caller). */
 const paginateExpenses = async ({ filter, skip, limit, sort = { expenseDate: -1 } }) => {
-  const query = { isDeleted: false, ...filter };
+  const query = { ...EXPENSE_LIVE, ...filter };
   const [data, total] = await Promise.all([
     Expense.find(query).populate('expenseCategory', CATEGORY_FIELDS).sort(sort).skip(skip).limit(limit).lean(),
     Expense.countDocuments(query),
@@ -100,15 +110,15 @@ const paginateExpenses = async ({ filter, skip, limit, sort = { expenseDate: -1 
 /** Soft-delete of an expense. @returns {Promise<Object|null>} */
 const softDeleteExpense = (id, extra = {}) =>
   Expense.findOneAndUpdate(
-    { _id: id, isDeleted: false, ...extra },
-    { $set: { isDeleted: true } },
+    { _id: id, ...EXPENSE_LIVE, ...extra },
+    { $set: softDeletePatch(Expense) },
     { new: true },
   ).lean();
 
 /** Sum of paid expenses for a campus over an optional period. */
 const sumExpenses = (match) =>
   Expense.aggregate([
-    { $match: { isDeleted: false, status: 'paid', ...match } },
+    { $match: { ...EXPENSE_LIVE, status: 'paid', ...match } },
     { $group: { _id: null, total: { $sum: '$amount' }, count: { $sum: 1 } } },
   ]);
 
@@ -119,27 +129,27 @@ const createCategory = (doc) => ExpenseCategory.create(doc);
 
 /** All non-deleted categories, sorted by name. */
 const listCategories = () =>
-  ExpenseCategory.find({ isDeleted: false }).sort({ name: 1 }).lean();
+  ExpenseCategory.find({ ...CATEGORY_LIVE }).sort({ name: 1 }).lean();
 
 /** Category by id (not deleted), lean. */
 const findCategoryById = (id) =>
-  ExpenseCategory.findOne({ _id: id, isDeleted: false }).lean();
+  ExpenseCategory.findOne({ _id: id, ...CATEGORY_LIVE }).lean();
 
 /** Case-insensitive lookup of a category by exact name (duplicate guard). */
 const findCategoryByName = (name) =>
-  ExpenseCategory.findOne({ name: new RegExp(`^${escapeRegex(name)}$`, 'i'), isDeleted: false }).lean();
+  ExpenseCategory.findOne({ name: new RegExp(`^${escapeRegex(name)}$`, 'i'), ...CATEGORY_LIVE }).lean();
 
 /** Soft-delete of a category. @returns {Promise<Object|null>} */
 const softDeleteCategory = (id) =>
   ExpenseCategory.findOneAndUpdate(
-    { _id: id, isDeleted: false },
-    { $set: { isDeleted: true } },
+    { _id: id, ...CATEGORY_LIVE },
+    { $set: softDeletePatch(ExpenseCategory) },
     { new: true },
   ).lean();
 
 /** Count of non-deleted expenses referencing a category (deletion guard). */
 const countExpensesByCategory = (categoryId) =>
-  Expense.countDocuments({ expenseCategory: categoryId, isDeleted: false });
+  Expense.countDocuments({ expenseCategory: categoryId, ...EXPENSE_LIVE });
 
 // ── StudentFee (debts) ────────────────────────────────────────────────────────
 
@@ -155,26 +165,26 @@ const createFee = (doc) => StudentFee.create(doc);
 const countOutstandingFeesByCampus = (campusId) =>
   StudentFee.countDocuments({
     schoolCampus: campusId,
-    isDeleted: false,
+    ...FEE_LIVE,
     status: { $in: ['pending', 'partial', 'overdue'] },
   });
 
 /** Debt by id (filtered not-deleted), lean enriched with the `balance` virtual. */
 const findFeeById = (id, extra = {}) =>
-  StudentFee.findOne({ _id: id, isDeleted: false, ...extra })
+  StudentFee.findOne({ _id: id, ...FEE_LIVE, ...extra })
     .populate('student', STUDENT_FIELDS)
     .lean({ virtuals: true });
 
 /** Mongoose document of a debt (for mutation via save()). */
 const getFeeDoc = (id, extra = {}) =>
-  StudentFee.findOne({ _id: id, isDeleted: false, ...extra });
+  StudentFee.findOne({ _id: id, ...FEE_LIVE, ...extra });
 
 /**
  * Paginated list of debts by a filter (already campus-scoped by the caller).
  * @returns {Promise<{ data: Object[], total: number }>}
  */
 const paginateFees = async ({ filter, skip, limit, sort = { createdAt: -1 } }) => {
-  const query = { isDeleted: false, ...filter };
+  const query = { ...FEE_LIVE, ...filter };
   const [data, total] = await Promise.all([
     StudentFee.find(query).populate('student', STUDENT_FIELDS).sort(sort).skip(skip).limit(limit).lean({ virtuals: true }),
     StudentFee.countDocuments(query),
@@ -184,7 +194,7 @@ const paginateFees = async ({ filter, skip, limit, sort = { createdAt: -1 } }) =
 
 /** All of a student's debts (ledger), sorted by creation. */
 const findFeesByStudent = (studentId, extra = {}) =>
-  StudentFee.find({ student: studentId, isDeleted: false, ...extra })
+  StudentFee.find({ student: studentId, ...FEE_LIVE, ...extra })
     .sort({ createdAt: -1 })
     .lean({ virtuals: true });
 
@@ -206,7 +216,7 @@ const incrementAmountPaidGuarded = (id, delta, extra = {}) =>
   StudentFee.findOneAndUpdate(
     {
       _id: id,
-      isDeleted: false,
+      ...FEE_LIVE,
       status: { $ne: 'cancelled' },
       ...extra,
       $expr: { $gte: ['$amountDue', { $add: ['$amountPaid', delta] }] },
@@ -222,8 +232,8 @@ const setFeeStatus = (id, status) =>
 /** Soft-delete of a debt. @returns {Promise<Object|null>} */
 const softDeleteFee = (id, extra = {}) =>
   StudentFee.findOneAndUpdate(
-    { _id: id, isDeleted: false, ...extra },
-    { $set: { isDeleted: true } },
+    { _id: id, ...FEE_LIVE, ...extra },
+    { $set: softDeletePatch(StudentFee) },
     { new: true },
   ).lean({ virtuals: true });
 
@@ -238,7 +248,7 @@ const softDeleteFee = (id, extra = {}) =>
 const markPastDueOverdue = (now) =>
   StudentFee.updateMany(
     {
-      isDeleted: false,
+      ...FEE_LIVE,
       dueDate: { $ne: null, $lt: now },
       status: { $in: ['pending', 'partial'] },
       $expr: { $lt: ['$amountPaid', '$amountDue'] }, // remaining balance > 0
@@ -256,7 +266,7 @@ const markPastDueOverdue = (now) =>
  */
 const findRemindableOverdueFees = (cutoff, limit = 200) =>
   StudentFee.find({
-    isDeleted: false,
+    ...FEE_LIVE,
     status: 'overdue',
     $or: [{ lastRemindedAt: null }, { lastRemindedAt: { $lt: cutoff } }],
   })
@@ -310,7 +320,7 @@ const aggregateOverdueAging = (campusOid, now) =>
       $match: {
         schoolCampus: campusOid,
         status: 'overdue',
-        isDeleted: false,
+        ...FEE_LIVE,
         dueDate: { $ne: null },
       },
     },
@@ -345,14 +355,14 @@ const aggregateOverdueAging = (campusOid, now) =>
  */
 const monthlyIncomeTotals = (match) =>
   Income.aggregate([
-    { $match: { isDeleted: false, status: 'received', ...match } },
+    { $match: { ...INCOME_LIVE, status: 'received', ...match } },
     { $group: { _id: { year: '$year', month: '$month' }, total: { $sum: '$amount' } } },
   ]);
 
 /** Monthly paid-expense totals — same contract as monthlyIncomeTotals. */
 const monthlyExpenseTotals = (match) =>
   Expense.aggregate([
-    { $match: { isDeleted: false, status: 'paid', ...match } },
+    { $match: { ...EXPENSE_LIVE, status: 'paid', ...match } },
     { $group: { _id: { year: '$year', month: '$month' }, total: { $sum: '$amount' } } },
   ]);
 

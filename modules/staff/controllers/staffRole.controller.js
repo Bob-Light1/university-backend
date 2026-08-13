@@ -15,8 +15,8 @@
  */
 
 const staffRoleRepo = require('../staffRole.repository');
-const staffRepo     = require('../staff.repository');
 const { ALL_PERMISSIONS } = require('../../../shared/constants/staff-permissions');
+const hardDelete = require('../../../shared/lib/hard-delete');
 const {
   sendSuccess,
   sendError,
@@ -217,36 +217,37 @@ const toggleStaffRole = async (req, res) => {
 // ── DELETE ────────────────────────────────────────────────────────────────────
 
 /**
- * Refuses deletion if any staff member currently holds this role.
+ * Permanently delete a staff role.
+ *
+ * A role carries a permission set, so its removal is security-relevant and goes through the
+ * harmonized hard-delete service (CLAUDE.md §5.2): ticket + confirmation phrase + password +
+ * written justification, with the "role still assigned to staff" check now declared as a
+ * BLOCK relation in the registry instead of being re-implemented here.
+ *
+ * Compatibility alias for `DELETE /api/danger-zone/staff-role/:id`. The impact preview that
+ * issues the required ticket is served by `GET /api/danger-zone/staff-role/:id/impact`.
  *
  * @route  DELETE /api/staff-roles/:id
- * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER (own campus)
  */
 const deleteStaffRole = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid StaffRole ID format.');
+    const receipt = await hardDelete.service.execute({
+      entityType: 'staff-role',
+      entityId:   req.params.id,
+      req,
+      confirmation: {
+        ticket:             req.body?.ticket,
+        confirmationPhrase: req.body?.confirmationPhrase,
+        password:           req.body?.password,
+        reason:             req.body?.reason,
+      },
+    });
 
-    const campusFilter = getCampusFilter(req);
-    const role = await staffRoleRepo.findScopedRaw(id, campusFilter.schoolCampus);
-    if (!role) return sendNotFound(res, 'StaffRole');
-
-    // Safety check: block deletion if the role is in use
-    const inUse = await staffRepo.isRoleInUse(role._id);
-    if (inUse) {
-      return sendError(
-        res, 409,
-        'This role is assigned to one or more staff members. Reassign or remove them first.'
-      );
-    }
-
-    await staffRoleRepo.deleteById(role._id);
-    return sendSuccess(res, 200, 'StaffRole deleted.');
+    return sendSuccess(res, 200, 'StaffRole deleted.', receipt);
 
   } catch (err) {
-    if (err.statusCode === 403) return sendError(res, 403, err.message);
-    console.error('❌ deleteStaffRole error:', err);
-    return sendError(res, 500, 'Failed to delete StaffRole.');
+    return hardDelete.respondToError(res, err);
   }
 };
 

@@ -17,7 +17,8 @@
  * de carte d'examen / certificat, cast ObjectId du compteur de correction).
  */
 
-const buildModelMock = () => {
+const buildModelMock = (modelName, marker) => {
+  const { softDeleteSchemaStub } = require('../helpers/soft-delete-stub');
   let leanVal = null;
   const makeQuery = () => {
     const q = {};
@@ -38,16 +39,19 @@ const buildModelMock = () => {
   Model.create = jest.fn((d) => Promise.resolve({ _id: 'created', ...d }));
   Model.insertMany = jest.fn((docs) => Promise.resolve(docs));
   Model.__setLean = (v) => { leanVal = v; };
+  // The repository derives its not-deleted filter from the schema, so the mock carries one.
+  Model.modelName = modelName;
+  Model.schema    = softDeleteSchemaStub(marker);
   return Model;
 };
 
-jest.mock('../../modules/exam/models/exam.session.model',            () => buildModelMock());
-jest.mock('../../modules/exam/models/exam.enrollment.model',         () => buildModelMock());
-jest.mock('../../modules/exam/models/exam.submission.model',         () => buildModelMock());
-jest.mock('../../modules/exam/models/exam.grading.model',            () => buildModelMock());
-jest.mock('../../modules/exam/models/exam.appeal.model',             () => buildModelMock());
-jest.mock('../../modules/exam/models/question-bank.model',           () => buildModelMock());
-jest.mock('../../modules/exam/models/exam.analytics-snapshot.model', () => buildModelMock());
+jest.mock('../../modules/exam/models/exam.session.model',            () => buildModelMock('ExamSession', 'isDeleted'));
+jest.mock('../../modules/exam/models/exam.enrollment.model',         () => buildModelMock('ExamEnrollment', 'isDeleted'));
+jest.mock('../../modules/exam/models/exam.submission.model',         () => buildModelMock('ExamSubmission', 'isDeleted'));
+jest.mock('../../modules/exam/models/exam.grading.model',            () => buildModelMock('ExamGrading', 'isDeleted'));
+jest.mock('../../modules/exam/models/exam.appeal.model',             () => buildModelMock('ExamAppeal', 'isDeleted'));
+jest.mock('../../modules/exam/models/question-bank.model',           () => buildModelMock('QuestionBank', 'isDeleted'));
+jest.mock('../../modules/exam/models/exam.analytics-snapshot.model', () => buildModelMock('ExamAnalyticsSnapshot', 'isDeleted'));
 
 const ExamSession           = require('../../modules/exam/models/exam.session.model');
 const ExamEnrollment        = require('../../modules/exam/models/exam.enrollment.model');

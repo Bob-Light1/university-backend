@@ -264,7 +264,7 @@ const deleteAnnouncement = async (req, res) => {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
     const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
 
-    const announcement = await announcementRepo.applyUpdate(scope, { deletedAt: new Date() });
+    const announcement = await announcementRepo.softDelete(scope);
     if (!announcement) return sendNotFound(res, 'Announcement');
 
     return sendSuccess(res, 200, 'Announcement deleted.');

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
 const { AI_PLANS, AI_PLAN_PRESETS } = require('../../shared/constants/ai.constants');
+const { notDeletedFilter } = require('../../shared/utils/soft-delete');
 
 /**
  * Campus Model
@@ -327,34 +328,40 @@ campusSchema.pre('save', function (next) {
 // Check if campus has reached capacity limits
 campusSchema.methods.canAddStudent = async function () {
   const Student = mongoose.model('Student');
-  const currentCount = await Student.countDocuments({ 
+  const currentCount = await Student.countDocuments({
     schoolCampus: this._id,
-    status: { $ne: 'archived' }
+    ...notDeletedFilter(Student),
   });
   return currentCount < this.features.maxStudents;
 };
 
 campusSchema.methods.canAddTeacher = async function () {
   const Teacher = mongoose.model('Teacher');
-  const currentCount = await Teacher.countDocuments({ 
+  const currentCount = await Teacher.countDocuments({
     schoolCampus: this._id,
-    status: { $ne: 'archived' }
+    ...notDeletedFilter(Teacher),
   });
   return currentCount < this.features.maxTeachers;
 };
 
 campusSchema.methods.canAddClass = async function () {
   const Class = mongoose.model('Class');
-  const currentCount = await Class.countDocuments({ 
+  const currentCount = await Class.countDocuments({
     campus: this._id,
-    status: { $ne: 'archived' }
+    ...notDeletedFilter(Class),
   });
   return currentCount < this.features.maxClasses;
 };
 campusSchema.methods.canAddDocumentStorage = async function(additionalBytes) {
   const Document = mongoose.model('Document');
   const result = await Document.aggregate([
-    { $match: { campusId: this._id, deletedAt: null, 'importedFile.sizeBytes': { $exists: true } } },
+    {
+      $match: {
+        campusId: this._id,
+        ...notDeletedFilter(Document),
+        'importedFile.sizeBytes': { $exists: true },
+      },
+    },
     { $group: { _id: null, total: { $sum: '$importedFile.sizeBytes' } } }
   ]);
   const usedBytes = result[0]?.total || 0;

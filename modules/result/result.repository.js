@@ -32,6 +32,17 @@ const mongoose = require('mongoose');
 const { Result }          = require('./models/result.model');
 const { FinalTranscript } = require('./models/final-transcript.model');
 const { GradingScale }    = require('./models/grading-scale.model');
+const { notDeletedFilter } = require('../../shared/utils/soft-delete');
+
+/**
+ * Not-deleted fragment for Result — derived from the model, exported so the aggregation
+ * callers share this one source.
+ *
+ * `Result.status` is a WORKFLOW state (PUBLISHED / ARCHIVED, uppercase), not a deletion
+ * marker: an ARCHIVED result is live. Deletion is `isDeleted`, and inside a `$match` the
+ * wrong marker returns 0 rather than raising (CLAUDE.md §5.1).
+ */
+const RESULT_LIVE = notDeletedFilter(Result);
 
 // Populate shapes for result reads (query shape — lives here).
 const RESULT_LIST_POPULATE = [
@@ -91,10 +102,10 @@ const paginateResults = async (filter, { skip, limit }) => {
 
 /** Full detail of a non-deleted result (lean, populate DETAIL). */
 const findResultByIdPopulated = (id) =>
-  applyPopulate(Result.findOne({ _id: id, isDeleted: false }), RESULT_DETAIL_POPULATE).lean();
+  applyPopulate(Result.findOne({ _id: id, ...RESULT_LIVE }), RESULT_DETAIL_POPULATE).lean();
 
 /** Non-deleted result doc for writing (update / delete / workflow). */
-const findResultForWrite = (id) => Result.findOne({ _id: id, isDeleted: false });
+const findResultForWrite = (id) => Result.findOne({ _id: id, ...RESULT_LIVE });
 
 /** Result doc by id, session-aware (original grade of a RETAKE in transaction). */
 const findResultById = (id, { session } = {}) =>
@@ -210,7 +221,10 @@ const aggregateStudentTranscript = (matchFilter) =>
  */
 const aggregateCampusOverview = (matchFilter) =>
   Result.aggregate([
-    { $match: matchFilter },
+    // The deletion fragment is appended HERE, last, so no caller can forget it or override
+    // it: this file owns the model, and inside a `$match` a missing marker returns rows
+    // rather than raising.
+    { $match: { ...matchFilter, ...RESULT_LIVE } },
     {
       $facet: {
         byStatus: [
@@ -227,7 +241,7 @@ const aggregateCampusOverview = (matchFilter) =>
           {
             $match: {
               status:    { $in: ['PUBLISHED', 'ARCHIVED'] },
-              isDeleted: false,
+              ...RESULT_LIVE,
             },
           },
           {
@@ -339,7 +353,7 @@ const listRetakeResults = (filter) =>
 
 /** Result authenticatable by QR token (public verification, lean). */
 const findResultByVerificationToken = (token) =>
-  Result.findOne({ verificationToken: token, isDeleted: false })
+  Result.findOne({ verificationToken: token, ...RESULT_LIVE })
     .populate('student', 'firstName lastName matricule')
     .populate('subject', 'subject_name subject_code')
     .populate('class',   'className')

@@ -17,11 +17,10 @@ const {
   isValidObjectId,
   validatePasswordStrength,
 } = require('../../../shared/utils/validation-helpers');
-const { deleteFile } = require('../../../shared/utils/file-upload');
 const { getLoginPrefs } = require('../../settings').service;
+const hardDelete = require('../../../shared/lib/hard-delete');
 
 const SALT_ROUNDS    = 12; // align with the platform standard (bcrypt cost 12)
-const STUDENT_FOLDER = 'students';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -274,38 +273,34 @@ const loginStudent = async (req, res) => {
 };
 
 /**
- * Permanently delete student
+ * Permanently delete a student.
+ *
+ * Compatibility alias for `DELETE /api/danger-zone/student/:id` — the removal itself, the
+ * cascade policy and the four confirmation controls all live in the harmonized hard-delete
+ * service (CLAUDE.md §5.2). The impact preview that issues the required ticket is served by
+ * `GET /api/danger-zone/student/:id/impact`.
+ *
  * @route   DELETE /api/students/:id/permanent
  * @access  Private (ADMIN only)
  */
 const deleteStudentPermanently = async (req, res) => {
   try {
-    const { id } = req.params;
+    const receipt = await hardDelete.service.execute({
+      entityType: 'student',
+      entityId:   req.params.id,
+      req,
+      confirmation: {
+        ticket:             req.body?.ticket,
+        confirmationPhrase: req.body?.confirmationPhrase,
+        password:           req.body?.password,
+        reason:             req.body?.reason,
+      },
+    });
 
-    // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return sendError(res, 400, 'Invalid student ID format');
-    }
-
-    const student = await studentRepo.findStudentDocById(id);
-    if (!student) {
-      return sendNotFound(res, 'Student');
-    }
-
-    // Delete profile image if exists
-    if (student.profileImage) {
-      await deleteFile(STUDENT_FOLDER, student.profileImage);
-    }
-
-    // Delete student from database (triggers post-findOneAndDelete hook:
-    // cascades child removal on the parent side)
-    await studentRepo.deleteStudentById(id);
-
-    return sendSuccess(res, 200, 'Student deleted permanently');
+    return sendSuccess(res, 200, 'Student deleted permanently', receipt);
 
   } catch (error) {
-    console.error('❌ Error deleting student:', error);
-    return sendError(res, 500, 'Failed to delete student');
+    return hardDelete.respondToError(res, error);
   }
 };
 

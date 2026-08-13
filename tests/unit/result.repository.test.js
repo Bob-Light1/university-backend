@@ -15,7 +15,8 @@
  * populate de la liste de rattrapage, token de vérification publique).
  */
 
-const buildModelMock = () => {
+const buildModelMock = (modelName, marker) => {
+  const { softDeleteSchemaStub } = require('../helpers/soft-delete-stub');
   let leanVal = null;
   const makeQuery = () => {
     const q = {};
@@ -39,12 +40,15 @@ const buildModelMock = () => {
   Model.getClassDistribution = jest.fn(() => Promise.resolve({ mean: 12 }));
   Model.generateForStudent = jest.fn(() => Promise.resolve({ _id: 'transcript1' }));
   Model.__setLean = (v) => { leanVal = v; };
+  // The repository derives its not-deleted filter from the schema, so the mock carries one.
+  Model.modelName = modelName;
+  Model.schema    = softDeleteSchemaStub(marker);
   return Model;
 };
 
-jest.mock('../../modules/result/models/result.model', () => ({ Result: buildModelMock() }));
-jest.mock('../../modules/result/models/final-transcript.model', () => ({ FinalTranscript: buildModelMock() }));
-jest.mock('../../modules/result/models/grading-scale.model', () => ({ GradingScale: buildModelMock() }));
+jest.mock('../../modules/result/models/result.model', () => ({ Result: buildModelMock('Result', 'isDeleted') }));
+jest.mock('../../modules/result/models/final-transcript.model', () => ({ FinalTranscript: buildModelMock('FinalTranscript', 'isDeleted') }));
+jest.mock('../../modules/result/models/grading-scale.model', () => ({ GradingScale: buildModelMock('GradingScale', 'status') }));
 
 const { Result }          = require('../../modules/result/models/result.model');
 const { FinalTranscript } = require('../../modules/result/models/final-transcript.model');
@@ -206,10 +210,12 @@ describe('result — agrégats (non-régression des pipelines)', () => {
   });
 
   test('aggregateCampusOverview : $match fourni + facettes statut/type/période + generalStats (taux réussite/à risque)', () => {
-    const match = { isDeleted: false, schoolCampus: 'c1' };
+    const match = { schoolCampus: 'c1' };
     repo.aggregateCampusOverview(match);
     const [pipeline] = Result.aggregate.mock.calls[0];
-    expect(pipeline[0]).toEqual({ $match: match });
+    // The repository owns the model, so it appends the deletion filter itself — the caller
+    // passes scope only.
+    expect(pipeline[0]).toEqual({ $match: { schoolCampus: 'c1', isDeleted: false } });
     const facet = pipeline[1].$facet;
     expect(Object.keys(facet)).toEqual(['byStatus', 'byEvalType', 'byExamPeriod', 'generalStats']);
     // generalStats only counts non-deleted PUBLISHED/ARCHIVED
@@ -217,6 +223,14 @@ describe('result — agrégats (non-régression des pipelines)', () => {
     const grp = facet.generalStats[1].$group;
     expect(grp.passingCount).toEqual({ $sum: { $cond: [{ $gte: ['$normalizedScore', 10] }, 1, 0] } });
     expect(grp.atRisk).toEqual({ $sum: { $cond: [{ $gte: ['$dropoutRiskScore', 60] }, 1, 0] } });
+  });
+
+  test('aggregateCampusOverview : le filtre de suppression ne peut pas être écrasé par l\'appelant', () => {
+    // Un appelant qui passerait `isDeleted: true` (ou l'oublierait) ne doit pas pouvoir
+    // faire remonter des résultats supprimés dans les KPI campus.
+    repo.aggregateCampusOverview({ schoolCampus: 'c1', isDeleted: true });
+    const [pipeline] = Result.aggregate.mock.calls[0];
+    expect(pipeline[0].$match.isDeleted).toBe(false);
   });
 
   test('aggregateDropoutRiskDistribution : scores null exclus, pire score par étudiant, seuils 30/60 alignés sur atRisk, sortie sans PII', () => {

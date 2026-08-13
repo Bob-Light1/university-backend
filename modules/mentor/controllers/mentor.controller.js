@@ -26,6 +26,7 @@ const mongoose = require('mongoose');
 const mentorRepo = require('../mentor.repository');
 const studentService = require('../../student').service; // student module facade (§3)
 const profileSvc = require('../../../shared/services/profile.service');
+const hardDelete = require('../../../shared/lib/hard-delete');
 const {
   sendSuccess,
   sendError,
@@ -412,29 +413,35 @@ const restoreMentor = async (req, res) => {
 // ── PERMANENT DELETE ──────────────────────────────────────────────────────────
 
 /**
+ * Permanently delete a mentor.
+ *
+ * Compatibility alias for `DELETE /api/danger-zone/mentor/:id`. Detaching the mentor from
+ * every student it still holds is now declared in the hard-delete registry as a DETACH
+ * relation, so it runs inside the same transaction as the removal instead of after it
+ * (CLAUDE.md §5.2). The impact preview that issues the required ticket is served by
+ * `GET /api/danger-zone/mentor/:id/impact`.
+ *
  * @route  DELETE /api/mentors/:id/permanent
  * @access ADMIN only
  */
 const deleteMentor = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid mentor ID format.');
-
-    const mentor = await mentorRepo.deleteById(id);
-    if (!mentor) return sendNotFound(res, 'Mentor');
-
-    // Detach the mentor from any students still assigned to it, so no
-    // Student.mentor reference is left dangling after the hard delete.
-    await studentService.detachAllFromMentor({
-      mentorId: mentor._id,
-      campusId: mentor.schoolCampus,
+    const receipt = await hardDelete.service.execute({
+      entityType: 'mentor',
+      entityId:   req.params.id,
+      req,
+      confirmation: {
+        ticket:             req.body?.ticket,
+        confirmationPhrase: req.body?.confirmationPhrase,
+        password:           req.body?.password,
+        reason:             req.body?.reason,
+      },
     });
 
-    return sendSuccess(res, 200, 'Mentor permanently deleted.');
+    return sendSuccess(res, 200, 'Mentor permanently deleted.', receipt);
 
   } catch (err) {
-    console.error('❌ deleteMentor error:', err);
-    return sendError(res, 500, 'Failed to delete mentor.');
+    return hardDelete.respondToError(res, err);
   }
 };
 

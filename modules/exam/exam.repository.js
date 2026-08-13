@@ -46,6 +46,18 @@ const ExamAppeal            = require('./models/exam.appeal.model');
 const QuestionBank          = require('./models/question-bank.model');
 const ExamAnalyticsSnapshot = require('./models/exam.analytics-snapshot.model');
 
+const { notDeletedFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
+
+// Deletion fragments derived from each model rather than hard-coded (CLAUDE.md §5.1).
+// Every exam collection carries an uppercase `status` workflow enum that includes
+// 'ARCHIVED' — a live state. Only `isDeleted` marks a deletion here, and the two must not
+// be confused; deriving the fragment removes the choice.
+const SESSION_LIVE    = notDeletedFilter(ExamSession);
+const ENROLLMENT_LIVE = notDeletedFilter(ExamEnrollment);
+const SUBMISSION_LIVE = notDeletedFilter(ExamSubmission);
+const GRADING_LIVE    = notDeletedFilter(ExamGrading);
+const APPEAL_LIVE     = notDeletedFilter(ExamAppeal);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // EXAM SESSION — reads
 // ─────────────────────────────────────────────────────────────────────────────
@@ -142,7 +154,7 @@ const findSessionsForExport = (filter) =>
 
 /** Recently COMPLETED sessions (anti-cheat cron, batch). */
 const findRecentlyCompletedSessions = (since, limit) =>
-  ExamSession.find({ status: 'COMPLETED', completedAt: { $gte: since }, isDeleted: false })
+  ExamSession.find({ status: 'COMPLETED', completedAt: { $gte: since }, ...SESSION_LIVE })
     .select('_id')
     .limit(limit)
     .lean();
@@ -166,7 +178,7 @@ const updateSessionById = (id, updates) =>
 
 /** Soft-delete of a DRAFT session. */
 const softDeleteSession = (id, userId) =>
-  ExamSession.findByIdAndUpdate(id, { isDeleted: true, updatedBy: userId });
+  ExamSession.findByIdAndUpdate(id, { ...softDeletePatch(ExamSession), updatedBy: userId });
 
 /** Applies a state-machine transition (returns the updated doc). */
 const applySessionTransition = (id, setFields) =>
@@ -182,31 +194,31 @@ const setSessionStatus = (id, status) =>
 
 /** Enrollment by (session, student) — non lean (mutated then saved). */
 const findEnrollment = (sessionId, studentId) =>
-  ExamEnrollment.findOne({ examSession: sessionId, student: studentId, isDeleted: false });
+  ExamEnrollment.findOne({ examSession: sessionId, student: studentId, ...ENROLLMENT_LIVE });
 
 /**
  * Enrollment by filter — non lean.
  * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
  */
-const findEnrollmentById = (filter) => ExamEnrollment.findOne({ ...filter, isDeleted: false });
+const findEnrollmentById = (filter) => ExamEnrollment.findOne({ ...filter, ...ENROLLMENT_LIVE });
 
 /**
  * Detailed enrollment (student + session→subject) — card/hall-ticket view.
  * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
  */
 const findEnrollmentDetailed = (filter) =>
-  ExamEnrollment.findOne({ ...filter, isDeleted: false })
+  ExamEnrollment.findOne({ ...filter, ...ENROLLMENT_LIVE })
     .populate('student', 'firstName lastName matricule profileImage')
     .populate({ path: 'examSession', populate: { path: 'subject', select: 'subject_name' } });
 
 /** Enrollment by hall ticket (QR check-in) — non lean. */
 const findEnrollmentByHallTicket = (sessionId, token) =>
-  ExamEnrollment.findOne({ examSession: sessionId, hallTicketToken: token, isDeleted: false })
+  ExamEnrollment.findOne({ examSession: sessionId, hallTicketToken: token, ...ENROLLMENT_LIVE })
     .populate('student', 'firstName lastName matricule');
 
 /** Eligible enrollments of a session (bulk generation) — non lean. */
 const findEligibleEnrollments = (sessionId) =>
-  ExamEnrollment.find({ examSession: sessionId, isEligible: true, isDeleted: false })
+  ExamEnrollment.find({ examSession: sessionId, isEligible: true, ...ENROLLMENT_LIVE })
     .populate('student', 'firstName lastName matricule profileImage');
 
 /** Paginated list of enrollments (lean). */
@@ -225,22 +237,23 @@ const paginateEnrollments = async (match, { skip, limit }) => {
 
 /** Count of a session's enrollments. */
 const countEnrollmentsForSession = (sessionId) =>
-  ExamEnrollment.countDocuments({ examSession: sessionId, isDeleted: false });
+  ExamEnrollment.countDocuments({ examSession: sessionId, ...ENROLLMENT_LIVE });
 
 /** Count of a session's absentees (analytics snapshot). */
 const countAbsentEnrollments = (sessionId) =>
-  ExamEnrollment.countDocuments({ examSession: sessionId, attendance: 'ABSENT', isDeleted: false });
+  ExamEnrollment.countDocuments({ examSession: sessionId, attendance: 'ABSENT', ...ENROLLMENT_LIVE });
 
 /** Distinct session ids a student is enrolled in (student session scoping). */
 const findEnrollmentSessionIdsForStudent = (studentId) =>
-  ExamEnrollment.find({ student: studentId, isDeleted: false }).distinct('examSession');
+  ExamEnrollment.find({ student: studentId, ...ENROLLMENT_LIVE }).distinct('examSession');
 
 /** A student's upcoming enrollments (dashboard facade) — lean. */
 const findUpcomingEnrollmentsForStudent = (studentId) =>
-  ExamEnrollment.find({ student: studentId, isEligible: true, isDeleted: false })
+  ExamEnrollment.find({ student: studentId, isEligible: true, ...ENROLLMENT_LIVE })
     .populate({
       path:     'examSession',
-      match:    { status: { $in: ['SCHEDULED', 'PUBLISHED', 'ONGOING'] }, startTime: { $gte: new Date() }, isDeleted: false },
+      // `match` applies to the populated ExamSession, not to the enrollment.
+      match:    { status: { $in: ['SCHEDULED', 'PUBLISHED', 'ONGOING'] }, startTime: { $gte: new Date() }, ...SESSION_LIVE },
       select:   'title startTime endTime status room subject',
       populate: { path: 'subject', select: 'subject_name' },
     })
@@ -259,7 +272,7 @@ const updateEnrollmentById = (id, updates) =>
 
 /** Soft-delete of an enrollment. */
 const softDeleteEnrollment = (id, userId) =>
-  ExamEnrollment.findByIdAndUpdate(id, { isDeleted: true, updatedBy: userId });
+  ExamEnrollment.findByIdAndUpdate(id, { ...softDeletePatch(ExamEnrollment), updatedBy: userId });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EXAM SUBMISSION
@@ -267,24 +280,24 @@ const softDeleteEnrollment = (id, userId) =>
 
 /** A student's submission for a session (start idempotency) — non lean. */
 const findSubmissionForStudent = (sessionId, studentId) =>
-  ExamSubmission.findOne({ examSession: sessionId, student: studentId, isDeleted: false });
+  ExamSubmission.findOne({ examSession: sessionId, student: studentId, ...SUBMISSION_LIVE });
 
 /** Submission by id belonging to a student — non lean (mutated/.toObject()). */
 const findSubmissionByIdForStudent = (id, studentId) =>
-  ExamSubmission.findOne({ _id: id, student: studentId, isDeleted: false });
+  ExamSubmission.findOne({ _id: id, student: studentId, ...SUBMISSION_LIVE });
 
 /** A student's IN_PROGRESS submission (save answer / anti-cheat) — non lean. */
 const findActiveSubmission = (id, studentId) =>
-  ExamSubmission.findOne({ _id: id, student: studentId, status: 'IN_PROGRESS', isDeleted: false });
+  ExamSubmission.findOne({ _id: id, student: studentId, status: 'IN_PROGRESS', ...SUBMISSION_LIVE });
 
 /**
  * Submission by filter (staff/student submission view) — non lean (.toObject()).
  * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
  */
-const findSubmissionByIdAny = (filter) => ExamSubmission.findOne({ ...filter, isDeleted: false });
+const findSubmissionByIdAny = (filter) => ExamSubmission.findOne({ ...filter, ...SUBMISSION_LIVE });
 
 /** Submission by id, verifiable for grading (any non-deleted submission). */
-const findSubmissionById = (id) => ExamSubmission.findOne({ _id: id, isDeleted: false });
+const findSubmissionById = (id) => ExamSubmission.findOne({ _id: id, ...SUBMISSION_LIVE });
 
 /** Paginated list of submissions (grading queue) — lean. */
 const paginateSubmissions = async (match, { skip, limit }) => {
@@ -302,12 +315,12 @@ const paginateSubmissions = async (match, { skip, limit }) => {
 
 /** A session's submissions for the analytics snapshot — non lean. */
 const findSubmissionsForSnapshot = (sessionId) =>
-  ExamSubmission.find({ examSession: sessionId, status: { $in: ['SUBMITTED', 'GRADED'] }, isDeleted: false })
+  ExamSubmission.find({ examSession: sessionId, status: { $in: ['SUBMITTED', 'GRADED'] }, ...SUBMISSION_LIVE })
     .select('answers student');
 
 /** A session's submissions for anti-cheat analysis — lean. */
 const findSubmissionsForAntiCheat = (sessionId) =>
-  ExamSubmission.find({ examSession: sessionId, status: { $in: ['SUBMITTED', 'GRADED'] }, isDeleted: false })
+  ExamSubmission.find({ examSession: sessionId, status: { $in: ['SUBMITTED', 'GRADED'] }, ...SUBMISSION_LIVE })
     .select('student answers antiCheatFlags')
     .lean();
 
@@ -333,7 +346,7 @@ const pushAntiCheatFlag = (id, flag) =>
  * Grading by filter — non lean (mutated/saved).
  * Callers pass `{ _id, ...campusFilter }` so campus isolation is always enforced.
  */
-const findGradingById = (filter) => ExamGrading.findOne({ ...filter, isDeleted: false });
+const findGradingById = (filter) => ExamGrading.findOne({ ...filter, ...GRADING_LIVE });
 
 /** Grading by filter (campus isolation) — populated detail. */
 const findGradingDetailed = (filter) =>
@@ -346,7 +359,7 @@ const findGradingDetailed = (filter) =>
 
 /** Grading of a submission (non-deleted) — pre-existence before scoring. */
 const findGradingBySubmission = (submissionId) =>
-  ExamGrading.findOne({ submission: submissionId, isDeleted: false });
+  ExamGrading.findOne({ submission: submissionId, ...GRADING_LIVE });
 
 /** Grading of a submission without the isDeleted filter (idempotent MCQ auto-grading). */
 const findGradingBySubmissionAny = (submissionId) =>
@@ -354,7 +367,7 @@ const findGradingBySubmissionAny = (submissionId) =>
 
 /** Grading populated for certificate generation/reissue — non lean. */
 const findGradingForCertificate = (id) =>
-  ExamGrading.findOne({ _id: id, isDeleted: false })
+  ExamGrading.findOne({ _id: id, ...GRADING_LIVE })
     .populate('student',     'firstName lastName matricule schoolCampus')
     .populate('examSession', 'title subject academicYear semester examPeriod startTime maxScore');
 
@@ -387,7 +400,7 @@ const distinctGradedSubmissions = (sessionId, graderId) =>
 
 /** Published gradings for a session used in the analytics snapshot — non-lean. */
 const findPublishedGradingsForSnapshot = (sessionId) =>
-  ExamGrading.find({ examSession: sessionId, status: 'PUBLISHED', isDeleted: false })
+  ExamGrading.find({ examSession: sessionId, status: 'PUBLISHED', ...GRADING_LIVE })
     .select('normalizedScore student examSession schoolCampus');
 
 /** Creates a grading (hooks: normalizedScore, needsMediation…). */
@@ -407,7 +420,7 @@ const updateGradingById = (id, setFields, opts = {}) =>
 /** Publication en masse des corrections d'une session (renvoie le writeResult). */
 const publishSessionGradings = (sessionId, setFields) =>
   ExamGrading.updateMany(
-    { examSession: sessionId, status: { $in: ['GRADED', 'MEDIATED'] }, isDeleted: false },
+    { examSession: sessionId, status: { $in: ['GRADED', 'MEDIATED'] }, ...GRADING_LIVE },
     { $set: setFields }
   );
 
@@ -418,7 +431,7 @@ const publishSessionGradings = (sessionId, setFields) =>
  */
 const findSessionGradingRecipients = (sessionId) =>
   ExamGrading.find(
-    { examSession: sessionId, status: { $in: ['GRADED', 'MEDIATED'] }, isDeleted: false },
+    { examSession: sessionId, status: { $in: ['GRADED', 'MEDIATED'] }, ...GRADING_LIVE },
     'student schoolCampus'
   ).lean();
 
@@ -427,7 +440,7 @@ const countPendingGradingForGrader = (graderId) =>
   ExamGrading.countDocuments({
     grader:    new mongoose.Types.ObjectId(graderId),
     status:    'PENDING',
-    isDeleted: false,
+    ...GRADING_LIVE,
   });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -436,7 +449,7 @@ const countPendingGradingForGrader = (graderId) =>
 
 /** Appeal by (grading, student) — duplicate guard. */
 const findAppealByGradingAndStudent = (gradingId, studentId) =>
-  ExamAppeal.findOne({ grading: gradingId, student: studentId, isDeleted: false });
+  ExamAppeal.findOne({ grading: gradingId, student: studentId, ...APPEAL_LIVE });
 
 /** Recours par filtre (isolation campus) — non lean (mutation review). */
 const findAppealByFilter = (filter) => ExamAppeal.findOne(filter);
@@ -531,7 +544,7 @@ const updateQuestionById = (id, updates) =>
 
 /** Soft-delete d'une question. */
 const softDeleteQuestion = (id, userId) =>
-  QuestionBank.findByIdAndUpdate(id, { isDeleted: true, updatedBy: userId });
+  QuestionBank.findByIdAndUpdate(id, { ...softDeletePatch(QuestionBank), updatedBy: userId });
 
 /** Increments usage count for questions selected in a session. */
 const incrementQuestionUsage = (ids) =>
@@ -651,7 +664,7 @@ const aggregateEarlyWarning = (match, { skip, limit, threshold }) =>
 /** Published grading stats aggregated per session (report export). */
 const aggregateSessionGradingStats = (sessionIds) =>
   ExamGrading.aggregate([
-    { $match: { examSession: { $in: sessionIds }, status: 'PUBLISHED', isDeleted: false } },
+    { $match: { examSession: { $in: sessionIds }, status: 'PUBLISHED', ...GRADING_LIVE } },
     {
       $group: {
         _id:         '$examSession',

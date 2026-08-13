@@ -16,12 +16,11 @@ const {
   isValidObjectId,
   validatePasswordStrength,
 } = require('../../../shared/utils/validation-helpers');
-const { deleteFile } = require('../../../shared/utils/file-upload');
 const teacherConfig = require('../teacher.config');
 const { getLoginPrefs } = require('../../settings').service;
+const hardDelete = require('../../../shared/lib/hard-delete');
 
 const SALT_ROUNDS    = 12; // platform standard (matches profile.service, generic-entity.controller, other modules)
-const TEACHEAR_FOLDER = 'teachers';
 const JWT_SECRET      = process.env.JWT_SECRET;
 
 // ========================================
@@ -259,37 +258,34 @@ const updateTeacherPassword = async (req, res) => {
 
 
 /**
- * Permanently delete teacher
+ * Permanently delete a teacher.
+ *
+ * Compatibility alias for `DELETE /api/danger-zone/teacher/:id` — the removal itself, the
+ * cascade policy and the four confirmation controls all live in the harmonized hard-delete
+ * service (CLAUDE.md §5.2). The impact preview that issues the required ticket is served by
+ * `GET /api/danger-zone/teacher/:id/impact`.
+ *
  * @route   DELETE /api/teachers/:id/permanent
  * @access  Private (ADMIN only)
  */
 const deleteTeacherPermanently = async (req, res) => {
   try {
-    const { id } = req.params;
+    const receipt = await hardDelete.service.execute({
+      entityType: 'teacher',
+      entityId:   req.params.id,
+      req,
+      confirmation: {
+        ticket:             req.body?.ticket,
+        confirmationPhrase: req.body?.confirmationPhrase,
+        password:           req.body?.password,
+        reason:             req.body?.reason,
+      },
+    });
 
-    // Validate ObjectId
-    if (!isValidObjectId(id)) {
-      return sendError(res, 400, 'Invalid teacher ID format');
-    }
-
-    const teacher = await teacherRepo.findTeacherDocById(id);
-    if (!teacher) {
-      return sendNotFound(res, 'Teacher');
-    }
-
-    // Delete profile image if exists
-    if (teacher.profileImage) {
-      await deleteFile(TEACHEAR_FOLDER, teacher.profileImage);
-    }
-
-    // Delete teacher from database
-    await teacherRepo.deleteTeacherById(id);
-
-    return sendSuccess(res, 200, 'Teacher deleted permanently');
+    return sendSuccess(res, 200, 'Teacher deleted permanently', receipt);
 
   } catch (error) {
-    console.error('❌ Error deleting teacher:', error);
-    return sendError(res, 500, 'Failed to delete teacher');
+    return hardDelete.respondToError(res, error);
   }
 };
 // ========================================

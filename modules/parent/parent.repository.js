@@ -132,6 +132,11 @@ const resetForReactivation = (id, campusFilter, hashedPlaceholder) =>
     { new: true },
   ).select('_id firstName email schoolCampus preferredLanguage').lean();
 
+/**
+ * ⚠️ UNGUARDED. Not reachable from any route: permanent deletion goes through the harmonized
+ * hard-delete service (CLAUDE.md §5.2). Kept for migration scripts only — never call it from
+ * a controller.
+ */
 const hardDeleteScoped = (id, campusFilter) =>
   Parent.findOneAndDelete({ _id: id, ...campusFilter });
 

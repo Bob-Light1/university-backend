@@ -246,6 +246,16 @@ const findVersionLean = (filter) => DocumentVersion.findOne(filter).lean();
 const deleteVersionsByDocument = (documentId, opts) =>
   DocumentVersion.deleteMany({ documentId }, opts);
 
+/**
+ * Deletes every share link of a document (hard-delete), session-aware.
+ *
+ * A share link outliving its document is a live token resolving to nothing: the public
+ * download route would dereference a removed id. Purged in the same transaction as the
+ * versions and the document itself.
+ */
+const deleteSharesByDocument = (documentId, opts) =>
+  DocumentShare.deleteMany({ documentId }, opts);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // DOCUMENT AUDIT (append-only: never deleted)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -376,6 +386,7 @@ module.exports = {
   paginateVersions,
   findVersionLean,
   deleteVersionsByDocument,
+  deleteSharesByDocument,
   // DocumentAudit
   createAudit,
   paginateAudits,

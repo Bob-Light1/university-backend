@@ -38,6 +38,7 @@ const {
 } = require('../../../shared/utils/validation-helpers');
 
 const { getFileUrl } = require('../../../shared/middleware/upload');
+const hardDelete = require('../../../shared/lib/hard-delete');
 
 const SALT_ROUNDS  = 12;
 const MGMT_ROLES   = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
@@ -458,26 +459,46 @@ const resetParentPassword = async (req, res) => {
 /**
  * Delete a parent.
  *  - CAMPUS_MANAGER / DIRECTOR : soft-delete (status = 'archived')
- *  - ADMIN                     : hard-delete (permanent removal from DB)
+ *  - ADMIN with `?hard=true`   : permanent deletion, delegated to the harmonized
+ *                                hard-delete service (CLAUDE.md §5.2). It requires a
+ *                                ticket from `GET /api/danger-zone/parent/:id/impact`,
+ *                                the exact confirmation phrase, the operator's password
+ *                                and a written justification — all in the request body.
  *
  * @route  DELETE /api/parents/:id
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 const deleteParent = async (req, res) => {
   try {
-    const { id }   = req.params;
-    const hardDelete = req.user.role === 'ADMIN' && req.query.hard === 'true';
+    const { id } = req.params;
+    // `?hard=true` is honoured for every role and refused by the registry when the role is not
+    // allowed. Reading the flag only for ADMIN would silently downgrade a DIRECTOR's explicit
+    // permanent-deletion request into an archive, and report it as a success.
+    const isHardDelete = req.query.hard === 'true';
 
     if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid parent ID format.');
 
     const campusFilter = getCampusFilter(req);
 
-    if (hardDelete) {
-      const parent = await parentRepo.hardDeleteScoped(id, campusFilter);
-      if (!parent) return sendNotFound(res, 'Parent');
+    if (isHardDelete) {
+      try {
+        const receipt = await hardDelete.service.execute({
+          entityType: 'parent',
+          entityId:   id,
+          req,
+          confirmation: {
+            ticket:             req.body?.ticket,
+            confirmationPhrase: req.body?.confirmationPhrase,
+            password:           req.body?.password,
+            reason:             req.body?.reason,
+          },
+        });
 
-      auditLog(req, 'HARD_DELETE_PARENT', id);
-      return sendSuccess(res, 200, 'Parent permanently deleted.');
+        auditLog(req, 'HARD_DELETE_PARENT', id);
+        return sendSuccess(res, 200, 'Parent permanently deleted.', receipt);
+      } catch (hardDeleteError) {
+        return hardDelete.respondToError(res, hardDeleteError);
+      }
     }
 
     // Soft-delete

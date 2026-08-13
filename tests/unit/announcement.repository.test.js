@@ -19,6 +19,11 @@ jest.mock('../../modules/announcement/models/announcement.model', () => {
   };
   let nextDoc = null;
   return {
+    // Announcement carries BOTH markers: `status: 'archived'` is the expiry state written by
+    // the nightly cron on a live record, and deletion is `deletedAt`. STRATEGY_OVERRIDES
+    // settles it on `modelName`, so the mock must carry the name as well as the schema.
+    modelName:      'Announcement',
+    schema:         require('../helpers/soft-delete-stub').softDeleteSchemaStub(['status', 'deletedAt']),
     create:         jest.fn((d) => Promise.resolve({ _id: 'new', ...d })),
     find:           jest.fn(() => makeChain([{ _id: '1' }])),
     findOne:        jest.fn(() => {

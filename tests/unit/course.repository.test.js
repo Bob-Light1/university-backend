@@ -21,6 +21,12 @@ jest.mock('../../modules/course/course.model', () => {
   return {
     APPROVAL_STATUS: { DRAFT: 'DRAFT', PENDING_REVIEW: 'PENDING_REVIEW', APPROVED: 'APPROVED', REJECTED: 'REJECTED' },
     Course: {
+      // Course carries BOTH markers, the mirror image of Announcement: `archiveCourse()`
+      // writes `status: 'archived'` AND `deletedAt` together, `status` being the marker.
+      // STRATEGY_OVERRIDES settles it on `modelName`.
+      modelName:      'Course',
+      schema:         require('../helpers/soft-delete-stub')
+        .softDeleteSchemaStub(['status', 'deletedAt', 'deletedBy']),
       find:           jest.fn(() => makeQuery()),
       findOne:        jest.fn(() => makeQuery()),
       countDocuments: jest.fn(() => Promise.resolve(4)),

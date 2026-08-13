@@ -21,16 +21,31 @@
 const mongoose = require('mongoose');
 const { Course, APPROVAL_STATUS } = require('./course.model');
 const { COURSE_POPULATE } = require('./controllers/course.helper');
+const {
+  notDeletedFilter,
+  deletedOnlyFilter,
+  softDeletePatch,
+  restorePatch,
+} = require('../../shared/utils/soft-delete');
 
 const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-const ACTIVE = { $ne: 'archived' };
+/**
+ * Not-deleted / deleted-only fragments for Course — derived, never hand-written.
+ *
+ * Course carries BOTH markers: `archiveById` writes `status: 'archived'` AND `deletedAt`
+ * together. `status` is the deletion marker, `deletedAt` its timestamp companion — which is
+ * the reverse of Announcement, and why the convention is declared in STRATEGY_OVERRIDES
+ * rather than inferred (CLAUDE.md §5.1).
+ */
+const NOT_DELETED   = notDeletedFilter(Course);
+const DELETED_ONLY  = deletedOnlyFilter(Course);
 
 // ── Reads ─────────────────────────────────────────────────────────────────
 
 /** Number of active courses among a list of ids (prerequisite validation). */
 const countExistingActive = (ids) =>
-  Course.countDocuments({ _id: { $in: ids }, status: ACTIVE });
+  Course.countDocuments({ _id: { $in: ids }, ...NOT_DELETED });
 
 /**
  * Paginated list (filter provided by the controller), populate LIST, virtuals.
@@ -47,31 +62,31 @@ const paginateList = async ({ filter, sort, skip, limit }) => {
 
 /** Detail of an active course (populate DETAIL, virtuals). */
 const findActiveByIdDetailed = (id) =>
-  Course.findOne({ _id: id, status: ACTIVE }).populate(COURSE_POPULATE.DETAIL).lean({ virtuals: true });
+  Course.findOne({ _id: id, ...NOT_DELETED }).populate(COURSE_POPULATE.DETAIL).lean({ virtuals: true });
 
 /** Raw read of an active course (preconditions: approvalStatus, resources…). */
 const findActiveByIdLean = (id) =>
-  Course.findOne({ _id: id, status: ACTIVE }).lean();
+  Course.findOne({ _id: id, ...NOT_DELETED }).lean();
 
 /** Latest active version by code (populate DETAIL, virtuals). */
 const findLatestActiveByCode = (code) =>
-  Course.findOne({ courseCode: code, isLatestVersion: true, status: ACTIVE })
+  Course.findOne({ courseCode: code, isLatestVersion: true, ...NOT_DELETED })
     .populate(COURSE_POPULATE.DETAIL).lean({ virtuals: true });
 
 /** Code of an active course (version history resolution). */
 const findCodeById = (id) =>
-  Course.findOne({ _id: id, status: ACTIVE }).select('courseCode').lean();
+  Course.findOne({ _id: id, ...NOT_DELETED }).select('courseCode').lean();
 
 /** Latest active version (raw read) — precursor to versioning. */
 const findLatestActiveLean = (id) =>
-  Course.findOne({ _id: id, status: ACTIVE, isLatestVersion: true }).lean();
+  Course.findOne({ _id: id, ...NOT_DELETED, isLatestVersion: true }).lean();
 
 /**
  * Paginated version history (same courseCode), sorted by version desc.
  * @returns {Promise<{data: Object[], total: number}>}
  */
 const paginateVersions = async (courseCode, { skip, limit }) => {
-  const filter = { courseCode, status: ACTIVE };
+  const filter = { courseCode, ...NOT_DELETED };
   const [data, total] = await Promise.all([
     Course.find(filter).sort({ version: -1 }).skip(skip).limit(limit)
       .populate([
@@ -86,7 +101,7 @@ const paginateVersions = async (courseCode, { skip, limit }) => {
 
 /** Active courses referencing `id` as a prerequisite (non-blocking warning). */
 const listDependents = (id) =>
-  Course.find({ 'prerequisites.course': id, status: ACTIVE })
+  Course.find({ 'prerequisites.course': id, ...NOT_DELETED })
     .select('courseCode title version approvalStatus').lean();
 
 /**
@@ -98,7 +113,7 @@ const listDependents = (id) =>
  * @returns {Promise<{ total: number, byStatus: Record<string, number> }>}
  */
 const getStatusCounts = async (baseFilter = {}) => {
-  const match = { status: ACTIVE, isLatestVersion: true, ...baseFilter };
+  const match = { ...NOT_DELETED, isLatestVersion: true, ...baseFilter };
   const rows = await Course.aggregate([
     { $match: match },
     { $group: { _id: '$approvalStatus', count: { $sum: 1 } } },
@@ -125,7 +140,7 @@ const create = async (data) => {
 
 /** Applies fields to an active course, save + populate DETAIL. @returns {Promise<Document|null>} */
 const applyUpdate = async (id, updates) => {
-  const course = await Course.findOne({ _id: id, status: ACTIVE });
+  const course = await Course.findOne({ _id: id, ...NOT_DELETED });
   if (!course) return null;
   Object.assign(course, updates);
   await course.save();
@@ -135,22 +150,18 @@ const applyUpdate = async (id, updates) => {
 
 /** Soft-delete (archive) of an active course. @returns {Promise<Document|null>} */
 const archiveById = async (id, { deletedBy }) => {
-  const course = await Course.findOne({ _id: id, status: ACTIVE });
+  const course = await Course.findOne({ _id: id, ...NOT_DELETED });
   if (!course) return null;
-  course.status    = 'archived';
-  course.deletedAt = new Date();
-  course.deletedBy = deletedBy;
+  Object.assign(course, softDeletePatch(Course), { deletedBy });
   await course.save();
   return course;
 };
 
 /** Restores an archived course. @returns {Promise<Document|null>} */
 const restoreById = async (id) => {
-  const course = await Course.findOne({ _id: id, status: 'archived' });
+  const course = await Course.findOne({ _id: id, ...DELETED_ONLY });
   if (!course) return null;
-  course.status    = 'active';
-  course.deletedAt = undefined;
-  course.deletedBy = undefined;
+  Object.assign(course, restorePatch(Course));
   await course.save();
   return course;
 };
@@ -160,7 +171,7 @@ const restoreById = async (id) => {
  * @returns {Promise<Document|null>}
  */
 const applyStatusTransition = async (id, { newStatus, historyEntry }) => {
-  const course = await Course.findOne({ _id: id, status: ACTIVE });
+  const course = await Course.findOne({ _id: id, ...NOT_DELETED });
   if (!course) return null;
   course.approvalStatus = newStatus;
   course.approvalHistory.push(historyEntry);
@@ -174,7 +185,7 @@ const applyStatusTransition = async (id, { newStatus, historyEntry }) => {
  * @returns {Promise<Object|null>} the added resource, or null if course not found
  */
 const pushResource = async (id, entry) => {
-  const course = await Course.findOne({ _id: id, status: ACTIVE });
+  const course = await Course.findOne({ _id: id, ...NOT_DELETED });
   if (!course) return null;
   course.resources.push(entry);
   await course.save();
@@ -186,7 +197,7 @@ const pushResource = async (id, entry) => {
  * @returns {Promise<boolean|null>} true if removed, null if course not found
  */
 const pullResource = async (id, resourceId) => {
-  const course = await Course.findOne({ _id: id, status: ACTIVE });
+  const course = await Course.findOne({ _id: id, ...NOT_DELETED });
   if (!course) return null;
   course.resources = course.resources.filter((r) => r._id.toString() !== resourceId);
   await course.save();
@@ -266,7 +277,7 @@ const listApproved = async ({ search, page = 1, limit = 20 } = {}) => {
   const filter = {
     approvalStatus:  APPROVAL_STATUS.APPROVED,
     isLatestVersion: true,
-    status:          ACTIVE,
+    ...NOT_DELETED,
   };
   if (search) {
     const rx = new RegExp(escapeRegex(search.trim()), 'i');
@@ -285,7 +296,7 @@ const listApproved = async ({ search, page = 1, limit = 20 } = {}) => {
 /** Course eligible for the Subject→Course link (level populated). */
 const findApprovedForLinking = (courseId) =>
   Course.findOne({
-    _id: courseId, status: ACTIVE,
+    _id: courseId, ...NOT_DELETED,
     approvalStatus: APPROVAL_STATUS.APPROVED, isLatestVersion: true,
   }).populate('level', 'name').lean();
 

@@ -54,12 +54,14 @@ describe('validation helpers (owning-module truth)', () => {
 });
 
 describe('getCampusOverviewAggregates', () => {
-  test('filtre : isolation campus (id casté ObjectId) + isDeleted, filtres académiques validés', async () => {
+  // Le filtre de suppression n'est plus restitué ici : il est appliqué par le repository,
+  // seul propriétaire du modèle (cf. result.repository.test — aggregateCampusOverview).
+  test('filtre : isolation campus (id casté ObjectId), filtres académiques validés', async () => {
     await service.getCampusOverviewAggregates({
       campusId: CAMPUS, academicYear: '2025-2026', semester: 'S1',
     });
     expect(repo.aggregateCampusOverview).toHaveBeenCalledWith({
-      isDeleted: false, schoolCampus: CAMPUS_OID, academicYear: '2025-2026', semester: 'S1',
+      schoolCampus: CAMPUS_OID, academicYear: '2025-2026', semester: 'S1',
     });
   });
 
@@ -68,7 +70,7 @@ describe('getCampusOverviewAggregates', () => {
       campusId: CAMPUS, academicYear: 'not-a-year', semester: 'T9',
     });
     expect(repo.aggregateCampusOverview).toHaveBeenCalledWith({
-      isDeleted: false, schoolCampus: CAMPUS_OID,
+      schoolCampus: CAMPUS_OID,
     });
   });
 

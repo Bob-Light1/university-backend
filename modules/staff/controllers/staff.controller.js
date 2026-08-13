@@ -40,6 +40,7 @@ const {
   buildCampusFilter,
 } = require('../../../shared/utils/validation-helpers');
 const { getLoginPrefs } = require('../../settings').service;
+const hardDelete = require('../../../shared/lib/hard-delete');
 
 const SALT_ROUNDS = 12;
 const JWT_SECRET  = process.env.JWT_SECRET;
@@ -467,22 +468,34 @@ const restoreStaff = async (req, res) => {
 // ── PERMANENT DELETE ──────────────────────────────────────────────────────────
 
 /**
+ * Permanently delete a staff member.
+ *
+ * Compatibility alias for `DELETE /api/danger-zone/staff/:id` — the removal itself, the
+ * cascade policy and the four confirmation controls all live in the harmonized hard-delete
+ * service (CLAUDE.md §5.2). The impact preview that issues the required ticket is served by
+ * `GET /api/danger-zone/staff/:id/impact`.
+ *
  * @route  DELETE /api/staff/:id/permanent
  * @access ADMIN only
  */
 const deleteStaff = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid staff ID format.');
+    const receipt = await hardDelete.service.execute({
+      entityType: 'staff',
+      entityId:   req.params.id,
+      req,
+      confirmation: {
+        ticket:             req.body?.ticket,
+        confirmationPhrase: req.body?.confirmationPhrase,
+        password:           req.body?.password,
+        reason:             req.body?.reason,
+      },
+    });
 
-    const staff = await staffRepo.deleteById(id);
-    if (!staff) return sendNotFound(res, 'Staff');
-
-    return sendSuccess(res, 200, 'Staff member permanently deleted.');
+    return sendSuccess(res, 200, 'Staff member permanently deleted.', receipt);
 
   } catch (err) {
-    console.error('❌ deleteStaff error:', err);
-    return sendError(res, 500, 'Failed to delete staff member.');
+    return hardDelete.respondToError(res, err);
   }
 };
 

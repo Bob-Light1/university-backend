@@ -16,6 +16,17 @@
 const Announcement     = require('./models/announcement.model');
 const UserNotification = require('./models/user-notification.model');
 const { escapeRegex, isValidObjectId } = require('../../shared/utils/validation-helpers');
+const { notDeletedFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
+
+/**
+ * Not-deleted fragment for Announcement — derived, never hand-written.
+ *
+ * This model carries BOTH markers and they mean opposite things: `status: 'archived'` is the
+ * EXPIRY state written by the nightly cron on a live announcement, while deletion is
+ * `deletedAt`. Reading it the other way round hides live announcements and resurrects deleted
+ * ones, so the convention is declared in STRATEGY_OVERRIDES rather than inferred here.
+ */
+const NOT_DELETED = notDeletedFilter(Announcement);
 
 // ── Constructeurs de filtres internes ─────────────────────────────────────────
 
@@ -37,7 +48,7 @@ const requireCampus = (campusId) => {
 
 // Admin scope: all (ADMIN/DIRECTOR) or own campus, excluding deleted.
 const adminScope = ({ isGlobalRole, campusId, requestedCampusId }) => {
-  const filter = { deletedAt: null };
+  const filter = { ...NOT_DELETED };
   if (!isGlobalRole) {
     filter.schoolCampus = requireCampus(campusId);
   } else if (requestedCampusId && isValidObjectId(String(requestedCampusId))) {
@@ -52,7 +63,7 @@ const adminScope = ({ isGlobalRole, campusId, requestedCampusId }) => {
 const visibleScope = (campusId, role) => ({
   schoolCampus: requireCampus(campusId),
   status:       'published',
-  deletedAt:    null,
+  ...NOT_DELETED,
   $and: [
     { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] },
     { $or: [{ targetRoles: role }, { targetRoles: 'ALL' }] },
@@ -104,6 +115,17 @@ const applyUpdate = async ({ id, isGlobalRole, campusId }, fields) => {
   await doc.save();
   return doc;
 };
+
+/**
+ * Soft-deletes an announcement within the caller's scope.
+ *
+ * Keeps the deletion marker on the same derived source as the read filters: writing the
+ * wrong field is the symmetric bug to filtering on the wrong one, and just as silent.
+ *
+ * @param {{id: string, isGlobalRole: boolean, campusId: string}} scope
+ * @returns {Promise<Document|null>} The deleted announcement, or null when out of scope.
+ */
+const softDelete = (scope) => applyUpdate(scope, softDeletePatch(Announcement));
 
 // ── USER (visible announcements + read receipts) ──────────────────────────────
 
@@ -196,7 +218,7 @@ const markAllVisibleRead = async ({ userId, campusId, role }) => {
 /** Archives expired published announcements. @returns {Promise<number>} modified */
 const archiveExpired = async (now) => {
   const r = await Announcement.updateMany(
-    { status: 'published', deletedAt: null, expiresAt: { $ne: null, $lte: now } },
+    { status: 'published', ...NOT_DELETED, expiresAt: { $ne: null, $lte: now } },
     { $set: { status: 'archived', archivedAt: now } },
   );
   return r.modifiedCount || 0;
@@ -205,7 +227,7 @@ const archiveExpired = async (now) => {
 /** Unpins announcements whose pinnedUntil date has passed. @returns {Promise<number>} modified */
 const unpinExpired = async (now) => {
   const r = await Announcement.updateMany(
-    { pinned: true, deletedAt: null, pinnedUntil: { $ne: null, $lte: now } },
+    { pinned: true, ...NOT_DELETED, pinnedUntil: { $ne: null, $lte: now } },
     { $set: { pinned: false, pinnedUntil: null } },
   );
   return r.modifiedCount || 0;
@@ -216,6 +238,7 @@ module.exports = {
   paginateForAdmin,
   findForAdmin,
   applyUpdate,
+  softDelete,
   listReadAmong,
   paginateVisible,
   distinctVisibleIds,

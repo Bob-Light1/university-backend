@@ -224,6 +224,11 @@ const saveStudentDoc = (doc) => doc.save();
 /**
  * Permanent deletion — `findByIdAndDelete` to trigger the
  * post('findOneAndDelete') hook (cascade removal from parents).
+ *
+ * ⚠️ UNGUARDED. Not reachable from any route: permanent deletion goes through the
+ * harmonized hard-delete service (CLAUDE.md §5.2), which enforces the ticket / phrase /
+ * password / reason gate, the blocker checks and the DeletionAudit entry. Kept for
+ * migration scripts only — never call it from a controller.
  */
 const deleteStudentById = (id) => Student.findByIdAndDelete(id);
 
