@@ -8,6 +8,7 @@ const staffProfileController  = require('./controllers/staff.profile.controller'
 const staffReadonlyController = require('./controllers/staff.readonly.controller');
 const { authenticate, authorize, isOwnerOrRole, requirePermission } = require('../../shared/middleware/auth');
 const { loginLimiter } = require('../../shared/middleware/rate-limiter');
+const { deletionLimiter } = require('../../shared/lib/hard-delete');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 
@@ -156,6 +157,6 @@ router.delete('/:id', authorize(MGMT_ROLES), staffController.archiveStaff);
  * @route  DELETE /api/staff/:id/permanent
  * @access ADMIN only
  */
-router.delete('/:id/permanent', authorize(['ADMIN']), staffController.deleteStaff);
+router.delete('/:id/permanent', authorize(['ADMIN']), deletionLimiter, staffController.deleteStaff);
 
 module.exports = router;

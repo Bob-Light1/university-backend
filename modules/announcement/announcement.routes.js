@@ -79,7 +79,8 @@ router.post('/', canManage, apiLimiter, adminCtrl.createAnnouncement);
  * @route   GET /api/announcements
  * @desc    List all announcements for the campus (filterable)
  * @access  ADMIN | DIRECTOR | CAMPUS_MANAGER | STAFF[announcements]
- * @query   page, limit, status, type, targetRole, pinned, search, campusId (ADMIN only)
+ * @query   page, limit, status, type, targetRole, pinned, search, campusId (ADMIN only),
+ *          deleted ('true' → trash view: soft-deleted announcements only — ADMIN | DIRECTOR)
  */
 router.get('/', canManage, apiLimiter, adminCtrl.getAllAnnouncements);
 

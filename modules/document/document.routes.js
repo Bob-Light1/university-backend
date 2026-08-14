@@ -34,6 +34,7 @@ const router = express.Router();
 // ── Existing platform middleware ──────────────────────────────────────────────
 const { authenticate }    = require('../../shared/middleware/auth');
 const { apiLimiter }      = require('../../shared/middleware/rate-limiter');
+const { hardDeleteFlagLimiter } = require('../../shared/lib/hard-delete');
 
 // ── Document-module middleware ────────────────────────────────────────────────
 const {
@@ -263,7 +264,10 @@ router.post(
   crudCtrl.createDocument,
 );
 
-/** GET /api/documents — list with filters and pagination */
+/**
+ * GET /api/documents — list with filters and pagination.
+ * `deleted=true` returns the trash (soft-deleted documents only), ADMIN / DIRECTOR only.
+ */
 router.get('/', ...base, crudCtrl.listDocuments);
 
 /** GET /api/documents/:id — single document with full body */
@@ -279,8 +283,13 @@ router.patch(
   crudCtrl.updateDocument,
 );
 
-/** DELETE /api/documents/:id — soft or hard delete */
-router.delete('/:id', ...withDoc, enforceLockGuard, crudCtrl.deleteDocument);
+/**
+ * DELETE /api/documents/:id — soft or hard delete.
+ * `hardDeleteFlagLimiter` meters ONLY the `?hard=true` form, on the same budget as the
+ * danger-zone router: both reach the same password control, so metering one of the two
+ * alone is a limit an attacker skips by changing URL. Soft deletes stay unmetered.
+ */
+router.delete('/:id', ...withDoc, enforceLockGuard, hardDeleteFlagLimiter, crudCtrl.deleteDocument);
 
 // ── WORKFLOW ──────────────────────────────────────────────────────────────────
 

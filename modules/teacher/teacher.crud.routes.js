@@ -6,6 +6,7 @@ const teacherDashboardController = require('./controllers/teacher.dashboard.cont
 const teacherProfileController   = require('./controllers/teacher.profile.controller');
 const { authenticate, authorize, isOwnerOrRole } = require('../../shared/middleware/auth');
 const { loginLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
+const { deletionLimiter } = require('../../shared/lib/hard-delete');
 const {
   uploadProfileImage,
   uploadImportFile,
@@ -267,6 +268,7 @@ router.patch(
 router.delete(
   '/:id/permanent',
   authorize(['ADMIN']),
+  deletionLimiter,
   teacherController.deleteTeacherPermanently
 );
 

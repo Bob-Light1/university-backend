@@ -43,7 +43,9 @@ const {
   MAX_REASON_LENGTH,
   IMPACT_COUNT_LIMIT,
   MAX_CASCADE_DOCUMENTS,
+  AUDIT_FIELD_LIMITS,
   buildConfirmationPhrase,
+  truncateForAudit,
   DANGER_ZONE_ROLES,
 } = require('../../shared/lib/hard-delete/hard-delete.constants');
 
@@ -354,6 +356,58 @@ describe('hard-delete service — volume guards', () => {
     expect(MAX_CASCADE_DOCUMENTS).toBeGreaterThan(0);
     expect(MAX_CASCADE_DOCUMENTS).toBeLessThanOrEqual(IMPACT_COUNT_LIMIT);
   });
+
+  it('cannot be under-reported by a capped count', () => {
+    // Impact counts are capped at IMPACT_COUNT_LIMIT, so cascadeVolumeOf() returns a LOWER
+    // bound of the real figure. That is only safe while the cap sits above the cascade limit:
+    // were it below, a relation holding more rows than the transaction can carry would be
+    // reported as a value under the threshold and the deletion would be let through to abort
+    // mid-flight.
+    expect(IMPACT_COUNT_LIMIT).toBeGreaterThan(MAX_CASCADE_DOCUMENTS);
+  });
+});
+
+// ── Audit ledger: the write must never be what fails ──────────────────────────
+
+describe('hard-delete audit — free text can never break the ledger write', () => {
+  it('truncates past the cap and marks the cut', () => {
+    expect(truncateForAudit('abc', 10)).toBe('abc');
+    expect(truncateForAudit('a'.repeat(10), 10)).toHaveLength(10);
+
+    const cut = truncateForAudit('a'.repeat(50), 10);
+    expect(cut).toHaveLength(10);
+    expect(cut.endsWith('…')).toBe(true);
+  });
+
+  it('turns null and undefined into a string rather than throwing', () => {
+    expect(truncateForAudit(null, 10)).toBe('');
+    expect(truncateForAudit(undefined, 10)).toBe('');
+  });
+
+  it('caps every free-text audit field at the value its schema declares', () => {
+    // One number, two readers. A writer that overruns the schema does not degrade: on the
+    // success path the audit row is created INSIDE the deletion transaction, so a rejected
+    // write aborts the whole thing and the entity becomes permanently undeletable; on the
+    // refusal path the row is simply lost, which is the one trace a security review needs.
+    for (const [field, cap] of Object.entries(AUDIT_FIELD_LIMITS)) {
+      const declared = DeletionAudit.schema.path(field)?.options?.maxlength;
+      expect([field, declared]).toEqual([field, cap]);
+    }
+  });
+
+  it('caps the blocker summary below what the widest entry can produce', () => {
+    // `campus` declares thirty-odd BLOCK relations; "Blocked by: <label> (<n>), …" over all of
+    // them runs past `failureReason` on its own. This is the case that motivated the cap, so
+    // it is pinned against the real registry rather than a made-up string.
+    const summary = REGISTRY.campus.relations
+      .filter((r) => r.mode === RELATION_MODE.BLOCK)
+      .map((r) => `${r.label} (1)`)
+      .join(', ');
+
+    expect(`Blocked by: ${summary}`.length).toBeGreaterThan(AUDIT_FIELD_LIMITS.failureReason);
+    expect(truncateForAudit(`Blocked by: ${summary}`, AUDIT_FIELD_LIMITS.failureReason))
+      .toHaveLength(AUDIT_FIELD_LIMITS.failureReason);
+  });
 });
 
 describe('hard-delete registry — lookup helpers', () => {
@@ -461,6 +515,42 @@ describe('hard-delete guard — deletion ticket', () => {
 
     const changed = [{ ...impact[0], count: 13 }, impact[1]];
     expect(digestImpact(changed)).not.toBe(digestImpact(impact));
+  });
+
+  it('separates two relations that share a model and a mode', () => {
+    // Several entries declare more than one relation over the same model in the same mode —
+    // `teacher` BLOCKs ExamGrading both as grader and as second grader, and DETACHes Class
+    // twice. Keyed on model and mode alone those lines are interchangeable, so counts moving
+    // between them leave the digest unchanged and a stale ticket still verifies. The label is
+    // what tells them apart.
+    const before = [
+      { model: 'ExamGrading', label: 'Exam gradings they signed',         mode: 'block', count: 3 },
+      { model: 'ExamGrading', label: 'Exam gradings they countersigned',  mode: 'block', count: 5 },
+    ];
+    const swapped = [
+      { ...before[0], count: 5 },
+      { ...before[1], count: 3 },
+    ];
+
+    expect(digestImpact(swapped)).not.toBe(digestImpact(before));
+  });
+
+  it('keeps every entry free of collisions on model + mode alone', () => {
+    // The registry is allowed to declare duplicate (model, mode) pairs — that is the point of
+    // the label. This pins that the entries which do so exist, so the guarantee above is
+    // exercised by real data and not only by the synthetic case.
+    const withDuplicates = Object.entries(REGISTRY).filter(([, entry]) => {
+      const keys = entry.relations.map((r) => `${r.model}:${r.mode}`);
+      return new Set(keys).size !== keys.length;
+    });
+
+    expect(withDuplicates.length).toBeGreaterThan(0);
+
+    // …and that the label always disambiguates them.
+    for (const [key, entry] of Object.entries(REGISTRY)) {
+      const labelled = entry.relations.map((r) => `${r.model}:${r.label}:${r.mode}`);
+      expect([key, new Set(labelled).size]).toEqual([key, labelled.length]);
+    }
   });
 
   it('refuses a ticket once the impact changed between preview and execution', () => {
@@ -576,5 +666,126 @@ describe('DeletionAudit — append-only ledger', () => {
       .forEach((path) => {
         expect(DeletionAudit.schema.path(path).isRequired).toBe(true);
       });
+  });
+});
+
+// ── Rate limiting: the alias routes are not a way around the gate ─────────────
+
+describe('hard-delete rate limit — every route reaching execute() is metered', () => {
+  /**
+   * The danger-zone router is not the only path to `service.execute()`. Seven compatibility
+   * aliases reach it, clearing the same four controls — including the password re-entry. A
+   * limiter mounted on the router alone is a limiter an attacker skips by changing URL, which
+   * is exactly what these routes were before: unmetered attempts against an operator password.
+   *
+   * The map is derived from the controllers that actually call `execute()`, so a NEW alias
+   * fails this suite until its route carries the limiter too.
+   *
+   * `deletionLimiter`        — routes that only ever perform a permanent deletion.
+   * `hardDeleteFlagLimiter`  — routes that switch on `?hard=true`; metering the archive path
+   *                            with the deletion budget would let ordinary archiving exhaust it.
+   */
+  const ROUTE_FILES = {
+    'modules/student/student.crud.routes.js':  'deletionLimiter',
+    'modules/teacher/teacher.crud.routes.js':  'deletionLimiter',
+    'modules/staff/staff.member.routes.js':    'deletionLimiter',
+    'modules/staff/staff.role.routes.js':      'deletionLimiter',
+    'modules/mentor/mentor.routes.js':         'deletionLimiter',
+    'modules/parent/parent.routes.js':         'hardDeleteFlagLimiter',
+    'modules/document/document.routes.js':     'hardDeleteFlagLimiter',
+  };
+
+  const ROOT = path.join(__dirname, '..', '..');
+
+  /** Controller files that reach the harmonized service directly. */
+  const controllersCallingExecute = () => {
+    const found = [];
+
+    const walk = (dir) => {
+      for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, item.name);
+        if (item.isDirectory()) { walk(full); continue; }
+        if (!item.name.endsWith('.js')) continue;
+
+        const source = fs.readFileSync(full, 'utf8');
+        if (/hardDelete\.service\.execute\s*\(/.test(source)) {
+          found.push(path.relative(ROOT, full));
+        }
+      }
+    };
+
+    walk(path.join(ROOT, 'modules'));
+    return found;
+  };
+
+  it.each(Object.entries(ROUTE_FILES))(
+    '%s mounts %s on its permanent-deletion route',
+    (file, limiter) => {
+      const source = fs.readFileSync(path.join(ROOT, file), 'utf8');
+
+      expect(source).toContain("require('../../shared/lib/hard-delete')");
+
+      // The limiter has to sit ON a delete route, not merely be imported.
+      const deleteRoutes = source
+        .split(/router\.delete\(/)
+        .slice(1)
+        .filter((chunk) => chunk.includes(limiter));
+
+      expect(deleteRoutes.length).toBeGreaterThan(0);
+    },
+  );
+
+  it('leaves no controller calling execute() from an unmetered module', () => {
+    // Every module that reaches execute() must own at least one route file in the map above.
+    const modulesWithExecute = new Set(
+      controllersCallingExecute().map((file) => file.split(path.sep)[1]),
+    );
+    const meteredModules = new Set(
+      Object.keys(ROUTE_FILES).map((file) => file.split('/')[1]),
+    );
+
+    const unmetered = [...modulesWithExecute].filter((mod) => !meteredModules.has(mod));
+    expect(unmetered).toEqual([]);
+  });
+
+  it('gives the deletion budget its own store, not one shared with unrelated flows', () => {
+    // Reusing strictLimiter would share a 3-per-hour budget with GAET generation, admin
+    // creation and partner password resets: two timetable generations would lock the danger
+    // zone, and vice versa.
+    const { DELETION_RATE_LIMIT } = require('../../shared/lib/hard-delete/hard-delete.constants');
+
+    expect(DELETION_RATE_LIMIT.STORE_PREFIX).toBe('hard-delete');
+    expect(DELETION_RATE_LIMIT.MAX_ATTEMPTS).toBeGreaterThan(0);
+    expect(DELETION_RATE_LIMIT.WINDOW_MINUTES).toBeGreaterThan(0);
+  });
+
+  it('lets the archive path through untouched', () => {
+    // `DELETE /api/parents/:id` and `DELETE /api/documents/:id` serve both operations. Metering
+    // the archive form on the deletion budget would let ordinary archiving exhaust it — and
+    // make the danger zone unavailable for the rest of the hour because someone archived
+    // eleven rows.
+    const { hardDeleteFlagLimiter } = require('../../shared/lib/hard-delete');
+
+    for (const query of [{}, { hard: 'false' }, { hard: '1' }]) {
+      const next = jest.fn();
+      hardDeleteFlagLimiter({ query }, {}, next);
+      expect(next).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('routes ?hard=true through the limiter instead of waving it through', async () => {
+    const { hardDeleteFlagLimiter } = require('../../shared/lib/hard-delete');
+
+    // Enough of a req/res for express-rate-limit to run for real: the point is that the
+    // permanent-deletion form is metered, not that it happens to be refused.
+    const req = { query: { hard: 'true' }, ip: '203.0.113.7' };
+    const res = { setHeader: jest.fn(), status: () => res, json: jest.fn() };
+    const next = jest.fn();
+
+    await hardDeleteFlagLimiter(req, res, next);
+
+    // The limiter ran: it stamped its RateLimit headers before handing control on.
+    expect(res.setHeader).toHaveBeenCalled();
+    expect(req.rateLimit).toBeDefined();
   });
 });

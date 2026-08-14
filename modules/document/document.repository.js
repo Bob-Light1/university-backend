@@ -242,6 +242,19 @@ const paginateVersions = async (filter, { skip, limit }) => {
 /** Version snapshot by filter (getVersion / restoreVersion), lean. */
 const findVersionLean = (filter) => DocumentVersion.findOne(filter).lean();
 
+/**
+ * PDF snapshot filenames of every version of a document, session-aware.
+ *
+ * Read BEFORE {@link deleteVersionsByDocument} on the hard-delete path: once the rows are gone
+ * there is nothing left to tell the storage layer which files on disk belonged to them, and a
+ * generated PDF that outlives its document is both a storage leak and a copy of a record the
+ * operator was told had been permanently destroyed.
+ */
+const listVersionSnapshotFiles = (documentId, opts) =>
+  DocumentVersion.find({ documentId, pdfSnapshot: { $ne: null } }, null, opts)
+    .select('pdfSnapshot')
+    .lean();
+
 /** Deletes all versions of a document (hard-delete), session-aware. */
 const deleteVersionsByDocument = (documentId, opts) =>
   DocumentVersion.deleteMany({ documentId }, opts);
@@ -385,6 +398,7 @@ module.exports = {
   createVersions,
   paginateVersions,
   findVersionLean,
+  listVersionSnapshotFiles,
   deleteVersionsByDocument,
   deleteSharesByDocument,
   // DocumentAudit

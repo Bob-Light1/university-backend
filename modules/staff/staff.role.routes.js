@@ -5,6 +5,7 @@ const router  = express.Router();
 
 const staffRoleController = require('./controllers/staffRole.controller');
 const { authenticate, authorize } = require('../../shared/middleware/auth');
+const { deletionLimiter } = require('../../shared/lib/hard-delete');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 
@@ -46,6 +47,6 @@ router.patch('/:id/toggle', authorize(MGMT_ROLES), staffRoleController.toggleSta
  * @route  DELETE /api/staff-roles/:id
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
-router.delete('/:id', authorize(MGMT_ROLES), staffRoleController.deleteStaffRole);
+router.delete('/:id', authorize(MGMT_ROLES), deletionLimiter, staffRoleController.deleteStaffRole);
 
 module.exports = router;

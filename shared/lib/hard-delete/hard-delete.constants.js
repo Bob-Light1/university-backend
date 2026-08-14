@@ -96,6 +96,55 @@ const MAX_CASCADE_DOCUMENTS = 5000;
 const DANGER_ZONE_ROLES = Object.freeze(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']);
 
 /**
+ * Rate limit applied to every route that can reach `service.execute()` — the danger-zone
+ * router *and* the per-module compatibility aliases (`/students/:id/permanent`,
+ * `/api/parents/:id?hard=true`, …). They all clear the same password control, so a budget
+ * enforced on only one of them is a budget an attacker skips by changing URL.
+ *
+ * Its own store prefix on purpose: sharing `strictLimiter`'s 3-per-hour budget with GAET
+ * generation, admin creation and partner password resets would lock the danger zone for
+ * unrelated reasons, and vice versa.
+ */
+const DELETION_RATE_LIMIT = Object.freeze({
+  WINDOW_MINUTES: 60,
+  MAX_ATTEMPTS:   10,
+  STORE_PREFIX:   'hard-delete',
+  MESSAGE:        'Too many permanent-deletion attempts. Please try again later.',
+});
+
+/**
+ * Character caps of the free-text fields on `DeletionAudit`, declared here so the schema and
+ * the writer agree on one number.
+ *
+ * The writer TRUNCATES to these caps rather than letting Mongoose reject the document. An
+ * audit row is the only surviving trace of an irreversible operation: on the success path a
+ * rejected write aborts the whole transaction and makes the entity permanently undeletable,
+ * and on the refusal path it silently loses the record of the attempt. A `Blocked by: …`
+ * summary over the `campus` entry's thirty-odd BLOCK relations overruns `failureReason` on
+ * its own, so this is a live case, not a defensive one.
+ */
+const AUDIT_FIELD_LIMITS = Object.freeze({
+  entityLabel:        200,
+  confirmationPhrase: 200,
+  entityIdentifier:   200,
+  reason:             600,
+  failureReason:      500,
+});
+
+/**
+ * Truncates a value to a field's cap, marking the cut with an ellipsis so a reader can tell a
+ * shortened message from a complete one.
+ *
+ * @param {*} value
+ * @param {number} max - Cap from {@link AUDIT_FIELD_LIMITS}.
+ * @returns {string}
+ */
+const truncateForAudit = (value, max) => {
+  const text = String(value ?? '');
+  return text.length <= max ? text : `${text.slice(0, max - 1)}…`;
+};
+
+/**
  * Builds the exact phrase the operator must type to confirm a permanent deletion.
  * Deterministic and server-computed on both the preview and the execute call, so a stale or
  * hand-crafted phrase can never match.
@@ -116,5 +165,8 @@ module.exports = {
   IMPACT_COUNT_LIMIT,
   MAX_CASCADE_DOCUMENTS,
   DANGER_ZONE_ROLES,
+  DELETION_RATE_LIMIT,
+  AUDIT_FIELD_LIMITS,
   buildConfirmationPhrase,
+  truncateForAudit,
 };

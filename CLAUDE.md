@@ -188,11 +188,15 @@ shared/lib/hard-delete/
 
 Plus four structural rules:
 - **archive first** — a live record cannot be hard-deleted; permanent deletion is always a *second* decision, verified via `deletedOnlyFilter`;
-- **blockers are re-counted inside the transaction**, not only at the gate: a result published between the confirmation and the commit refuses the deletion instead of being orphaned;
-- **cascade volume cap** (`MAX_CASCADE_DOCUMENTS` = 5000) — cascades run in one transaction, bounded by the 16 MB oplog entry and the 60 s lifetime, so an oversized deletion is refused up front rather than aborting mid-flight;
-- a dedicated rate limiter (10/h per IP, own store prefix — do **not** reuse `strictLimiter`, its 3/h budget is shared with GAET/admin/partner).
+- **blockers and cascade volume are re-counted inside the transaction**, not only at the gate: a result published between the confirmation and the commit refuses the deletion instead of being orphaned, and a cascade that grew past the cap is refused with the gate's own message instead of aborting mid-flight;
+- **cascade volume cap** (`MAX_CASCADE_DOCUMENTS` = 5000) — cascades run in one transaction, bounded by the 16 MB oplog entry and the 60 s lifetime, so an oversized deletion is refused up front rather than aborting mid-flight. The cap is safe only because `IMPACT_COUNT_LIMIT` (10 000) sits **above** it: impact counts are capped, so the volume is a lower bound, and a cap below the limit would let an oversized cascade read as under-threshold;
+- a dedicated rate limiter (10/h per IP, own store prefix — do **not** reuse `strictLimiter`, its 3/h budget is shared with GAET/admin/partner). It lives in `hard-delete.limiter.js`, **not** in the router, and is mounted on the danger-zone route **and on every compatibility alias**: they all reach the same `execute()` and the same password control, so a limiter on the router alone is one that changing URL bypasses. `deletionLimiter` for the dedicated `/permanent` routes, `hardDeleteFlagLimiter` for the `?hard=true` routes (it meters only the permanent form — metering archives on the deletion budget would let ordinary archiving exhaust it).
 
 Every attempt is audited, not just the successful ones: a wrong password, a mismatched phrase, a forged or expired ticket and an aborted transaction all write a `DeletionAudit` row (`outcome: 'failed'`), alongside `'blocked'` and `'completed'`.
+
+The audit write is never allowed to be what fails. Every DeletionAudit payload is built by one `buildAuditPayload()` in the service — so a field cannot be present on the success row and missing on the refusal row — and its free-text fields are **truncated** to `AUDIT_FIELD_LIMITS` (the same constants the schema declares) instead of being handed to Mongoose to reject. A rejected write does not degrade gracefully: on the success path the row is created *inside* the transaction, so it aborts the deletion and makes the entity permanently undeletable; on the refusal path the row is simply lost. `Blocked by: …` over the `campus` entry's thirty-odd BLOCK relations overruns `failureReason` on its own — that is a live case, not a defensive one.
+
+The confirmation phrase is built from `resolveIdentifier()`, which falls back to the id on a blank identifier as well as a null one. `doc.matricule || doc.username` returns `''` when neither is set, and `??` lets it through: the phrase would collapse to a bare `DELETE` (typeable by accident) and `entityIdentifier` (required) would fail the audit write.
 
 #### Relation modes — declared per entity in the registry
 
@@ -217,13 +221,38 @@ Adding a campus-scoped model anywhere in the platform also fails that suite unti
 
 #### Legacy routes
 
-`DELETE /api/students/:id/permanent`, `/teachers`, `/staff`, `/mentors`, `/staff-roles/:id`, `/api/parents/:id?hard=true` and `/api/documents/:id?hard=true` still exist as **compatibility aliases** — they now delegate to `hardDelete.service.execute()` and require the same body. `document` keeps a `customExecutor` (version purge + **share-link purge** + storage cache + DocumentAudit + ai-service re-ingest) but clears the same gate; a `customExecutor` entry may therefore declare only `BLOCK`/`RETAIN` relations, and names what its own teardown covers in `handledByExecutor` (the registry test refuses a `CASCADE`/`DETACH` that would be counted and never applied). Repository helpers such as `deleteStudentById` / `hardDeleteScoped` are **unguarded and unrouted** — migration scripts only, never a controller.
+`DELETE /api/students/:id/permanent`, `/teachers`, `/staff`, `/mentors`, `/staff-roles/:id`, `/api/parents/:id?hard=true` and `/api/documents/:id?hard=true` still exist as **compatibility aliases** — they delegate to `hardDelete.service.execute()`, require the same body **and carry the same rate limiter** (see above; `tests/unit/hard-delete.test.js` fails until a new alias does). `document` keeps a `customExecutor` (version purge + **share-link purge** + **stored-file purge** + storage cache + DocumentAudit + ai-service re-ingest) but clears the same gate; a `customExecutor` entry may therefore declare only `BLOCK`/`RETAIN` relations, and names what its own teardown covers in `handledByExecutor` (the registry test refuses a `CASCADE`/`DETACH` that would be counted and never applied). Repository helpers such as `deleteStudentById` / `hardDeleteScoped` are **unguarded and unrouted** — migration scripts only, never a controller.
 
 `?hard=true` is read for **every** role and refused by the registry when the role is not allowed. Gating the flag on the role in the controller would silently downgrade an explicit permanent-deletion request into an archive and report it as a success.
 
+**Files follow the row.** The generic executor removes `entry.files(doc)` after the commit (`removeFiles`, never throwing — a leftover file is a cleanup task, an uncommitted deletion is not). The GED does the same inside `document.service.hardDeleteDocument` for the imported file, the PDF snapshot, the QR code and **every version's** snapshot, and returns the paths so they land on the ledger row. Version snapshots must be read **before** their rows are deleted — afterwards nothing maps the files on disk back to the document. `branding.logo` is deliberately excluded: it is campus-level artwork shared across documents. A generated PDF that survives its own permanent deletion is a readable copy of a record the operator was told had been destroyed, charged against the campus quota on top.
+
 #### Frontend
 
-`src/services/dangerZoneService.js` + `src/components/shared/HardDeleteDialog.jsx` (impact → phrase + password + reason, with ticket countdown) and `HardDeleteAction.jsx`. `GenericEntityPage` exposes the action **only** to ADMIN and **only** on archived rows, via the `dangerZoneEntityType` prop set in each `*Config.jsx`. i18n under `common.hardDelete.*` (10 locales).
+`src/services/dangerZoneService.js` + `src/components/shared/HardDeleteDialog.jsx` (impact → phrase + password + reason, with ticket countdown) and `HardDeleteAction.jsx`. i18n under `common.hardDelete.*` (10 locales).
+
+**Every screen goes through `src/hooks/useHardDelete.js` — never through a hard-coded role.** The hook reads `GET /danger-zone/entities` once per signed-in identity (module cache keyed on user + role, so a different account cannot inherit the previous one's permissions; a failed fetch resolves to an empty catalogue and is not retried per mount) and returns:
+
+- `enabled` — the registry lists this entity type for this operator, so render the dialog;
+- `canDelete(isArchived)` — the full per-row gate, `requireArchivedFirst` included (it defaults to `true` while the catalogue loads, so a permanent-deletion button never flashes on a live record);
+- `requestDelete(id, label)` + `dialogProps` — spread straight onto `<HardDeleteDialog />`.
+
+Restating either rule in a component is a second source of truth for something the registry owns, and it fails in the direction nobody notices: the button is simply missing for an operator entitled to it. That is exactly what the old `hasRole(['ADMIN'])` in `GenericEntityPage` did to `announcement`/`document` (DIRECTOR) and `staff-role` (CAMPUS_MANAGER).
+
+Wired screens — all fifteen registered entities: `GenericEntityPage` via the `dangerZoneEntityType` prop set in each `*Config.jsx` (`student · teacher · parent · mentor · staff`), `Classes.jsx`, `Subjects.jsx`, `ManageDepartment.jsx`, `ManageLevel.jsx`, `CourseManager.jsx`, `PartnerManager.jsx`/`PartnerList.jsx`, `CampusList.jsx`, `StaffRolesManager.jsx`, `AnnouncementAdmin.jsx`, `DocumentManager.jsx`.
+
+**A trash view is a prerequisite, not a nicety.** `requireArchivedFirst` means the operator must be able to *see* soft-deleted rows to select one. The `status: 'archived'` families already listed theirs; the two `deletedAt` models did not, so permanent deletion was unreachable for them — and in the GED the only entry point (a "Delete permanently…" shortcut inside the soft-delete dialog, on a live document) could only ever produce a refusal. Both now list their trash, restricted to the roles that can act on it:
+
+| Endpoint | Trash | Access |
+|---|---|---|
+| `GET /api/announcements?deleted=true` | soft-deleted announcements, same campus scope | ADMIN / DIRECTOR — 403 otherwise |
+| `GET /api/documents?deleted=true` | soft-deleted documents, same campus scope | ADMIN / DIRECTOR — 403 otherwise |
+
+Both refuse the flag rather than silently returning the live list, which would read as "the trash is empty". Both derive the fragment with `deletedOnlyFilter(Model)` — the exact complement of the not-deleted filter every other read carries, so the two cannot drift. In the UI the trash is a toggle (announcements) or a `Deleted` tab (GED) rendered only when `hardDelete.enabled`; rows there expose permanent deletion and nothing else — every lifecycle action is meaningless on a deleted row, and the GED drawer would 404 since each detail endpoint filters on `deletedAt: null`. Neither model has a restore endpoint: soft deletion is retention, permanent deletion is the danger zone.
+
+`DELETE /staff-roles/:id` is a danger-zone alias, so `StaffRolesManager` reaches it through the dialog like everything else. It used to send a bare `api.delete()` behind a `window.confirm`, which the guard refused every time (no ticket, no phrase, no password, no reason) — the button was dead. `deleteStaffRole()` has been removed from `staffService.js` so the shape cannot come back.
+
+The dialog can always go back to step 1 (`rerunPreview`): a ticket lives 5 minutes and reading a long impact report outlasts it easily, and a `409` on execute means the ticket is spent — the report is dropped so the operator re-reads an impact that may have changed, instead of resubmitting a token the server has already refused. `minReasonLength` / `maxReasonLength` travel on `report.requirements` rather than being mirrored as frontend literals; the local constant is a fallback only.
 
 **Outside this system**, only three exceptions — none of them business data:
 - `ActivationToken` cleanup (`account.service.js`) and TTL-expiring collections;

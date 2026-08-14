@@ -16,7 +16,7 @@
  */
 
 const {
-  sendSuccess, sendCreated, sendError, sendNotFound,
+  sendSuccess, sendCreated, sendError, sendNotFound, sendForbidden,
   sendPaginated, asyncHandler,
 } = require('../../../shared/utils/response-helpers');
 
@@ -80,8 +80,18 @@ const createDocument = asyncHandler(async (req, res) => {
  * GET /api/documents
  * Returns a paginated list filtered by type, category, status, tags, date range,
  * and structured metadata fields (studentId, teacherId, courseId, semester, academicYear).
+ *
+ * `deleted=true` switches to the trash view (soft-deleted documents only) — ADMIN / DIRECTOR
+ * only, since they are the only roles that may permanently delete one.
  */
 const listDocuments = asyncHandler(async (req, res) => {
+  // The trash view exposes records an operator already removed from sight, and only ADMIN /
+  // DIRECTOR can do anything with one. Refuse the flag outright rather than quietly answering
+  // with the live list, which would read as "the trash is empty".
+  if (req.query.deleted === 'true' && !req.isGlobalRole) {
+    return sendForbidden(res, 'Only ADMIN and DIRECTOR may list deleted documents');
+  }
+
   const { data, total, page, limit } = await documentService.listDocuments(req, req.query);
 
   return sendPaginated(res, 200, 'Documents retrieved successfully', data, {

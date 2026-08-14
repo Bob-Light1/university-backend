@@ -47,6 +47,7 @@ const router = express.Router();
 // ── AUTH & RATE LIMITING ──────────────────────────────────────────────────────
 const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { loginLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
+const { hardDeleteFlagLimiter } = require('../../shared/lib/hard-delete');
 
 // ── FILE UPLOAD (multer) ──────────────────────────────────────────────────────
 const {
@@ -340,7 +341,10 @@ router.patch('/:id/reset-password', authorize(MANAGERS), resetParentPassword);
  * @route  DELETE /api/parents/:id
  * @desc   Soft-delete for all managers; hard-delete (?hard=true) for ADMIN only
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
+ * @note   `hardDeleteFlagLimiter` meters ONLY the `?hard=true` form, on the same budget as the
+ *         danger-zone router: the two reach the same password control, so a limiter on one of
+ *         them alone is one an attacker skips by changing URL. Archiving stays unmetered.
  */
-router.delete('/:id', authorize(MANAGERS), deleteParent);
+router.delete('/:id', authorize(MANAGERS), hardDeleteFlagLimiter, deleteParent);
 
 module.exports = router;

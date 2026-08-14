@@ -8,6 +8,7 @@ const mentorProfileController   = require('./controllers/mentor.profile.controll
 const mentorReadonlyController  = require('./controllers/mentor.readonly.controller');
 const { authenticate, authorize, isOwnerOrRole } = require('../../shared/middleware/auth');
 const { loginLimiter } = require('../../shared/middleware/rate-limiter');
+const { deletionLimiter } = require('../../shared/lib/hard-delete');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 
@@ -153,6 +154,6 @@ router.delete('/:id', authorize(MGMT_ROLES), mentorController.archiveMentor);
  * @route  DELETE /api/mentors/:id/permanent
  * @access ADMIN only
  */
-router.delete('/:id/permanent', authorize(['ADMIN']), mentorController.deleteMentor);
+router.delete('/:id/permanent', authorize(['ADMIN']), deletionLimiter, mentorController.deleteMentor);
 
 module.exports = router;

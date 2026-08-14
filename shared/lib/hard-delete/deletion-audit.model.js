@@ -19,7 +19,7 @@
  */
 
 const mongoose = require('mongoose');
-const { DELETION_OUTCOME, RELATION_MODE } = require('./hard-delete.constants');
+const { DELETION_OUTCOME, RELATION_MODE, AUDIT_FIELD_LIMITS } = require('./hard-delete.constants');
 
 /** One line of the impact report, as computed at execution time. */
 const ImpactLineSchema = new mongoose.Schema(
@@ -48,9 +48,9 @@ const DeletionAuditSchema = new mongoose.Schema(
     /** Id of the target. Kept as an ObjectId for cross-referencing, never as a ref. */
     entityId:    { type: mongoose.Schema.Types.ObjectId, required: true, index: true },
     /** Business key the operator had to type, e.g. 'STU-2024-0031'. */
-    entityIdentifier: { type: String, required: true, trim: true },
+    entityIdentifier: { type: String, required: true, trim: true, maxlength: AUDIT_FIELD_LIMITS.entityIdentifier },
     /** Display label at deletion time, e.g. 'Jane Doe'. */
-    entityLabel: { type: String, required: true, trim: true, maxlength: 200 },
+    entityLabel: { type: String, required: true, trim: true, maxlength: AUDIT_FIELD_LIMITS.entityLabel },
     /** Campus the entity belonged to; null for global collections. */
     campusId:    { type: mongoose.Schema.Types.ObjectId, ref: 'Campus', default: null, index: true },
 
@@ -62,9 +62,9 @@ const DeletionAuditSchema = new mongoose.Schema(
 
     // ── Justification & proof of intent ───────────────────────────────────────
     /** Mandatory free-text justification supplied by the operator. */
-    reason: { type: String, required: true, trim: true, maxlength: 600 },
+    reason: { type: String, required: true, trim: true, maxlength: AUDIT_FIELD_LIMITS.reason },
     /** The exact phrase typed by the operator, stored verbatim for the record. */
-    confirmationPhrase: { type: String, required: true, trim: true, maxlength: 200 },
+    confirmationPhrase: { type: String, required: true, trim: true, maxlength: AUDIT_FIELD_LIMITS.confirmationPhrase },
     /**
      * Digest of the impact report the operator approved. Proves the ticket that authorized
      * this deletion was issued for this exact state of the database.
@@ -81,7 +81,7 @@ const DeletionAuditSchema = new mongoose.Schema(
       index:    true,
     },
     /** Populated when outcome is BLOCKED or FAILED. */
-    failureReason: { type: String, default: null, trim: true, maxlength: 500 },
+    failureReason: { type: String, default: null, trim: true, maxlength: AUDIT_FIELD_LIMITS.failureReason },
     /** Impact report as computed server-side at execution time. */
     impact: { type: [ImpactLineSchema], default: [] },
     /** Number of documents actually removed per model, e.g. { StudentAttendance: 42 }. */

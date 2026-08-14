@@ -12,25 +12,10 @@
 const express = require('express');
 
 const { authenticate, authorize } = require('../../middleware/auth');
-const { apiLimiter, createCustomLimiter } = require('../../middleware/rate-limiter');
+const { apiLimiter } = require('../../middleware/rate-limiter');
 const { DANGER_ZONE_ROLES } = require('./hard-delete.constants');
+const { deletionLimiter } = require('./hard-delete.limiter');
 const controller = require('./hard-delete.controller');
-
-/**
- * Dedicated limiter, with its own store prefix on purpose.
- *
- * Reusing `strictLimiter` would share a single 3-per-hour budget with GAET generation, admin
- * creation and partner password resets — an admin who ran two timetable generations would
- * find the danger zone locked, and vice versa. 10 attempts per hour per IP still throttles
- * the password control hard: reaching it already requires a valid signed ticket and the exact
- * confirmation phrase, neither of which can be brute-forced.
- */
-const deletionLimiter = createCustomLimiter(
-  60,
-  10,
-  'Too many permanent-deletion attempts. Please try again later.',
-  { prefix: 'hard-delete' },
-);
 
 const router = express.Router();
 

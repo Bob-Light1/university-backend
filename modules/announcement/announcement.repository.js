@@ -16,7 +16,7 @@
 const Announcement     = require('./models/announcement.model');
 const UserNotification = require('./models/user-notification.model');
 const { escapeRegex, isValidObjectId } = require('../../shared/utils/validation-helpers');
-const { notDeletedFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
+const { notDeletedFilter, deletedOnlyFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
 
 /**
  * Not-deleted fragment for Announcement — derived, never hand-written.
@@ -27,6 +27,14 @@ const { notDeletedFilter, softDeletePatch } = require('../../shared/utils/soft-d
  * ones, so the convention is declared in STRATEGY_OVERRIDES rather than inferred here.
  */
 const NOT_DELETED = notDeletedFilter(Announcement);
+
+/**
+ * Deleted-only fragment — the exact complement of {@link NOT_DELETED}, derived from the same
+ * declared convention. It backs the admin trash view, which is what makes an announcement
+ * reachable for permanent deletion: the danger zone refuses a live record, so without a way to
+ * list the soft-deleted ones the operator could never select one.
+ */
+const DELETED_ONLY = deletedOnlyFilter(Announcement);
 
 // ── Constructeurs de filtres internes ─────────────────────────────────────────
 
@@ -46,9 +54,12 @@ const requireCampus = (campusId) => {
   return campusId;
 };
 
-// Admin scope: all (ADMIN/DIRECTOR) or own campus, excluding deleted.
-const adminScope = ({ isGlobalRole, campusId, requestedCampusId }) => {
-  const filter = { ...NOT_DELETED };
+// Admin scope: all (ADMIN/DIRECTOR) or own campus. Excludes deleted rows unless `deleted` is
+// set, in which case it lists ONLY them — the trash view, which the controller restricts to
+// global roles. Campus isolation is unchanged either way: a soft-deleted announcement belongs
+// to the same tenant it always did.
+const adminScope = ({ isGlobalRole, campusId, requestedCampusId, deleted = false }) => {
+  const filter = { ...(deleted ? DELETED_ONLY : NOT_DELETED) };
   if (!isGlobalRole) {
     filter.schoolCampus = requireCampus(campusId);
   } else if (requestedCampusId && isValidObjectId(String(requestedCampusId))) {
@@ -76,13 +87,15 @@ const create = (data) => Announcement.create(data);
 
 /**
  * Liste paginée pour l'admin (tri épinglé d'abord, puis récent).
+ *
+ * @param {boolean} [deleted=false] - List soft-deleted announcements instead of live ones.
  * @returns {Promise<{data: Object[], total: number}>}
  */
 const paginateForAdmin = async ({
   isGlobalRole, campusId, requestedCampusId,
-  status, type, targetRole, pinned, search, skip, limit,
+  status, type, targetRole, pinned, search, skip, limit, deleted = false,
 }) => {
-  const filter = adminScope({ isGlobalRole, campusId, requestedCampusId });
+  const filter = adminScope({ isGlobalRole, campusId, requestedCampusId, deleted });
   if (status)              filter.status      = status;
   if (type)                filter.type        = type;
   if (targetRole)          filter.targetRoles = targetRole;

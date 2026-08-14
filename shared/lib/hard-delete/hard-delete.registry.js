@@ -581,9 +581,16 @@ const REGISTRY = Object.freeze({
     handledByExecutor: ['DocumentVersion.documentId', 'DocumentShare.documentId'],
     /**
      * The GED owns a richer teardown than the generic executor can express: version purge,
-     * share-link purge, storage-cache invalidation, DocumentAudit entry and an ai-service
-     * re-ingest signal. The gate (ticket, phrase, password, reason, audit) still runs here;
-     * only the removal itself is delegated. See document.service.hardDeleteDocument.
+     * share-link purge, purge of every file the document owns on disk (imported file, PDF
+     * snapshot, QR code and each version's snapshot), storage-cache invalidation, DocumentAudit
+     * entry and an ai-service re-ingest signal. The gate (ticket, phrase, password, reason,
+     * audit) still runs here; only the removal itself is delegated. The removed storage paths
+     * come back on the receipt and land on the DeletionAudit row, exactly as `removeFiles()`
+     * reports them for the generic path. See document.service.hardDeleteDocument.
+     *
+     * `files` is deliberately absent: the GED stores under a campus-scoped layout
+     * (`documents/{campusId}/{category}/`) that the generic `deleteFile(folder, path)` cannot
+     * address. Declaring it here would silently miss every file.
      *
      * Because that path replaces `runTransactionalDelete()` wholesale, a CASCADE or DETACH
      * declared on this entry would be counted in the impact report and then never applied.

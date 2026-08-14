@@ -93,15 +93,26 @@ const createAnnouncement = async (req, res) => {
 
 const getAllAnnouncements = async (req, res) => {
   try {
-    const { page = 1, limit = 20, status, type, targetRole, pinned, search, campusId } = req.query;
+    const { page = 1, limit = 20, status, type, targetRole, pinned, search, campusId, deleted } = req.query;
     const safePage  = Math.max(1, Number(page)  || 1);
     const safeLimit = Math.min(100, Math.max(1, Number(limit) || 20));
     const skip = (safePage - 1) * safeLimit;
+
+    // The trash lists records an operator already removed from sight, and only ADMIN / DIRECTOR
+    // may act on one (they are the roles the danger-zone registry declares for `announcement`).
+    // Refuse the flag rather than quietly answering with the live list — that would read as
+    // "the trash is empty".
+    if (deleted === 'true' && !isGlobalRole(req.user.role)) {
+      return sendForbidden(res, 'Only ADMIN and DIRECTOR may list deleted announcements.');
+    }
 
     const { data, total } = await announcementRepo.paginateForAdmin({
       isGlobalRole:      isGlobalRole(req.user.role),
       campusId:          req.user.campusId,
       requestedCampusId: campusId, // narrow (ADMIN/DIRECTOR only — applied in the repo)
+      // Trash view. It exists so a soft-deleted announcement can be reached at all: permanent
+      // deletion refuses a live record, and the live list is the only one that existed.
+      deleted:           deleted === 'true',
       status,
       type,
       targetRole,

@@ -16,6 +16,7 @@ const routes    = require('./hard-delete.routes');
 const service   = require('./hard-delete.service');
 const constants = require('./hard-delete.constants');
 const controller = require('./hard-delete.controller');
+const { deletionLimiter, hardDeleteFlagLimiter } = require('./hard-delete.limiter');
 
 module.exports = {
   routes,
@@ -23,4 +24,14 @@ module.exports = {
   constants,
   /** Exposed so per-module controllers map service errors identically. */
   respondToError: controller.respondToError,
+  /**
+   * The deletion rate limit, exposed so the compatibility aliases carry the SAME budget as the
+   * danger-zone router. They reach the same `execute()` and the same password control; a
+   * limiter mounted on one of the two is a limiter that changing URL bypasses.
+   *
+   * `deletionLimiter` for the dedicated `/permanent` routes, `hardDeleteFlagLimiter` for the
+   * routes that only become a permanent deletion under `?hard=true`.
+   */
+  deletionLimiter,
+  hardDeleteFlagLimiter,
 };

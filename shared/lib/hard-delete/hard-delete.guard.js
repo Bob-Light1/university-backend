@@ -53,12 +53,18 @@ const getSecret = () => {
  * recorded, a child row added between preview and execute — changes the digest and invalidates
  * the ticket, forcing the operator through a fresh preview.
  *
- * @param {Array<{ model: string, mode: string, count: number }>} impact
+ * The label is part of the canonical form, not decoration: several entries declare more than
+ * one relation over the same model in the same mode (a teacher BLOCKs `ExamGrading` both as
+ * grader and as second grader; a class DETACHes `Class` twice). Keyed on model and mode alone,
+ * those lines are interchangeable, so counts moving from one to the other leave the digest
+ * unchanged and a stale ticket still verifies. The label is what separates them.
+ *
+ * @param {Array<{ model: string, label: string, mode: string, count: number }>} impact
  * @returns {string} 32-char hex digest.
  */
 const digestImpact = (impact) => {
   const canonical = [...impact]
-    .map((line) => `${line.model}:${line.mode}:${line.count}`)
+    .map((line) => `${line.model}:${line.label}:${line.mode}:${line.count}`)
     .sort()
     .join('|');
 

@@ -24,6 +24,7 @@ const getCampusName = (...args) => require('../../campus').service.getCampusName
 
 const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
 const { validateContentBlocks }  = require('./document.validation.service');
+const storageService             = require('./document.storage.service');
 
 const {
   DOCUMENT_TYPE,
@@ -32,6 +33,18 @@ const {
 } = require('../models/document.model');
 
 const { AUDIT_ACTION } = require('../models/document.audit.model');
+const Document = require('../models/document.model');
+const { deletedOnlyFilter } = require('../../../shared/utils/soft-delete');
+
+/**
+ * Deleted-only fragment for the trash view — derived from the model rather than hand-written,
+ * because it is the exact complement of the `deletedAt: null` filter every other read carries
+ * and the two must never drift apart.
+ *
+ * The trash view is what makes a soft-deleted document reachable at all: the danger zone
+ * refuses a live record, and until now no listing returned anything else.
+ */
+const DELETED_ONLY = deletedOnlyFilter(Document);
 
 /**
  * Fire-and-forget AI ingestion signal (Phase 3 design doc §6.3): notifies
@@ -297,12 +310,21 @@ const listDocuments = async (req, queryParams) => {
     studentId, teacherId, courseId, classId,
     semester, academicYear,
     page = 1, limit = 20, sortBy = 'createdAt', sortDir = 'desc',
+    deleted,
   } = queryParams;
+
+  // Trash view: soft-deleted documents only. Restricted to global roles because they are the
+  // only ones the danger-zone registry lets act on the result — and a soft-deleted document is
+  // one an operator already decided nobody should see. The controller rejects the flag for any
+  // other role rather than silently returning live documents instead.
+  const deletionFragment = deleted === 'true' && req.isGlobalRole
+    ? { ...DELETED_ONLY }
+    : { deletedAt: null };
 
   // Start with campus-scoped base filter (Layer 2 isolation)
   const filter = req.isGlobalRole
-    ? { deletedAt: null }
-    : { campusId: req.campusId, deletedAt: null };
+    ? { ...deletionFragment }
+    : { campusId: req.campusId, ...deletionFragment };
 
   if (type)     filter.type     = type;
   if (category) filter.category = category;
@@ -530,26 +552,66 @@ const softDeleteDocument = async (documentId, reason, req) => {
 };
 
 /**
- * Hard-deletes a document and all its versions (ADMIN/DIRECTOR only).
- * Audit records are NEVER deleted.
+ * Every file on disk owned by a document and by nothing else.
+ *
+ * Deliberately excludes `branding.logo`: a logo is campus-level artwork shared by every
+ * document that uses the same branding, so removing it with one document would blank the
+ * others. Everything listed here is generated or uploaded for this document alone.
+ *
+ * @param {Object}   doc      - The document (Mongoose doc or lean).
+ * @param {string[]} versionSnapshots - `pdfSnapshot` filenames of its versions.
+ * @returns {Array<{ category: string, fileName: string }>}
+ */
+const collectOwnedFiles = (doc, versionSnapshots = []) => {
+  const files = [];
+
+  if (doc.importedFile?.fileName) files.push({ category: 'imported', fileName: doc.importedFile.fileName });
+  if (doc.pdfSnapshot)            files.push({ category: 'pdf',      fileName: doc.pdfSnapshot });
+  if (doc.qrCode?.fileName)       files.push({ category: 'qrcodes',  fileName: doc.qrCode.fileName });
+
+  for (const fileName of versionSnapshots) {
+    if (fileName) files.push({ category: 'pdf', fileName });
+  }
+
+  return files;
+};
+
+/**
+ * Hard-deletes a document, all its versions, all its share links and every file it owns on
+ * disk (ADMIN/DIRECTOR only). Audit records are NEVER deleted.
+ *
+ * The stored files are removed AFTER the commit and never throw: a leftover file is a cleanup
+ * task, whereas rolling back a committed deletion is impossible. Leaving them behind is not an
+ * option either — an imported PDF that survives its own permanent deletion is a readable copy
+ * of a record the operator was told had been destroyed, on top of the storage leak that grows
+ * with every deletion and is charged against the campus quota.
  *
  * @param {string} documentId
  * @param {import('express').Request} req
+ * @returns {Promise<{ filesRemoved: string[] }>} Storage paths actually removed.
  */
 const hardDeleteDocument = async (documentId, req) => {
   const session = await repo.startSession();
   session.startTransaction();
 
+  let ownedFiles = [];
+  let campusId;
+
   try {
     const doc = await repo.findDocumentByIdForWrite(documentId, { session });
     if (!doc) throw Object.assign(new Error('Document not found'), { statusCode: 404 });
+
+    campusId = doc.campusId;
+
+    // Read the version snapshots BEFORE their rows go: afterwards nothing maps the files on
+    // disk back to this document.
+    const versions = await repo.listVersionSnapshotFiles(documentId, { session });
+    ownedFiles = collectOwnedFiles(doc, versions.map((v) => v.pdfSnapshot));
 
     await repo.deleteVersionsByDocument(documentId, { session });
     // Share links must go with the document: a surviving token resolves to a removed id.
     await repo.deleteSharesByDocument(documentId, { session });
     await repo.deleteDocumentById(documentId, { session });
-
-    invalidateStorageCache(doc.campusId.toString());
 
     // Audit written WITHOUT the document (already removed) — no lastAuditEntry update needed
     await repo.createAudit([{
@@ -575,6 +637,22 @@ const hardDeleteDocument = async (documentId, req) => {
   } finally {
     session.endSession();
   }
+
+  const filesRemoved = [];
+  for (const { category, fileName } of ownedFiles) {
+    try {
+      const removed = await storageService.deleteFile(campusId, category, fileName);
+      if (removed) filesRemoved.push(`${category}/${fileName}`);
+    } catch (err) {
+      console.error(`⚠️ document hard-delete: failed to remove ${category}/${fileName}:`, err.message);
+    }
+  }
+
+  // Cache invalidated once the bytes are actually gone, so the recomputed usage reflects the
+  // freed space rather than the pre-deletion footprint.
+  invalidateStorageCache(campusId.toString());
+
+  return { filesRemoved };
 };
 
 // ── Version Snapshot ──────────────────────────────────────────────────────────

@@ -35,7 +35,11 @@ const {
   DELETION_OUTCOME,
   IMPACT_COUNT_LIMIT,
   MAX_CASCADE_DOCUMENTS,
+  MIN_REASON_LENGTH,
+  MAX_REASON_LENGTH,
+  AUDIT_FIELD_LIMITS,
   buildConfirmationPhrase,
+  truncateForAudit,
 } = require('./hard-delete.constants');
 const {
   digestImpact,
@@ -228,6 +232,86 @@ const buildSnapshot = (doc, redact = []) => {
   return snapshot;
 };
 
+// ── Identity ──────────────────────────────────────────────────────────────────
+
+/**
+ * The business key the operator has to retype, resolved in ONE place.
+ *
+ * The registry's `identifier()` is free to return an empty string — `doc.matricule ||
+ * doc.username` does exactly that when neither field is set — and `??` would let it through,
+ * because `''` is neither null nor undefined. Two things break at once when it does: the
+ * confirmation phrase collapses to a bare `DELETE`, which any operator can type by accident,
+ * and `entityIdentifier` (required) fails validation on the audit write, aborting the whole
+ * transaction. Falling back on the id keeps both the control and the ledger meaningful.
+ *
+ * @param {import('./hard-delete.registry').HardDeleteEntry} entry
+ * @param {Object} target
+ * @returns {string}
+ */
+const resolveIdentifier = (entry, target) => {
+  const raw = String(entry.identifier(target) ?? '').trim();
+  return raw || String(target._id);
+};
+
+/**
+ * The human label, same reasoning as {@link resolveIdentifier}.
+ *
+ * @param {import('./hard-delete.registry').HardDeleteEntry} entry
+ * @param {Object} target
+ * @param {string} identifier - Fallback when the entity has no display name.
+ * @returns {string}
+ */
+const resolveLabel = (entry, target, identifier) => {
+  const raw = String(entry.display(target) ?? '').trim();
+  return raw || identifier;
+};
+
+// ── Audit ─────────────────────────────────────────────────────────────────────
+
+/**
+ * Builds the DeletionAudit payload shared by the three write sites (refusal, generic removal,
+ * document removal). One builder, so a field can never be present on the success row and
+ * missing on the refusal row — the two are read side by side in the ledger.
+ *
+ * Free-text fields are truncated to their schema caps rather than left to Mongoose. A rejected
+ * audit write is not a recoverable error here: on the success path it aborts the transaction
+ * and makes the entity permanently undeletable, and on the refusal path the row is simply
+ * lost. `Blocked by: …` over the `campus` entry's thirty-odd BLOCK relations overruns
+ * `failureReason` on its own.
+ *
+ * @param {Object} params
+ * @returns {Object} A `DeletionAudit` document payload.
+ */
+const buildAuditPayload = ({
+  entry, entityType, target, req, reason, phrase, digest, impact,
+  outcome, failureReason = null, passwordVerified = false, extra = {},
+}) => {
+  const identifier = resolveIdentifier(entry, target);
+
+  return {
+    entityType,
+    entityModel:      entry.model().modelName,
+    entityId:         target._id,
+    entityIdentifier: truncateForAudit(identifier, AUDIT_FIELD_LIMITS.entityIdentifier),
+    entityLabel:      truncateForAudit(resolveLabel(entry, target, identifier), AUDIT_FIELD_LIMITS.entityLabel),
+    campusId:         entry.campusPath ? target[entry.campusPath] ?? null : null,
+    performedBy:      req.user.id,
+    performedByModel: req.user.role === 'CAMPUS_MANAGER' ? 'Campus' : 'Admin',
+    performedByRole:  req.user.role,
+    performedAt:      new Date(),
+    reason:             truncateForAudit(reason, AUDIT_FIELD_LIMITS.reason),
+    confirmationPhrase: truncateForAudit(phrase, AUDIT_FIELD_LIMITS.confirmationPhrase),
+    impactDigest:       digest || 'n/a',
+    passwordVerified:   Boolean(passwordVerified),
+    outcome,
+    failureReason:    failureReason ? truncateForAudit(failureReason, AUDIT_FIELD_LIMITS.failureReason) : null,
+    impact:           (impact ?? []).filter((line) => line.count > 0),
+    ipAddress:        req.ip ?? null,
+    userAgent:        req.headers?.['user-agent'] ?? null,
+    ...extra,
+  };
+};
+
 // ── Preview ───────────────────────────────────────────────────────────────────
 
 /**
@@ -249,7 +333,7 @@ const preview = async ({ entityType, entityId, req }) => {
   const blockers = blockersOf(impact);
   const digest   = digestImpact(impact);
 
-  const identifier = String(entry.identifier(target) ?? target._id);
+  const identifier = resolveIdentifier(entry, target);
 
   // Surfaced at preview time, not only at execution: an operator who is going to be refused
   // should learn it before typing a confirmation phrase and their password.
@@ -269,7 +353,7 @@ const preview = async ({ entityType, entityId, req }) => {
     entity: {
       id:         String(target._id),
       identifier,
-      label:      String(entry.display(target) ?? identifier),
+      label:      resolveLabel(entry, target, identifier),
       campusId:   entry.campusPath ? target[entry.campusPath] ?? null : null,
     },
     confirmationPhrase: buildConfirmationPhrase(identifier),
@@ -281,10 +365,14 @@ const preview = async ({ entityType, entityId, req }) => {
       limit:        MAX_CASCADE_DOCUMENTS,
       overLimit:    overCascadeLimit,
     },
+    // The dialog validates the reason before submitting, so it needs the bound the server
+    // will apply — carried here rather than mirrored as a frontend literal (CLAUDE.md §0.1).
     requirements: {
       confirmationPhrase: true,
       password:           true,
       reason:             true,
+      minReasonLength:    MIN_REASON_LENGTH,
+      maxReasonLength:    MAX_REASON_LENGTH,
     },
     ticket:    ticket?.ticket ?? null,
     expiresAt: ticket?.expiresAt ?? null,
@@ -313,31 +401,16 @@ const auditRefusal = async ({
   failureReason, passwordVerified, outcome = DELETION_OUTCOME.BLOCKED,
 }) => {
   try {
-    const identifier = String(entry.identifier(target) ?? target._id);
-
-    await DeletionAudit.create({
-      entityType,
-      entityModel:      entry.model().modelName,
-      entityId:         target._id,
-      entityIdentifier: identifier,
-      entityLabel:      String(entry.display(target) ?? identifier),
-      campusId:         entry.campusPath ? target[entry.campusPath] ?? null : null,
-      performedBy:      req.user.id,
-      performedByModel: req.user.role === 'CAMPUS_MANAGER' ? 'Campus' : 'Admin',
-      performedByRole:  req.user.role,
-      performedAt:      new Date(),
+    await DeletionAudit.create(buildAuditPayload({
+      entry, entityType, target, req, digest, impact,
       // The justification is only validated on the happy path; an attempt refused before that
       // still needs a non-empty required field, and the placeholder is itself informative.
-      reason:             reason || '(refused before a justification was accepted)',
-      confirmationPhrase: phrase || '(not verified)',
-      impactDigest:       digest || 'n/a',
-      passwordVerified:   Boolean(passwordVerified),
+      reason: reason || '(refused before a justification was accepted)',
+      phrase: phrase || '(not verified)',
       outcome,
       failureReason,
-      impact:             (impact ?? []).filter((line) => line.count > 0),
-      ipAddress:          req.ip ?? null,
-      userAgent:          req.headers?.['user-agent'] ?? null,
-    });
+      passwordVerified,
+    }));
   } catch (err) {
     console.error('⚠️ hard-delete: failed to write the refusal audit entry:', err.message);
   }
@@ -379,6 +452,20 @@ const runTransactionalDelete = async ({ entry, entityType, target, req, reason, 
         );
       }
 
+      // The volume is re-read for the same reason the blockers are: rows added between the
+      // gate and the commit would otherwise push the cascade past what one transaction can
+      // carry, and the operator would get an opaque abort instead of the explicit refusal the
+      // gate already knows how to phrase.
+      const liveCascadeVolume = cascadeVolumeOf(liveImpact);
+      if (liveCascadeVolume > MAX_CASCADE_DOCUMENTS) {
+        throw httpError(
+          409,
+          `Permanent deletion refused: the cascade grew to ${liveCascadeVolume} documents while ` +
+          `the deletion was being confirmed, above the ${MAX_CASCADE_DOCUMENTS} a single ` +
+          `transaction can carry.`,
+        );
+      }
+
       for (const relation of entry.relations) {
         const RelatedModel = resolveRelationModel(relation);
 
@@ -398,31 +485,16 @@ const runTransactionalDelete = async ({ entry, entityType, target, req, reason, 
         throw httpError(409, `${entry.label} was already removed by another operation`);
       }
 
-      const identifier = String(entry.identifier(target) ?? target._id);
-
-      const [audit] = await DeletionAudit.create([{
-        entityType,
-        entityModel:      Model.modelName,
-        entityId:         id,
-        entityIdentifier: identifier,
-        entityLabel:      String(entry.display(target) ?? identifier),
-        campusId:         entry.campusPath ? target[entry.campusPath] ?? null : null,
-        performedBy:      req.user.id,
-        performedByModel: req.user.role === 'CAMPUS_MANAGER' ? 'Campus' : 'Admin',
-        performedByRole:  req.user.role,
-        performedAt:      new Date(),
-        reason,
-        confirmationPhrase: phrase,
-        impactDigest:       digest,
-        passwordVerified:   true,
-        outcome:            DELETION_OUTCOME.COMPLETED,
-        impact:             impact.filter((line) => line.count > 0),
-        cascadeDeleted:     { ...cascadeDeleted },
-        detached:           { ...detached },
-        snapshot:           buildSnapshot(target, entry.redact),
-        ipAddress:          req.ip ?? null,
-        userAgent:          req.headers?.['user-agent'] ?? null,
-      }], { session });
+      const [audit] = await DeletionAudit.create([buildAuditPayload({
+        entry, entityType, target, req, reason, phrase, digest, impact,
+        outcome:          DELETION_OUTCOME.COMPLETED,
+        passwordVerified: true,
+        extra: {
+          cascadeDeleted: { ...cascadeDeleted },
+          detached:       { ...detached },
+          snapshot:       buildSnapshot(target, entry.redact),
+        },
+      })], { session });
 
       auditId = audit._id;
     });
@@ -495,7 +567,7 @@ const execute = async ({ entityType, entityId, req, confirmation = {} }) => {
 
   await assertAlreadySoftDeleted(entry, entityId);
 
-  const identifier = String(entry.identifier(target) ?? target._id);
+  const identifier = resolveIdentifier(entry, target);
 
   const impact = await computeImpact(entry, entityId);
   const digest = digestImpact(impact);
@@ -614,7 +686,7 @@ const execute = async ({ entityType, entityId, req, confirmation = {} }) => {
     entityType,
     entityId:   String(target._id),
     identifier,
-    label:      String(entry.display(target) ?? identifier),
+    label:      resolveLabel(entry, target, identifier),
     cascadeDeleted,
     detached,
     filesRemoved,
@@ -629,47 +701,39 @@ const execute = async ({ entityType, entityId, req, confirmation = {} }) => {
  * here so the platform-wide ledger stays complete — the document module's own audit trail is
  * scoped to documents and answers a different question.
  *
+ * The stored files the GED purges are reported back and recorded on the ledger row, exactly as
+ * `removeFiles()` does for the generic path: `filesRemoved: []` on a document deletion would
+ * read as "nothing was on disk", which is the opposite of what happens.
+ *
  * @param {Object} params
  * @returns {Promise<Object>} Deletion receipt.
  */
 const executeDocumentDelete = async ({ entry, entityType, target, req, reason, phrase, digest, impact }) => {
   const documentService = require('../../../modules/document/services/document.service');
 
-  await documentService.hardDeleteDocument(String(target._id), req);
+  const { filesRemoved = [] } = await documentService.hardDeleteDocument(String(target._id), req) ?? {};
 
-  const identifier = String(entry.identifier(target) ?? target._id);
+  const identifier = resolveIdentifier(entry, target);
 
-  const audit = await DeletionAudit.create({
-    entityType,
-    entityModel:      entry.model().modelName,
-    entityId:         target._id,
-    entityIdentifier: identifier,
-    entityLabel:      String(entry.display(target) ?? identifier),
-    campusId:         target[entry.campusPath] ?? null,
-    performedBy:      req.user.id,
-    performedByModel: req.user.role === 'CAMPUS_MANAGER' ? 'Campus' : 'Admin',
-    performedByRole:  req.user.role,
-    performedAt:      new Date(),
-    reason,
-    confirmationPhrase: phrase,
-    impactDigest:       digest,
-    passwordVerified:   true,
-    outcome:            DELETION_OUTCOME.COMPLETED,
-    impact:             impact.filter((line) => line.count > 0),
-    snapshot:           buildSnapshot(target, entry.redact),
-    ipAddress:          req.ip ?? null,
-    userAgent:          req.headers?.['user-agent'] ?? null,
-  });
+  const audit = await DeletionAudit.create(buildAuditPayload({
+    entry, entityType, target, req, reason, phrase, digest, impact,
+    outcome:          DELETION_OUTCOME.COMPLETED,
+    passwordVerified: true,
+    extra: {
+      snapshot: buildSnapshot(target, entry.redact),
+      filesRemoved,
+    },
+  }));
 
   return {
     auditId:  String(audit._id),
     entityType,
     entityId: String(target._id),
     identifier,
-    label:    String(entry.display(target) ?? identifier),
+    label:    resolveLabel(entry, target, identifier),
     cascadeDeleted: {},
     detached:       {},
-    filesRemoved:   [],
+    filesRemoved,
   };
 };
 
