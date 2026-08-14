@@ -34,6 +34,7 @@ const crypto    = require('crypto');
 const sanitizeHtml   = require('sanitize-html');
 
 const { saveFile }   = require('./document.storage.service');
+const { generateQrCodeDataUrl } = require('./document.qr.service');
 const { HTML_SANITIZE_OPTIONS } = require('./document.validation.service');
 const repo           = require('../document.repository');
 
@@ -123,6 +124,109 @@ const drainQueue = () => {
   }
 };
 
+// ── Binary asset resolution (inlined into the HTML) ───────────────────────────
+
+/**
+ * Puppeteer loads the template via `setContent`, which has no base URL: a relative
+ * or API-authenticated `src` resolves to nothing. Every binary the document needs
+ * is therefore inlined as a `data:` URI before the HTML is built — the same
+ * approach `academic-pdf.service.js` takes for ID cards.
+ *
+ * The template used to emit `data-file` / `data-qr-file` attributes for a
+ * post-processing step that was never written, leaving `<img src="">` and an empty
+ * `<div>`: every image and every verification QR in every generated document PDF
+ * came out blank.
+ */
+
+/** Extensions inlineable into an <img>, with the MIME type each data: URI declares. */
+const INLINE_IMAGE_MIME = Object.freeze({
+  '.png':  'image/png',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif':  'image/gif',
+  '.svg':  'image/svg+xml',
+});
+
+/** Upper bound per inlined image. Base64 inflates by ~33% and the HTML is held in memory. */
+const MAX_INLINE_ASSET_BYTES = 5 * 1024 * 1024;
+
+/**
+ * Reads one content-block image from campus-scoped storage and returns it as a
+ * data: URI, or null when it cannot be inlined.
+ *
+ * Returns null rather than throwing: a missing asset must degrade to a visible
+ * placeholder in the PDF, never abort the generation of an otherwise valid document.
+ *
+ * @param {string} campusId
+ * @param {string} fileName  UUID-based storage filename
+ * @returns {Promise<string|null>}
+ */
+const readImageDataUri = async (campusId, fileName) => {
+  if (!campusId || !fileName) return null;
+
+  // The stored name is a UUID, but it reaches us through document content — a
+  // separator or `..` here would read outside the campus directory.
+  if (path.basename(fileName) !== fileName) return null;
+
+  const mime = INLINE_IMAGE_MIME[path.extname(fileName).toLowerCase()];
+  if (!mime) return null;
+
+  const filePath = path.join(UPLOAD_DIR, campusId.toString(), 'images', fileName);
+
+  try {
+    const { size } = await fs.stat(filePath);
+    if (size > MAX_INLINE_ASSET_BYTES) {
+      console.warn(`[PdfService] Image ${fileName} skipped — ${size} bytes exceeds the inline limit.`);
+      return null;
+    }
+    const buffer = await fs.readFile(filePath);
+    return `data:${mime};base64,${buffer.toString('base64')}`;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Resolves every binary a document's body blocks reference, in parallel.
+ *
+ * QR codes are regenerated from `doc.ref` rather than read from disk: the payload
+ * is the verification URL and nothing else, `generateQrCodeDataUrl` exists for
+ * exactly this ("for inline embedding in HTML templates"), and it keeps a rendered
+ * QR correct even when the stored PNG is missing.
+ *
+ * @param {object} doc  lean document — needs `body`, `campusId`, `ref`
+ * @returns {Promise<{ images: Map<string, string>, qrCodes: Map<number, string> }>}
+ */
+const resolveDocumentAssets = async (doc) => {
+  const images   = new Map();
+  const qrCodes  = new Map();
+  const blocks   = doc?.body || [];
+
+  const imageNames = new Set();
+  const qrSizes    = new Set();
+
+  for (const block of blocks) {
+    if (block?.type === 'IMAGE' && block.content?.fileName) imageNames.add(block.content.fileName);
+    if (block?.type === 'QR_CODE') qrSizes.add(qrSize(block.content));
+  }
+
+  await Promise.all([
+    ...[...imageNames].map(async (fileName) => {
+      const uri = await readImageDataUri(doc.campusId, fileName);
+      if (uri) images.set(fileName, uri);
+    }),
+    ...[...qrSizes].map(async (size) => {
+      // A document with no ref (template preview) has no verification URL to encode.
+      if (!doc?.ref) return;
+      const uri = await generateQrCodeDataUrl(doc.ref, size).catch(() => null);
+      if (uri) qrCodes.set(size, uri);
+    }),
+  ]);
+
+  return { images, qrCodes };
+};
+
 // ── HTML Template Rendering ───────────────────────────────────────────────────
 
 /**
@@ -173,14 +277,19 @@ const renderParagraph = (content) => {
   return `<p style="${escapeHtml(style)}">${body}</p>`;
 };
 
+/** Rendered pixel size of a QR block, shared by the resolver and the renderer. */
+const qrSize = (content) => (Number.isFinite(+content?.size) ? +content.size : 80);
+
 /**
  * Renders a single ContentBlock to an HTML string.
  * Unrecognized block types render as empty strings.
  *
  * @param {object} block
+ * @param {{ images: Map<string, string>, qrCodes: Map<number, string> }} [assets]
+ *        Binary assets already resolved to data: URIs by `resolveDocumentAssets`.
  * @returns {string}
  */
-const renderBlock = (block) => {
+const renderBlock = (block, assets = { images: new Map(), qrCodes: new Map() }) => {
   const { type, content } = block;
   if (!content) return '';
 
@@ -193,8 +302,18 @@ const renderBlock = (block) => {
     case 'PARAGRAPH':
       return renderParagraph(content);
     case 'IMAGE': {
-      const width = Number.isFinite(+content.width) ? ` width="${+content.width}"` : '';
-      return `<figure><img src="" data-file="${escapeHtml(content.fileName)}"${width} alt="${escapeHtml(content.alt || '')}" />${content.caption ? `<figcaption>${escapeHtml(content.caption)}</figcaption>` : ''}</figure>`;
+      const width   = Number.isFinite(+content.width) ? ` width="${+content.width}"` : '';
+      const caption = content.caption ? `<figcaption>${escapeHtml(content.caption)}</figcaption>` : '';
+      const dataUri = assets.images.get(content.fileName);
+
+      // A missing asset renders as a visible placeholder carrying its filename.
+      // The previous `<img src="">` was indistinguishable from a broken upload —
+      // and, since nothing ever filled it, indistinguishable from a working one.
+      if (!dataUri) {
+        return `<figure class="asset-missing"><span>Image unavailable</span><small>${escapeHtml(content.fileName || '—')}</small>${caption}</figure>`;
+      }
+
+      return `<figure><img src="${dataUri}"${width} alt="${escapeHtml(content.alt || '')}" />${caption}</figure>`;
     }
     case 'TABLE': {
       const headerRow = (content.headers || []).map((h) => `<th>${escapeHtml(h)}</th>`).join('');
@@ -209,8 +328,15 @@ const renderBlock = (block) => {
       return `<${tag}>${items}</${tag}>`;
     }
     case 'QR_CODE': {
-      const size = Number.isFinite(+content.size) ? +content.size : 80;
-      return `<div class="qr-code" data-qr-file="${escapeHtml(content.fileName || '')}" style="width:${size}px">${content.label ? `<span>${escapeHtml(content.label)}</span>` : ''}</div>`;
+      const size    = qrSize(content);
+      const label   = content.label ? `<span>${escapeHtml(content.label)}</span>` : '';
+      const dataUri = assets.qrCodes.get(size);
+
+      if (!dataUri) {
+        return `<div class="qr-code asset-missing" style="width:${size}px"><span>QR unavailable</span>${label}</div>`;
+      }
+
+      return `<div class="qr-code" style="width:${size}px"><img src="${dataUri}" width="${size}" height="${size}" alt="${escapeHtml(content.label || 'Verification QR code')}" />${label}</div>`;
     }
     case 'CODE_BLOCK':
       return `<pre><code class="language-${escapeHtml(content.language || 'text')}">${escapeHtml(content.code)}</code></pre>`;
@@ -227,16 +353,20 @@ const renderBlock = (block) => {
  * Builds a complete HTML document string from a Document record.
  * Includes branding, watermark, header, footer, and body blocks.
  *
+ * Binary assets must already be resolved — `setContent` has no base URL, so an
+ * `src` that is not a data: URI renders nothing. Callers pass the result of
+ * `resolveDocumentAssets(doc)`; omitting it renders the placeholders.
+ *
  * @param {object} doc       - Mongoose document (lean)
  * @param {string} campusName
+ * @param {{ images: Map<string, string>, qrCodes: Map<number, string> }} [assets]
  * @returns {string} Full HTML string
  */
-const buildHtmlTemplate = (doc, campusName) => {
+const buildHtmlTemplate = (doc, campusName, assets = { images: new Map(), qrCodes: new Map() }) => {
   const branding   = doc.branding || {};
-  const print      = doc.printConfig || {};
   const bodyHtml   = (doc.body || [])
     .sort((a, b) => a.order - b.order)
-    .map(renderBlock)
+    .map((block) => renderBlock(block, assets))
     .join('\n');
 
   // Colors flow into CSS — constrain to a strict hex pattern to prevent CSS injection.
@@ -270,6 +400,15 @@ const buildHtmlTemplate = (doc, campusName) => {
   li { margin-bottom: 4px; }
   pre { background: #f4f4f4; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 10pt; }
   hr { border: none; border-top: 1px solid #ddd; margin: 24px 0; }
+  figure { margin: 16px 0; text-align: center; }
+  figure img { max-width: 100%; height: auto; }
+  figcaption { font-size: 9pt; color: #666; margin-top: 6px; }
+  .qr-code { display: inline-block; text-align: center; }
+  .qr-code img { display: block; }
+  .qr-code span { font-size: 8pt; color: #555; display: block; margin-top: 4px; }
+  /* A binary that could not be inlined is shown, not silently blank. */
+  .asset-missing { border: 1px dashed #bbb; padding: 12px; color: #999; font-size: 9pt; }
+  .asset-missing small { display: block; font-size: 7pt; word-break: break-all; }
   .signature-placeholder { margin: 32px 0; }
   .signature-line { border-bottom: 1px solid #333; width: 200px; margin-top: 40px; }
   .signature-placeholder span { font-size: 10pt; color: #555; }
@@ -338,8 +477,14 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
       try {
         page = await browser.newPage();
 
-        const html = buildHtmlTemplate(doc, campusName);
-        await page.setContent(html, { waitUntil: 'networkidle0', timeout: TIMEOUT_MS });
+        const assets = await resolveDocumentAssets(doc);
+        const html   = buildHtmlTemplate(doc, campusName, assets);
+
+        // Every binary is a data: URI, so the page issues no network request.
+        // 'networkidle0' would wait out its 500 ms idle detector for traffic that
+        // can never happen — it was chosen for the URL-fetching template that the
+        // missing resolution step implied, and never revisited.
+        await page.setContent(html, { waitUntil: 'load', timeout: TIMEOUT_MS });
 
         const print      = doc.printConfig || {};
         const pageFormat = print.pageSize === 'CARD_CR80'
@@ -432,4 +577,6 @@ module.exports = {
   generateDocumentPdf,
   getOrGeneratePdf,
   buildHtmlTemplate,
+  resolveDocumentAssets,
+  renderBlock,
 };

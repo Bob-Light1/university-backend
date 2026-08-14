@@ -255,10 +255,16 @@ const previewTemplate = asyncHandler(async (req, res) => {
   const { templateData = {} } = req.body;
   const resolvedBody          = resolveTemplateVariables(template.layout, templateData);
 
-  const { buildHtmlTemplate } = require('../services/document.pdf.service');
+  const { buildHtmlTemplate, resolveDocumentAssets } = require('../services/document.pdf.service');
   const campus     = req.campusId ? await getCampusName(req.campusId) : null;
-  const mockDoc    = { title: template.name, body: resolvedBody, branding: template.branding, ref: 'PREVIEW' };
-  const html       = buildHtmlTemplate(mockDoc, campus?.campus_name || '');
+  const mockDoc    = {
+    title: template.name, body: resolvedBody, branding: template.branding,
+    ref: 'PREVIEW', campusId: req.campusId,
+  };
+  // Images and QR codes must be inlined here too, otherwise the preview shows the
+  // placeholders while the generated PDF shows the real assets.
+  const assets     = await resolveDocumentAssets(mockDoc);
+  const html       = buildHtmlTemplate(mockDoc, campus?.campus_name || '', assets);
 
   return sendSuccess(res, 200, 'Template preview generated', { html });
 });
