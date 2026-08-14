@@ -4,7 +4,7 @@ const {
   sendError,
   sendNotFound,
 } = require('../utils/response-helpers');
-const { isValidObjectId } = require('../utils/validation-helpers');
+const { isValidObjectId, buildCampusFilter } = require('../utils/validation-helpers');
 const ExportService = require('../services/export.service');
 const ImportService = require('../services/import.service');
 
@@ -346,16 +346,40 @@ class GenericBulkController {
         return sendError(res, 400, 'File is required');
       }
 
-      if (!campusId) {
+      // Resolve the campus the rows will be written into. DERIVED from the role, never
+      // read from the body for a scoped one (CLAUDE.md §2/§3): buildCampusFilter lets a
+      // global role target any campus, pins every other role to the campus in its own
+      // token, and throws when a scoped token carries none.
+      //
+      // The inline check this replaces named CAMPUS_MANAGER and only CAMPUS_MANAGER, so
+      // it enumerated who is constrained instead of who is exempt. Every role the route
+      // gate ever admits beyond those three would have had `req.body.campusId` honoured —
+      // an import of a whole cohort into someone else's tenant.
+      let effectiveCampusId;
+      try {
+        effectiveCampusId = buildCampusFilter(req.user, campusId).schoolCampus;
+      } catch (err) {
+        console.error('[import CampusIsolation] breach prevented:', err.message);
+        return sendError(res, 403, 'Campus information is missing from your session. Please log in again.');
+      }
+
+      // A global role scoping to no campus at all: nothing to write the rows into.
+      if (!effectiveCampusId) {
         return sendError(res, 400, 'Campus ID is required');
+      }
+
+      // A scoped role that asked for a DIFFERENT campus is refused rather than quietly
+      // redirected: the derivation above already guarantees isolation, but silently
+      // writing a whole cohort into a campus the operator did not name is its own defect.
+      // This keeps the message the CAMPUS_MANAGER path used to give, for every role.
+      if (campusId && String(campusId) !== String(effectiveCampusId)) {
+        return sendError(res, 403, 'Can only import to your campus');
       }
 
       // Import
       const result = await this.importService.import(
         file,
-        campusId,
-        req.user.role,
-        req.user.campusId,
+        effectiveCampusId,
         { dryRun: dryRun === 'true' || dryRun === true }
       );
 
@@ -363,7 +387,11 @@ class GenericBulkController {
 
     } catch (error) {
       console.error(`❌ Import error:`, error);
-      return sendError(res, 500, error.message || `Failed to import ${this.entityNameLower}s`);
+      return sendError(
+        res,
+        error.statusCode || 500,
+        error.message || `Failed to import ${this.entityNameLower}s`,
+      );
     }
   };
 

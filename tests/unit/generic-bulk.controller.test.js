@@ -133,6 +133,115 @@ describe('B6-⑤ — bulkChangeRelated campus isolation reads the path the schem
   });
 });
 
+describe('B8-⑥ — the import campus is derived from the role, never read from the body', () => {
+  /** Controller whose ImportService is replaced by a spy, so no file is ever parsed. */
+  const buildImportController = () => {
+    const controller = new GenericBulkController(buildModel([]), { entityName: 'Student' });
+    controller.importService = {
+      import: jest.fn().mockResolvedValue({ message: 'ok', data: { imported: 1 } }),
+    };
+    return controller;
+  };
+
+  const importReq = (user, bodyCampusId) => ({
+    user,
+    body: bodyCampusId === undefined ? {} : { campusId: bodyCampusId },
+    file: { path: '/tmp/x.csv', originalname: 'x.csv' },
+  });
+
+  test('a CAMPUS_MANAGER importing into their own campus is allowed', async () => {
+    const controller = buildImportController();
+
+    const out = await controller.importFromFile(importReq(
+      { role: 'CAMPUS_MANAGER', campusId: CAMPUS_A }, CAMPUS_A,
+    ), res);
+
+    expect(out.code).toBe(200);
+    expect(controller.importService.import).toHaveBeenCalledWith(
+      expect.anything(), CAMPUS_A, expect.anything(),
+    );
+  });
+
+  test('a CAMPUS_MANAGER naming ANOTHER campus is refused', async () => {
+    const controller = buildImportController();
+
+    const out = await controller.importFromFile(importReq(
+      { role: 'CAMPUS_MANAGER', campusId: CAMPUS_A }, CAMPUS_B,
+    ), res);
+
+    expect(out.code).toBe(403);
+    expect(controller.importService.import).not.toHaveBeenCalled();
+  });
+
+  test('a scoped role the old inline check did not name is ALSO pinned to its own campus', async () => {
+    // The defect in one assertion: the replaced check tested `userRole === 'CAMPUS_MANAGER'`
+    // and nothing else, so any other scoped role had req.body.campusId honoured — an
+    // entire cohort written into another tenant.
+    const controller = buildImportController();
+
+    const out = await controller.importFromFile(importReq(
+      { role: 'TEACHER', campusId: CAMPUS_A }, CAMPUS_B,
+    ), res);
+
+    expect(out.code).toBe(403);
+    expect(controller.importService.import).not.toHaveBeenCalled();
+  });
+
+  test('a scoped role naming no campus gets its own, not undefined', async () => {
+    const controller = buildImportController();
+
+    const out = await controller.importFromFile(importReq(
+      { role: 'CAMPUS_MANAGER', campusId: CAMPUS_A }, undefined,
+    ), res);
+
+    expect(out.code).toBe(200);
+    expect(controller.importService.import).toHaveBeenCalledWith(
+      expect.anything(), CAMPUS_A, expect.anything(),
+    );
+  });
+
+  test('a scoped token carrying no campus is refused 403, not defaulted', async () => {
+    const controller = buildImportController();
+
+    const out = await controller.importFromFile(importReq(
+      { role: 'CAMPUS_MANAGER', campusId: null }, CAMPUS_B,
+    ), res);
+
+    expect(out.code).toBe(403);
+    expect(controller.importService.import).not.toHaveBeenCalled();
+  });
+
+  test('a global role may target any campus, which is the point of being global', async () => {
+    const controller = buildImportController();
+
+    const out = await controller.importFromFile(importReq({ role: 'ADMIN' }, CAMPUS_B), res);
+
+    expect(out.code).toBe(200);
+    expect(controller.importService.import).toHaveBeenCalledWith(
+      expect.anything(), CAMPUS_B, expect.anything(),
+    );
+  });
+
+  test('a global role naming no campus gets 400, not an import into nowhere', async () => {
+    const controller = buildImportController();
+
+    const out = await controller.importFromFile(importReq({ role: 'ADMIN' }, undefined), res);
+
+    expect(out.code).toBe(400);
+    expect(controller.importService.import).not.toHaveBeenCalled();
+  });
+
+  test('the service refuses an unresolved campus on its own', async () => {
+    // Defence in depth, not a second policy: the service cannot see `req`, so it cannot
+    // decide the campus — it can only refuse to write rows that belong to no tenant.
+    const ImportService = require('../../shared/services/import.service');
+    const service = new ImportService({}, { name: 'Student' });
+
+    await expect(service.import({ path: '/tmp/x.csv', originalname: 'x.csv' }, null))
+      .rejects.toThrow(/campus is not resolved/i);
+  });
+});
+
 describe('B6-④ — the caller\'s export columns are the ones used', () => {
   const TEACHER_COLUMNS = [
     { header: 'Matricule', key: 'matricule', width: 15 },

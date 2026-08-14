@@ -222,15 +222,26 @@ class ImportService {
   }
 
   /**
-   * Import entities
+   * Import entities.
+   *
+   * @param {object} file     - Multer file ({ path, originalname })
+   * @param {string} campusId - The campus every row is written into. Must ALREADY be
+   *                            resolved from the caller's role by the controller
+   *                            (buildCampusFilter): this service never sees `req` and so
+   *                            cannot tell a trusted campus id from one a client sent.
+   *                            The check that used to live here covered CAMPUS_MANAGER
+   *                            alone and read as if the boundary were enforced.
+   * @param {object} [options]
+   * @param {boolean} [options.dryRun] - Validate only, write nothing
    */
-  async import(file, campusId, userRole, userCampusId, options = {}) {
+  async import(file, campusId, options = {}) {
     const { dryRun = false } = options;
 
     try {
-      // Campus isolation check
-      if (userRole === 'CAMPUS_MANAGER' && campusId !== userCampusId) {
-        throw new Error('Can only import to your campus');
+      // Fail closed: an unset campus would import a whole file with `schoolCampus:
+      // undefined`, i.e. rows belonging to no tenant and visible through no campus filter.
+      if (!campusId) {
+        throw Object.assign(new Error('Import campus is not resolved'), { statusCode: 400 });
       }
 
       if (!file || !file.path) {
