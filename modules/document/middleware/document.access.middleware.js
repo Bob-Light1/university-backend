@@ -252,7 +252,7 @@ const enforceLockGuard = (req, res, next) => {
  * @example
  *   router.post('/:id/publish', authenticate, enforceCampusAccess, requireDocRole(['ADMIN','DIRECTOR','CAMPUS_MANAGER']), publishDocument);
  */
-const requireDocRole = (allowedRoles) => (req, res, next) => {
+const requireDocRole = (allowedRoles) => function requireDocRole(req, res, next) {
   if (!allowedRoles.includes(req.user.role)) {
     return sendForbidden(
       res,

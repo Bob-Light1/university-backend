@@ -145,13 +145,32 @@ const withDoc = [
   loadAndVerifyDocument,
 ];
 
+/**
+ * Per-role scope guards. Each is a no-op for every role but its own, so the three travel
+ * together: naming the set once is what stops a route from carrying two of the three.
+ *
+ * They answer "may this identity touch THIS document", which a campus filter cannot: a
+ * TEACHER and a STUDENT of the same campus both pass Layer 3 and must still be held to
+ * their own course materials / their own records.
+ */
+const docScopeGuards = [
+  enforceTeacherScope,
+  enforceStudentScope,
+  enforceParentScope,
+];
+
+/**
+ * Roles that may modify a document. STUDENT and PARENT hold read-only access to the GED —
+ * stated here rather than left to the scope guards, which only narrow WHICH documents a
+ * role sees and would happily let a student edit a transcript that is linked to them.
+ */
+const DOCUMENT_WRITE_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER', 'TEACHER'];
+
 /** Applied to routes that allow TEACHER scope access (read-only on their course materials) */
 const withDocTeacher = [
   ...withDoc,
   enforceDocumentTypeAccess,
-  enforceTeacherScope,
-  enforceStudentScope,
-  enforceParentScope,
+  ...docScopeGuards,
 ];
 
 // ── PUBLIC ROUTES (no authentication) ────────────────────────────────────────
@@ -273,13 +292,28 @@ router.get('/', ...base, crudCtrl.listDocuments);
 /** GET /api/documents/:id — single document with full body */
 router.get('/:id', ...withDocTeacher, crudCtrl.getDocument);
 
-/** PATCH /api/documents/:id — partial update */
+/**
+ * PATCH /api/documents/:id — partial update.
+ *
+ * Middleware order is load-bearing, for the same reason spelled out on POST above:
+ * `enforceDocumentTypeAccess` reads `req.body.type`, and on a multipart/form-data request
+ * `req.body` does not exist until multer has parsed it. Running the guard first made it
+ * fall back to the type of the document ALREADY stored — so a TEACHER retyping a
+ * COURSE_MATERIAL into a restricted type was refused when the request was JSON and
+ * accepted when the identical request was sent as multipart. Two answers to one question,
+ * chosen by Content-Type.
+ *
+ * Everything that can refuse without reading the body still runs before multer, so an
+ * unauthorized caller is turned away without a 25 MB upload being parsed first.
+ */
 router.patch(
   '/:id',
   ...withDoc,
-  enforceDocumentTypeAccess,
+  requireDocRole(DOCUMENT_WRITE_ROLES),
+  ...docScopeGuards,
   enforceLockGuard,
   documentUpload.single('file'),
+  enforceDocumentTypeAccess,
   crudCtrl.updateDocument,
 );
 
@@ -288,8 +322,20 @@ router.patch(
  * `hardDeleteFlagLimiter` meters ONLY the `?hard=true` form, on the same budget as the
  * danger-zone router: both reach the same password control, so metering one of the two
  * alone is a limit an attacker skips by changing URL. Soft deletes stay unmetered.
+ *
+ * Carries the same role gate and scope guards as PATCH: deletion is a write, and this
+ * route reached `softDeleteDocument` — which checks the status but never the identity —
+ * with nothing between it and any authenticated member of the campus.
  */
-router.delete('/:id', ...withDoc, enforceLockGuard, hardDeleteFlagLimiter, crudCtrl.deleteDocument);
+router.delete(
+  '/:id',
+  ...withDoc,
+  requireDocRole(DOCUMENT_WRITE_ROLES),
+  ...docScopeGuards,
+  enforceLockGuard,
+  hardDeleteFlagLimiter,
+  crudCtrl.deleteDocument,
+);
 
 // ── WORKFLOW ──────────────────────────────────────────────────────────────────
 
