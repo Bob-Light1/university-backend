@@ -55,16 +55,21 @@ let poolInitialized  = false;
 /** Queue of pending generation requests waiting for a free browser slot */
 const waitQueue = [];
 
-/**
- * Initializes the Puppeteer browser pool.
- * Called once at server startup. Subsequent calls are no-ops.
- */
+/** Resolves the Chromium executable, preferring an explicitly configured path. */
 const resolveChromePath = async () => {
   if (process.env.PUPPETEER_EXECUTABLE_PATH) return process.env.PUPPETEER_EXECUTABLE_PATH;
   // @sparticuz/chromium extracts the binary to /tmp/chromium on first call
   return chromium.executablePath();
 };
 
+/**
+ * Initializes the Puppeteer browser pool. Subsequent calls are no-ops.
+ *
+ * Despite the export, nothing calls this at server startup (B8-④): the first
+ * `generateDocumentPdf` awaits it, so the pool is built lazily on the first
+ * request — which is why that request pays the Chromium launch cost. The export
+ * is kept so a boot-time warm-up can be wired without changing this file.
+ */
 const initPool = async () => {
   if (poolInitialized) return;
 
@@ -446,6 +451,19 @@ ${bodyHtml}
  *
  * PDF filename format: {docRef}_v{version}_{versionId}.pdf
  *
+ * Timeout semantics — the two rules this function exists to keep:
+ *   1. The browser is released EXACTLY ONCE, and only after the page work has
+ *      actually stopped. Releasing on the timeout path *and* in the `finally`
+ *      pushed the same browser twice: the pool grew past POOL_SIZE holding
+ *      duplicate references, and two concurrent generations then drove one
+ *      browser. A pool whose bound is not enforced is not a pool.
+ *   2. A timed-out generation performs NO write. Rejecting the caller's promise
+ *      does not stop the async work behind it — the old version went on to write
+ *      the PDF and call `setPdfSnapshot` seconds after the caller had been told
+ *      the generation failed, leaving the record pointing at a file nobody was
+ *      told existed. The timeout therefore CANCELS the work (closing the page
+ *      makes the pending Puppeteer call reject) rather than merely reporting it.
+ *
  * @param {string} documentId
  * @param {string} versionId     - DocumentVersion ObjectId (for filename immutability)
  * @param {string} campusName
@@ -464,8 +482,23 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
   const { browser, release } = await acquireBrowser();
 
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(() => {
+    let page;
+    let settled  = false;   // the caller's promise has been resolved or rejected
+    let released = false;   // this browser has gone back to the pool
+
+    const releaseOnce = () => {
+      if (released) return;
+      released = true;
       release();
+    };
+
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      // Cancel, do not merely report: closing the page rejects whatever
+      // setContent/pdf call is in flight, so the `finally` below runs promptly
+      // and nothing downstream writes a file or touches the document record.
+      if (page) page.close().catch(() => {});
       reject(Object.assign(
         new Error('PDF generation timed out — please retry'),
         { statusCode: 503, retryAfter: 30 },
@@ -473,7 +506,6 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
     }, TIMEOUT_MS);
 
     (async () => {
-      let page;
       try {
         page = await browser.newPage();
 
@@ -507,6 +539,11 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
           printBackground:  true,
         });
 
+        // Last check before anything leaves this function's memory. The caller may
+        // already have been handed a 503; writing the PDF and the snapshot now
+        // would contradict what it was told.
+        if (settled) return;
+
         const safeRef    = doc.ref.replace(/[^A-Z0-9-]/g, '_');
         const fileName   = `${safeRef}_v${doc.currentVersion}_${versionId || 'latest'}.pdf`;
         const campusDir  = path.join(UPLOAD_DIR, doc.campusId.toString(), 'pdf');
@@ -517,15 +554,22 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
         // Update pdfSnapshot on the document record
         await repo.setPdfSnapshot(documentId, fileName);
 
-        clearTimeout(timeout);
+        settled = true;
         resolve({ fileName, buffer: pdfBuffer });
 
       } catch (err) {
-        clearTimeout(timeout);
+        // A rejection caused BY the timeout's page.close() must not overwrite the
+        // 503 the caller already has.
+        if (settled) return;
+        settled = true;
         reject(err);
       } finally {
+        clearTimeout(timeout);
         if (page) await page.close().catch(() => {});
-        release();
+        // The single release, and only once the page work has actually stopped —
+        // returning a browser that is still rendering is what handed one browser
+        // to two concurrent generations.
+        releaseOnce();
       }
     })();
   });
