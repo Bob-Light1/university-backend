@@ -36,6 +36,7 @@ const {
   sendForbidden,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
+const { csvField } = require('../../../shared/utils/csv');
 const { buildReferralUrl } = require('../../../shared/utils/referral');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
@@ -53,17 +54,6 @@ const buildCampusFilter = (req) => {
 };
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * Builds a CSV cell, neutralizing spreadsheet formula injection.
- * A leading =, +, -, @, tab or CR is prefixed with a single quote so Excel /
- * Google Sheets treat it as text (OWASP CSV Injection).
- */
-const csvCell = (value) => {
-  const s = String(value ?? '');
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  return `"${safe.replace(/"/g, '""')}"`;
-};
 
 /**
  * Normalizes a convention sub-document from the client: drops empty-string fields
@@ -389,7 +379,7 @@ const exportPartners = asyncHandler(async (req, res) => {
     const headers = Object.keys(rows[0] || {});
     const csvRows = [
       headers.join(','),
-      ...rows.map((r) => headers.map((h) => csvCell(r[h])).join(',')),
+      ...rows.map((r) => headers.map((h) => csvField(r[h])).join(',')),
     ];
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="partners_export.csv"');

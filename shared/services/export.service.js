@@ -1,5 +1,6 @@
 const ExcelJS = require('exceljs');
 const { buildCampusFilter, escapeRegex } = require('../utils/validation-helpers');
+const { csvField } = require('../utils/csv');
 
 /**
  * EXPORT SERVICE
@@ -175,23 +176,24 @@ class ExportService {
       // UTF-8 BOM for Excel compatibility
       let csv = '\uFEFF';
 
-      // Headers
+      // Headers \u2014 csvField too: the header text is column config, not user input today,
+      // but encoding the whole file one way is what stops the next column from being the
+      // exception.
       const headers = this.entityConfig.columns
-        .map(col => `"${col.header}"`)
+        .map(col => csvField(col.header))
         .join(',');
       csv += headers + '\n';
 
-      // Rows
+      // Rows. csvField neutralizes spreadsheet formulas BEFORE quoting: the previous
+      // expression quoted and escaped correctly, which is CSV-valid and no defence at all
+      // \u2014 the parser consumes the quotes and hands the raw string to the spreadsheet,
+      // which evaluates anything opening with =, +, - or @.
       entities.forEach(entity => {
         const row = this.entityConfig.columns.map(col => {
           const value = this.getNestedValue(entity, col.key);
-          const formatted = this.formatValue(value, col.format);
-          
-          // Escape double quotes
-          const escaped = formatted.toString().replace(/"/g, '""');
-          return `"${escaped}"`;
+          return csvField(this.formatValue(value, col.format));
         }).join(',');
-        
+
         csv += row + '\n';
       });
 

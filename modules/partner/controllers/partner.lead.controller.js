@@ -43,6 +43,7 @@ const {
   sendForbidden,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
+const { csvField } = require('../../../shared/utils/csv');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
@@ -66,16 +67,6 @@ const hashIp = (ip) => crypto.createHash('sha256').update(ip || '').digest('hex'
 const phoneDigits = (p) => String(p || '').replace(/\D/g, '');
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/**
- * Builds a CSV cell, neutralizing spreadsheet formula injection (OWASP).
- * A leading =, +, -, @, tab or CR is prefixed with a single quote.
- */
-const csvCell = (value) => {
-  const s = String(value ?? '');
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  return `"${safe.replace(/"/g, '""')}"`;
-};
 
 // Transitions de statut valides dans le pipeline
 const VALID_TRANSITIONS = {
@@ -522,7 +513,7 @@ const exportLeads = asyncHandler(async (req, res) => {
     const headers = Object.keys(rows[0] || {});
     const csv = [
       headers.join(','),
-      ...rows.map((r) => headers.map((h) => csvCell(r[h])).join(',')),
+      ...rows.map((r) => headers.map((h) => csvField(r[h])).join(',')),
     ].join('\n');
 
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
