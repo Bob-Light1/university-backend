@@ -10,9 +10,9 @@ const ImportService = require('../services/import.service');
 
 /**
  * GENERIC BULK OPERATIONS CONTROLLER :
- * 
+ *
  * Reusable bulk operations for any entity
- * 
+ *
  * Features:
  * - Bulk change related entity (class, department)
  * - Bulk send email
@@ -21,6 +21,18 @@ const ImportService = require('../services/import.service');
  * - Import from CSV and Excel
  * - Get import templates
  */
+
+/**
+ * Schema path carrying the campus reference, for every model this controller drives:
+ * the bulk entities (Student, Teacher) and the related entities they are moved between
+ * (Class, Department) all declare `schoolCampus`.
+ *
+ * Named once because the campus comparison is the isolation boundary (CLAUDE.md §2) and a
+ * wrong path does not raise: it reads `undefined`, which never equals the caller's campus,
+ * so the check answers 403 for every legitimate CAMPUS_MANAGER instead of letting one
+ * through. A dead feature, not a leak — and silent in the direction nobody reports.
+ */
+const CAMPUS_PATH = 'schoolCampus';
 
 class GenericBulkController {
   constructor(Model, config) {
@@ -35,10 +47,17 @@ class GenericBulkController {
     this.findRelatedById = config.findRelatedById || null;
     this.relatedField = config.relatedField || null; // e.g., 'studentClass'
     
-    // Initialize Export Service
+    // Initialize Export Service.
+    // `columns` is the name every caller actually uses — teacher.controller.js and
+    // student.controller.js both spread an `exportConfig` that declares it, next to a
+    // `populateFields` this constructor reads under its own name. Accepting only
+    // `exportColumns` silently discarded the caller's columns and fell back to the
+    // student-shaped default, so a Teacher export carried a Class column its schema has
+    // no path for (blank) and lost Date of Birth. Wrong columns are wrong output, not a
+    // wrong scope, which is why it survived unreported.
     this.exportService = new ExportService(Model, {
       name: this.entityName,
-      columns: config.exportColumns || this.getDefaultExportColumns(),
+      columns: config.exportColumns || config.columns || this.getDefaultExportColumns(),
       populateFields: config.populateFields || this.getDefaultPopulateFields(),
       classField: config.classField || 'studentClass',
     });
@@ -122,7 +141,7 @@ class GenericBulkController {
 
         // Campus isolation for related entity
         if (req.user.role === 'CAMPUS_MANAGER') {
-          if (relatedEntity.campus?.toString() !== req.user.campusId) {
+          if (relatedEntity[CAMPUS_PATH]?.toString() !== req.user.campusId) {
             await session.abortTransaction();
             return sendError(res, 403, 'Related entity does not belong to your campus');
           }
@@ -140,7 +159,7 @@ class GenericBulkController {
       // Campus isolation check for entities
       if (req.user.role === 'CAMPUS_MANAGER') {
         const unauthorized = entities.filter(
-          e => e.schoolCampus?.toString() !== req.user.campusId
+          e => e[CAMPUS_PATH]?.toString() !== req.user.campusId
         );
         
         if (unauthorized.length > 0) {
@@ -201,7 +220,7 @@ class GenericBulkController {
       // Campus isolation
       if (req.user.role === 'CAMPUS_MANAGER') {
         const unauthorized = entities.filter(
-          e => e.schoolCampus?.toString() !== req.user.campusId
+          e => e[CAMPUS_PATH]?.toString() !== req.user.campusId
         );
         
         if (unauthorized.length > 0) {
@@ -248,7 +267,7 @@ class GenericBulkController {
         }).select('schoolCampus').session(session);
 
         const unauthorized = entities.filter(
-          e => e.schoolCampus?.toString() !== req.user.campusId
+          e => e[CAMPUS_PATH]?.toString() !== req.user.campusId
         );
         
         if (unauthorized.length > 0) {
