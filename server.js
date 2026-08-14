@@ -149,14 +149,11 @@ try {
 const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
-  // Storage preflight — runs BEFORE accepting traffic. The GED writes every file
-  // to the local filesystem with no NODE_ENV branch, while the production host's
-  // filesystem is ephemeral: an unsafe deployment used to boot happily and lose
-  // every document on the next deploy, silently. It now refuses to start (B8-①).
-  //
-  // NOTE: this converts silent data loss into a loud refusal. It does not make
-  // storage durable — that requires a mounted volume pointed at by UPLOAD_DIR, or
-  // migrating modules/document/ to an object store.
+  // Storage preflight — runs BEFORE accepting traffic. The GED now writes through a
+  // provider-dispatching storage service (Cloudinary in production, local disk
+  // otherwise); this asserts that the backend actually selected survives a redeploy,
+  // and refuses to start otherwise. Losing every document on the next deploy used to
+  // happen silently (B8-①).
   await assertPersistentStorage();
 
   const server = app.listen(PORT, () => {

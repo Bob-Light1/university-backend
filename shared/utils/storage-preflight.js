@@ -4,26 +4,33 @@
  * @file storage-preflight.js
  * @description Boot-time assertion that GED file storage survives a redeploy.
  *
- * `modules/document/services/document.storage.service.js` writes every imported
- * file, PDF snapshot, QR code and campus logo to the local filesystem, with no
- * branch on NODE_ENV — while `shared/middleware/upload.js` records, in a comment,
- * in a different file, that the production host has an ephemeral filesystem.
- * Nothing reconciled the two at runtime, so an unsafe deployment booted happily
- * and lost every GED file on the next deploy, with no error and no log line
- * (B8-①).
+ * The GED writes imported files, PDF snapshots and content-block images through
+ * `modules/document/services/document.storage.service.js`, which dispatches to one
+ * of two backends chosen by `resolveStorageProvider()`. This check runs the SAME
+ * resolution and refuses to start a production process whose chosen backend cannot
+ * survive a deploy.
  *
- * This follows the fail-fast pattern of the database block in `server.js`: an
- * unsafe configuration must prevent boot, not produce a warning nobody reads.
+ * It reads the same function the storage service dispatches on rather than
+ * re-deriving the answer, because B8-① was precisely a disagreement between two
+ * places that each believed something different about where files go: the storage
+ * service wrote to disk unconditionally, while `upload.js` recorded — in a comment,
+ * in another file — that the production filesystem is ephemeral. Nothing reconciled
+ * them at runtime, so an unsafe deployment booted happily and lost every GED file on
+ * the next deploy, with no error and no log line.
  *
- * It does NOT make storage persistent. It makes an unsafe deployment refuse to
- * start. Actually persisting the data is an operations decision — mount a volume
- * and point UPLOAD_DIR at it, or migrate the storage service to an object store
- * (its interface was designed to be swapped).
+ * This follows the fail-fast pattern of the database block in `server.js`: an unsafe
+ * configuration must prevent boot, not produce a warning nobody reads.
  */
 
 const fs   = require('fs').promises;
 const fsc  = require('fs').constants;
 const path = require('path');
+
+const {
+  STORAGE_PROVIDER,
+  isCloudinaryConfigured,
+  resolveStorageProvider,
+} = require('./storage-provider');
 
 /**
  * Repository root, resolved from this file's location (`shared/utils/`).
@@ -51,8 +58,8 @@ const isInside = (parent, target) => {
 /**
  * Fails the boot with an actionable message.
  *
- * States the CONSEQUENCE, not only the condition: whoever reads this at 3 a.m.
- * must understand what is about to be lost without having read this file.
+ * States the CONSEQUENCE, not only the condition: whoever reads this at 3 a.m. must
+ * understand what is about to be lost without having read this file.
  *
  * @param {string} reason
  * @param {string} fix
@@ -63,11 +70,10 @@ const fail = (reason, fix) => {
   console.error('❌ STORAGE PREFLIGHT FAILED — refusing to start.');
   console.error(`   Reason: ${reason}`);
   console.error('');
-  console.error('   Consequence if ignored: every document, PDF snapshot, QR code and');
-  console.error('   campus logo written by modules/document/ is stored on the container');
-  console.error('   filesystem. On a host with an ephemeral filesystem (Render, Heroku,');
-  console.error('   most container platforms) that data is DESTROYED on the next deploy,');
-  console.error('   with no error and no log line.');
+  console.error('   Consequence if ignored: every document, PDF snapshot and campus');
+  console.error('   logo written by modules/document/ is at risk. Stored on a container');
+  console.error('   filesystem (Render, Heroku, most container platforms) that data is');
+  console.error('   DESTROYED on the next deploy, with no error and no log line.');
   console.error('');
   console.error(`   Fix: ${fix}`);
   console.error('');
@@ -75,7 +81,7 @@ const fail = (reason, fix) => {
 };
 
 /**
- * Verifies that GED file storage is durable before the server accepts traffic.
+ * Verifies that the LOCAL backend is durable.
  *
  * Production rules, all of which must hold:
  *   1. UPLOAD_DIR is set.
@@ -84,36 +90,27 @@ const fail = (reason, fix) => {
  *   3. The directory exists and is writable — an unwritable volume is the same
  *      outage, found later and at a worse moment.
  *
- * Outside production it never exits, and names the effective directory so a
- * developer always knows where their uploads went.
- *
- * @param {object} [env=process.env]  injectable for tests
- * @returns {Promise<{ ok: boolean, dir: string, persistent: boolean }>}
+ * @param {object} env
+ * @returns {Promise<string>} the verified directory
  */
-const assertPersistentStorage = async (env = process.env) => {
-  const isProduction = env.NODE_ENV === 'production';
+const verifyLocalBackend = async (env) => {
   const raw = env.UPLOAD_DIR;
 
-  // Mirrors the fallback in document.storage.service.js and upload.js: with
-  // UPLOAD_DIR unset, files land inside the repo. That branch is the data-loss
-  // branch, so the effective directory is computed the same way here.
+  // Mirrors the fallback in document.storage.local.js and upload.js: with UPLOAD_DIR
+  // unset, files land inside the repo. That branch is the data-loss branch, so the
+  // effective directory is computed the same way here.
   const effectiveDir = raw && raw.trim()
     ? path.resolve(raw)
     : path.join(REPO_ROOT, 'uploads');
 
-  if (!isProduction) {
-    console.warn(`⚠️  [storage] Non-production boot — document uploads → ${effectiveDir}`);
-    console.warn('⚠️  [storage] Persistence is NOT checked outside production.');
-    return { ok: true, dir: effectiveDir, persistent: false };
-  }
-
   if (!raw || !raw.trim()) {
     fail(
-      'NODE_ENV=production but UPLOAD_DIR is not set, so document storage would default '
-      + `to ${effectiveDir} (inside the deployed application directory).`,
-      'Mount a persistent volume and set UPLOAD_DIR to its absolute path '
-      + '(e.g. UPLOAD_DIR=/var/data/uploads), or migrate modules/document/ to a remote '
-      + 'object store — the storage service interface is designed to be swapped.',
+      'NODE_ENV=production with the local storage backend, but UPLOAD_DIR is not set, '
+      + `so document storage would default to ${effectiveDir} (inside the deployed `
+      + 'application directory).',
+      'Either configure the object store — set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY '
+      + 'and CLOUDINARY_API_SECRET and leave DOC_STORAGE_PROVIDER unset — or mount a '
+      + 'persistent volume and set UPLOAD_DIR to its absolute path (e.g. /var/data/uploads).',
     );
   }
 
@@ -121,7 +118,8 @@ const assertPersistentStorage = async (env = process.env) => {
     fail(
       `UPLOAD_DIR resolves to ${effectiveDir}, which is inside the application directory `
       + `(${REPO_ROOT}). A mounted persistent volume is never inside the source tree.`,
-      'Point UPLOAD_DIR at a path on a mounted volume, outside the deployed code.',
+      'Point UPLOAD_DIR at a path on a mounted volume, outside the deployed code, or '
+      + 'switch to the Cloudinary backend.',
     );
   }
 
@@ -135,8 +133,69 @@ const assertPersistentStorage = async (env = process.env) => {
     );
   }
 
-  console.log(`✅ [storage] Persistent document storage verified → ${effectiveDir}`);
-  return { ok: true, dir: effectiveDir, persistent: true };
+  return effectiveDir;
+};
+
+/**
+ * Verifies that the CLOUDINARY backend is usable.
+ *
+ * Only the credentials are checked, and deliberately so: a boot-time round trip to a
+ * third party makes startup depend on that party's availability, which trades a
+ * data-loss failure for an availability failure. A missing credential, on the other
+ * hand, is a configuration mistake that is certain to break every upload, so it must
+ * stop the boot.
+ *
+ * The explicit override is the case worth guarding: `DOC_STORAGE_PROVIDER=cloudinary`
+ * selects this backend regardless of whether it was ever configured.
+ *
+ * @param {object} env
+ * @returns {void}
+ */
+const verifyCloudinaryBackend = (env) => {
+  if (!isCloudinaryConfigured(env)) {
+    fail(
+      'The Cloudinary storage backend is selected but its credentials are incomplete '
+      + '(CLOUDINARY_CLOUD_NAME / CLOUDINARY_API_KEY / CLOUDINARY_API_SECRET).',
+      'Set the three credentials, or set DOC_STORAGE_PROVIDER=local and point UPLOAD_DIR '
+      + 'at a mounted persistent volume.',
+    );
+  }
+};
+
+/**
+ * Verifies that GED file storage is durable before the server accepts traffic.
+ *
+ * Outside production it never exits, and names both the backend and the effective
+ * directory so a developer always knows where their uploads went.
+ *
+ * @param {object} [env=process.env]  injectable for tests
+ * @returns {Promise<{ ok: boolean, provider: string, dir: string|null, persistent: boolean }>}
+ */
+const assertPersistentStorage = async (env = process.env) => {
+  const provider     = resolveStorageProvider(env);
+  const isProduction = env.NODE_ENV === 'production';
+
+  if (!isProduction) {
+    const dir = provider === STORAGE_PROVIDER.LOCAL
+      ? (env.UPLOAD_DIR && env.UPLOAD_DIR.trim()
+        ? path.resolve(env.UPLOAD_DIR)
+        : path.join(REPO_ROOT, 'uploads'))
+      : null;
+
+    console.warn(`⚠️  [storage] Non-production boot — GED backend: ${provider}${dir ? ` → ${dir}` : ''}`);
+    console.warn('⚠️  [storage] Persistence is NOT checked outside production.');
+    return { ok: true, provider, dir, persistent: false };
+  }
+
+  if (provider === STORAGE_PROVIDER.CLOUDINARY) {
+    verifyCloudinaryBackend(env);
+    console.log('✅ [storage] Persistent document storage verified → Cloudinary object store');
+    return { ok: true, provider, dir: null, persistent: true };
+  }
+
+  const dir = await verifyLocalBackend(env);
+  console.log(`✅ [storage] Persistent document storage verified → ${dir} (local volume)`);
+  return { ok: true, provider, dir, persistent: true };
 };
 
 module.exports = { assertPersistentStorage, isInside, REPO_ROOT };
