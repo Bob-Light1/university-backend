@@ -49,7 +49,20 @@ describe('API inter-modules — fonctions de service attendues', () => {
     ['ai',      ['isEnabled', 'forward', 'fetchMonthlyUsage']],
   ];
 
-  describe.each(CONTRACTS)('modules/%s.service', (name, fns) => {
+  // B9-① : les sept jobs de fond (CLAUDE.md §11) sont chargés depuis les façades par
+  // shared/lib/register-jobs.js. Une façade qui cesse d'exporter son job ne LÈVE PAS —
+  // elle rend `undefined`, que cron.schedule accepte : la tâche échoue alors à chaque
+  // déclenchement, nuitamment, dans le logger de node-cron. Seuls deux des sept étaient
+  // épinglés ici ; les cinq autres pouvaient disparaître sans qu'un test ne bronche.
+  const CRON_CONTRACTS = [
+    ['exam',            ['runAntiCheatJob']],
+    ['announcement',    ['runExpiryJob']],
+    ['public-portal',   ['runCompetitionClosingJob']],
+    ['finance',         ['runOverdueJob']],
+    ['academic-print',  ['runPrintQueueJob']],
+  ];
+
+  describe.each([...CONTRACTS, ...CRON_CONTRACTS])('modules/%s.service', (name, fns) => {
     const service = require(`../../modules/${name}`).service;
     test.each(fns)('expose %s()', (fn) => {
       expect(typeof service[fn]).toBe('function');

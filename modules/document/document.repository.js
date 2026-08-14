@@ -168,11 +168,25 @@ const paginatePublishedForCampus = async (filter, { skip, limit }) => {
   return { docs, total };
 };
 
-/** Batch of documents whose retention has expired (cron, by batch, lean). */
-const findExpiredDocuments = (filter, { skip, limit }) =>
+/**
+ * Batch of documents whose retention has expired (cron, by batch, lean).
+ *
+ * Takes a limit and NO offset, deliberately. The candidate set is self-draining:
+ * the cron soft-deletes what it reads, so every processed document leaves the
+ * filter. Paginating over it with a `skip` steps past the documents that took the
+ * place of the ones just deleted — half of any backlog above one batch is silently
+ * left behind. The offset is absent from the signature so it cannot be reintroduced.
+ */
+const findExpiredDocuments = (filter, { limit }) =>
   Document.find(filter)
     .select('_id campusId ref retentionPolicy retentionUntil')
-    .skip(skip).limit(limit).lean();
+    .limit(limit).lean();
+
+/**
+ * How many documents still match the retention filter. The cron reports this after
+ * draining: a job can only report what it did, never what it missed.
+ */
+const countExpiredDocuments = (filter) => Document.countDocuments(filter);
 
 /** Full document for PDF rendering (body + branding + print config). */
 const findDocumentForPdf = (id) =>
@@ -390,6 +404,7 @@ module.exports = {
   findIngestableDocuments,
   findCitationDocuments,
   findExpiredDocuments,
+  countExpiredDocuments,
   findDocumentForPdf,
   findDocumentForPdfCache,
   aggregateImportedStorageBytes,

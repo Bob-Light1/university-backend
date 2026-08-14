@@ -8,6 +8,7 @@ const { shutdownAcademicPool } = require('./modules/academic-print').service;
 const { shutdownQueue: shutdownGaetQueue } = require('./modules/gaet').service;
 const { shutdownIngestionQueue }           = require('./modules/public-portal').service;
 const { shutdownRateLimiter }              = require('./shared/middleware/rate-limiter');
+const { assertPersistentStorage }          = require('./shared/utils/storage-preflight');
 
 // ========================================
 // ENVIRONMENT VALIDATION
@@ -123,47 +124,62 @@ process.on('unhandledRejection', (reason, promise) => {
 // ========================================
 // CRON JOBS
 // ========================================
+// Each job is loaded and registered under its own guard (shared/lib/register-jobs.js):
+// a module that fails to load costs exactly one job, not all seven, and the reason
+// logged is the real error rather than a guess.
 try {
   const cron = require('node-cron');
-  const { runRetentionJob }  = require('./modules/document').service;
-  const { runAntiCheatJob }  = require('./modules/exam').service;
-  const { runExpiryJob }     = require('./modules/announcement').service;
-  const { runCompetitionClosingJob } = require('./modules/public-portal').service;
-  const { runRetryJob: runNotificationRetryJob } = require('./modules/notification').service;
-  const { runOverdueJob: runFinanceOverdueJob }  = require('./modules/finance').service;
-  const { runPrintQueueJob } = require('./modules/academic-print').service;
-  cron.schedule('0 2 * * 0', runRetentionJob);          // Every Sunday at 02:00
-  cron.schedule('0 3 * * *', runAntiCheatJob);          // Nightly at 03:00
-  cron.schedule('0 1 * * *', runExpiryJob);             // Nightly at 01:00
-  cron.schedule('5 0 1 * *', runCompetitionClosingJob); // 1st of month at 00:05
-  cron.schedule('*/10 * * * *', runNotificationRetryJob); // Every 10 min — flush external sends
-  cron.schedule('0 6 * * *', runFinanceOverdueJob);       // Nightly at 06:00 — overdue fees + reminders
-  cron.schedule('*/2 * * * *', runPrintQueueJob);         // Every 2 min — sweep pending/stale print jobs
-} catch {
-  console.warn('⚠️  node-cron not available — cron jobs disabled.');
+  const { registerJobs, projectJobs, CRON_TIMEZONE } = require('./shared/lib/register-jobs');
+
+  const { scheduled, failed } = registerJobs(cron, projectJobs(), { timezone: CRON_TIMEZONE });
+
+  console.log(`⏰ Cron jobs registered: ${scheduled.length}/${scheduled.length + failed.length} (timezone: ${CRON_TIMEZONE})`);
+  if (failed.length > 0) {
+    console.error(`❌ ${failed.length} cron job(s) NOT registered: ${failed.map((f) => f.name).join(', ')}`);
+  }
+} catch (err) {
+  // Only reached if node-cron itself cannot be loaded — the one cause this
+  // message is now entitled to name.
+  console.warn('⚠️  node-cron not available — cron jobs disabled:', err.message);
 }
 
 // ========================================
 // START SERVER
 // ========================================
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => {
-  console.log('🚀 ========================================');
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`📁 Static files: ${path.join(__dirname, 'uploads')}`);
-  console.log('🚀 ========================================');
-});
 
-// Handle server errors
-server.on('error', (error) => {
-  if (error.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use`);
-    process.exit(1);
-  } else {
-    console.error('❌ Server error:', error);
-    process.exit(1);
-  }
-});
+const startServer = async () => {
+  // Storage preflight — runs BEFORE accepting traffic. The GED writes every file
+  // to the local filesystem with no NODE_ENV branch, while the production host's
+  // filesystem is ephemeral: an unsafe deployment used to boot happily and lose
+  // every document on the next deploy, silently. It now refuses to start (B8-①).
+  //
+  // NOTE: this converts silent data loss into a loud refusal. It does not make
+  // storage durable — that requires a mounted volume pointed at by UPLOAD_DIR, or
+  // migrating modules/document/ to an object store.
+  await assertPersistentStorage();
+
+  const server = app.listen(PORT, () => {
+    console.log('🚀 ========================================');
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`📁 Static files: ${path.join(__dirname, 'uploads')}`);
+    console.log('🚀 ========================================');
+  });
+
+  server.on('error', (error) => {
+    if (error.code === 'EADDRINUSE') {
+      console.error(`❌ Port ${PORT} is already in use`);
+      process.exit(1);
+    } else {
+      console.error('❌ Server error:', error);
+      process.exit(1);
+    }
+  });
+
+  return server;
+};
+
+startServer();
 
 module.exports = app; // Export for testing

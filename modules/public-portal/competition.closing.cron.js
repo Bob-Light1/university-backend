@@ -12,9 +12,11 @@
  *  notification (Africa's Talking + Resend/SendGrid) is a Phase 3 prerequisite — not triggered
  *  here, notifiedAt stays null until wired up.
  *
- *  Usage in server.js (node-cron):
- *    const { runCompetitionClosingJob } = require('./crons/competition.closing.cron');
- *    cron.schedule('5 0 1 * *', runCompetitionClosingJob); // 1st of the month at 00:05
+ *  Schedule: 1st of the month at 00:05 UTC, registered by
+ *  `shared/lib/register-jobs.js`. The timezone is not incidental here: this job
+ *  derives the current period in UTC (see `currentPeriod` below), so a schedule
+ *  firing on the container's local time would run while UTC is still the previous
+ *  month and `period < currentPeriod()` would exclude the month that just ended.
  *
  *  Manual trigger (tests / catch-up):
  *    const { closeCompetition } = require('./crons/competition.closing.cron');

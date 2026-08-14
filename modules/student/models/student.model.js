@@ -1,5 +1,7 @@
 const mongoose = require('mongoose');
 
+const { storageRefSchema } = require('../../../shared/utils/storage-reference.schema');
+
 const NotificationPrefsSchema = new mongoose.Schema(
   {
     inapp:    { type: Boolean, default: true  }, // baseline inbox — always on, not user-disableable
@@ -112,6 +114,11 @@ const studentSchema = new mongoose.Schema(
       type: String,
       default: null
     },
+
+    // Where the profile image actually lives. `profileImage` is a URL — a way to
+    // READ the asset, not a handle to MANAGE it; without this, replacing a photo
+    // could never delete the previous one (B7-③).
+    profileImageRef: storageRefSchema,
 
     // **ACADEMIC ASSIGNMENT**
     schoolCampus: {

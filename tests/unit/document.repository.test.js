@@ -224,14 +224,23 @@ describe('document — lectures spécialisées (façade / cron / pdf / quota)', 
     expect(out).toEqual({ docs: [{ _id: 'p1' }], total: 4 });
   });
 
-  test('findExpiredDocuments : select rétention+skip+limit+lean', () => {
+  // B9-③ : le jeu de candidats se draine tout seul (le cron soft-delete ce qu'il lit),
+  // donc paginer dessus avec un skip saute la moitié du backlog. L'offset ne doit
+  // exister ni dans la signature ni dans la requête.
+  test('findExpiredDocuments : select rétention+limit+lean, JAMAIS de skip', () => {
     const q = Document.__makeQuery();
     Document.find.mockReturnValueOnce(q);
-    repo.findExpiredDocuments({ deletedAt: null }, { skip: 0, limit: 100 });
+    repo.findExpiredDocuments({ deletedAt: null }, { limit: 100 });
     expect(q.select).toHaveBeenCalledWith('_id campusId ref retentionPolicy retentionUntil');
-    expect(q.skip).toHaveBeenCalledWith(0);
+    expect(q.skip).not.toHaveBeenCalled();
     expect(q.limit).toHaveBeenCalledWith(100);
     expect(q.lean).toHaveBeenCalled();
+  });
+
+  test('countExpiredDocuments : countDocuments(filter)', () => {
+    Document.countDocuments.mockClear();
+    repo.countExpiredDocuments({ deletedAt: null });
+    expect(Document.countDocuments).toHaveBeenCalledWith({ deletedAt: null });
   });
 
   test('findDocumentForPdf : select corps+branding+printConfig+lean', () => {

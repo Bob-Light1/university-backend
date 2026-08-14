@@ -9,7 +9,8 @@
  *  a session. Pairs exceeding the similarity threshold are flagged for human review
  *  — no automated penalty is applied (detection-only approach per spec §7.3).
  *
- *  Usage in server.js (node-cron):
+ *  Schedule: nightly at 03:00 UTC, registered by `shared/lib/register-jobs.js`.
+ *  Historical usage (no longer the registration site):
  *    const cron = require('node-cron');
  *    const { runAntiCheatJob } = require('./modules/exam').service;
  *    cron.schedule('0 3 * * *', runAntiCheatJob); // Nightly at 03:00
