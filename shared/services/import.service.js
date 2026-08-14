@@ -4,6 +4,7 @@ const { createReadStream } = require('fs');
 const ExcelJS = require('exceljs');
 const bcrypt = require('bcrypt');
 const crypto = require('crypto');
+const { buildUniquenessQuery } = require('../utils/unique-scope');
 
 /**
  * IMPORT SERVICE
@@ -162,17 +163,33 @@ class ImportService {
   /**
    * Check for duplicates.
    * Email is normalized to lowercase; all other fields are compared as-is.
+   *
+   * The lookup carries the scope the model's own unique index declares, rather than
+   * assuming uniqueness is global. Teacher declares `{ schoolCampus, email }` unique, so a
+   * global query rejected a legitimate import into campus B because campus A already
+   * employed that address — reported as `email "…" already exists`, with no mention of a
+   * campus, against a row the database would have accepted.
+   *
+   * @param {Object} row
+   * @param {Object} [scopeValues] - Values available to fill an index's scope keys,
+   *                                 e.g. { schoolCampus: campusId }
+   * @returns {Promise<string[]|null>}
    */
-  async checkDuplicates(row) {
+  async checkDuplicates(row, scopeValues = {}) {
     const duplicates = [];
 
     for (const field of this.entityConfig.uniqueFields) {
       if (row[field]) {
         const value = field === 'email' ? row[field].toLowerCase() : row[field];
-        const exists = await this.Model.findOne({ [field]: value }).lean();
+        const { query, scoped } = buildUniquenessQuery(this.Model, field, value, scopeValues);
+        const exists = await this.Model.findOne(query).lean();
 
         if (exists) {
-          duplicates.push(`${field} "${row[field]}" already exists`);
+          duplicates.push(
+            scoped
+              ? `${field} "${row[field]}" already exists in this campus`
+              : `${field} "${row[field]}" already exists`,
+          );
         }
       }
     }
@@ -287,8 +304,8 @@ class ImportService {
             throw new Error(validationErrors.join('; '));
           }
 
-          // Check duplicates
-          const duplicateErrors = await this.checkDuplicates(row);
+          // Check duplicates, within the scope the model's unique index declares
+          const duplicateErrors = await this.checkDuplicates(row, { schoolCampus: campusId });
           if (duplicateErrors) {
             throw new Error(duplicateErrors.join('; '));
           }
