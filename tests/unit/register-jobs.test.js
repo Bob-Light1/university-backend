@@ -10,7 +10,7 @@
  * fuseau du conteneur.
  */
 
-const { registerJobs, projectJobs, JOB_FAILURE } = require('../../shared/lib/register-jobs');
+const { registerJobs, projectJobs, JOB_FAILURE, CRON_TIMEZONE } = require('../../shared/lib/register-jobs');
 
 /** Doublure minimale de node-cron : enregistre, et reproduit le vrai validate(). */
 function fakeCron() {
@@ -125,6 +125,23 @@ describe('registerJobs — isolement des échecs (B9-①)', () => {
 });
 
 describe('registerJobs — horloge de déclenchement (B9-②)', () => {
+  test('l’horloge de déclenchement est UTC, écrite dans le code', () => {
+    // Le TZ de l'hôte n'est défini nulle part dans ce dépôt. Les jobs, eux,
+    // calculent en UTC (competition.closing.cron : getUTCFullYear/getUTCMonth) :
+    // laisser node-cron matcher sur l'heure locale du conteneur fait clôturer
+    // chaque compétition mensuelle avec un mois de retard à l'ouest de Greenwich.
+    expect(CRON_TIMEZONE).toBe('UTC');
+  });
+
+  test('AUCUN des sept jobs réels n’est enregistré sans fuseau', () => {
+    const cron = fakeCron();
+
+    registerJobs(cron, projectJobs(), { timezone: CRON_TIMEZONE, logger: silent });
+
+    expect(cron.registered).toHaveLength(7);
+    for (const r of cron.registered) expect(r.opts.timezone).toBe('UTC');
+  });
+
   test('le fuseau est appliqué à CHAQUE enregistrement', () => {
     const cron = fakeCron();
 

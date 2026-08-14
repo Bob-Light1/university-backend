@@ -18,6 +18,20 @@
  *   3. verify what the loader returned before handing it to the scheduler.
  */
 
+/**
+ * The clock every job fires on.
+ *
+ * Without it, node-cron matches the expression against the container's local time
+ * while the jobs themselves compute in UTC — `competition.closing.cron.js`
+ * derives the current period from `getUTCFullYear()`/`getUTCMonth()`. On any host
+ * west of Greenwich the `5 0 1 * *` registration fires while UTC is still the
+ * previous month, so `period < currentPeriod()` excludes the month that just
+ * ended and every monthly competition closes a month late. The host's TZ is set
+ * nowhere in this repository, so the firing clock has to be stated in code rather
+ * than inherited from wherever the container happens to run.
+ */
+const CRON_TIMEZONE = 'UTC';
+
 /** Failure kinds, so a caller reacts per kind rather than by parsing strings. */
 const JOB_FAILURE = Object.freeze({
   LOAD_THREW:     'LOAD_THREW',      // the module threw while being required
@@ -107,4 +121,4 @@ const projectJobs = () => [
   { name: 'print-queue-sweep',   schedule: '*/2 * * * *',  load: () => require('../../modules/academic-print').service.runPrintQueueJob },
 ];
 
-module.exports = { registerJobs, projectJobs, JOB_FAILURE };
+module.exports = { registerJobs, projectJobs, JOB_FAILURE, CRON_TIMEZONE };

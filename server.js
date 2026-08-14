@@ -128,11 +128,11 @@ process.on('unhandledRejection', (reason, promise) => {
 // logged is the real error rather than a guess.
 try {
   const cron = require('node-cron');
-  const { registerJobs, projectJobs } = require('./shared/lib/register-jobs');
+  const { registerJobs, projectJobs, CRON_TIMEZONE } = require('./shared/lib/register-jobs');
 
-  const { scheduled, failed } = registerJobs(cron, projectJobs());
+  const { scheduled, failed } = registerJobs(cron, projectJobs(), { timezone: CRON_TIMEZONE });
 
-  console.log(`⏰ Cron jobs registered: ${scheduled.length}/${scheduled.length + failed.length}`);
+  console.log(`⏰ Cron jobs registered: ${scheduled.length}/${scheduled.length + failed.length} (timezone: ${CRON_TIMEZONE})`);
   if (failed.length > 0) {
     console.error(`❌ ${failed.length} cron job(s) NOT registered: ${failed.map((f) => f.name).join(', ')}`);
   }

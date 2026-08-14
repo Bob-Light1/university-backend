@@ -9,11 +9,9 @@
  *
  * ADMIN users are notified of all retention-triggered deletions via the event system.
  *
- * Schedule: weekly (configure via node-cron in server.js)
- * Usage in server.js:
- *   const cron = require('node-cron');
- *   const { runRetentionJob } = require('./modules/document/document.retention.cron');
- *   cron.schedule('0 2 * * 0', runRetentionJob); // Every Sunday at 02:00
+ * Schedule: every Sunday at 02:00 UTC. Registered — like all seven background
+ * jobs — by `shared/lib/register-jobs.js`, which owns the schedule, the timezone
+ * and the per-job failure guard. Do not call `cron.schedule` from here.
  */
 
 const repo = require('./document.repository');
