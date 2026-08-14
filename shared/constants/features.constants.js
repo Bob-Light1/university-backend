@@ -225,7 +225,7 @@ const FEATURE_REGISTRY = Object.freeze({
     dependsOn: ['campus', 'class', 'student', 'subject', 'teacher'],
     usesWhenAvailable: ['notification', 'settings'],
     routers: ['/api/examination'], minPlan: FEATURE_PLANS.STANDARD,
-    crons: [{ name: 'exam-anti-cheat', nature: CRON_NATURE.EMISSION }],
+    crons: [{ name: 'exam-anticheat', nature: CRON_NATURE.EMISSION }],
   },
   document: {
     label: 'Document management', core: false,
@@ -300,9 +300,12 @@ const FEATURE_REGISTRY = Object.freeze({
     minPlan: FEATURE_PLANS.STANDARD, crons: [],
   },
   'public-portal': {
+    // PREMIUM by decision (2026-08-14): the portal is a growth lever, sold
+    // alongside `partner` and `gaet` rather than as base equipment — and it is
+    // functionally tied to `partner` (referral links, lead funnel).
     label: 'Public portal', core: false, minState: null, records: [],
     dependsOn: ['campus'], usesWhenAvailable: ['ai', 'partner'],
-    routers: ['/api/public', '/api/portal-admin'], minPlan: FEATURE_PLANS.STANDARD,
+    routers: ['/api/public', '/api/portal-admin'], minPlan: FEATURE_PLANS.PREMIUM,
     // Closing settles competition state; winner notifications are emission and
     // are suppressed when the module is not active.
     crons: [{ name: 'competition-closing', nature: CRON_NATURE.HYGIENE }],
