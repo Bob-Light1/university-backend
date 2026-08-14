@@ -10,72 +10,29 @@
  * doc.ref format: DOC-{YEAR}-{CAMPUS_CODE}-{nanoid(8)}
  * → The nanoid suffix provides ~281 trillion combinations — immune to sequential scanning.
  *
- * Generated QR PNGs are stored under:
- *   uploads/documents/{campusId}/qrcodes/{fileName}
+ * QR codes are never stored. They are regenerated from `doc.ref` at render time and
+ * inlined as data: URIs — the payload is the verification URL and nothing else, so a
+ * stored PNG could only ever be a stale copy of a pure function of the reference.
+ *
+ * A `generateQrCode()` that wrote a PNG under `uploads/documents/{campusId}/qrcodes/`
+ * used to live here. It had ZERO callers, wrote straight to the filesystem behind the
+ * storage service's back, and was the last thing keeping `qrcodes/` alive as a write
+ * target. Deletion of legacy `qrCode.fileName` rows is still handled by
+ * `document.service.collectOwnedFiles`, so nothing is orphaned.
  *
  * The verification endpoint (GET /api/documents/verify/:ref) is public and rate-limited.
  * It returns minimal metadata only — never document content or internal IDs.
  */
 
 const QRCode = require('qrcode');
-const path   = require('path');
-const fs     = require('fs').promises;
-
-const UPLOAD_DIR = process.env.UPLOAD_DIR
-  ? path.join(process.env.UPLOAD_DIR, 'documents')
-  : path.join(__dirname, '..', '..', 'uploads', 'documents');
 
 const BASE_URL = process.env.QR_VERIFICATION_BASE_URL || 'https://app.yourdomain.com';
 
 // ── Public API ────────────────────────────────────────────────────────────────
 
 /**
- * Generates a QR code PNG for a document and saves it to campus-scoped storage.
- *
- * @param {string} docRef    - Document reference (e.g., DOC-2025-UNIV-AB12CD34)
- * @param {string} campusId
- * @param {object} options   - { size?: number (default 80), errorCorrectionLevel?: 'L'|'M'|'Q'|'H' }
- * @returns {Promise<{ fileName: string, data: string, generatedAt: Date }>}
- */
-const generateQrCode = async (docRef, campusId, options = {}) => {
-  const {
-    size = 80,
-    errorCorrectionLevel = 'M',
-  } = options;
-
-  const verificationUrl = `${BASE_URL}/verify/${docRef}`;
-
-  // Generate QR as PNG buffer
-  const buffer = await QRCode.toBuffer(verificationUrl, {
-    type:                 'png',
-    width:                size,
-    errorCorrectionLevel,
-    margin:               2,
-    color: {
-      dark:  '#000000',
-      light: '#FFFFFF',
-    },
-  });
-
-  // Save to campus-scoped qrcodes directory
-  const qrcodeDir = path.join(UPLOAD_DIR, campusId.toString(), 'qrcodes');
-  await fs.mkdir(qrcodeDir, { recursive: true });
-
-  const fileName = `qr_${docRef.replace(/[^A-Z0-9-]/g, '_').toLowerCase()}.png`;
-  const filePath = path.join(qrcodeDir, fileName);
-
-  await fs.writeFile(filePath, buffer);
-
-  return {
-    fileName,
-    data:        verificationUrl,
-    generatedAt: new Date(),
-  };
-};
-
-/**
- * Generates a QR code as a base64 data URL (for inline embedding in HTML templates).
- * Does not write to disk.
+ * Generates a QR code as a base64 data URL, for inline embedding in HTML templates.
+ * Writes nothing, anywhere.
  *
  * @param {string} docRef
  * @param {number} size
@@ -93,6 +50,5 @@ const generateQrCodeDataUrl = async (docRef, size = 80) => {
 };
 
 module.exports = {
-  generateQrCode,
   generateQrCodeDataUrl,
 };

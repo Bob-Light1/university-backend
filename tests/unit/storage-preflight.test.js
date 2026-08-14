@@ -3,15 +3,17 @@
 /**
  * Préflight du stockage GED (B8-①).
  *
- * `document.storage.service.js` écrit tous les fichiers de la GED sur le système
- * de fichiers local, sans branche sur NODE_ENV, tandis que `upload.js` documente —
+ * `document.storage.service.js` écrivait tous les fichiers de la GED sur le système
+ * de fichiers local, sans branche sur NODE_ENV, tandis que `upload.js` documentait —
  * dans un commentaire, dans un autre fichier — que le système de fichiers de
  * production est éphémère. Rien ne réconciliait les deux à l'exécution : un
  * déploiement dangereux démarrait sans un mot et perdait toute la GED au déploiement
  * suivant.
  *
- * Ce module ne rend PAS le stockage durable. Il fait échouer le démarrage d'un
- * déploiement qui ne l'est pas.
+ * La GED écrit désormais à travers un backend choisi par `resolveStorageProvider()`.
+ * Ce module lit la MÊME fonction que le service de stockage — il ne re-dérive pas la
+ * réponse — et refuse de démarrer un processus de production dont le backend retenu
+ * ne survit pas à un redéploiement.
  */
 
 const path = require('path');
@@ -52,12 +54,72 @@ describe('assertPersistentStorage — hors production', () => {
   test('ne bloque jamais le démarrage et nomme le répertoire effectif', async () => {
     const out = await assertPersistentStorage({ NODE_ENV: 'development' });
 
-    expect(out).toEqual({ ok: true, dir: path.join(REPO_ROOT, 'uploads'), persistent: false });
+    expect(out).toEqual({ ok: true, provider: 'local', dir: path.join(REPO_ROOT, 'uploads'), persistent: false });
     expect(exitSpy).not.toHaveBeenCalled();
   });
 });
 
-describe('assertPersistentStorage — production, les trois règles', () => {
+describe('assertPersistentStorage — production sur l’object store', () => {
+  const CREDENTIALS = {
+    CLOUDINARY_CLOUD_NAME: 'forun',
+    CLOUDINARY_API_KEY:    'key',
+    CLOUDINARY_API_SECRET: 'secret',
+  };
+
+  test('les trois identifiants suffisent — aucun UPLOAD_DIR requis', async () => {
+    const out = await assertPersistentStorage({ NODE_ENV: 'production', ...CREDENTIALS });
+
+    expect(out).toEqual({ ok: true, provider: 'cloudinary', dir: null, persistent: true });
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  test('aucun aller-retour réseau au démarrage', async () => {
+    // Vérifier les identifiants contre l'API ferait dépendre le démarrage de la
+    // disponibilité d'un tiers : on échangerait une panne de perte de données contre
+    // une panne de disponibilité. Seule la configuration est vérifiée.
+    const fetchSpy = jest.spyOn(global, 'fetch').mockImplementation(() => {
+      throw new Error('the preflight must not call out');
+    });
+
+    await assertPersistentStorage({ NODE_ENV: 'production', ...CREDENTIALS });
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  test('le backend forcé sans identifiants refuse le démarrage', async () => {
+    // DOC_STORAGE_PROVIDER=cloudinary sélectionne le backend qu'il ait jamais été
+    // configuré ou non : c'est le cas qui mérite le garde-fou.
+    await expect(assertPersistentStorage({
+      NODE_ENV: 'production',
+      DOC_STORAGE_PROVIDER: 'cloudinary',
+    })).rejects.toThrow('process.exit(1)');
+
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('credentials are incomplete'));
+  });
+
+  test('un identifiant manquant sur trois refuse le démarrage', async () => {
+    await expect(assertPersistentStorage({
+      NODE_ENV: 'production',
+      DOC_STORAGE_PROVIDER: 'cloudinary',
+      CLOUDINARY_CLOUD_NAME: 'forun',
+      CLOUDINARY_API_KEY:    'key',   // pas de secret
+    })).rejects.toThrow('process.exit(1)');
+  });
+
+  test('l’object store configuré mais explicitement écarté retombe sur les règles du volume', async () => {
+    // DOC_STORAGE_PROVIDER=local est un choix d'opérateur légitime — il doit alors
+    // subir la vérification complète du volume, pas être cru sur parole.
+    await expect(assertPersistentStorage({
+      NODE_ENV: 'production',
+      DOC_STORAGE_PROVIDER: 'local',
+      ...CREDENTIALS,
+    })).rejects.toThrow('process.exit(1)');
+
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining('UPLOAD_DIR is not set'));
+  });
+});
+
+describe('assertPersistentStorage — production sur le disque local, les trois règles', () => {
   test('règle 1 : UPLOAD_DIR absent refuse le démarrage', async () => {
     await expect(assertPersistentStorage({ NODE_ENV: 'production' }))
       .rejects.toThrow('process.exit(1)');
@@ -91,7 +153,7 @@ describe('assertPersistentStorage — production, les trois règles', () => {
 
     const out = await assertPersistentStorage({ NODE_ENV: 'production', UPLOAD_DIR: volume });
 
-    expect(out).toEqual({ ok: true, dir: volume, persistent: true });
+    expect(out).toEqual({ ok: true, provider: 'local', dir: volume, persistent: true });
     expect(exitSpy).not.toHaveBeenCalled();
 
     await fs.rm(volume, { recursive: true, force: true });

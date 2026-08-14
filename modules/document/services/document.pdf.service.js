@@ -21,19 +21,18 @@
  *   3. Launch Puppeteer page from pool
  *   4. setContent(html) → waitForNetworkIdle
  *   5. page.pdf({ format, margin, printBackground: true })
- *   6. Save to uploads/documents/{campusId}/pdf/
+ *   6. Save through document.storage.service (category 'pdf') — never to the filesystem
+ *      directly, so the snapshot follows whichever backend is active (B8-①)
  *   7. Update Document.pdfSnapshot filename
  */
 
 const puppeteer = require('puppeteer-core');
 const chromium  = require('@sparticuz/chromium');
 const path      = require('path');
-const fs        = require('fs').promises;
-const crypto    = require('crypto');
 
 const sanitizeHtml   = require('sanitize-html');
 
-const { saveFile }   = require('./document.storage.service');
+const storage        = require('./document.storage.service');
 const { generateQrCodeDataUrl } = require('./document.qr.service');
 const { HTML_SANITIZE_OPTIONS } = require('./document.validation.service');
 const repo           = require('../document.repository');
@@ -42,9 +41,6 @@ const repo           = require('../document.repository');
 
 const POOL_SIZE    = parseInt(process.env.PUPPETEER_POOL_SIZE    || '2', 10);
 const TIMEOUT_MS   = parseInt(process.env.PUPPETEER_TIMEOUT_MS   || '30000', 10);
-const UPLOAD_DIR   = process.env.UPLOAD_DIR
-  ? path.join(process.env.UPLOAD_DIR, 'documents')
-  : path.join(__dirname, '..', '..', 'uploads', 'documents');
 
 // ── Browser Pool ──────────────────────────────────────────────────────────────
 
@@ -177,19 +173,15 @@ const readImageDataUri = async (campusId, fileName) => {
   const mime = INLINE_IMAGE_MIME[path.extname(fileName).toLowerCase()];
   if (!mime) return null;
 
-  const filePath = path.join(UPLOAD_DIR, campusId.toString(), 'images', fileName);
+  // Through the storage service rather than the filesystem: reading images directly
+  // is what would have left every content-block image on an ephemeral disk while the
+  // imported file moved to the object store (B8-①).
+  const buffer = await storage.readFile(
+    campusId, 'images', fileName, { maxBytes: MAX_INLINE_ASSET_BYTES },
+  );
+  if (!buffer) return null;
 
-  try {
-    const { size } = await fs.stat(filePath);
-    if (size > MAX_INLINE_ASSET_BYTES) {
-      console.warn(`[PdfService] Image ${fileName} skipped — ${size} bytes exceeds the inline limit.`);
-      return null;
-    }
-    const buffer = await fs.readFile(filePath);
-    return `data:${mime};base64,${buffer.toString('base64')}`;
-  } catch {
-    return null;
-  }
+  return `data:${mime};base64,${buffer.toString('base64')}`;
 };
 
 /**
@@ -544,12 +536,15 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
         // would contradict what it was told.
         if (settled) return;
 
-        const safeRef    = doc.ref.replace(/[^A-Z0-9-]/g, '_');
-        const fileName   = `${safeRef}_v${doc.currentVersion}_${versionId || 'latest'}.pdf`;
-        const campusDir  = path.join(UPLOAD_DIR, doc.campusId.toString(), 'pdf');
-        await fs.mkdir(campusDir, { recursive: true });
-        const filePath   = path.join(campusDir, fileName);
-        await fs.writeFile(filePath, pdfBuffer);
+        const safeRef  = doc.ref.replace(/[^A-Z0-9-]/g, '_');
+        const fileName = `${safeRef}_v${doc.currentVersion}_${versionId || 'latest'}.pdf`;
+
+        await storage.saveBuffer(pdfBuffer, {
+          campusId: doc.campusId,
+          category: 'pdf',
+          fileName,
+          mimeType: 'application/pdf',
+        });
 
         // Update pdfSnapshot on the document record
         await repo.setPdfSnapshot(documentId, fileName);
@@ -579,9 +574,12 @@ const generateDocumentPdf = async (documentId, versionId, campusName) => {
  * Returns the cached PDF if available and version unchanged.
  * Triggers regeneration otherwise.
  *
+ * `filePath` is deliberately NOT returned any more: no caller ever read it, and an
+ * absolute local path is a lie as soon as the bytes live in an object store.
+ *
  * @param {string} documentId
  * @param {string} campusName
- * @returns {Promise<{ fileName: string, filePath: string, buffer: Buffer }>}
+ * @returns {Promise<{ fileName: string, buffer: Buffer }>}
  */
 const getOrGeneratePdf = async (documentId, campusName) => {
   const doc = await repo.findDocumentForPdfCache(documentId);
@@ -589,20 +587,13 @@ const getOrGeneratePdf = async (documentId, campusName) => {
   if (!doc) throw Object.assign(new Error('Document not found'), { statusCode: 404 });
 
   if (doc.pdfSnapshot) {
-    const filePath = path.join(UPLOAD_DIR, doc.campusId.toString(), 'pdf', doc.pdfSnapshot);
-    try {
-      await fs.access(filePath);
-      const buffer = await fs.readFile(filePath);
-      return { fileName: doc.pdfSnapshot, filePath, buffer };
-    } catch {
-      // Cached file missing — regenerate
-    }
+    const buffer = await storage.readFile(doc.campusId, 'pdf', doc.pdfSnapshot);
+    // A null buffer means the cached snapshot is gone — fall through and regenerate.
+    if (buffer) return { fileName: doc.pdfSnapshot, buffer };
   }
 
   // No cache — generate a new PDF
-  const { fileName, buffer } = await generateDocumentPdf(documentId, null, campusName);
-  const filePath = path.join(UPLOAD_DIR, doc.campusId.toString(), 'pdf', fileName);
-  return { fileName, filePath, buffer };
+  return generateDocumentPdf(documentId, null, campusName);
 };
 
 /**
