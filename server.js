@@ -123,24 +123,23 @@ process.on('unhandledRejection', (reason, promise) => {
 // ========================================
 // CRON JOBS
 // ========================================
+// Each job is loaded and registered under its own guard (shared/lib/register-jobs.js):
+// a module that fails to load costs exactly one job, not all seven, and the reason
+// logged is the real error rather than a guess.
 try {
   const cron = require('node-cron');
-  const { runRetentionJob }  = require('./modules/document').service;
-  const { runAntiCheatJob }  = require('./modules/exam').service;
-  const { runExpiryJob }     = require('./modules/announcement').service;
-  const { runCompetitionClosingJob } = require('./modules/public-portal').service;
-  const { runRetryJob: runNotificationRetryJob } = require('./modules/notification').service;
-  const { runOverdueJob: runFinanceOverdueJob }  = require('./modules/finance').service;
-  const { runPrintQueueJob } = require('./modules/academic-print').service;
-  cron.schedule('0 2 * * 0', runRetentionJob);          // Every Sunday at 02:00
-  cron.schedule('0 3 * * *', runAntiCheatJob);          // Nightly at 03:00
-  cron.schedule('0 1 * * *', runExpiryJob);             // Nightly at 01:00
-  cron.schedule('5 0 1 * *', runCompetitionClosingJob); // 1st of month at 00:05
-  cron.schedule('*/10 * * * *', runNotificationRetryJob); // Every 10 min — flush external sends
-  cron.schedule('0 6 * * *', runFinanceOverdueJob);       // Nightly at 06:00 — overdue fees + reminders
-  cron.schedule('*/2 * * * *', runPrintQueueJob);         // Every 2 min — sweep pending/stale print jobs
-} catch {
-  console.warn('⚠️  node-cron not available — cron jobs disabled.');
+  const { registerJobs, projectJobs } = require('./shared/lib/register-jobs');
+
+  const { scheduled, failed } = registerJobs(cron, projectJobs());
+
+  console.log(`⏰ Cron jobs registered: ${scheduled.length}/${scheduled.length + failed.length}`);
+  if (failed.length > 0) {
+    console.error(`❌ ${failed.length} cron job(s) NOT registered: ${failed.map((f) => f.name).join(', ')}`);
+  }
+} catch (err) {
+  // Only reached if node-cron itself cannot be loaded — the one cause this
+  // message is now entitled to name.
+  console.warn('⚠️  node-cron not available — cron jobs disabled:', err.message);
 }
 
 // ========================================
