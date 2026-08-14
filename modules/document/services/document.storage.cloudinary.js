@@ -38,6 +38,25 @@ const cloudinary   = require('cloudinary').v2;
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
+/**
+ * The SDK is configured HERE, not inherited.
+ *
+ * `shared/middleware/upload.js` also calls `cloudinary.config()`, and the Cloudinary
+ * SDK keeps that configuration on a module-level singleton — so this file appeared to
+ * work while it was only ever borrowing someone else's setup. Inside the server that
+ * holds by accident (`app.js` loads the routes, which load `upload.js`). Outside it —
+ * `scripts/migrate-ged-to-object-store.js`, `scripts/smoke-cloudinary.js`, any worker
+ * that does not go through Express — nothing configures the SDK and every upload fails
+ * with `Must supply api_key`.
+ *
+ * Calling it twice with the same values is harmless; depending on load order is not.
+ */
+cloudinary.config({
+  cloud_name : process.env.CLOUDINARY_CLOUD_NAME,
+  api_key    : process.env.CLOUDINARY_API_KEY,
+  api_secret : process.env.CLOUDINARY_API_SECRET,
+});
+
 /** Root folder for every GED object. Segregates the GED from `backend/*` profile assets. */
 const FOLDER_ROOT = process.env.DOC_STORAGE_FOLDER || 'ged';
 

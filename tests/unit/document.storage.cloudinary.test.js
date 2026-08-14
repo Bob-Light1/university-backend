@@ -24,9 +24,17 @@ const mockUploadStream = jest.fn();
 const mockDestroy      = jest.fn();
 const mockResource     = jest.fn();
 const mockPrivateUrl   = jest.fn(() => 'https://res.cloudinary.test/signed');
+const mockConfig       = jest.fn();
+
+// Les identifiants doivent être posés AVANT le require du backend : il se configure
+// à la charge, et c'est précisément ce qui est épinglé plus bas.
+process.env.CLOUDINARY_CLOUD_NAME = 'forun-test';
+process.env.CLOUDINARY_API_KEY    = 'test-key';
+process.env.CLOUDINARY_API_SECRET = 'test-secret';
 
 jest.mock('cloudinary', () => ({
   v2: {
+    config:   (...args) => mockConfig(...args),
     uploader: {
       upload_stream: (...args) => mockUploadStream(...args),
       destroy:       (...args) => mockDestroy(...args),
@@ -37,6 +45,10 @@ jest.mock('cloudinary', () => ({
 }));
 
 const backend = require('../../modules/document/services/document.storage.cloudinary');
+
+// Capté À LA CHARGE : la configuration a lieu au require, et `jest.clearAllMocks()`
+// dans le beforeEach effacerait la trace avant que le test ne puisse la lire.
+const CONFIG_AT_LOAD = mockConfig.mock.calls.map(([options]) => options);
 
 const CAMPUS = '507f1f77bcf86cd799439011';
 
@@ -56,6 +68,22 @@ const stubUpload = (result = { bytes: 42 }, error = null) => {
 beforeEach(() => {
   jest.clearAllMocks();
   stubUpload();
+});
+
+describe('le SDK est configuré ICI, pas hérité', () => {
+  test('le backend appelle cloudinary.config() à sa propre charge', () => {
+    // Trouvé par `scripts/smoke-cloudinary.js` au premier essai réel : ce fichier
+    // faisait require('cloudinary') sans jamais le configurer, et empruntait en
+    // silence la configuration posée par shared/middleware/upload.js. Dans le serveur
+    // ça tient par accident (app.js charge les routes, qui chargent upload.js). Hors
+    // serveur — script de migration, worker, ce test — rien ne configure le SDK et
+    // TOUT téléversement échoue avec « Must supply api_key ».
+    expect(CONFIG_AT_LOAD).toContainEqual({
+      cloud_name: 'forun-test',
+      api_key:    'test-key',
+      api_secret: 'test-secret',
+    });
+  });
 });
 
 describe('publicIdFor — déterministe et inversible', () => {
