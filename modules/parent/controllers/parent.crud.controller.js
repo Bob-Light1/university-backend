@@ -37,7 +37,7 @@ const {
   buildCampusFilter,
 } = require('../../../shared/utils/validation-helpers');
 
-const { getFileUrl } = require('../../../shared/middleware/upload');
+const { describeUploadedFile, discardPreviousUpload } = require('../../../shared/utils/storage-reference');
 const hardDelete = require('../../../shared/lib/hard-delete');
 
 const SALT_ROUNDS  = 12;
@@ -110,9 +110,12 @@ const createParent = async (req, res) => {
     delete body.parentRef;
     delete body.lastLogin;
 
-    // Profile image uploaded via multer (multipart/form-data)
-    if (req.file) {
-      body.profileImage = getFileUrl(req.file);
+    // Profile image uploaded via multer (multipart/form-data). The reference is
+    // recorded alongside the URL: a URL cannot be deleted, a storageKey can.
+    const imageRef = describeUploadedFile(req.file);
+    if (imageRef) {
+      body.profileImage    = imageRef.url;
+      body.profileImageRef = { provider: imageRef.provider, storageKey: imageRef.storageKey };
     }
 
     // Normalize children: multer returns a string when only 1 value is sent
@@ -264,9 +267,16 @@ const updateParent = async (req, res) => {
     // Strip immutable / sensitive fields
     const { password, parentRef, lastLogin, schoolCampus: _sc, ...updates } = req.body;
 
-    // Profile image uploaded via multer (multipart/form-data)
-    if (req.file) {
-      updates.profileImage = getFileUrl(req.file);
+    // Profile image uploaded via multer (multipart/form-data). Replacing it must
+    // also remove the asset it replaces — this controller stored the right URL
+    // but never deleted anything, so every replacement orphaned a file (B7-③).
+    const imageRef = describeUploadedFile(req.file);
+    if (imageRef) {
+      const previous = await parentRepo.findStorageRefScoped(id, campusFilter);
+      await discardPreviousUpload(previous?.profileImageRef, `Parent ${id}`);
+
+      updates.profileImage    = imageRef.url;
+      updates.profileImageRef = { provider: imageRef.provider, storageKey: imageRef.storageKey };
     }
 
     // Normalize children: multer returns a string when only 1 value is sent

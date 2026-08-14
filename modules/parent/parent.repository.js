@@ -98,6 +98,13 @@ const findScopedDetailed = (id, campusFilter) =>
     .populate('children', 'firstName lastName profileImage studentClass status')
     .lean({ virtuals: true });
 
+/**
+ * Storage reference of a parent's current profile image, campus-scoped.
+ * Read before a replacement so the previous asset can actually be removed.
+ */
+const findStorageRefScoped = (id, campusFilter) =>
+  Parent.findOne({ _id: id, ...campusFilter }).select('profileImageRef').lean();
+
 const updateScoped = (id, campusFilter, updates) =>
   Parent.findOneAndUpdate(
     { _id: id, ...campusFilter, status: NOT_ARCHIVED },
@@ -228,6 +235,7 @@ module.exports = {
   findByIdForResponse,
   paginate,
   findScopedDetailed,
+  findStorageRefScoped,
   updateScoped,
   setStatusScoped,
   findActiveScoped,

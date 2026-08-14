@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const crypto = require('crypto');
 
+const { storageRefSchema } = require('../../../shared/utils/storage-reference.schema');
+
 const NotificationPrefsSchema = new mongoose.Schema(
   {
     inapp:    { type: Boolean, default: true  }, // baseline inbox — always on, not user-disableable
@@ -154,6 +156,9 @@ const teacherSchema = new mongoose.Schema(
       type: String,
       default: null
     },
+
+    // Where the profile image actually lives — see student.model.js (B7-③).
+    profileImageRef: storageRefSchema,
 
     // **ROLES AND PERMISSIONS**
     roles: {

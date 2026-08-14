@@ -15,6 +15,8 @@
  */
 
 const mongoose = require('mongoose');
+
+const { storageRefSchema } = require('../../shared/utils/storage-reference.schema');
 const bcrypt   = require('bcrypt');
 const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
 
@@ -146,6 +148,9 @@ const parentSchema = new mongoose.Schema(
       type:    String,
       default: null,
     },
+
+    // Where the profile image actually lives — see student.model.js (B7-③).
+    profileImageRef: storageRefSchema,
 
     // ── CAMPUS & CHILDREN ─────────────────────────────────────────────────
     schoolCampus: {

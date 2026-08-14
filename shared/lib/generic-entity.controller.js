@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const bcrypt = require('bcrypt');
 const mongoose = require('mongoose');
 const { cleanupUploadedFile } = require('../middleware/upload');
-const { deleteFile } = require('../utils/file-upload');
+const { describeUploadedFile, discardPreviousUpload } = require('../utils/storage-reference');
 const {
   sendSuccess,
   sendError,
@@ -218,15 +218,21 @@ class GenericEntityController {
       const salt           = await bcrypt.genSalt(SALT_ROUNDS);
       const hashedPassword = await bcrypt.hash(plainPassword, salt);
 
-      const profileImage = uploadedFile ? uploadedFile.path : null;
+      // `uploadedFile.path` is environment-dependent — an absolute filesystem
+      // path in development, an https Cloudinary URL in production — so storing
+      // it raw wrote a path to a file on a developer's laptop into the database
+      // (B7-②). `describeUploadedFile` gives it one meaning in both, and records
+      // the storageKey a later deletion needs.
+      const imageRef = describeUploadedFile(uploadedFile);
 
       // ── 8. Create the document ──────────────────────
       const entityData = {
         ...rest,
-        username:     username.toLowerCase(),
-        password:     hashedPassword,
-        schoolCampus: campusId,
-        profileImage,
+        username:        username.toLowerCase(),
+        password:        hashedPassword,
+        schoolCampus:    campusId,
+        profileImage:    imageRef?.url ?? null,
+        profileImageRef: imageRef ? { provider: imageRef.provider, storageKey: imageRef.storageKey } : null,
       };
       if (email) entityData.email = email.toLowerCase();
       if (activationMode) entityData.status = 'pending';
@@ -483,13 +489,21 @@ class GenericEntityController {
         }
       }
 
-      // Profile image management
+      // Profile image management. The previous asset is removed through the
+      // reference recorded at upload time — the old `deleteFile(folder,
+      // entity.profileImage)` failed three ways at once (wrong root, wrong
+      // argument, wrong environment) and returned `false` instead of throwing,
+      // so `.catch()` guarded a promise that never rejected and no old picture
+      // was ever deleted, in any environment (B7-③).
       if (uploadedFile) {
-        if (entity.profileImage) {
-          // static import
-          await deleteFile(this.folderName, entity.profileImage).catch(console.error);
-        }
-        updates.profileImage = uploadedFile.path;
+        const imageRef = describeUploadedFile(uploadedFile);
+
+        await discardPreviousUpload(entity.profileImageRef, `${this.entityName} ${entity._id}`);
+
+        updates.profileImage    = imageRef?.url ?? null;
+        updates.profileImageRef = imageRef
+          ? { provider: imageRef.provider, storageKey: imageRef.storageKey }
+          : null;
       }
 
       // Normalization
