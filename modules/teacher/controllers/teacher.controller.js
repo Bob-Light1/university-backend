@@ -6,21 +6,26 @@ const Teacher = require('../models/teacher.model'); // accepted exception: Model
 const teacherRepo = require('../teacher.repository');
 const departmentService = require('../../department').service; // department module facade (§3)
 
+const profileSvc = require('../../../shared/services/profile.service');
+
 const {
   sendSuccess,
   sendError,
-  sendNotFound,
+  sendForbidden,
 } = require('../../../shared/utils/response-helpers');
 const {
   isValidEmail,
   isValidObjectId,
-  validatePasswordStrength,
+  buildCampusFilter,
 } = require('../../../shared/utils/validation-helpers');
+
 const teacherConfig = require('../teacher.config');
 const { getLoginPrefs } = require('../../settings').service;
 const hardDelete = require('../../../shared/lib/hard-delete');
 
-const SALT_ROUNDS    = 12; // platform standard (matches profile.service, generic-entity.controller, other modules)
+/** Roles allowed to reset another account's password — scoped by buildCampusFilter. */
+const MANAGEMENT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
+
 const JWT_SECRET      = process.env.JWT_SECRET;
 
 // ========================================
@@ -192,63 +197,41 @@ const loginTeacher = async (req, res) => {
 /**
    * Update teacher password
    * @route   PATCH /api/teachers/:id/password
-   * @access  Private (Teachers themselves or ADMIN)
+   * @access  Private (the teacher themselves, or a management role WITHIN THEIR CAMPUS)
    */
 const updateTeacherPassword = async (req, res) => {
   try {
     const { id } = req.params;
-    const { currentPassword, newPassword } = req.body;
 
     // Validate ObjectId
     if (!isValidObjectId(id)) {
       return sendError(res, 400, 'Invalid teacher ID format');
     }
 
-    // Validate new password
-    if (!newPassword) {
-      return sendError(res, 400, 'New password is required');
+    const actorIsTarget = req.user?.id === id;
+    const isManager     = MANAGEMENT_ROLES.includes(req.user?.role);
+
+    if (!actorIsTarget && !isManager) {
+      return sendForbidden(res, 'You are not authorized to change this password');
     }
 
-    const passwordValidation = validatePasswordStrength(newPassword);
-    if (!passwordValidation.valid) {
-      return sendError(res, 400, 'Password does not meet requirements', {
-        errors: passwordValidation.errors
-      });
+    // Campus scope, derived — never inlined (CLAUDE.md §2). This is the control
+    // that was missing: the target used to be resolved by bare `_id`, so a
+    // CAMPUS_MANAGER could reset a teacher's password on ANY campus (B6-③).
+    let campusFilter;
+    try {
+      campusFilter = buildCampusFilter(req.user);
+    } catch {
+      return sendForbidden(res, 'Campus access denied');
     }
 
-    // Authorization
-    const isOwner = req.user?.id === id;
-    const isAdmin = ['ADMIN', 'CAMPUS_MANAGER', 'DIRECTOR'].includes(req.user?.role);
-
-    if (!isOwner && !isAdmin) {
-      return sendError(res, 403, 'You are not authorized to change this password');
-    }
-
-    // Fetch teacher with password
-    const teacher = await teacherRepo.findTeacherByIdWithPassword(id);
-    if (!teacher) {
-      return sendNotFound(res, 'teacher');
-    }
-
-    // Verify current password (skip for ADMIN)
-    if (!isAdmin) {
-      if (!currentPassword) {
-        return sendError(res, 400, 'Current password is required');
-      }
-
-      const isMatch = await bcrypt.compare(currentPassword, teacher.password);
-      if (!isMatch) {
-        return sendError(res, 401, 'Current password is incorrect');
-      }
-    }
-
-    // Hash new password
-    const salt = await bcrypt.genSalt(SALT_ROUNDS);
-    teacher.password = await bcrypt.hash(newPassword, salt);
-
-    await teacherRepo.saveTeacherDoc(teacher);
-
-    return sendSuccess(res, 200, 'Password updated successfully');
+    return profileSvc.resetManagedPassword(
+      res,
+      Teacher,
+      { _id: id, ...campusFilter },
+      req.body,
+      { actorIsTarget },
+    );
 
   } catch (error) {
     console.error('❌ Password update error:', error);

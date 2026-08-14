@@ -149,6 +149,72 @@ const changePassword = async (res, Model, filter, body) => {
   }
 };
 
+// ── ADMINISTRATIVE PASSWORD RESET ─────────────────────────────────────────────
+
+/**
+ * Resets the password of a MANAGED account (a manager acting on someone else),
+ * or of the actor's own account when they reach it through the same route.
+ *
+ * `filter` MUST already carry the campus scope, built by `buildCampusFilter`.
+ * This function never resolves the target by bare id, and that is the whole point:
+ * `Teacher.findById(id)` with `CAMPUS_MANAGER` folded into an `isAdmin` boolean
+ * let a manager of one campus reset the password of any teacher on another campus
+ * and then sign in as them — a cross-tenant account takeover, in breach of the
+ * campus boundary CLAUDE.md §2 declares non-negotiable (B6-③). The identical code
+ * existed in the student controller.
+ *
+ * The current-password proof is REQUIRED whenever the actor is the target — a
+ * manager is not exempt from proving their own password just because they hold a
+ * management role. It is waived only for a manager acting on someone else's
+ * account, which is what an administrative reset is for: the user has forgotten
+ * it. The control on that path is the campus scope in `filter`, not the proof.
+ *
+ * @param {import('express').Response} res
+ * @param {import('mongoose').Model}   Model
+ * @param {object} filter               MUST include the campus scope
+ * @param {object} body                 { currentPassword?, newPassword }
+ * @param {object} options
+ * @param {boolean} options.actorIsTarget  the actor is resetting their own password
+ */
+const resetManagedPassword = async (res, Model, filter, body, { actorIsTarget }) => {
+  try {
+    const { currentPassword, newPassword } = body;
+
+    if (!newPassword) {
+      return sendError(res, 400, 'newPassword is required.');
+    }
+
+    const pwCheck = validatePasswordStrength(newPassword);
+    if (!pwCheck.valid) return sendError(res, 400, pwCheck.errors[0]);
+
+    // Campus-scoped resolution. A target outside the actor's campus simply does
+    // not exist as far as this function is concerned — 404, never a 403 that
+    // would confirm the account is real on another campus.
+    const doc = await Model.findOne(filter).select('+password');
+    if (!doc) return sendNotFound(res, Model.modelName);
+
+    if (actorIsTarget) {
+      if (!currentPassword) {
+        return sendError(res, 400, 'currentPassword is required to change your own password.');
+      }
+      const isMatch = doc.comparePassword
+        ? await doc.comparePassword(currentPassword)
+        : await bcrypt.compare(currentPassword, doc.password);
+
+      if (!isMatch) return sendError(res, 401, 'Current password is incorrect.');
+    }
+
+    // Hash manually — bypasses the pre-save hook to avoid double hashing.
+    const hashed = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await Model.findByIdAndUpdate(doc._id, { password: hashed });
+
+    return sendSuccess(res, 200, 'Password updated successfully.');
+  } catch (err) {
+    console.error(`❌ [profile.service] resetManagedPassword ${Model.modelName}:`, err.message);
+    return sendError(res, 500, 'Failed to update password.');
+  }
+};
+
 // ── UPLOAD PROFILE IMAGE ──────────────────────────────────────────────────────
 
 /**
@@ -263,6 +329,7 @@ module.exports = {
   getMe,
   updateProfile,
   changePassword,
+  resetManagedPassword,
   uploadProfileImage,
   updateNotifications,
   getUploadSignature,
