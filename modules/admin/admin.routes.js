@@ -16,6 +16,8 @@
  *  PATCH  /api/admin/:id/status          → updateAdminStatus     (ADMIN only)
  *  GET    /api/admin/campuses/:id/ai-entitlement → getCampusAiEntitlement    (ADMIN | DIRECTOR)
  *  PUT    /api/admin/campuses/:id/ai-entitlement → updateCampusAiEntitlement (ADMIN | DIRECTOR)
+ *  GET    /api/admin/campuses/:id/entitlement    → getCampusEntitlement      (ADMIN | DIRECTOR)
+ *  PATCH  /api/admin/campuses/:id/entitlement    → updateCampusEntitlement   (ADMIN | DIRECTOR)
  */
 
 const express = require('express');
@@ -37,6 +39,11 @@ const {
   getCampusAiEntitlement,
   updateCampusAiEntitlement,
 } = require('./controllers/admin.ai-entitlement.controller');
+
+const {
+  getCampusEntitlement,
+  updateCampusEntitlement,
+} = require('./controllers/admin.entitlement.controller');
 
 const { authenticate, authorize } = require('../../shared/middleware/auth');
 
@@ -169,6 +176,33 @@ router.put(
   authenticate,
   authorize(['ADMIN', 'DIRECTOR']),
   updateCampusAiEntitlement,
+);
+
+/**
+ * GET /api/admin/campuses/:id/entitlement
+ * Unified per-campus entitlement: effective state of every module, what the
+ * plan alone grants, the override in force, and the recent audit entries
+ * (CAMPUS_ENTITLEMENT_DESIGN.md §5 — the OFFER layer).
+ */
+router.get(
+  '/campuses/:id/entitlement',
+  authenticate,
+  authorize(['ADMIN', 'DIRECTOR']),
+  getCampusEntitlement,
+);
+
+/**
+ * PATCH /api/admin/campuses/:id/entitlement
+ * Sets the offer of a campus: plan and/or per-module overrides.
+ * Body: { plan?, modules?: [{ key, state, until?, reason }] }.
+ * Refuses (409) a change that would hide institutional records or a module
+ * another collection still needs on this campus; appends an audit entry.
+ */
+router.patch(
+  '/campuses/:id/entitlement',
+  authenticate,
+  authorize(['ADMIN', 'DIRECTOR']),
+  updateCampusEntitlement,
 );
 
 /**

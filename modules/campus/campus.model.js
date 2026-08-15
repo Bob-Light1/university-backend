@@ -1,7 +1,99 @@
 const mongoose = require('mongoose');
 const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
 const { AI_PLANS, AI_PLAN_PRESETS } = require('../../shared/constants/ai.constants');
+const {
+  FEATURE_PLANS,
+  FEATURE_STATES,
+  FEATURE_KEYS,
+} = require('../../shared/constants/features.constants');
 const { notDeletedFilter } = require('../../shared/utils/soft-delete');
+
+/**
+ * One per-campus deviation from the plan preset (CAMPUS_ENTITLEMENT_DESIGN.md §3).
+ *
+ * An ARRAY rather than a Mongoose `Map` on purpose: Map keys forbid the dot,
+ * and the feature namespace is `domain.action` (`finance.expenses`) the day a
+ * finer granularity is needed. A Map would close that door on day one, and
+ * re-opening it would cost a data migration. The cost of the array is nil —
+ * ~30 entries at most, flattened once per request by `resolveEntitlement()`
+ * and cached behind it.
+ *
+ * Only the DEVIATIONS live here; everything the plan already grants is derived.
+ */
+const entitlementOverrideSchema = new mongoose.Schema(
+  {
+    key: {
+      type:     String,
+      required: true,
+      enum:     FEATURE_KEYS,
+    },
+    state: {
+      type:     String,
+      required: true,
+      enum:     Object.values(FEATURE_STATES),
+    },
+    /** End of effect. `null` = permanent. Evaluated at READ time — never a cron (§4.2). */
+    until: {
+      type:    Date,
+      default: null,
+    },
+    /** Shown to the manager and kept on the audit row — a disappeared button needs a why. */
+    reason: {
+      type:      String,
+      trim:      true,
+      maxlength: [300, 'Reason must not exceed 300 characters'],
+      default:   '',
+    },
+    /** Which of the two layers posted it: the offer (ADMIN) or the usage (CAMPUS_MANAGER), §5. */
+    setBy: {
+      type:     String,
+      required: true,
+      enum:     ['admin', 'campus'],
+    },
+    setAt:   { type: Date, default: Date.now },
+    setById: { type: mongoose.Schema.Types.ObjectId, default: null },
+  },
+  { _id: false }
+);
+
+/**
+ * The single entitlement object (design doc §2.2): everything this campus is
+ * entitled to — tier, module deviations, quotas, AI specifics.
+ *
+ * NO DEFAULT, deliberately. An absent object means "campus predating the
+ * system" and resolves to everything ENABLED (fail-open, §4.3). Giving it a
+ * default would switch every campus to the `free` tier the moment this schema
+ * ships, silently hiding paid modules on live tenants.
+ *
+ * `features` (quotas) and `aiEntitlement` below stay in place until the
+ * migration is validated in production (§3.2) — removal is a later, separate,
+ * reversible step.
+ */
+const entitlementSchema = new mongoose.Schema(
+  {
+    plan: {
+      type: String,
+      enum: Object.values(FEATURE_PLANS),
+    },
+    modules: {
+      type:    [entitlementOverrideSchema],
+      default: [],
+    },
+    quotas: {
+      maxStudents:          { type: Number, min: [1, 'maxStudents must be at least 1'] },
+      maxTeachers:          { type: Number, min: [1, 'maxTeachers must be at least 1'] },
+      maxClasses:           { type: Number, min: [1, 'maxClasses must be at least 1'] },
+      maxDocumentStorageMB: { type: Number, min: [100, 'Storage quota must be at least 100 MB'] },
+      /** 0 = unlimited, same convention as aiEntitlement.monthlyTokenBudget. */
+      aiMonthlyTokens:      { type: Number, min: [0, 'aiMonthlyTokens cannot be negative'] },
+    },
+    /** The only genuinely AI-specific leftover once the module joins the grid. */
+    ai: {
+      llmProfile: { type: String, trim: true, maxlength: 50 },
+    },
+  },
+  { _id: false }
+);
 
 /**
  * Campus Model
@@ -248,6 +340,34 @@ const campusSchema = new mongoose.Schema(
     // Append-only audit trail of aiEntitlement mutations (CLAUDE.md §8).
     // Excluded from standard reads; the admin endpoint selects it explicitly.
     aiEntitlementAudit: {
+      type: [
+        new mongoose.Schema(
+          {
+            at:        { type: Date, default: Date.now },
+            actorId:   { type: mongoose.Schema.Types.ObjectId, required: true },
+            actorRole: { type: String, required: true },
+            changes:   { type: Object, required: true },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+      select:  false,
+    },
+
+    // Unified per-campus entitlement (CAMPUS_ENTITLEMENT_DESIGN.md). Absent =
+    // everything enabled; `scripts/migrate-entitlement.js` folds `features` and
+    // `aiEntitlement` into it without changing what any campus can reach.
+    entitlement: {
+      type:    entitlementSchema,
+      default: undefined,
+    },
+
+    // Append-only audit trail of entitlement mutations (CLAUDE.md §8), same
+    // shape as aiEntitlementAudit with a widened scope. Hiding a module is the
+    // kind of change a support ticket starts with ("the button disappeared"),
+    // so who / when / why is not optional.
+    entitlementAudit: {
       type: [
         new mongoose.Schema(
           {

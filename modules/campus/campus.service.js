@@ -14,6 +14,9 @@
  *   - setCampusCommissionConfig : updates the config (partner.commission).
  *   - getCampusAiEntitlement    : AI entitlement config (ai gate middleware, admin read).
  *   - setCampusAiEntitlement    : replaces the AI entitlement + audit entry (admin).
+ *   - getCampusEntitlement      : unified entitlement (gate middleware, admin/campus read).
+ *   - getCampusEntitlementWithAudit : entitlement + audit trail (admin console).
+ *   - setCampusEntitlement      : replaces the entitlement + audit entry (both layers).
  *   - getActiveCampusBySlug     : public portal resolution by slug (active status).
  *   - getActiveCampusById       : public portal resolution by _id (active status).
  *   - listActivePublicCampuses  : list of public campuses (portal selector).
@@ -41,6 +44,10 @@ const getCampusAiEntitlement    = (campusId) => campusRepo.getCampusAiEntitlemen
 const getCampusAiEntitlementWithAudit = (campusId) => campusRepo.getCampusAiEntitlementWithAudit(campusId);
 const setCampusAiEntitlement    = (campusId, entitlement, auditEntry) =>
   campusRepo.setCampusAiEntitlement(campusId, entitlement, auditEntry);
+const getCampusEntitlement      = (campusId) => campusRepo.getCampusEntitlement(campusId);
+const getCampusEntitlementWithAudit = (campusId) => campusRepo.getCampusEntitlementWithAudit(campusId);
+const setCampusEntitlement      = (campusId, entitlement, auditEntry) =>
+  campusRepo.setCampusEntitlement(campusId, entitlement, auditEntry);
 const getActiveCampusBySlug     = (slug, select) => campusRepo.getActiveCampusBySlug(slug, select);
 const getActiveCampusById       = (campusId, select) => campusRepo.getActiveCampusById(campusId, select);
 const listActivePublicCampuses  = (select) => campusRepo.listActivePublicCampuses(select);
@@ -59,6 +66,9 @@ module.exports = {
   getCampusAiEntitlement,
   getCampusAiEntitlementWithAudit,
   setCampusAiEntitlement,
+  getCampusEntitlement,
+  getCampusEntitlementWithAudit,
+  setCampusEntitlement,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,

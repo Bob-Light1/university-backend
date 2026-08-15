@@ -90,6 +90,35 @@ const CRON_NATURE = Object.freeze({
   HYGIENE:  'hygiene',
 });
 
+// ─── Error codes ──────────────────────────────────────────────────────────────
+
+/**
+ * Dedicated codes travelling in `errors.code`. A bare 403 is indistinguishable
+ * from a role refusal on the frontend, which makes the in-flight write case
+ * (design doc §8.3) impossible to handle properly: the axios interceptor keys
+ * off these to re-hydrate the flags and refresh the navigation instead of
+ * showing "forbidden". Mirrored by the frontend, never re-declared there.
+ *
+ * The first two are raised by the gate; the others by the toggle guard, which
+ * refuses a mutation of the entitlement itself.
+ */
+const FEATURE_ERROR_CODES = Object.freeze({
+  /** Gate: the module is hidden for this campus. */
+  FEATURE_DISABLED:      'FEATURE_DISABLED',
+  /** Gate: the module is frozen — reads pass, this write does not. */
+  FEATURE_READ_ONLY:     'FEATURE_READ_ONLY',
+  /** Guard: `core` module, non-negotiable for anyone (§5.1). */
+  FEATURE_CORE:          'FEATURE_CORE',
+  /** Guard: a campus override may only restrict what the offer already grants (§5). */
+  FEATURE_NOT_IN_OFFER:  'FEATURE_NOT_IN_OFFER',
+  /** Guard: floored module holding records — freeze it, never hide it (§4.1.1). */
+  FEATURE_HAS_RECORDS:   'FEATURE_HAS_RECORDS',
+  /** Guard: an active module structurally needs this one on this campus (§6.3.3). */
+  FEATURE_IN_USE:        'FEATURE_IN_USE',
+  /** Guard: `until` beyond MAX_UNTIL_MONTHS, or already in the past (D-F). */
+  FEATURE_UNTIL_INVALID: 'FEATURE_UNTIL_INVALID',
+});
+
 // ─── Limits ───────────────────────────────────────────────────────────────────
 
 /**
@@ -416,6 +445,7 @@ module.exports = {
   FEATURE_PLANS,
   PLAN_RANK,
   CRON_NATURE,
+  FEATURE_ERROR_CODES,
   MAX_UNTIL_MONTHS,
   FEATURE_REGISTRY,
   UNGATED_MOUNTS,

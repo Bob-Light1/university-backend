@@ -151,6 +151,32 @@ const setCampusAiEntitlement = (campusId, entitlement, auditEntry) =>
     { new: true, runValidators: true }
   ).select('aiEntitlement campus_name').lean();
 
+/**
+ * Unified entitlement (CAMPUS_ENTITLEMENT_DESIGN.md). `.lean()` matters here:
+ * the resolver must only ever see RAW DATA, never a Mongoose document, so the
+ * whole entitlement chain survives the PostgreSQL migration untouched (§15bis.3).
+ */
+const getCampusEntitlement = (campusId) =>
+  Campus.findById(campusId).select('entitlement campus_name status').lean();
+
+/** Entitlement + audit trail (admin console only — audit is select:false elsewhere). */
+const getCampusEntitlementWithAudit = (campusId) =>
+  Campus.findById(campusId)
+    .select('entitlement campus_name status +entitlementAudit').lean();
+
+/**
+ * Replaces the entitlement object and appends an audit entry in the same write
+ * (append-only, CLAUDE.md §8). `entitlement` is the FULL next value — the merge
+ * belongs to the caller, which is the only party that knows which layer wrote.
+ * @param {Object} auditEntry — { actorId, actorRole, changes }
+ */
+const setCampusEntitlement = (campusId, entitlement, auditEntry) =>
+  Campus.findByIdAndUpdate(
+    campusId,
+    { $set: { entitlement }, $push: { entitlementAudit: auditEntry } },
+    { new: true, runValidators: true }
+  ).select('entitlement campus_name status').lean();
+
 const getActiveCampusBySlug = (campusSlug, select = '_id') =>
   Campus.findOne({ campusSlug, status: 'active' }).select(select).lean();
 
@@ -186,6 +212,9 @@ module.exports = {
   getCampusAiEntitlement,
   getCampusAiEntitlementWithAudit,
   setCampusAiEntitlement,
+  getCampusEntitlement,
+  getCampusEntitlementWithAudit,
+  setCampusEntitlement,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,

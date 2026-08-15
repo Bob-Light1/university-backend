@@ -10,15 +10,18 @@
 > `CLAUDE.md`) et reprend le chantier sans contexte de la discussion d'origine.
 > Ce document est sa source de vérité.
 >
-> **Statut** : **conception approuvée — version complète retenue.** La décision
-> bloquante D-A est tranchée (2026-08-13) : une **tarification par palier** est
-> à l'horizon, le chantier se justifie et la variante courte du §16.2 est
-> écartée. Décisions D-C, D-D, D-E, D-F tranchées le même jour (§14). Reste
-> **D-B élargie** : validation du noyau `core` (§5.1) *et* de la catégorie
-> `minState` (§4.1.1) avant d'ouvrir la phase 1.
-> **Aucune ligne de code écrite à ce jour.**
+> **Statut** : **phases 0 et 1 livrées** (registre gelé + socle backend).
+> Toutes les décisions porteur sont tranchées (§14). L'API est protégée et
+> pilotable ; il reste les phases 2 à 5 — dont la **phase 5 (les bords), qui ne
+> doit jamais être reportée** au-delà de la livraison des phases 1-4.
+> Seule action porteur en attente : lancer `scripts/migrate-entitlement.js`
+> sur la base réelle (voir §10, phase 1.2).
 >
-> **Révisions** : v1 (2026-08-13) — conception initiale, issue de l'analyse
+> **Révisions** : **v1.4 (2026-08-15)** — phase 1 livrée ; §7.1 (montage dérivé
+> du registre + `optionalAuth`), §6.3.3 (arêtes globales exclues, `level`
+> tranché), §4.1.1 (contrôle porté sur la transition effective, donc aussi sur
+> un déclassement de palier) et §15bis.3 (dérogation Mongoose assumée) corrigés
+> d'après le code écrit. v1 (2026-08-13) — conception initiale, issue de l'analyse
 > comparative de quatre alternatives (§2.3). **v1.1 (2026-08-13)** — décisions
 > D-A / D-C / D-D / D-E / D-F tranchées ; graphe de dépendances réel dérivé du
 > code et intégré (§6.3) ; liste `core` proposée sur base quantitative (§5.1).
@@ -483,6 +486,34 @@ transitive du noyau — un bouton qui ne peut jamais être actionné.
 Les filtres par arête sont écrits en phase 1, à côté du resolver, sur le modèle
 de `block(model, label, filter)` du registre de suppression.
 
+### 6.3.4 Ce que la phase 1 a tranché en écrivant ces filtres
+
+**Les arêtes portées par une collection globale ne bloquent pas.** `Course.level`
+est bien une clé étrangère `required`, mais `Course` n'a **pas** de `campusId` :
+la compter refuserait `level` sur *tous* les campus du parc à cause d'un cours
+créé ailleurs. Une collection sans lecture par campus ne peut pas justifier un
+refus par campus. Seul `Class.level` bloque donc — et l'arête `Course` reste
+visible dans l'aperçu d'impact.
+
+**Un campus mature ne peut effectivement plus masquer `level` ni `subject`, et
+c'est le comportement voulu.** Le §5.1 défendait « ranger la config après
+paramétrage » ; la règle pilotée par la donnée le refuse dès qu'il existe une
+classe ou un emploi du temps. La tension se résout par l'état intermédiaire :
+la réponse pour un campus configuré est **`read_only`**, pas `hidden`. C'est la
+même phrase que partout ailleurs dans ce document — *on n'empêche pas d'arrêter,
+on empêche de faire disparaître*. Le cas « campus en pré-ouverture », lui, reste
+entièrement ouvert : c'est exactement ce que la règle pilotée par la donnée
+préserve.
+
+**Le contrôle porte sur la transition effective, pas sur la charge utile.**
+Les deux contrôles de données (plancher `minState` et usage structurel) sont
+calculés sur le couple *résolu avant / résolu après*, et non sur les overrides
+soumis. C'est ce qui rend un **déclassement de palier** aussi sûr qu'un toggle :
+passer un campus de `standard` à `free` masque `finance` **par le preset**, sans
+qu'aucun override ne le mentionne, et doit être refusé de la même manière quand
+des paiements existent. Vérifier la charge utile seule laissait passer
+précisément le chemin dangereux.
+
 ---
 
 ## 7. Gate serveur
@@ -505,10 +536,28 @@ requireFeature('finance')   // posé sur le routeur, app.js:220-243
 
 Codes d'erreur dédiés obligatoires : un `403` générique est indistinguable d'un
 refus de rôle côté frontend, ce qui rend impossible le traitement propre de
-l'écriture en vol (§8.3).
+l'écriture en vol (§8.3). Ils sont gelés dans `FEATURE_ERROR_CODES`
+(`shared/constants/features.constants.js`), miroir frontend compris.
 
-Montage : **une ligne par routeur** dans `app.js:220-243`. Aucun contrôleur ne
-connaît le système.
+**Montage (corrigé en phase 1)** : `mountEntitlementGates(app)`, **une seule
+ligne** dans `app.js`, qui pose une garde par chemin déclaré au registre
+(`FEATURE_REGISTRY[key].routers`). Écrire les 26 lignes à la main donnerait à
+cette liste une seconde source de vérité non épinglée (CLAUDE.md §0.1), et le
+mode de défaillance d'une ligne oubliée est le silencieux : un module qui ignore
+le campus qui l'a coupé. Aucun contrôleur ne connaît le système.
+
+Deux contraintes de montage découvertes à l'écriture, non anticipées :
+
+1. **La garde est montée avant les routeurs, donc avant leur `authenticate()`
+   interne** — `req.user` n'existe pas encore. Elle lit donc l'identité via
+   `optionalAuth` (même algorithme, même `issuer`, ne refuse jamais) : la garde
+   voit qui appelle sans prendre en charge l'authentification, et un jeton absent
+   ou invalide reçoit toujours son 401 du routeur.
+2. **Trois modules (`student`, `teacher`, `staff`) montent leur routeur sur
+   `/api` nu** et exposent plusieurs préfixes depuis l'intérieur. Les garder à
+   leur point de montage placerait la garde devant toute la surface API : elles
+   sont donc montées par chemin (`/api/students`, `/api/schedules/student`, …),
+   ce que le registre déclarait déjà.
 
 ### 7.2 Cache — non optionnel
 
@@ -697,8 +746,8 @@ Livrables du §9 : 7 crons, portail public, quotas, notifications.
 
 | Phase | Charge | Livrable seule ? |
 |---|---|---|
-| 0 — Registre | 0,5 j | — |
-| 1 — Socle backend | 2,5 j | ✅ API protégée, pilotage par API |
+| 0 — Registre | 0,5 j | — ✅ **livrée le 2026-08-14** |
+| 1 — Socle backend | 2,5 j | ✅ API protégée, pilotage par API — ✅ **livrée le 2026-08-15** |
 | 2 — Absorption IA | 1 j | ✅ |
 | 3 — Front | 2 j | ✅ UI cohérente |
 | 4 — Pilotage UI | 2 j | ✅ autonomie du manager |
@@ -905,6 +954,21 @@ produise aucune dette à repayer le jour de la bascule :
 3. **Zéro appel Mongoose hors repository.** Le chantier qui vient de s'achever ne
    doit pas être entamé par celui-ci ; le test de couverture (§11) le vérifie.
 
+> **Dérogation assumée en phase 1 — les sondes de refus.** Le point 3 est tenu
+> pour le chemin de requête : le resolver, la garde et les 26 routeurs ne voient
+> qu'un objet plat, et toute la persistance campus passe par
+> `campus.repository.js`. Il ne l'est **pas** pour
+> `shared/lib/entitlement/entitlement.usage.js`, qui compte des lignes dans une
+> vingtaine de collections pour décider d'un refus (§6.3.3). Faire transiter ce
+> comptage par vingt façades de modules ajouterait vingt méthodes publiques dont
+> le seul appelant serait ce fichier. Il réutilise donc `MODEL_ACCESSORS` déjà
+> exporté par `hard-delete.registry.js` — même précédent, même besoin, pas de
+> seconde carte de modèles à faire dériver. Deux garde-fous : le chemin campus de
+> chaque modèle est **lu dans le schéma** et non déclaré, et
+> `tests/unit/entitlement-deps.test.js` épingle chaque sonde contre les schémas
+> réels. Le jour de la bascule Postgres, ce fichier et le registre de suppression
+> définitive migrent ensemble.
+
 ---
 
 ## 16. Périmètre
@@ -941,7 +1005,8 @@ croyant à une barrière.
 | 2026-08-13 | **v1.3** — question de séquencement vs migration PostgreSQL instruite : §15bis ajouté. Prérequis (couche repository) vérifié comme levé (527 → ~0 appels Mongoose en controllers) ; condition de déclenchement Postgres non remplie ; 3 garde-fous de conception ajoutés pour une bascule ultérieure sans dette |
 | 2026-08-13 | **PHASE 0 LIVRÉE** — `shared/constants/features.constants.js` (26 entrées : 8 modules core + `danger-zone`, 4 à plancher, 13 libres). D-B validée par le porteur. Validation structurelle passée. **Trois défauts trouvés et corrigés au gel** : (1) 4 cycles de dépendance entre modules non-core, (2) 8 incohérences de palier, tous deux causés par la confusion arêtes HARD/SOFT → `dependsOn` re-dérivé des clés étrangères `required` des modèles et `usesWhenAvailable` créé (§6.3.1-2) ; (3) refus de toggle rendu **piloté par la donnée** et non par la déclaration (§6.3.3), sans quoi `subject`/`level`/`department` devenaient indésactivables par fermeture transitive |
 | 2026-08-14 | **PHASE 0 CLOSE.** D-B tranchée (noyau 8 + `danger-zone`, plancher sur 4). `public-portal` déplacé en `premium` → paliers **15 / 22 / 26**. `tests/unit/feature-registry.test.js` livré : **25 tests verts**, lint 0, suites voisines (hard-delete, soft-delete, register-jobs) 228 tests toujours verts. Registre gelé. **Réalignement** : les crons ont migré de `server.js` vers `shared/lib/register-jobs.js` (`projectJobs()`) pendant le chantier — §9.1 corrigé, noms canoniques repris, un seul nom divergeait (`exam-anticheat`) |
-| — | ***Prochaine étape : PHASE 1** — socle backend (§10). Aucune décision porteur en attente ; la seule action qui t'appartient est le lancement de `scripts/migrate-entitlement.js` sur la base réelle, en fin de phase.* |
+| 2026-08-15 | **PHASE 1 LIVRÉE — socle backend.** 9 livrables (1.1 → 1.9) : schéma `Campus.entitlement` + `entitlementAudit` **ajoutés à côté** de `features` / `aiEntitlement` (§3.2, rien retiré) · resolver pur `shared/utils/entitlement.js` · sondes `shared/lib/entitlement/entitlement.usage.js` · garde · cache TTL 60 s · `shared/middleware/entitlement.js` monté en une ligne · `GET /api/settings/entitlement` · `PATCH /api/admin/campuses/:id/entitlement` (offre) · `PATCH /api/campus/:id/entitlement` (usage) · `scripts/migrate-entitlement.js`. **Tests livrés dans la phase** : 83 unitaires (resolve · deps · service) + 18 d'intégration sur la garde ; suite complète **1265 tests verts / 61 suites**, lint 0 erreur. **Quatre points tranchés à l'écriture** : (1) le contrôle de données porte sur la **transition effective** et non sur la charge utile, ce qui couvre le déclassement de palier (§6.3.4) ; (2) les arêtes portées par une collection **globale** ne bloquent pas, et `level` / `subject` d'un campus mature se **gèlent** au lieu de se masquer (§6.3.4) ; (3) la garde lit l'identité via `optionalAuth` — montée avant les routeurs, elle précède leur `authenticate()` (§7.1) ; (4) dérogation Mongoose assumée et bornée pour les sondes (§15bis.3). **Deux défauts trouvés par les tests** : le chemin `subjectId` déclaré à la racine sur `GaetConstraint` et `StudentSchedule` (il est imbriqué — un bloqueur qui ne bloque jamais), et `describeForCampus` qui ne renvoyait qu'**un** override quand les deux couches en portent un (la décision de l'ADMIN s'affichait sur l'écran du manager) |
+| — | ***Prochaine étape : PHASE 2** — absorption de l'IA (§10), 1 j. Critère d'acceptation : la suite de tests IA existante passe **sans modification**. Rappel de la règle ferme : ne jamais livrer les phases 1-3 sans la **phase 5** (les bords).*<br>***Action porteur, une seule*** : lancer `node scripts/migrate-entitlement.js --dry-run` puis sans le drapeau sur la base réelle. Tant qu'elle n'a pas tourné, aucun campus ne porte d'`entitlement` et **tout reste activé partout** (fail-open, §4.3) — le socle est donc inerte, jamais bloquant. |
 
 *(Tenir cette section à jour à chaque phase close — c'est le point d'entrée d'une
 reprise du chantier par un tiers.)*

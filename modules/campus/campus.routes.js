@@ -22,6 +22,11 @@ const {
   updateCampusDefaults,
 } = require('./controllers/campus.controller');
 
+const {
+  getEntitlement: getCampusEntitlement,
+  updateEntitlement: updateCampusEntitlement,
+} = require('./controllers/campus.entitlement.controller');
+
 const { authenticate, authorize, optionalAuth } = require('../../shared/middleware/auth');
 const { loginLimiter, strictLimiter, apiLimiter } = require('../../shared/middleware/rate-limiter');
 
@@ -114,6 +119,31 @@ router.patch(
   '/:id/defaults',
   authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
   updateCampusDefaults
+);
+
+/**
+ * @route   GET /api/campus/:id/entitlement
+ * @desc    Modules of the campus offer with their effective state — the
+ *          manager's own pilot screen (CAMPUS_ENTITLEMENT_DESIGN.md §5).
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER (own campus only)
+ */
+router.get(
+  '/:id/entitlement',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  getCampusEntitlement
+);
+
+/**
+ * @route   PATCH /api/campus/:id/entitlement
+ * @desc    Usage layer: switch modules off or back on INSIDE the offer.
+ *          Body { modules: [{ key, state, until?, reason }] }. Can only ever
+ *          restrict — widening is refused (403), `plan` is refused (400).
+ * @access  ADMIN, DIRECTOR, CAMPUS_MANAGER (own campus only)
+ */
+router.patch(
+  '/:id/entitlement',
+  authorize(['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER']),
+  updateCampusEntitlement
 );
 
 /**

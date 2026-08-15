@@ -183,6 +183,17 @@ app.get('/health', (req, res) => {
 });
 
 // ========================================
+// PER-CAMPUS ENTITLEMENT GATE (CAMPUS_ENTITLEMENT_DESIGN.md §7.1)
+// ========================================
+// One path-scoped gate per router declared in shared/constants/features.constants.js,
+// mounted BEFORE every route it governs. No controller knows this system exists.
+// Fail-OPEN on purpose (§4.3): this is commercial packaging, not a security
+// boundary — unlike buildCampusFilter() / notDeletedFilter(), an unknown key
+// means "enabled". Unauthenticated surfaces pass through untouched (§9.2).
+const { mountEntitlementGates } = require('./shared/middleware/entitlement');
+mountEntitlementGates(app);
+
+// ========================================
 // PUBLIC PORTAL ROUTES (pas de JWT requis — monté avant les routes authentifiées)
 // ========================================
 const publicPortalRoutes = require('./modules/public-portal').routes; // /api/public + /api/portal-admin
