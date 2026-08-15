@@ -127,6 +127,23 @@ const examSessionSchema = new mongoose.Schema(
     completedAt:  { type: Date },
     scheduleRef:  { type: mongoose.Schema.Types.ObjectId, ref: 'StudentSchedule' },
 
+    /**
+     * When the anti-cheat job last scanned this session. `null` means "still to scan", and
+     * that is the whole candidate query.
+     *
+     * It replaces the previous proxy — "completed in the last 48 h" — which, evaluated by a
+     * job running every 24 h, selected each session on two consecutive nights and, with an
+     * append-only `$push`, recorded every finding twice. A window answers "is this session
+     * recent"; the job needed "has this session been scanned", and those diverge the moment
+     * the two periods differ.
+     *
+     * `lastSubmissionAt` is its companion: `submitExam` gates on the SUBMISSION's status,
+     * not the session's, so an attempt left IN_PROGRESS can be submitted after the session
+     * is COMPLETED and already scanned. A submission landing after the stamp invalidates it.
+     */
+    antiCheatScannedAt: { type: Date, default: null },
+    lastSubmissionAt:   { type: Date, default: null },
+
     // Audit: reason required when cancelling/postponing/rescheduling
     cancellationReason: { type: String },
     postponeReason:     { type: String },
@@ -161,6 +178,12 @@ examSessionSchema.pre('save', function (next) {
 // ── Indexes ───────────────────────────────────────────────────────────────────
 
 examSessionSchema.index({ schoolCampus: 1, academicYear: 1, semester: 1, status: 1 });
+// Anti-cheat candidate scan: COMPLETED sessions not yet scanned, oldest first. Deliberately
+// NOT campus-scoped — the job is platform-wide and has no `req` to derive a campus from.
+examSessionSchema.index(
+  { status: 1, antiCheatScannedAt: 1, completedAt: 1 },
+  { partialFilterExpression: { isDeleted: false } },
+);
 examSessionSchema.index({ schoolCampus: 1, startTime: 1, endTime: 1 });
 examSessionSchema.index(
   { classes: 1, startTime: 1 },

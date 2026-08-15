@@ -152,12 +152,50 @@ const findSessionsForExport = (filter) =>
     .populate('classes', 'name')
     .lean();
 
-/** Recently COMPLETED sessions (anti-cheat cron, batch). */
-const findRecentlyCompletedSessions = (since, limit) =>
-  ExamSession.find({ status: 'COMPLETED', completedAt: { $gte: since }, ...SESSION_LIVE })
-    .select('_id')
+/**
+ * COMPLETED sessions still awaiting an anti-cheat scan (cron, batch).
+ *
+ * Selects on the marker, not on a time window: `antiCheatScannedAt: null` is a fact, where
+ * "completed in the last 48 h" was a proxy that disagreed with the job's own 24 h period and
+ * scanned everything twice. Because a scanned session stops matching, the candidate set
+ * DRAINS — a backlog larger than one batch is picked up on the following run rather than
+ * sitting permanently behind the limit.
+ *
+ * Sorted oldest-first, which an unsorted `.limit()` was not: without a sort, which documents
+ * the limit returns is unspecified, so the same sessions could be served every night while
+ * others were never scanned at all.
+ */
+const findSessionsPendingAntiCheat = (limit) =>
+  ExamSession.find({ status: 'COMPLETED', antiCheatScannedAt: null, ...SESSION_LIVE })
+    .select('_id completedAt antiCheatScannedAt lastSubmissionAt')
+    .sort({ completedAt: 1 })
     .limit(limit)
     .lean();
+
+/**
+ * How many sessions still await a scan (anti-cheat cron reporting).
+ * The outstanding count, not the processed one: a job can only report what it did, and a
+ * backlog is exactly what that number hides.
+ */
+const countSessionsPendingAntiCheat = () =>
+  ExamSession.countDocuments({ status: 'COMPLETED', antiCheatScannedAt: null, ...SESSION_LIVE });
+
+/** Stamps a session as scanned (anti-cheat cron). */
+const markSessionAntiCheatScanned = (sessionId, at = new Date()) =>
+  ExamSession.updateOne({ _id: sessionId }, { $set: { antiCheatScannedAt: at } });
+
+/**
+ * Records a submission arrival and invalidates any existing anti-cheat scan.
+ *
+ * Both fields move together, in one write, because they are one fact: a paper landed, so
+ * whatever the last scan concluded was computed without it. `submitExam` gates on the
+ * SUBMISSION's status rather than the session's, so this is reachable after COMPLETED.
+ */
+const noteSubmissionOnSession = (sessionId, at = new Date()) =>
+  ExamSession.updateOne(
+    { _id: sessionId },
+    { $set: { lastSubmissionAt: at, antiCheatScannedAt: null } },
+  );
 
 /** Session ids by filter (early-warning, year isolation). */
 const distinctSessionIds = (filter) => ExamSession.find(filter).distinct('_id');
@@ -337,6 +375,19 @@ const setSubmissionStatus = (id, status) =>
 /** Adds an anti-cheat flag (append-only). */
 const pushAntiCheatFlag = (id, flag) =>
   ExamSubmission.findByIdAndUpdate(id, { $push: { antiCheatFlags: flag } });
+
+/**
+ * Applies a whole scan's flags in one round trip (anti-cheat cron).
+ *
+ * The cron previously awaited two `findByIdAndUpdate` calls inside its O(n²) pairwise loop.
+ * One write for the run also means the flags and the `antiCheatScannedAt` stamp can be
+ * ordered deliberately: flags first, stamp second, so a run that dies between them re-scans
+ * rather than marking a session scanned with half its findings missing.
+ *
+ * `ordered: false` — one rejected op must not discard the rest of the batch.
+ */
+const bulkPushAntiCheatFlags = (ops) =>
+  (ops.length ? ExamSubmission.bulkWrite(ops, { ordered: false }) : Promise.resolve(null));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // EXAM GRADING
@@ -692,7 +743,10 @@ module.exports = {
   paginateSessions,
   paginateCampusExaminations,
   findSessionsForExport,
-  findRecentlyCompletedSessions,
+  findSessionsPendingAntiCheat,
+  countSessionsPendingAntiCheat,
+  markSessionAntiCheatScanned,
+  noteSubmissionOnSession,
   distinctSessionIds,
   countExamSessions,
   // ExamSession — writes
@@ -729,6 +783,7 @@ module.exports = {
   saveSubmissionDoc,
   setSubmissionStatus,
   pushAntiCheatFlag,
+  bulkPushAntiCheatFlags,
   // ExamGrading
   findGradingById,
   findGradingDetailed,

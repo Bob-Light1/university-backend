@@ -287,6 +287,13 @@ const submitExam = async (req, res) => {
     submission.submittedAt = new Date();
     await repo.saveSubmissionDoc(submission);
 
+    // Record the arrival on the session and invalidate any anti-cheat scan already done.
+    // This gate is on the SUBMISSION's status, not the session's, so a paper can land after
+    // the session is COMPLETED and has been scanned — and a scan computed without it is
+    // stale, since the new paper forms new pairs with every existing one. Clearing the
+    // marker puts the session back in the cron's candidate set.
+    await repo.noteSubmissionOnSession(submission.examSession, submission.submittedAt);
+
     // MCQ auto-grading (if session has questions with correctAnswer)
     // Dispatched asynchronously — no blocking
     setImmediate(() => _autoGradeMCQ(submission).catch(console.error));

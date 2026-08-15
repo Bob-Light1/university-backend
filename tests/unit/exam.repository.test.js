@@ -91,15 +91,29 @@ describe('exam — ExamSession lectures', () => {
     expect(ExamSession.findById).toHaveBeenCalledWith('s1', 'title status maxScore subject startTime endTime');
   });
 
-  test('findRecentlyCompletedSessions : COMPLETED depuis `since`, _id only, limit', () => {
-    const since = new Date('2026-06-01');
+  // B9-④ / B9-⑤ — replaces `findRecentlyCompletedSessions`, which selected on a 48 h window.
+  // The window was a proxy for "not yet scanned" that disagreed with the job's own 24 h
+  // period, and the unsorted limit meant nothing ever drained. Selection is now the marker,
+  // and the sort is part of the contract, not a detail.
+  test('findSessionsPendingAntiCheat: unscanned COMPLETED sessions, oldest first, limited', () => {
     const q = ExamSession.find();
     ExamSession.find.mockClear();
     ExamSession.find.mockReturnValue(q);
-    repo.findRecentlyCompletedSessions(since, 50);
-    expect(ExamSession.find).toHaveBeenCalledWith({ status: 'COMPLETED', completedAt: { $gte: since }, isDeleted: false });
-    expect(q.select).toHaveBeenCalledWith('_id');
+    repo.findSessionsPendingAntiCheat(50);
+    expect(ExamSession.find).toHaveBeenCalledWith({
+      status: 'COMPLETED', antiCheatScannedAt: null, isDeleted: false,
+    });
+    expect(q.sort).toHaveBeenCalledWith({ completedAt: 1 });
     expect(q.limit).toHaveBeenCalledWith(50);
+  });
+
+  test('countSessionsPendingAntiCheat: the outstanding set, on the same filter', () => {
+    // The job reports what remains, not only what it processed — a job that reports what it
+    // did cannot report what it missed.
+    repo.countSessionsPendingAntiCheat();
+    expect(ExamSession.countDocuments).toHaveBeenCalledWith({
+      status: 'COMPLETED', antiCheatScannedAt: null, isDeleted: false,
+    });
   });
 
   test('paginateSessions : find paginé + countDocuments, tri startTime asc', async () => {
