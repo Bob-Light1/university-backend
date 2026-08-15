@@ -93,12 +93,12 @@ const countDuplicates = (flags) => {
 };
 
 const main = async () => {
-  if (!process.env.MONGO_URI) {
-    console.error('❌ MONGO_URI is not set.');
+  if (!process.env.MONGODB_URI) {
+    console.error('❌ MONGODB_URI is not set.');
     process.exit(1);
   }
 
-  await mongoose.connect(process.env.MONGO_URI);
+  await mongoose.connect(process.env.MONGODB_URI);
   console.log(`✅ Connected. Mode: ${APPLY ? (PURGE ? 'APPLY --purge (DESTRUCTIVE)' : 'APPLY') : 'DRY RUN'}\n`);
 
   const submissions = await ExamSubmission

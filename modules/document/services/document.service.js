@@ -178,7 +178,7 @@ const computeRetention = (docType, createdAt, overrides = {}, canOverride = fals
  *
  * IMPORTANT: MongoDB transactions require a Replica Set configuration.
  * Standalone instances will throw on session.startTransaction().
- * Ensure MONGO_URI points to a replica set in production.
+ * Ensure MONGODB_URI points to a replica set in production.
  *
  * @param {mongoose.ClientSession|null} session
  * @param {object} params
