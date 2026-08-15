@@ -360,6 +360,10 @@ describe('router coverage', () => {
     for (const [key, paths] of Object.entries(MOUNTED)) {
       if (!FEATURE_REGISTRY[key]) continue;
       for (const mountPath of paths) {
+        // A module may also expose a deliberately ungated surface — `ai` mounts
+        // /internal/ai for service-to-service reads, which carries no user JWT
+        // and is never published by the reverse proxy.
+        if (UNGATED_MOUNTS.includes(mountPath)) continue;
         // A multi-route module mounts at the bare '/api' prefix and declares its
         // real sub-paths; anything more specific must match a declared router.
         if (mountPath === '/api' || mountPath === '/api/') {
@@ -396,11 +400,13 @@ describe('crons', () => {
     }
   });
 
-  test('the registry declares as many crons as the platform schedules', () => {
-    const scheduled = projectJobs().length;
-    // A job scheduled but undeclared keeps running for a disabled module; a job
-    // declared but unscheduled makes the emission/hygiene split a fiction.
-    expect(FEATURE_CRONS.length).toBe(scheduled);
+  test('the registry declares exactly the jobs the platform schedules', () => {
+    // Names, not just a count: a matching total with a drifted name is the case
+    // a count would pass. A job scheduled but undeclared keeps running for a
+    // disabled module; a job declared but unscheduled makes the
+    // emission/hygiene split a fiction.
+    expect(FEATURE_CRONS.map((cron) => cron.name).sort())
+      .toEqual(projectJobs().map((job) => job.name).sort());
     // And server.js must not grow a second, ungoverned registration site.
     expect(SERVER_SOURCE).not.toMatch(/cron\.schedule\(/);
   });

@@ -562,10 +562,16 @@ incidents **visibles par le client final**.
 
 ### 9.1 Les 7 crons
 
-`server.js:135-141`. Chacun balaye tous les campus sans aucun filtre. Concrètement :
-désactiver Finance pour un campus **n'empêchera pas** le cron de 06:00 de lui
-envoyer des relances d'impayés — c'est-à-dire des **emails sortants au nom d'un
-module officiellement coupé**.
+**Point d'ancrage (corrigé le 2026-08-14)** : les enregistrements ne sont plus
+dans `server.js` mais dans `shared/lib/register-jobs.js`, via `projectJobs()`.
+C'est favorable à ce chantier — les 7 jobs sont déclarés au même endroit avec un
+**nom canonique**, ce qui donne un point d'accroche unique pour le filtre
+d'entitlement au lieu de sept sites d'appel.
+
+Chacun balaye tous les campus sans aucun filtre. Concrètement : désactiver
+Finance pour un campus **n'empêche pas** le job de 06:00 de lui envoyer des
+relances d'impayés — c'est-à-dire des **emails sortants au nom d'un module
+officiellement coupé**.
 
 **Mais la règle « module coupé → cron coupé » est fausse, et dangereusement pour
 deux d'entre eux.** La bonne formulation :
@@ -578,18 +584,22 @@ deux d'entre eux.** La bonne formulation :
   qu'il arrive** : ces jobs répondent à des obligations légales ou empêchent des
   états bloqués, et rien de ce qu'ils font n'est visible d'un utilisateur.
 
-| Cron | Module | Nature | Comportement si module non actif |
+Noms canoniques repris verbatim de `projectJobs()` :
+
+| Job | Module | Nature | Comportement si module non actif |
 |---|---|---|---|
-| Dim 02:00 — rétention documentaire | `document` | **Hygiène** | ⚠️ **CONTINUE.** Arrêter la purge = conserver des données au-delà de la durée légale → violation RGPD silencieuse |
-| /2 min — sweep file d'impression | `print` | **Hygiène** | ⚠️ **CONTINUE** jusqu'à drainage des jobs en cours, sinon ils restent bloqués indéfiniment |
-| 01:00 — expiration des annonces | `announcement` | Hygiène | CONTINUE (une annonce non expirée reste « live » à jamais) |
-| 1ᵉʳ du mois 00:05 — clôture concours | `public-portal` | Hygiène + émission | Clôture l'état, **n'émet plus** |
-| 03:00 — anti-triche examens | `examination` | Émission | S'ARRÊTE |
-| 06:00 — impayés + relances | `finance` | Émission | **S'ARRÊTE** — c'est le cas d'école : des emails de relance au nom d'un module officiellement coupé |
-| /10 min — retry notifications | `notification` | Socle | Ne s'arrête jamais (**core**) |
+| `document-retention` (dim 02:00) | `document` | **Hygiène** | ⚠️ **CONTINUE.** Arrêter la purge = conserver des données au-delà de la durée légale → violation RGPD silencieuse |
+| `print-queue-sweep` (/2 min) | `academic-print` | **Hygiène** | ⚠️ **CONTINUE** jusqu'à drainage des jobs en cours, sinon ils restent bloqués indéfiniment |
+| `announcement-expiry` (01:00) | `announcement` | Hygiène | CONTINUE (une annonce non expirée reste « live » à jamais) |
+| `competition-closing` (1ᵉʳ du mois 00:05) | `public-portal` | Hygiène + émission | Clôture l'état, **n'émet plus** |
+| `exam-anticheat` (03:00) | `exam` | Émission | S'ARRÊTE |
+| `finance-overdue` (06:00) | `finance` | Émission | **S'ARRÊTE** — c'est le cas d'école : des emails de relance au nom d'un module officiellement coupé |
+| `notification-retry` (/10 min) | `notification` | Socle | Ne s'arrête jamais (**core**) |
 
 Chaque entrée de registre déclare donc `crons: [{ name, nature }]`, et non une
-simple liste de noms.
+simple liste de noms. `tests/unit/feature-registry.test.js` compare cette
+déclaration à `projectJobs()` **par nom, pas par comptage** : un job ajouté ou
+renommé sans mise à jour du registre fait échouer la suite.
 
 ### 9.2 Portail public
 
@@ -783,7 +793,7 @@ plus tard.
 | # | Décision | Statut |
 |---|---|---|
 | **D-A** | Une tarification par palier est-elle à l'horizon ? | ✅ **OUI** (2026-08-13) — version complète retenue, variante courte §16.2 écartée |
-| **D-B** | Liste définitive des modules `core` | ⏳ **OUVERTE** — proposition argumentée au §5.1, à valider avant phase 1 |
+| **D-B** | Liste définitive des modules `core` et plancher `minState` | ✅ **CLOSE** (2026-08-14) — noyau à 8 modules validé + `danger-zone` comme 9ᵉ entrée de gouvernance ; plancher `read_only` retenu sur `result` · `finance` · `exam` · `document` |
 | **D-C** | Graphe `dependsOn` / `requiredBy` | ✅ **Dérivé du code** (2026-08-13) — tableau au §6.3, à re-vérifier au gel du registre |
 | **D-D** | Composition des presets `free` / `standard` / `premium` | ✅ **Alignée sur la grille IA** (0 / 99 / 299 €, `PHASE3_AI_DESIGN.md` §15/D10) — une seule grille commerciale, un seul discours de vente |
 | **D-E** | Le CAMPUS_MANAGER peut-il rallumer seul un module qu'il a masqué ? | ✅ **OUI, sans l'ADMIN** — §5 |
@@ -794,14 +804,23 @@ plus tard.
 La grille modules épouse la grille IA déjà en production. Répartition de départ
 (modifiable en base sans redéploiement) :
 
-| Palier | Modules |
-|---|---|
-| `free` (0 €) | noyau `core` + level · subject · course · department · result · attendance |
-| `standard` (99 €) | + document · print · examination · announcement · finance |
-| `premium` (299 €) | + gaet · partner · ai (chat/search/analytics/advisors selon §11.3 IA) |
+Répartition arrêtée le 2026-08-14, gelée au registre (`minPlan` par entrée) :
 
-Le placement de `gaet` et `ai` en premium est cohérent avec l'acte 6 du parcours
-de référence (§13.2) : ce sont les deux leviers d'upsell identifiés.
+| Palier | Modules ajoutés | Total |
+|---|---|---|
+| `free` (0 €) | noyau `core` (9) + level · subject · course · department · parent · result | **15** |
+| `standard` (99 €) | + finance · exam · document · announcement · academic-print · mentor · staff | **22** |
+| `premium` (299 €) | + public-portal · gaet · partner · ai | **26** |
+
+`gaet` et `ai` en premium sont cohérents avec l'acte 6 du parcours de référence
+(§13.2) : les deux leviers d'upsell identifiés. **`public-portal` les rejoint**
+(décision du 2026-08-14) — le portail public est un outil d'acquisition,
+fonctionnellement lié à `partner` (liens de parrainage, tunnel de prospects),
+donc vendu avec lui plutôt qu'en équipement de base.
+
+Le registre vérifie qu'aucun module ne dépend structurellement d'un palier
+supérieur au sien : un module inclus dans une offre où ses prérequis manquent
+serait vendu inutilisable.
 
 ---
 
@@ -921,7 +940,8 @@ croyant à une barrière.
 | 2026-08-13 | **v1.2 — revue « ERP international ».** Correction : `teacher` (6 dépendants) manquait au noyau alors que `class` (5) y figurait. Ajout de `admin`. **Nouvelle catégorie `minState: 'read_only'`** (§4.1.1), fondée sur le registre de suppression définitive. **Correction du §9.1** : distinction émission / hygiène — la rétention documentaire et le drainage d'impression doivent tourner même module coupé. Ajout des 3 garanties intangibles (§4.1.2) |
 | 2026-08-13 | **v1.3** — question de séquencement vs migration PostgreSQL instruite : §15bis ajouté. Prérequis (couche repository) vérifié comme levé (527 → ~0 appels Mongoose en controllers) ; condition de déclenchement Postgres non remplie ; 3 garde-fous de conception ajoutés pour une bascule ultérieure sans dette |
 | 2026-08-13 | **PHASE 0 LIVRÉE** — `shared/constants/features.constants.js` (26 entrées : 8 modules core + `danger-zone`, 4 à plancher, 13 libres). D-B validée par le porteur. Validation structurelle passée. **Trois défauts trouvés et corrigés au gel** : (1) 4 cycles de dépendance entre modules non-core, (2) 8 incohérences de palier, tous deux causés par la confusion arêtes HARD/SOFT → `dependsOn` re-dérivé des clés étrangères `required` des modèles et `usesWhenAvailable` créé (§6.3.1-2) ; (3) refus de toggle rendu **piloté par la donnée** et non par la déclaration (§6.3.3), sans quoi `subject`/`level`/`department` devenaient indésactivables par fermeture transitive |
-| — | *Prochaine étape : validation de D-B élargie (`teacher` + `admin` + catégorie `minState`), puis ouverture de la **phase 0** (gel du registre `features.constants.js`)* |
+| 2026-08-14 | **PHASE 0 CLOSE.** D-B tranchée (noyau 8 + `danger-zone`, plancher sur 4). `public-portal` déplacé en `premium` → paliers **15 / 22 / 26**. `tests/unit/feature-registry.test.js` livré : **25 tests verts**, lint 0, suites voisines (hard-delete, soft-delete, register-jobs) 228 tests toujours verts. Registre gelé. **Réalignement** : les crons ont migré de `server.js` vers `shared/lib/register-jobs.js` (`projectJobs()`) pendant le chantier — §9.1 corrigé, noms canoniques repris, un seul nom divergeait (`exam-anticheat`) |
+| — | ***Prochaine étape : PHASE 1** — socle backend (§10). Aucune décision porteur en attente ; la seule action qui t'appartient est le lancement de `scripts/migrate-entitlement.js` sur la base réelle, en fin de phase.* |
 
 *(Tenir cette section à jour à chaque phase close — c'est le point d'entrée d'une
 reprise du chantier par un tiers.)*
