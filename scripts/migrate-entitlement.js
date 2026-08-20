@@ -45,6 +45,14 @@ const {
   PLAN_PRESETS,
 } = require('../shared/constants/features.constants');
 const { AI_PLANS } = require('../shared/constants/ai.constants');
+// Required for its collection name only — the documents are read and written
+// through the raw driver, because the legacy fields this script folds away
+// (`features.max*`) are being removed from the schema and `strict: true` would
+// hide them. The name itself must never be a literal: Mongoose's pluralizer
+// maps `Campus` to `campus`, not `campuses`, and a hard-coded name that matches
+// no collection fails the way this script must never fail — an empty cursor,
+// a clean exit and a report of zero campuses migrated.
+const Campus = require('../modules/campus/campus.model');
 
 const args    = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');
@@ -113,7 +121,15 @@ async function run() {
   console.log('Connected to MongoDB:', mongoose.connection.name);
   console.log(DRY_RUN ? 'MODE: dry-run — no write will be performed.\n' : 'MODE: write\n');
 
-  const campuses = mongoose.connection.db.collection('campuses');
+  const campuses = mongoose.connection.db.collection(Campus.collection.collectionName);
+  const total = await campuses.countDocuments();
+  console.log(`Collection: ${Campus.collection.collectionName} — ${total} campus(es)\n`);
+  if (total === 0) {
+    // A migration that touches nothing is indistinguishable from a migration
+    // that could not find its data. Say which one this is.
+    console.warn('WARNING: no campus found. Check MONGODB_URI points at the right database.');
+  }
+
   const cursor = campuses.find(
     {},
     { projection: { campus_name: 1, entitlement: 1, features: 1, aiEntitlement: 1 } }

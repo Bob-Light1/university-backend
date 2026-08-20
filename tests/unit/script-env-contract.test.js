@@ -21,8 +21,10 @@
 
 const fs   = require('fs');
 const path = require('path');
+const mongoose = require('mongoose');
 
-const SCRIPTS_DIR = path.join(__dirname, '..', '..', 'scripts');
+const ROOT        = path.join(__dirname, '..', '..');
+const SCRIPTS_DIR = path.join(ROOT, 'scripts');
 
 /** The single name the application declares — `server.js` is the source of truth. */
 const CANONICAL = 'MONGODB_URI';
@@ -79,6 +81,91 @@ describe('scripts/ — database connection environment contract', () => {
       .map(([name]) => name);
 
     expect(mismatched).toEqual([]);
+  });
+});
+
+describe('scripts/ — raw-driver collection name contract', () => {
+  /**
+   * The symmetric defect to the one above, and it fails in the opposite direction.
+   *
+   * A migration script that reaches past Mongoose to the raw driver names its collection
+   * as a string. Mongoose derives that name from the model through a pluralizer whose
+   * output is not always the plural an author would write: `Campus` maps to `campus`, not
+   * `campuses`. A literal that matches no collection does not raise — the driver creates
+   * the handle lazily — so the script connects, iterates an empty cursor, reports
+   * "0 migrated" and exits 0. Unlike RES-①, which at least exited 1, this one looks like
+   * a successful run against data that had nothing to migrate.
+   *
+   * Model files are loaded from disk rather than trusted from `mongoose.modelNames()`,
+   * for the reason `hard-delete.test.js` does the same: a model no test imported would
+   * otherwise be invisible here, and invisible is how it reaches production.
+   */
+  const modelFiles = (dir, acc = []) => {
+    for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (item.name === 'node_modules' || item.name.startsWith('.')) continue;
+      const full = path.join(dir, item.name);
+      if (item.isDirectory()) modelFiles(full, acc);
+      else if (/\.model\.js$/.test(item.name)) acc.push(full);
+    }
+    return acc;
+  };
+
+  /** Every collection name Mongoose actually resolves, across every schema on disk. */
+  const realCollectionNames = () => {
+    for (const file of modelFiles(path.join(ROOT, 'modules'))) require(file);
+    for (const file of modelFiles(path.join(ROOT, 'shared'))) require(file);
+    return new Set(mongoose.modelNames().map((n) => mongoose.model(n).collection.collectionName));
+  };
+
+  /** `[script, literal]` for every `.collection('name')` written as a string in scripts/. */
+  const literals = () => SCRIPTS.flatMap(([name, source]) => {
+    const found = [...source.matchAll(/\.collection\(\s*'([^']+)'\s*\)/g)];
+    return found.map((m) => [name, m[1]]);
+  });
+
+  test('the scan finds the raw-driver call sites it is meant to guard', () => {
+    // A regex that silently stops matching would make every assertion below vacuous.
+    expect(literals().length).toBeGreaterThan(3);
+  });
+
+  test('every hard-coded collection name resolves to a real collection', () => {
+    const real = realCollectionNames();
+
+    const offenders = literals()
+      .filter(([, literal]) => !real.has(literal))
+      .map(([script, literal]) => `${script}: '${literal}'`);
+
+    expect(offenders).toEqual([]);
+  });
+
+  test("Campus is the irregular case — its collection is 'campus', not 'campuses'", () => {
+    // Pinned by name because it is the one the pluralizer gets counter-intuitively right:
+    // 'campus' already reads as a plural to it. Any script writing 'campuses' migrates
+    // nothing and says so in the language of success.
+    const Campus = require('../../modules/campus/campus.model');
+    expect(Campus.collection.collectionName).toBe('campus');
+
+    const offenders = SCRIPTS
+      .filter(([, source]) => /\.collection\(\s*'campuses'\s*\)/.test(source))
+      .map(([name]) => name);
+
+    expect(offenders).toEqual([]);
+  });
+});
+
+describe('the entitlement migration addresses the right collection', () => {
+  const source = fs.readFileSync(path.join(SCRIPTS_DIR, 'migrate-entitlement.js'), 'utf8');
+
+  test('it derives the collection name from the model instead of restating it', () => {
+    expect(source).toMatch(/Campus\.collection\.collectionName/);
+    expect(source).not.toMatch(/\.collection\(\s*'campuses'\s*\)/);
+  });
+
+  test('it reports an empty collection rather than exiting quietly', () => {
+    // The defect class is a run that touches nothing and reads as a run that had nothing
+    // to touch. The two are only distinguishable if the script says which one happened.
+    expect(source).toMatch(/countDocuments\(\)/);
+    expect(source).toMatch(/no campus found/i);
   });
 });
 
