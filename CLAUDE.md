@@ -348,6 +348,26 @@ The dialog can always go back to step 1 (`rerunPreview`): a ticket lives 5 minut
 
 ---
 
+## 11bis. `docs/cours/` — a separate git repository, not dead weight
+
+`docs/cours/` is **its own git repository**, nested here on purpose. It is invisible to this
+repo (`.gitignore` line 7, `docs/*`), so `git status` never shows it and it is easy to mistake
+for an untracked scratch folder. It is not: it holds the ERP training program (~35 000 lines,
+150 files) with its own history, its own remote and its own commit cadence.
+
+- **Commit course changes from `docs/cours/`**, never from here. The two histories are unrelated.
+- **Do not move or delete that folder.** Twelve solution files resolve *this* backend from their
+  position on disk — eight by `require('../../../../{modules,shared}…')`, the four Track 10
+  scripts by `REPO_ROOT = path.resolve(__dirname, '../../../..')`. A symlink does not help; Node
+  resolves the real path. `docs/cours/README.md` §"Where this lives" states the invariant.
+- **Changing backend code can silently break lessons.** The Track 08–10 solutions load real
+  modules and count real figures (modules, routes, models) against numbers printed in the lesson
+  prose. `docs/cours/check-solutions.sh` is the check: 34 executable solutions, all green today.
+  Worth running after a structural refactor — a red Track 10 means a lesson now states a false
+  number, and the fix belongs in the lesson text, not in the assertion.
+
+---
+
 ## 12. Compaction instructions
 
 Always preserve: current task and status (done / in progress / blocked); files created or modified this session (one-line each); campus-isolation or middleware-chain decisions; active errors and root cause if known; validation/schema changes decided this session; the next step or open question.
