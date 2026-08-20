@@ -10,15 +10,18 @@
 > `CLAUDE.md`) et reprend le chantier sans contexte de la discussion d'origine.
 > Ce document est sa source de vérité.
 >
-> **Statut** : **phases 0, 1 et 2 livrées** (registre gelé + socle backend +
-> absorption de l'IA). Toutes les décisions porteur sont tranchées (§14). L'API
-> est protégée et pilotable, l'IA est un module de la grille ; il reste les
-> phases 3 à 5 — dont la **phase 5 (les bords), qui ne doit jamais être
-> reportée** au-delà de la livraison des phases 1-4.
+> **Statut** : **phases 0, 1, 2 et 3 livrées** (registre gelé + socle backend +
+> absorption de l'IA + consommation frontend). Toutes les décisions porteur sont
+> tranchées (§14). L'API est protégée et pilotable, l'IA est un module de la
+> grille, et l'interface consomme les états sans dupliquer la moindre règle ;
+> il reste les phases 4 et 5 — dont la **phase 5 (les bords), qui ne doit jamais
+> être reportée** au-delà de la livraison des phases 1-4.
 > Seule action porteur en attente : lancer `scripts/migrate-entitlement.js`
 > sur la base réelle (voir §10, phase 1.2).
 >
-> **Révisions** : **v1.5 (2026-08-20)** — phase 2 livrée ; §3 (`entitlement.ai.features`),
+> **Révisions** : **v1.6 (2026-08-20)** — phase 3 livrée ; §8.2 (surface réelle
+> livrée), §8.4 (nouveau — ce que la phase 3 a tranché) et §10 phase 3 mis à
+> jour d'après le code écrit. **v1.5 (2026-08-20)** — phase 2 livrée ; §3 (`entitlement.ai.features`),
 > §3.2 (repli legacy au premier write), §10 phase 2 et §17 mis à jour d'après le
 > code écrit. **v1.4 (2026-08-15)** — phase 1 livrée ; §7.1 (montage dérivé
 > du registre + `optionalAuth`), §6.3.3 (arêtes globales exclues, `level`
@@ -611,15 +614,19 @@ fois après login par un `EntitlementProvider`.
 Motif : modifier la réponse des **9 contrôleurs de login** (§1.2) multiplierait
 par 9 la surface de changement et les contrats à maintenir, pour un gain nul.
 
-### 8.2 Consommation
+### 8.2 Consommation — livrée en phase 3
 
-| Livrable | Rôle |
-|---|---|
-| `services/entitlementService.js` | appel API — **aucune règle d'accès dupliquée** |
-| `EntitlementProvider` + `useFeature(key)` | contexte React, refetch sur `FEATURE_DISABLED` |
-| `<FeatureGate feature="finance">` | masque section/bouton ; `mode="write"` pour le cas `read_only` |
-| Filtrage nav | les 8 fichiers portail, ~80 entrées `link:` |
-| `FeatureGuard` | **composé** avec `ProtectedRoute` (pas substitué) : accès direct par URL → écran « module non activé », jamais un 404 |
+| Livrable | Fichier | Rôle |
+|---|---|---|
+| Miroir des constantes | `src/config/featureConstants.js` | états + codes d'erreur seuls. **Ni les clés, ni les libellés, ni les paliers** ne sont dupliqués : ils voyagent dans le champ `registry` de la réponse, donc ajouter un module au registre backend ne demande aucune livraison frontend |
+| Client API | `src/services/entitlementService.js` | un appel, aucune règle |
+| Contexte | `src/context/EntitlementContext.jsx` | hydratation unique par identité × campus (cache module, même patron que `useHardDelete`), refetch sur refus, Snackbar global |
+| Hook | `src/hooks/useFeature.js` | `useFeature(key)` → `{ state, visible, canWrite, readOnly, restricted, label }` ; `useEntitlement()` pour le contexte complet |
+| Garde de rendu | `src/components/shared/FeatureGate.jsx` | masque section/bouton ; `mode="write"` pour le cas `read_only` |
+| Garde de route | `src/routes/FeatureGuard.jsx` | **composé** avec `ProtectedRoute` (pas substitué) : accès direct par URL → écran « module non activé », jamais un 404. Pose aussi le bandeau `read_only` (§8.4) |
+| Filtrage nav | `src/components/AppShell.jsx` + 6 fichiers portail | les portails **déclarent** (`feature: 'finance'`), AppShell **décide** |
+| Écriture en vol | `src/api/featureRefusal.js` + intercepteur axios | §8.3 |
+| i18n | `common.features.*`, 10 locales | écran de refus, message d'interception, badges |
 
 ### 8.3 L'écriture en vol
 
@@ -628,6 +635,66 @@ prend un 403. Sans traitement, cela ressemble à un bug.
 
 Intercepteur axios global : sur `FEATURE_DISABLED` / `FEATURE_READ_ONLY` →
 message explicite + re-hydratation des flags + rafraîchissement de la navigation.
+
+---
+
+### 8.4 Ce que la phase 3 a tranché en écrivant le code
+
+**Le fail-open ne se transpose pas tel quel au rendu.** Le resolver répond
+`enabled` quand il ne sait pas (§4.3), et la tentation était d'appliquer la même
+règle pendant le chargement. C'est faux : « je ne sais pas encore » et « je n'ai
+pas pu savoir » sont deux questions différentes. Supposer `enabled` le temps
+d'une requête fait apparaître des entrées de menu et des boutons qui disparaissent
+une demi-seconde plus tard — exactement le bouton mort que le §4.1.2 proscrit, et
+la seule défaillance qu'un utilisateur remarque. **Rien de gardé ne s'affiche
+avant la réponse** ; en revanche l'**échec**, lui, reste fail-open (une requête
+en erreur résout vers « tout activé », jamais vers un écran vide).
+
+**La place du provider est contrainte des trois côtés, ce n'est pas une
+préférence.** Il doit être *dans* `BrowserRouter` (il lit `/campus/:campusId`
+pour savoir quel tenant un ADMIN visite), *dans* `AuthProvider` (son cache est
+clé sur l'identité connectée) et *dans* `RtlProvider` **et** la frontière
+`Suspense` de l'i18n (il rend un Snackbar thémé et traduit). i18next tourne avec
+`useSuspense: true` : le placer au-dessus de cette frontière suspend l'arbre
+entier sans boundary.
+
+**Deux portails ne sont délibérément pas filtrés.** Le §8.2 comptait « les 8
+fichiers portail » ; six seulement portent des clés. `Admin.jsx` et
+`Director.jsx` servent des rôles globaux, que la garde serveur laisse passer
+(§5.2) : y filtrer retirerait les entrées des deux seuls opérateurs capables de
+rallumer un module. Ce sont eux que sert le **badge**, et il apparaît là où ils
+naviguent réellement dans un tenant — le portail campus.
+
+**Le filtrage nettoie aussi les séparateurs et les groupes vides.** Retirer 7
+entrées sur 24 laisse un en-tête « Évaluation » sans rien dessous et des filets
+qui s'empilent. Un groupe vide est l'« onglet vide » du §4.1.2 au même titre
+qu'un bouton mort ; il part avec ses enfants, et les séparateurs orphelins
+(en tête, en queue, deux de suite) sont repliés.
+
+**Un module `read_only` garde sa route ET son entrée de menu.** `FeatureGuard`
+ne refuse que `hidden`. Bloquer la route d'un module gelé amputerait précisément
+l'historique que cet état existe pour préserver (§4.1) ; ce sont les actions
+mutantes *à l'intérieur* de la page qui disparaissent, via
+`<FeatureGate mode="write">`.
+
+**Un module gelé est annoncé une fois, au-dessus de la page.** Masquer chaque
+contrôle mutant sur quatre modules et une douzaine d'onglets, c'est la
+granularité par bouton que le §6.2 écarte de la v1 — et la faire à moitié est
+pire que ne pas la faire : une page dont trois boutons ont disparu et deux sont
+restés est une page dont l'utilisateur conclut que les deux restants sont
+cassés. Un bandeau posé par `FeatureGuard` énonce la règle pour tout l'écran,
+l'intercepteur (§8.3) rattrape ce que l'utilisateur tente quand même, et
+`<FeatureGate mode="write">` reste disponible pour les écrans qui veulent
+descendre plus fin. Le bandeau ne s'affiche pas pour un rôle global : ses
+écritures passent, le lui annoncer serait faux (§5.2).
+
+**Le portail parent garde sur le module qui POSSÈDE la donnée, pas sur celui qui
+sert la route.** `/api/parents/me/children/:id/transcripts` est gardé par
+`parent` côté serveur : masquer `result` n'y déclenche aucun 403. Mais un campus
+qui masque les Résultats ne doit pas les proposer aux parents — c'est le §4.1.2,
+pas un effet de bord. **C'est le seul endroit du chantier où la garde frontend
+est plus stricte que la garde serveur**, et c'est assumé. Le sens inverse
+resterait un bug ; celui-ci ne fait que refuser d'afficher.
 
 ---
 
@@ -786,9 +853,27 @@ retrait post-validation prod, pas avant.
 
 ---
 
-### Phase 3 — Front, consommation · 2 j
+### Phase 3 — Front, consommation · 2 j — ✅ **livrée le 2026-08-20**
 
-Livrables du §8.2 et §8.3.
+Livrables du §8.2 (tableau détaillé) et du §8.3. Ce que la phase a tranché en
+écrivant le code : §8.4.
+
+**Surface touchée** : 7 fichiers créés · 3 socles modifiés (`main.jsx`,
+`AppShell.jsx`, l'intercepteur axios) · 6 portails annotés · 6 tables de routes
+gardées · 10 `common.json`. `npm run build` vert, `eslint` sans erreur nouvelle
+(la seule sur `EntitlementContext.jsx` est `react-refresh/only-export-components`,
+identique à celle que porte déjà `AuthContext.jsx` — même patron).
+
+**Limite à connaître** : le frontend n'a **aucun framework de test** (`lint` +
+`build` sont les seuls contrôles automatiques du dépôt). Les épinglages de cette
+phase vivent donc côté backend, où le contrat est produit : registre, resolver,
+sondes, service, vue IA et garde d'intégration — **157 tests / 6 suites,
+re-passés verts après la phase 3**, contrat inchangé. Ce qui n'est pas épinglé,
+et ne peut pas l'être ici : la correspondance entre une entrée de menu et sa
+clé, et celle entre une route et sa garde. Les deux sont déclarées explicitement
+à chaque site (deux surfaces distinctes — visibilité du menu et accès direct par
+URL), et une divergence est silencieuse dans un sens comme dans l'autre. **À
+vérifier à la QA visuelle**, avec un campus migré.
 
 ---
 
@@ -801,7 +886,12 @@ Livrables du §8.2 et §8.3.
   offre, 3 états, sélecteur de date `until`, **motif obligatoire** sur toute
   désactivation.
 - **Vue parc (admin)** : matrice campus × modules.
-- i18n des libellés du registre (10 locales).
+- i18n des libellés du registre (10 locales). **Trois surfaces les consomment
+  déjà** depuis la phase 3 — l'écran « module non activé », le bandeau
+  `read_only` et l'aperçu d'impact — et affichent d'ici là le libellé anglais du
+  registre (`FEATURE_REGISTRY[key].label`, transporté par la réponse
+  d'hydratation). Le reste des chaînes de la phase 3 est déjà traduit dans les
+  10 locales (`common.features.*`).
 
 ---
 
@@ -818,7 +908,7 @@ Livrables du §9 : 7 crons, portail public, quotas, notifications.
 | 0 — Registre | 0,5 j | — ✅ **livrée le 2026-08-14** |
 | 1 — Socle backend | 2,5 j | ✅ API protégée, pilotage par API — ✅ **livrée le 2026-08-15** |
 | 2 — Absorption IA | 1 j | ✅ — ✅ **livrée le 2026-08-20** |
-| 3 — Front | 2 j | ✅ UI cohérente |
+| 3 — Front | 2 j | ✅ UI cohérente — ✅ **livrée le 2026-08-20** |
 | 4 — Pilotage UI | 2 j | ✅ autonomie du manager |
 | 5 — Bords | 1,5 j | ❌ **doit sortir avec 1-4** |
 | **Total** | **~9,5 j** | |
@@ -945,10 +1035,15 @@ serait vendu inutilisable.
 ## 15. Definition of Done
 
 - [ ] Tout module monté dans `app.js` est déclaré au registre (test CI vert)
-- [ ] Aucune règle d'accès dupliquée côté frontend
+- [x] Aucune règle d'accès dupliquée côté frontend *(phase 3 — le filtrage vit
+      dans `AppShell`, la décision dans `useFeature`, et le registre voyage
+      dans la réponse au lieu d'être recopié)*
 - [ ] Les 7 crons filtrent sur l'entitlement
 - [ ] Un module `hidden` est indiscernable d'un module inexistant pour un
-      utilisateur final (vérifié sur les 8 portails)
+      utilisateur final (vérifié sur les 8 portails) — *mécanique livrée en
+      phase 3 (entrées retirées, groupes vides et séparateurs orphelins repliés,
+      accès direct par URL renvoyé sur un écran explicite) ; **reste la QA
+      visuelle réelle**, qui suppose un campus migré*
 - [ ] Un module `read_only` conserve tout son historique consultable
 - [ ] Un module portant des enregistrements ne peut pas passer `hidden` (§4.1.1)
 - [ ] Les crons d'hygiène tournent même module coupé ; les crons d'émission se
@@ -1076,7 +1171,8 @@ croyant à une barrière.
 | 2026-08-14 | **PHASE 0 CLOSE.** D-B tranchée (noyau 8 + `danger-zone`, plancher sur 4). `public-portal` déplacé en `premium` → paliers **15 / 22 / 26**. `tests/unit/feature-registry.test.js` livré : **25 tests verts**, lint 0, suites voisines (hard-delete, soft-delete, register-jobs) 228 tests toujours verts. Registre gelé. **Réalignement** : les crons ont migré de `server.js` vers `shared/lib/register-jobs.js` (`projectJobs()`) pendant le chantier — §9.1 corrigé, noms canoniques repris, un seul nom divergeait (`exam-anticheat`) |
 | 2026-08-15 | **PHASE 1 LIVRÉE — socle backend.** 9 livrables (1.1 → 1.9) : schéma `Campus.entitlement` + `entitlementAudit` **ajoutés à côté** de `features` / `aiEntitlement` (§3.2, rien retiré) · resolver pur `shared/utils/entitlement.js` · sondes `shared/lib/entitlement/entitlement.usage.js` · garde · cache TTL 60 s · `shared/middleware/entitlement.js` monté en une ligne · `GET /api/settings/entitlement` · `PATCH /api/admin/campuses/:id/entitlement` (offre) · `PATCH /api/campus/:id/entitlement` (usage) · `scripts/migrate-entitlement.js`. **Tests livrés dans la phase** : 83 unitaires (resolve · deps · service) + 18 d'intégration sur la garde ; suite complète **1265 tests verts / 61 suites**, lint 0 erreur. **Quatre points tranchés à l'écriture** : (1) le contrôle de données porte sur la **transition effective** et non sur la charge utile, ce qui couvre le déclassement de palier (§6.3.4) ; (2) les arêtes portées par une collection **globale** ne bloquent pas, et `level` / `subject` d'un campus mature se **gèlent** au lieu de se masquer (§6.3.4) ; (3) la garde lit l'identité via `optionalAuth` — montée avant les routeurs, elle précède leur `authenticate()` (§7.1) ; (4) dérogation Mongoose assumée et bornée pour les sondes (§15bis.3). **Deux défauts trouvés par les tests** : le chemin `subjectId` déclaré à la racine sur `GaetConstraint` et `StudentSchedule` (il est imbriqué — un bloqueur qui ne bloque jamais), et `describeForCampus` qui ne renvoyait qu'**un** override quand les deux couches en portent un (la décision de l'ADMIN s'affichait sur l'écran du manager) |
 | 2026-08-20 | **PHASE 2 LIVRÉE — absorption de l'IA.** L'IA rejoint la grille pour l'activation et garde ce qui lui est propre (budget, profil LLM, sous-features). `shared/lib/entitlement/entitlement.ai.js` (vue IA, **forme de sortie identique** à l'ancien `aiEntitlement`, donc contrat frontend intact) · `entitlement.legacy.js` (le repli legacy → unifié, désormais **partagé** entre `scripts/migrate-entitlement.js` et le premier write) · gate IA, `signalIngest` et console admin `PUT /admin/campuses/:id/ai-entitlement` rebranchés sur la porte unique · `applyChanges()` ouvert aux champs de valeur (`quotas`, `ai`) avec fusion partielle et `null` = effacement · `AI_PLANS` dérivé de `FEATURE_PLANS` · `PLATFORM_ENTITLEMENT` dérivé du preset premium. **Critère d'acceptation tenu** : `tests/unit/ai.entitlement.test.js` passe **sans une ligne modifiée**. Suite complète **1326 tests / 63 suites**, lint 0 erreur (+31 tests : `entitlement.ai.test.js` 22, service 9). **Deux défauts trouvés en écrivant la phase** : (1) la migration **grand-pérennisait `ai`** comme les 25 autres modules — elle aurait offert un module payant, facturé à l'usage, à tout le parc le jour de son exécution ; (2) un premier write sur un campus non migré aurait stocké un **palier sans grand-père**, faisant disparaître Finance / Examens / Documents comme effet de bord d'une édition IA. **Deux points tranchés** : l'IA est la seule exception au fail-open (une donnée absente peut allumer un module, jamais une dépense, §3.2) ; `plan` étant le palier plateforme (D-D), la console IA élargit toute l'offre — conséquence assumée, rendue visible en phase 4. |
-| — | ***Prochaine étape : PHASE 3** — front, consommation (§8.2 et §8.3), 2 j. Rappel de la règle ferme : ne jamais livrer les phases 1-3 sans la **phase 5** (les bords).*<br>***Action porteur, une seule*** : lancer `node scripts/migrate-entitlement.js --dry-run` puis sans le drapeau sur la base réelle. Tant qu'elle n'a pas tourné, aucun campus ne porte d'`entitlement` et **tout reste activé partout** (fail-open, §4.3) — le socle est donc inerte, jamais bloquant. Seule exception depuis la phase 2 : l'IA, qui continue de lire son drapeau de souscription historique. |
+| 2026-08-20 | **PHASE 3 LIVRÉE — front, consommation.** L'interface consomme les états sans réimplémenter une seule règle. **7 fichiers créés** : miroir de constantes `src/config/featureConstants.js` (états + codes d'erreur **seuls** — clés, libellés et paliers voyagent dans le champ `registry` de la réponse, donc un module ajouté au registre backend n'exige aucune livraison frontend) · `entitlementService.js` · `EntitlementContext.jsx` (hydratation unique par identité × campus, cache module comme `useHardDelete`, Snackbar global) · `useFeature.js` · `FeatureGate.jsx` (`mode="write"` pour `read_only`) · `FeatureGuard.jsx` (composé avec `ProtectedRoute`) · `api/featureRefusal.js` (canal intercepteur → provider, sans cycle d'import). **3 socles modifiés** : `main.jsx`, `AppShell.jsx` (le filtrage vit **là et nulle part ailleurs** — six portails déclarent `feature:`, un seul décide), intercepteur axios (§8.3). **6 portails annotés**, **6 tables de routes gardées**, **10 `common.json`** (`common.features.*`). `npm run build` vert, aucune erreur lint nouvelle. **Six points tranchés à l'écriture** (§8.4) : (1) le fail-open ne se transpose pas au rendu — « je ne sais pas encore » withhold, « je n'ai pas pu savoir » reste fail-open ; (2) la place du provider est contrainte des trois côtés (routeur, auth, thème + frontière Suspense i18n en `useSuspense: true`) ; (3) `Admin.jsx` / `Director.jsx` **ne sont pas filtrés** — rôles globaux, ce sont eux que sert le badge ; (4) groupes vides et séparateurs orphelins sont repliés, un en-tête de section vide est l'« onglet vide » du §4.1.2 ; (5) `read_only` garde sa route **et** son entrée de menu, et est **annoncé par un bandeau unique** plutôt que par un masquage partiel des boutons (le §6.2 écarte la granularité par bouton en v1, et la faire à moitié fait conclure à l'utilisateur que les boutons restants sont cassés) ; (6) le portail parent garde sur le module qui **possède** la donnée (`result`) et non sur celui qui sert la route (`parent`) — **seul endroit du chantier où la garde frontend est plus stricte que la garde serveur**, assumé. |
+| — | ***Prochaine étape : PHASE 5** — les bords (§9 : 7 crons, portail public, quotas, notifications), 1,5 j. **À faire avant la phase 4, pas après** : la règle ferme du §10 interdit de livrer les phases 1-3 sans la phase 5, et elles sont désormais toutes les trois écrites. Un système de flags que les crons ignorent envoie des e-mails au nom d'un module coupé — le pire des deux mondes. La phase 4 (pilotage UI, 2 j) suit.*<br>***Action porteur, une seule*** : lancer `node scripts/migrate-entitlement.js --dry-run` puis sans le drapeau sur la base réelle. Tant qu'elle n'a pas tourné, aucun campus ne porte d'`entitlement` et **tout reste activé partout** (fail-open, §4.3) — le socle est donc inerte, jamais bloquant, frontend compris. Seule exception depuis la phase 2 : l'IA, qui continue de lire son drapeau de souscription historique. |
 
 *(Tenir cette section à jour à chaque phase close — c'est le point d'entrée d'une
 reprise du chantier par un tiers.)*

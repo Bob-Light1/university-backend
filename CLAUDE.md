@@ -3,17 +3,35 @@
 > Multi-campus academic SaaS ERP. Stack: Node.js · Express · Mongoose · JWT · Multer/Formidable · Cloudinary · node-cron · Puppeteer.
 > Entry: `server.js` (boot, crons, graceful shutdown) → `app.js` (Express app, route mounting). API prefix: `/api/`.
 
-## Monorepo paths
+## Project paths — FOUR bricks
 
-| Layer | Path |
-|---|---|
-| **Backend** | `/home/adminsecu/Projects/university/backend` |
-| **Frontend** | `/home/adminsecu/Projects/university/frontend` |
+The platform is **four separate git repositories**, not one monorepo. This backend is one of them;
+the other three are peers, and two of them consume this API.
 
-**Full-stack tasks** — when a change touches both layers, keep the contract consistent end-to-end:
-- API shape changes (route, method, payload, response fields) must be reflected in the frontend API client in the same task.
-- Enum values, status strings, and error codes defined in backend models/constants must match exactly what the frontend expects — never duplicate literals; if they diverge, the backend is the source of truth.
-- New or renamed endpoints must be registered in `app.js` **and** updated in the frontend service/hook that calls them before the task is considered done.
+| # | Brick | Path | Stack · port | Role |
+|---|---|---|---|---|
+| 1 | **Backend ERP** *(this repo)* | `/home/adminsecu/Projects/university/backend` | Node · Express · Mongoose — `:5000` | The API and the source of truth for every enum, status and error code |
+| 2 | **Frontend ERP** | `/home/adminsecu/Projects/university/frontend` | React · Vite · MUI — `:5173` (Vite default, not pinned) | The signed-in back-office: admin, director, campus manager, teacher, student, parent, mentor |
+| 3 | **AI-service** | `/home/adminsecu/Projects/university/ai-service` | Python · FastAPI · Postgres/pgvector — `:8000` (loopback), db `:5434` | RAG, embeddings, chat. Reached **only** through this backend (`/api/ai`), never published directly — see §10 |
+| 4 | **Portail-préinscription** | `/home/adminsecu/Projects/partner` ⚠️ | Next.js 15 · next-intl — `:3000` | Public site: pre-registration, programs, quiz, competitions, partner short links `/r/{code}` |
+
+⚠️ **The portal does not live under `university/`.** Its folder is named `partner` (the referral
+programme it also serves), it sits next to unrelated projects in `~/Projects`, and nothing on disk
+links it back here. Looking for it beside the other three is the obvious mistake — it is not there.
+
+Remotes: `Bob-Light1/university-backend` · `university-frontend` · `university-ai-service` · `parters-portail`.
+
+**Cross-brick tasks** — a change that crosses a brick boundary is not done until every consumer follows:
+- API shape changes (route, method, payload, response fields) must be reflected in **each** client that calls
+  the route in the same task — the ERP frontend (`src/services/`) and, for anything under the public-portal
+  surface (§10), the Next.js portal too.
+- Enum values, status strings, and error codes defined in backend models/constants must match exactly what the
+  clients expect — never duplicate literals; if they diverge, **the backend is the source of truth** for all three.
+- New or renamed endpoints must be registered in `app.js` **and** updated in the frontend service/hook that calls
+  them before the task is considered done.
+- The wiring between bricks is environment, not imports: backend `PORT` / `PORTAL_URL` / `PORTAL_API_KEY` /
+  `AI_SERVICE_URL`, frontend `VITE_API_BASE_URL` / `VITE_PORTAL_URL`, portal `ERP_API_URL` / `NEXT_PUBLIC_PORTAL_URL`.
+  Moving or renaming a route means checking these, not only the code.
 
 ---
 
@@ -27,7 +45,7 @@
 
 ## 0.1 DRY — MANDATORY
 
-- **Do not repeat yourself.** Before writing logic, look for an existing helper — `utils/response-helpers.js`, `shared/utils/` (`soft-delete`, `validation-helpers`, campus filters), `shared/lib/`, the module's own `*.service.js` / `*.repository.js` / `*.helper.js`. Reuse it; do not re-implement, copy-paste or paraphrase it.
+- **Do not repeat yourself.** Before writing logic, look for an existing helper — `shared/utils/response-helpers.js`, `shared/utils/` (`soft-delete`, `validation-helpers`, campus filters), `shared/lib/`, the module's own `*.service.js` / `*.repository.js` / `*.helper.js`. Reuse it; do not re-implement, copy-paste or paraphrase it.
 - Duplicated logic in 2+ places must be extracted: intra-module → `<domain>.helper.js` or the service; cross-module → `shared/`. Never `require()` another module's internals — go through its `index.js` public surface or a shared helper.
 - Single source of truth for values: enums (`Object.freeze({})` in models/constants), status strings, error codes, limits. Never hard-code a literal that already exists as a constant, on either side of the stack (backend is the source, the frontend mirrors it).
 - **Factorization must not cost efficiency or clarity.** A helper that forces an extra DB round-trip, breaks a `Promise.all([...])`, drops `.lean()`, or adds an indirection layer nobody can follow is worse than the duplication it removes. Prefer parametrized helpers over deep abstraction; keep two similar-looking blocks separate when they answer different rules that will diverge (accidental duplication ≠ real duplication).
@@ -59,7 +77,19 @@ Modules: `admin · campus · student · teacher · parent · mentor · staff · 
 | Role | Scope |
 |---|---|
 | `ADMIN` / `DIRECTOR` | All campuses — no filter |
-| `CAMPUS_MANAGER` / `TEACHER` / `STUDENT` / `PARENT` / `MENTOR` | Own campus (`req.user.campusId`) |
+| `CAMPUS_MANAGER` / `TEACHER` / `STUDENT` / `PARENT` / `MENTOR` / `STAFF` | Own campus (`req.user.campusId`) |
+| `PARTNER` | Own campus **and own partner record** — see below |
+
+**`PARTNER` is a signed-in role, not just a data record.** It has its own auth controller
+(`modules/partner/controllers/partner.auth.controller.js`, `POST /api/partners/auth/login` and the
+password-reset pair), its own ERP interface (`frontend/src/partner/`, routed by `PartnerRoutes.jsx`),
+and a token carrying `{ id, role: 'PARTNER', campusId, partnerCode, partnerType }`. Its `campusId`
+is derived from `partner.schoolCampus` — see §5.
+
+Its isolation is the only one in the platform that is **not campus-to-campus alone**: two partners
+of the *same* campus must never see each other's leads or commissions. A filter that carries only
+`campusId` lets that through. Every read on `PartnerLead` / `PartnerCommission` for a `PARTNER`
+token must also pin the partner id.
 
 - Every DB query on scoped collections (`Student`, `Teacher`, `Class`, `Subject`, `Result`, `Schedule`, `Attendance`, `Document`, `Announcement`, `Staff`) **must** include `campusId` for non-global roles.
 - `req.body.campusId` is **never** trusted for scoped roles — always `req.user.campusId`.
@@ -80,7 +110,7 @@ Modules: `admin · campus · student · teacher · parent · mentor · staff · 
 
 ## 4. Response helpers — REQUIRED (never `res.json()` directly)
 
-From `utils/response-helpers.js`:
+From `shared/utils/response-helpers.js`:
 ```
 sendSuccess · sendCreated · sendPaginated · sendError
 sendNotFound · sendForbidden · sendUnauthorized
@@ -94,7 +124,15 @@ Response shape: `{ success, message, data, meta }`.
 ## 5. Models
 
 - Campus-scoped: `campusId: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
-- Global collections (`Course`, `Partner`, `GradingScale`): no `campusId`.
+- Truly global collection: **`Course` only** — no campus field at all.
+- **Campus-scoped under a different field name — `schoolCampus`, not `campusId`**: `Partner`,
+  `PartnerLead`, `PartnerCommission`, `PartnerApplication`, `GradingScale`. `partner.model.js`
+  declares `schoolCampus` **required** under an explicit isolation invariant and indexes it four
+  times; `GradingScale.getDefault(campusId)` filters on it; the `PARTNER` token's `campusId` is
+  derived from it. Grepping for `campusId` alone will therefore report these as global and they
+  are not — the mistake that reached `docs/architecture/QA_TEST_STRATEGY.md` v1.1 (its D-15).
+- The reliable inventory of what is campus-scoped is the **hard-delete registry**: its suite fails
+  until a scoped model is declared on the `campus` entry (§5.2), which no grep guarantees.
 - Enums: `Object.freeze({})` — exported and reused across backend controllers/validators (the frontend mirrors the same values in its Yup schemas).
 - Auto-increment refs via `counter` model. `{ timestamps: true }` on every schema.
 - Compound indexes at schema level for frequent query patterns.
@@ -167,7 +205,11 @@ shared/lib/hard-delete/
   hard-delete.service.js     # preview() + execute() — the only removal code path
   hard-delete.controller.js  # HTTP surface
   hard-delete.routes.js      # mounted at /api/danger-zone
+  hard-delete.limiter.js     # deletionLimiter (/permanent) · hardDeleteFlagLimiter (?hard=true)
   deletion-audit.model.js    # append-only ledger (DeletionAudit) — never deleted
+  index.js                   # public surface: routes · service · constants · respondToError
+                             #   + both limiters, so aliases carry the SAME budget.
+                             #   Registry, guard and audit model stay internal.
 ```
 
 **API** (per-entity roles come from the registry; the router itself allows ADMIN / DIRECTOR / CAMPUS_MANAGER):
@@ -326,11 +368,11 @@ The dialog can always go back to step 1 (`rerunPreview`): a ticket lives 5 minut
 
 **Finance** (`/api/finance`) — fees, expenses, income; nightly overdue-fee detection + reminders.
 
-**Public-portal** (`/api`) — public-facing: pre-registration, programs, quiz/leaderboard, recruitment competitions; monthly competition-closing cron.
+**Public-portal** (`/api`) — public-facing: pre-registration, programs, quiz/leaderboard, recruitment competitions; monthly competition-closing cron. Its client is brick 4, the Next.js portal at `/home/adminsecu/Projects/partner` — changing anything here means changing it there too.
 
-**AI** (`/api/ai` + `/internal/ai`) — Phase 3 gateway to the Python `ai-service` (sibling repo). No Mongoose model; per-campus entitlement lives on `Campus.aiEntitlement` (plans/features/budget, `shared/constants/ai.constants.js`). Scope travels in a short-lived S2S JWT (HS256, TTL ≤ 300 s), never in the body. Inert without `AI_SERVICE_URL` (503). Design doc: `docs/architecture/PHASE3_AI_DESIGN.md`.
+**AI** (`/api/ai` + `/internal/ai`) — Phase 3 gateway to the Python `ai-service` (brick 3 — `/home/adminsecu/Projects/university/ai-service`). No Mongoose model; per-campus entitlement lives on `Campus.aiEntitlement` (plans/features/budget, `shared/constants/ai.constants.js`). Scope travels in a short-lived S2S JWT (HS256, TTL ≤ 300 s), never in the body. Inert without `AI_SERVICE_URL` (503). Design doc: `docs/architecture/PHASE3_AI_DESIGN.md`.
 
-**Locale** — `middleware/locale/locale.middleware.js` applied globally.
+**Locale** — `shared/middleware/locale.middleware.js` applied globally.
 
 ---
 
