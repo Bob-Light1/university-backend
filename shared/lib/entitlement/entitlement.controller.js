@@ -109,6 +109,31 @@ const parsePayload = (body = {}, allowPlan = false) => {
 };
 
 /**
+ * Maps a refused change to its HTTP answer.
+ *
+ * The worst status among the blockers wins, and the FULL list travels — never
+ * one at a time, the way the hard-delete impact report does it. An operator who
+ * discovers a refusal item by item is an operator who will work around it.
+ *
+ * Extracted so the AI console (`admin.ai-entitlement.controller.js`), which
+ * reaches the same door with a different payload since phase 2, refuses in
+ * exactly the same words as the entitlement routes.
+ *
+ * @param {Object} res
+ * @param {Object} result - A non-ok `applyChanges()` result.
+ * @returns {Object} the Express response.
+ */
+const sendRefusal = (res, result) => {
+  const status = result.blockers.reduce((worst, b) => Math.max(worst, b.status), 400);
+  const primary = result.blockers.find((b) => b.status === status) || result.blockers[0];
+  return sendError(res, status, primary.message, {
+    code: primary.code,
+    blockers: result.blockers.map(({ status: _status, ...rest }) => rest),
+    warnings: result.warnings || [],
+  });
+};
+
+/**
  * Runs one layer's change and maps the outcome to HTTP.
  *
  * Refusals answer with the status the guard chose, the dedicated code and the
@@ -136,16 +161,7 @@ const applyAndRespond = async (req, res, { campusId, layer, allowPlan }) => {
   });
 
   if (result.notFound) return sendNotFound(res, 'Campus');
-
-  if (!result.ok) {
-    const status = result.blockers.reduce((worst, b) => Math.max(worst, b.status), 400);
-    const primary = result.blockers.find((b) => b.status === status) || result.blockers[0];
-    return sendError(res, status, primary.message, {
-      code: primary.code,
-      blockers: result.blockers.map(({ status: _status, ...rest }) => rest),
-      warnings: result.warnings || [],
-    });
-  }
+  if (!result.ok) return sendRefusal(res, result);
 
   return sendSuccess(res, 200, 'Entitlement updated', {
     campusId: String(campusId),
@@ -160,5 +176,6 @@ module.exports = {
   MIN_REASON_LENGTH,
   MAX_REASON_LENGTH,
   parsePayload,
+  sendRefusal,
   applyAndRespond,
 };

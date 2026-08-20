@@ -8,11 +8,25 @@
  * entitlement endpoint and the frontend Yup schemas all mirror these values.
  */
 
-/** Per-campus AI plans (§11.3). */
+const { FEATURE_PLANS } = require('./features.constants');
+
+/**
+ * Per-campus AI plans (§11.3) — an ALIAS of the platform tiers, never a second
+ * grid (CAMPUS_ENTITLEMENT_DESIGN.md, decision D-D and phase 2).
+ *
+ * The AI was priced first and the module grid was aligned onto it; deriving the
+ * alias in this direction keeps the AI's own vocabulary readable at its call
+ * sites while making a divergence impossible — renaming a tier in the registry
+ * renames it here, and the two can no longer drift into two sales pitches.
+ *
+ * `FEATURE_PLANS.CUSTOM` is deliberately absent: a bespoke MODULE offer says
+ * nothing about an AI tier, and ai-service knows three. `aiPlanOf()`
+ * (`shared/lib/entitlement/entitlement.ai.js`) narrows it back to `free`.
+ */
 const AI_PLANS = Object.freeze({
-  FREE: 'free',
-  STANDARD: 'standard',
-  PREMIUM: 'premium',
+  FREE: FEATURE_PLANS.FREE,
+  STANDARD: FEATURE_PLANS.STANDARD,
+  PREMIUM: FEATURE_PLANS.PREMIUM,
 });
 
 /** AI features toggled per plan (value gradient §1.4.2). */

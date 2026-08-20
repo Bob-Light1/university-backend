@@ -263,3 +263,137 @@ describe('describeForCampus — the pilot screen payload', () => {
     expect(result).toMatchObject({ label: 'Results & transcripts', core: false, minState: FEATURE_STATES.READ_ONLY });
   });
 });
+
+describe('applyChanges — the value fields the AI console writes (phase 2)', () => {
+  it('merges a quota patch instead of replacing the block', async () => {
+    storedAs({ plan: FEATURE_PLANS.STANDARD, modules: [], quotas: { maxStudents: 400 } });
+
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR,
+      quotas: { aiMonthlyTokens: 1000000 },
+      modules: [{ key: 'gaet', state: FEATURE_STATES.ENABLED, reason: 'upsell agreed today' }],
+    });
+
+    // A partial patch is a patch: the quota nobody mentioned must survive it.
+    expect(written().quotas).toEqual({ maxStudents: 400, aiMonthlyTokens: 1000000 });
+  });
+
+  it('merges one level down, so a single AI flag does not wipe its siblings', async () => {
+    storedAs({
+      plan: FEATURE_PLANS.STANDARD, modules: [],
+      ai: { llmProfile: 'gpt-4o-mini', features: { advisors: true } },
+    });
+
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR,
+      ai: { features: { analytics: false } },
+    });
+
+    expect(written().ai).toEqual({
+      llmProfile: 'gpt-4o-mini',
+      features: { advisors: true, analytics: false },
+    });
+  });
+
+  it('removes a key on null — that is how a deviation is handed back to the preset', async () => {
+    storedAs({
+      plan: FEATURE_PLANS.STANDARD, modules: [],
+      ai: { llmProfile: 'gpt-4o-mini', features: { advisors: true } },
+    });
+
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR,
+      ai: { features: null },
+    });
+
+    expect(written().ai).toEqual({ llmProfile: 'gpt-4o-mini' });
+  });
+
+  it('ignores value patches submitted on the usage layer — a manager does not write their own bill', async () => {
+    storedAs({ plan: FEATURE_PLANS.STANDARD, modules: [], quotas: { maxStudents: 400 } });
+
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.CAMPUS, actor: ACTOR,
+      quotas: { maxStudents: 99999 },
+      modules: [{ key: 'mentor', state: FEATURE_STATES.HIDDEN, reason: 'not used on this campus' }],
+    });
+
+    expect(written().quotas).toEqual({ maxStudents: 400 });
+  });
+
+  it('refuses a patch that is not an object rather than storing it', async () => {
+    const result = await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR, ai: 'premium',
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.blockers[0].code).toBe('FEATURE_PATCH_INVALID');
+    expect(mockCampusFacade.setCampusEntitlement).not.toHaveBeenCalled();
+  });
+});
+
+describe('applyChanges — the first write on a campus the migration has not reached', () => {
+  /** A campus as it exists before `scripts/migrate-entitlement.js` has run. */
+  const unmigrated = () => {
+    mockCampusFacade.getCampusEntitlement.mockResolvedValue({
+      _id: CAMPUS_ID,
+      campus_name: 'Douala',
+      features: { maxStudents: 400 },
+      aiEntitlement: { enabled: false, plan: FEATURE_PLANS.FREE, llmProfile: 'free' },
+    });
+  };
+
+  it('folds the legacy configuration first, so the tier lands with its grandfathering', async () => {
+    unmigrated();
+
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR,
+      ai: { llmProfile: 'gpt-4o-mini' },
+    });
+
+    const stored = written();
+    // Without the fold this write would store a `free` tier and nothing else —
+    // and every standard-tier module the campus had been using for months would
+    // vanish as a side effect of an unrelated AI edit.
+    expect(stored.plan).toBe(FEATURE_PLANS.FREE);
+    expect(stored.modules.map((m) => m.key)).toEqual(
+      expect.arrayContaining(['finance', 'exam', 'document', 'announcement'])
+    );
+    expect(stored.quotas.maxStudents).toBe(400);
+    expect(stored.ai.llmProfile).toBe('gpt-4o-mini');
+  });
+
+  it('never grandfathers the AI, even while folding everything else', async () => {
+    unmigrated();
+
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR,
+      ai: { llmProfile: 'gpt-4o-mini' },
+    });
+
+    expect(written().modules.some((m) => m.key === 'ai')).toBe(false);
+  });
+
+  it('says on the audit row that the fold happened', async () => {
+    unmigrated();
+
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR,
+      ai: { llmProfile: 'gpt-4o-mini' },
+    });
+
+    // The overrides this write created were not decided by the actor whose name
+    // is on the row; the trail has to say where they came from.
+    expect(auditRow().changes.foldedLegacy).toBe(true);
+  });
+
+  it('does not fold a campus that already carries an entitlement', async () => {
+    await service.applyChanges({
+      campusId: CAMPUS_ID, layer: OVERRIDE_LAYERS.ADMIN, actor: ACTOR,
+      modules: [{ key: 'gaet', state: FEATURE_STATES.ENABLED, reason: 'upsell agreed today' }],
+    });
+
+    expect(auditRow().changes.foldedLegacy).toBeUndefined();
+    expect(written().modules.map((m) => m.key)).toEqual(['gaet']);
+  });
+});

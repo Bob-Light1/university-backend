@@ -10,14 +10,17 @@
 > `CLAUDE.md`) et reprend le chantier sans contexte de la discussion d'origine.
 > Ce document est sa source de vérité.
 >
-> **Statut** : **phases 0 et 1 livrées** (registre gelé + socle backend).
-> Toutes les décisions porteur sont tranchées (§14). L'API est protégée et
-> pilotable ; il reste les phases 2 à 5 — dont la **phase 5 (les bords), qui ne
-> doit jamais être reportée** au-delà de la livraison des phases 1-4.
+> **Statut** : **phases 0, 1 et 2 livrées** (registre gelé + socle backend +
+> absorption de l'IA). Toutes les décisions porteur sont tranchées (§14). L'API
+> est protégée et pilotable, l'IA est un module de la grille ; il reste les
+> phases 3 à 5 — dont la **phase 5 (les bords), qui ne doit jamais être
+> reportée** au-delà de la livraison des phases 1-4.
 > Seule action porteur en attente : lancer `scripts/migrate-entitlement.js`
 > sur la base réelle (voir §10, phase 1.2).
 >
-> **Révisions** : **v1.4 (2026-08-15)** — phase 1 livrée ; §7.1 (montage dérivé
+> **Révisions** : **v1.5 (2026-08-20)** — phase 2 livrée ; §3 (`entitlement.ai.features`),
+> §3.2 (repli legacy au premier write), §10 phase 2 et §17 mis à jour d'après le
+> code écrit. **v1.4 (2026-08-15)** — phase 1 livrée ; §7.1 (montage dérivé
 > du registre + `optionalAuth`), §6.3.3 (arêtes globales exclues, `level`
 > tranché), §4.1.1 (contrôle porté sur la transition effective, donc aussi sur
 > un déclassement de palier) et §15bis.3 (dérogation Mongoose assumée) corrigés
@@ -178,7 +181,13 @@ entitlement: {
     aiMonthlyTokens                // repris de aiEntitlement.monthlyTokenBudget
   },
 
-  ai: { llmProfile: String }       // seul reliquat réellement spécifique à l'IA
+  // Seuls reliquats réellement spécifiques à l'IA (phase 2). `features` ne porte
+  // que les ÉCARTS au preset du palier — un campus conforme à son palier n'y
+  // stocke rien et suit la grille quand le palier change.
+  ai: {
+    llmProfile: String,
+    features:   { chat, search, analytics, advisors }   // booléens, écarts seuls
+  }
 }
 
 // Renommage de aiEntitlementAudit — même forme, périmètre élargi.
@@ -201,6 +210,24 @@ cache (§7.2).
 `features` et `aiEntitlement` sont **conservés dans le schéma** jusqu'à
 validation en production de la migration (§10, phases 1.2 et 2). Le retrait est
 une opération distincte, postérieure, et réversible jusque-là.
+
+**Un campus est soit migré, soit pas — jamais moitié-moitié** (tranché en
+phase 2). Tant qu'il ne porte pas d'objet unifié, c'est l'objet legacy qui fait
+foi ; dès qu'il en porte un, le legacy n'est plus lu du tout. Lire la moitié de
+chacun laisserait un champ périmé survivre à la décision qui l'a remplacé.
+
+**Asymétrie lecture / écriture, assumée.** Le repli legacy → unifié
+(`shared/lib/entitlement/entitlement.legacy.js`) est appliqué à **l'écriture**,
+jamais à la lecture :
+
+| Chemin | Comportement sur un campus non migré | Motif |
+|---|---|---|
+| **Lecture** (resolver, garde) | pas de repli — tout reste activé (§4.3) | lire ne doit jamais changer ce qu'un campus atteint ; le socle reste inerte tant que la migration n'a pas tourné |
+| **Écriture** (`applyChanges`) | repli d'abord, puis application | sans lui, le premier write stockerait un palier **sans son grand-père**, et tout module hors palier — utilisé quotidiennement — disparaîtrait comme effet de bord d'une édition sans rapport |
+
+C'est le seul endroit du chantier où la migration s'applique paresseusement, et
+l'entrée d'audit le déclare (`changes.foldedLegacy`) : les overrides créés par ce
+repli n'ont pas été décidés par l'acteur dont le nom figure sur la ligne.
 
 ---
 
@@ -698,22 +725,64 @@ Une heure de validation qui évite de refaire la phase 1.
 
 ---
 
-### Phase 2 — Absorption de l'IA · 1 j
+### Phase 2 — Absorption de l'IA · 1 j — ✅ **livrée le 2026-08-20**
 
 L'IA devient un module comme les autres **pour l'activation**, et garde sa
 logique propre là où elle est réellement différente : comptage de tokens, profil
 LLM, JWT S2S.
 
-- `ai.entitlement.middleware.js` lit `entitlement` unifié ;
-  `requireAiFeature('chat')` = composition de `requireFeature('ai.chat')` + le
-  contrôle de budget existant.
-- `AI_PLANS` / `AI_FEATURES` conservés comme **alias** vers le registre : zéro
-  rupture du contrat frontend IA.
-- `aiEntitlement` retiré **après** validation de la migration en production.
+| Concept IA | Source unifiée |
+|---|---|
+| souscrit | état du module `ai` dans `entitlement.modules` |
+| palier | `entitlement.plan` (une seule grille, D-D) |
+| budget mensuel | `entitlement.quotas.aiMonthlyTokens` |
+| profil LLM | `entitlement.ai.llmProfile` |
+| chat / search / analytics / advisors | `entitlement.ai.features`, sinon le preset du palier |
 
-**Critère d'acceptation : la suite de tests IA existante passe sans
-modification.** Si un test casse, c'est la généralisation qui a changé un
-contrat — on corrige le code, on ne retouche pas le test.
+Livrables : `shared/lib/entitlement/entitlement.ai.js` (la vue IA de l'objet
+unifié, forme de sortie **identique** à l'ancien `aiEntitlement`) ·
+`entitlement.legacy.js` (le repli, partagé avec la migration) · gate IA, signal
+d'ingestion et console admin rebranchés · `applyChanges()` ouvert aux champs de
+**valeur** (`quotas`, `ai`) · `AI_PLANS` dérivé de `FEATURE_PLANS`.
+
+**Critère d'acceptation tenu : la suite de tests IA existante passe sans
+modification** (11 tests, fichier non touché). Suite complète **1326 tests /
+63 suites**, lint 0 erreur.
+
+#### Ce que la phase 2 a tranché en écrivant le code
+
+**L'IA ne tombe pas en fail-open, et c'est la seule exception du chantier.**
+Le resolver répond `enabled` à un campus sans entitlement (§4.3) : une donnée
+absente ne doit jamais éteindre un tenant. Pour l'IA le raisonnement s'inverse —
+elle **dépense de l'argent par requête** chez un tiers. L'absence de donnée peut
+allumer un module, jamais une dépense. Concrètement : tant qu'un campus n'est pas
+migré, l'IA continue de lire `aiEntitlement.enabled`, dont le défaut est `false`.
+
+**La migration ne grand-pérennise jamais `ai`.** C'est le seul module qui portait
+déjà un drapeau de souscription par campus : son usage passé est un **fait**, pas
+une hypothèse. Le traiter comme les 25 autres aurait offert un module payant à
+tout le parc le jour de la migration. Défaut trouvé en écrivant la phase, corrigé
+dans le repli partagé.
+
+**Le premier write sur un campus non migré replie d'abord** (§3.2) : sans cela,
+régler l'IA depuis la console aurait stocké un palier sans grand-père et fait
+disparaître Finance, Examens et Documents d'un campus qui les utilisait.
+
+**`plan` est le palier de la plateforme, pas un palier IA** (D-D). Basculer un
+campus en `premium` depuis la console IA élargit donc **toute** son offre. C'est
+l'aboutissement voulu de l'unification, mais la conséquence n'est visible sur
+aucun écran avant la **phase 4**, qui remplace ce dialogue par la matrice
+complète. À garder à l'esprit d'ici là.
+
+**Le refus arrive dans un endpoint qui n'en avait pas.** La console IA passant
+désormais par la porte unique, un **déclassement de palier** y est contrôlé comme
+partout ailleurs : il est refusé (409) s'il enterrait des enregistrements d'un
+autre module (§6.3.4). Le mappage refus → HTTP est factorisé
+(`sendRefusal`), donc les deux surfaces refusent dans les mêmes termes.
+
+**Reliquat assumé** : `aiEntitlement` reste dans le schéma (§3.2) et
+`setCampusAiEntitlement` n'a plus d'appelant — les deux partent ensemble au
+retrait post-validation prod, pas avant.
 
 ---
 
@@ -748,7 +817,7 @@ Livrables du §9 : 7 crons, portail public, quotas, notifications.
 |---|---|---|
 | 0 — Registre | 0,5 j | — ✅ **livrée le 2026-08-14** |
 | 1 — Socle backend | 2,5 j | ✅ API protégée, pilotage par API — ✅ **livrée le 2026-08-15** |
-| 2 — Absorption IA | 1 j | ✅ |
+| 2 — Absorption IA | 1 j | ✅ — ✅ **livrée le 2026-08-20** |
 | 3 — Front | 2 j | ✅ UI cohérente |
 | 4 — Pilotage UI | 2 j | ✅ autonomie du manager |
 | 5 — Bords | 1,5 j | ❌ **doit sortir avec 1-4** |
@@ -1006,7 +1075,8 @@ croyant à une barrière.
 | 2026-08-13 | **PHASE 0 LIVRÉE** — `shared/constants/features.constants.js` (26 entrées : 8 modules core + `danger-zone`, 4 à plancher, 13 libres). D-B validée par le porteur. Validation structurelle passée. **Trois défauts trouvés et corrigés au gel** : (1) 4 cycles de dépendance entre modules non-core, (2) 8 incohérences de palier, tous deux causés par la confusion arêtes HARD/SOFT → `dependsOn` re-dérivé des clés étrangères `required` des modèles et `usesWhenAvailable` créé (§6.3.1-2) ; (3) refus de toggle rendu **piloté par la donnée** et non par la déclaration (§6.3.3), sans quoi `subject`/`level`/`department` devenaient indésactivables par fermeture transitive |
 | 2026-08-14 | **PHASE 0 CLOSE.** D-B tranchée (noyau 8 + `danger-zone`, plancher sur 4). `public-portal` déplacé en `premium` → paliers **15 / 22 / 26**. `tests/unit/feature-registry.test.js` livré : **25 tests verts**, lint 0, suites voisines (hard-delete, soft-delete, register-jobs) 228 tests toujours verts. Registre gelé. **Réalignement** : les crons ont migré de `server.js` vers `shared/lib/register-jobs.js` (`projectJobs()`) pendant le chantier — §9.1 corrigé, noms canoniques repris, un seul nom divergeait (`exam-anticheat`) |
 | 2026-08-15 | **PHASE 1 LIVRÉE — socle backend.** 9 livrables (1.1 → 1.9) : schéma `Campus.entitlement` + `entitlementAudit` **ajoutés à côté** de `features` / `aiEntitlement` (§3.2, rien retiré) · resolver pur `shared/utils/entitlement.js` · sondes `shared/lib/entitlement/entitlement.usage.js` · garde · cache TTL 60 s · `shared/middleware/entitlement.js` monté en une ligne · `GET /api/settings/entitlement` · `PATCH /api/admin/campuses/:id/entitlement` (offre) · `PATCH /api/campus/:id/entitlement` (usage) · `scripts/migrate-entitlement.js`. **Tests livrés dans la phase** : 83 unitaires (resolve · deps · service) + 18 d'intégration sur la garde ; suite complète **1265 tests verts / 61 suites**, lint 0 erreur. **Quatre points tranchés à l'écriture** : (1) le contrôle de données porte sur la **transition effective** et non sur la charge utile, ce qui couvre le déclassement de palier (§6.3.4) ; (2) les arêtes portées par une collection **globale** ne bloquent pas, et `level` / `subject` d'un campus mature se **gèlent** au lieu de se masquer (§6.3.4) ; (3) la garde lit l'identité via `optionalAuth` — montée avant les routeurs, elle précède leur `authenticate()` (§7.1) ; (4) dérogation Mongoose assumée et bornée pour les sondes (§15bis.3). **Deux défauts trouvés par les tests** : le chemin `subjectId` déclaré à la racine sur `GaetConstraint` et `StudentSchedule` (il est imbriqué — un bloqueur qui ne bloque jamais), et `describeForCampus` qui ne renvoyait qu'**un** override quand les deux couches en portent un (la décision de l'ADMIN s'affichait sur l'écran du manager) |
-| — | ***Prochaine étape : PHASE 2** — absorption de l'IA (§10), 1 j. Critère d'acceptation : la suite de tests IA existante passe **sans modification**. Rappel de la règle ferme : ne jamais livrer les phases 1-3 sans la **phase 5** (les bords).*<br>***Action porteur, une seule*** : lancer `node scripts/migrate-entitlement.js --dry-run` puis sans le drapeau sur la base réelle. Tant qu'elle n'a pas tourné, aucun campus ne porte d'`entitlement` et **tout reste activé partout** (fail-open, §4.3) — le socle est donc inerte, jamais bloquant. |
+| 2026-08-20 | **PHASE 2 LIVRÉE — absorption de l'IA.** L'IA rejoint la grille pour l'activation et garde ce qui lui est propre (budget, profil LLM, sous-features). `shared/lib/entitlement/entitlement.ai.js` (vue IA, **forme de sortie identique** à l'ancien `aiEntitlement`, donc contrat frontend intact) · `entitlement.legacy.js` (le repli legacy → unifié, désormais **partagé** entre `scripts/migrate-entitlement.js` et le premier write) · gate IA, `signalIngest` et console admin `PUT /admin/campuses/:id/ai-entitlement` rebranchés sur la porte unique · `applyChanges()` ouvert aux champs de valeur (`quotas`, `ai`) avec fusion partielle et `null` = effacement · `AI_PLANS` dérivé de `FEATURE_PLANS` · `PLATFORM_ENTITLEMENT` dérivé du preset premium. **Critère d'acceptation tenu** : `tests/unit/ai.entitlement.test.js` passe **sans une ligne modifiée**. Suite complète **1326 tests / 63 suites**, lint 0 erreur (+31 tests : `entitlement.ai.test.js` 22, service 9). **Deux défauts trouvés en écrivant la phase** : (1) la migration **grand-pérennisait `ai`** comme les 25 autres modules — elle aurait offert un module payant, facturé à l'usage, à tout le parc le jour de son exécution ; (2) un premier write sur un campus non migré aurait stocké un **palier sans grand-père**, faisant disparaître Finance / Examens / Documents comme effet de bord d'une édition IA. **Deux points tranchés** : l'IA est la seule exception au fail-open (une donnée absente peut allumer un module, jamais une dépense, §3.2) ; `plan` étant le palier plateforme (D-D), la console IA élargit toute l'offre — conséquence assumée, rendue visible en phase 4. |
+| — | ***Prochaine étape : PHASE 3** — front, consommation (§8.2 et §8.3), 2 j. Rappel de la règle ferme : ne jamais livrer les phases 1-3 sans la **phase 5** (les bords).*<br>***Action porteur, une seule*** : lancer `node scripts/migrate-entitlement.js --dry-run` puis sans le drapeau sur la base réelle. Tant qu'elle n'a pas tourné, aucun campus ne porte d'`entitlement` et **tout reste activé partout** (fail-open, §4.3) — le socle est donc inerte, jamais bloquant. Seule exception depuis la phase 2 : l'IA, qui continue de lire son drapeau de souscription historique. |
 
 *(Tenir cette section à jour à chaque phase close — c'est le point d'entrée d'une
 reprise du chantier par un tiers.)*

@@ -14,6 +14,7 @@
 const crypto = require('crypto');
 const config = require('../../shared/configs/general.config');
 const { signServiceToken } = require('./ai.s2s');
+const { resolveAiEntitlement } = require('../../shared/lib/entitlement/entitlement.ai');
 
 /** Correlation header shared with ai-service (mirrors REQUEST_ID_HEADER). */
 const REQUEST_ID_HEADER = 'X-Request-Id';
@@ -97,9 +98,12 @@ const forward = async (path, {
  * changes (same spirit as the notification emitters). Never throws, never
  * blocks the caller's response.
  *
- * The signal is skipped when the campus has not subscribed to AI
- * (aiEntitlement.enabled = false is the per-campus opt-out, D7) — an
- * unsubscribed campus must never be indexed.
+ * The signal is skipped when the campus has not subscribed to AI — the per-campus
+ * opt-out (D7). Since phase 2 of CAMPUS_ENTITLEMENT_DESIGN.md that subscription
+ * is the state of the `ai` key in the unified entitlement, read through the same
+ * `resolveAiEntitlement()` as the request gate rather than re-derived here: an
+ * unsubscribed campus must never be indexed, and "unsubscribed" has to mean the
+ * same thing on the ingestion path as on the query path.
  *
  * @param {Object} p
  * @param {string|Object} p.campusId - Campus owning the source.
@@ -112,14 +116,16 @@ const signalIngest = async ({ campusId, sourceId, sourceType = 'document' }) => 
   try {
     // Lazy require: campus is a module hub (see the note in its facade).
     const campus = await require('../campus').service.getCampusAiEntitlement(String(campusId));
-    if (campus?.status !== 'active' || !campus?.aiEntitlement?.enabled) return false;
+    if (campus?.status !== 'active') return false;
+    const entitlement = resolveAiEntitlement(campus);
+    if (!entitlement.enabled) return false;
 
     const { response } = await forward('/ingest', {
       body: { sourceType, sourceId: String(sourceId) },
       // Machine subject: a scoped (non-global) role bound to the campus —
       // ai-service derives the ingestion scope from this token (§4.2).
       user: { id: 'system-ingest-signal', role: 'SERVICE', campusId: String(campusId) },
-      entitlement: campus.aiEntitlement,
+      entitlement,
       campusId: String(campusId),
     });
     return response.ok;

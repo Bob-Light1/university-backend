@@ -117,6 +117,10 @@ const FEATURE_ERROR_CODES = Object.freeze({
   FEATURE_IN_USE:        'FEATURE_IN_USE',
   /** Guard: `until` beyond MAX_UNTIL_MONTHS, or already in the past (D-F). */
   FEATURE_UNTIL_INVALID: 'FEATURE_UNTIL_INVALID',
+  /** Guard: the submitted `plan` is not one of FEATURE_PLANS. */
+  FEATURE_PLAN_INVALID:  'FEATURE_PLAN_INVALID',
+  /** Guard: a `quotas` / `ai` patch that is not a plain object (phase 2). */
+  FEATURE_PATCH_INVALID: 'FEATURE_PATCH_INVALID',
 });
 
 // ─── Limits ───────────────────────────────────────────────────────────────────

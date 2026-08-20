@@ -130,14 +130,26 @@ const setCampusCommissionConfig = (campusId, cfg) =>
     { new: true, runValidators: true }
   ).select('commissionConfig campus_name').lean();
 
-/** AI entitlement config (modules/ai gate middleware + admin read). */
+/**
+ * AI entitlement config (modules/ai gate middleware + admin read).
+ *
+ * BOTH objects are selected, and the caller picks: since phase 2 the AI reads
+ * the unified `entitlement`, and falls back to the legacy `aiEntitlement` only
+ * for a campus the migration has not reached yet (§3.2). One read, one
+ * decision — `resolveAiEntitlement()` owns which side answers.
+ */
 const getCampusAiEntitlement = (campusId) =>
-  Campus.findById(campusId).select('aiEntitlement campus_name status').lean();
+  Campus.findById(campusId).select('aiEntitlement entitlement campus_name status').lean();
 
-/** AI entitlement + audit trail (admin console only — audit is select:false elsewhere). */
+/**
+ * AI entitlement + audit trail (admin console only — audit is select:false
+ * elsewhere). Both ledgers travel for the same reason as above: AI mutations
+ * are appended to `entitlementAudit` since phase 2, while everything written
+ * before that date still sits in `aiEntitlementAudit`.
+ */
 const getCampusAiEntitlementWithAudit = (campusId) =>
   Campus.findById(campusId)
-    .select('aiEntitlement campus_name status +aiEntitlementAudit').lean();
+    .select('aiEntitlement entitlement campus_name status +aiEntitlementAudit +entitlementAudit').lean();
 
 /**
  * Replaces the embedded AI entitlement and appends an audit entry (append-only,
@@ -157,7 +169,12 @@ const setCampusAiEntitlement = (campusId, entitlement, auditEntry) =>
  * whole entitlement chain survives the PostgreSQL migration untouched (§15bis.3).
  */
 const getCampusEntitlement = (campusId) =>
-  Campus.findById(campusId).select('entitlement campus_name status').lean();
+  Campus.findById(campusId)
+    // The legacy pair travels too: a campus the migration has not reached yet
+    // is folded from it on its FIRST entitlement write, so the tier never lands
+    // without its grandfathering (`entitlement.legacy.js`). Dropped from this
+    // selector the day §3.2 removes the fields.
+    .select('entitlement features aiEntitlement campus_name status').lean();
 
 /** Entitlement + audit trail (admin console only — audit is select:false elsewhere). */
 const getCampusEntitlementWithAudit = (campusId) =>

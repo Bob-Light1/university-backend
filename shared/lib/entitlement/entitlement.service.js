@@ -19,6 +19,7 @@ const {
   FEATURE_REGISTRY,
   FEATURE_KEYS,
   FEATURE_PLANS,
+  FEATURE_ERROR_CODES,
 } = require('../../constants/features.constants');
 const {
   resolveEntitlement,
@@ -28,6 +29,7 @@ const {
   OVERRIDE_LAYERS,
 } = require('../../utils/entitlement');
 const cache = require('./entitlement.cache');
+const { foldLegacyEntitlement } = require('./entitlement.legacy');
 const { checkOverrideAuthority, checkHiddenTransitions } = require('./entitlement.guard');
 
 /** Lazy facade access — see the file header. */
@@ -46,6 +48,8 @@ const readRaw = async (campusId) => {
     entitlement: campus?.entitlement || null,
     campusName: campus?.campus_name || null,
     found: Boolean(campus),
+    /** The lean document, so a write can fold the legacy fields (§3.2). */
+    campus: campus || null,
   };
 };
 
@@ -133,6 +137,40 @@ const describeForCampus = async (campusId) => {
 };
 
 /**
+ * Applies a patch to a stored sub-object (`quotas`, `ai`) — the two parts of an
+ * entitlement that carry VALUES rather than states, and which therefore cannot
+ * be expressed as module overrides.
+ *
+ * Rules, deliberately few:
+ *  - an absent key leaves the stored value alone (a partial patch is a patch,
+ *    not a replacement — the AI console sends one field at a time);
+ *  - `null` REMOVES the key, which is how a deviation is handed back to the
+ *    preset that governs it (§3: only the deviations are stored, so "no
+ *    deviation" has to be expressible);
+ *  - a nested object recurses one level, so `{ ai: { features: { chat: false } } }`
+ *    does not wipe the sibling flags.
+ *
+ * @param {Object|undefined} current
+ * @param {Object} patch
+ * @returns {Object|undefined} the merged value, or undefined when nothing is left.
+ */
+const mergePatch = (current, patch) => {
+  const next = { ...(current || {}) };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === null) {
+      delete next[key];
+    } else if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const merged = mergePatch(next[key], value);
+      if (merged === undefined) delete next[key];
+      else next[key] = merged;
+    } else {
+      next[key] = value;
+    }
+  }
+  return Object.keys(next).length ? next : undefined;
+};
+
+/**
  * Drops overrides that no longer say anything: a permanent override equal to
  * what the layer underneath already gives. The stored array must hold ONLY the
  * deviations (§3) — a redundant entry is a decision nobody made that will
@@ -168,12 +206,28 @@ const pruneRedundant = (overrides, plan) =>
  * @param {Object} params.actor   - `req.user` — `{ id, role }`.
  * @param {string} [params.plan]  - ADMIN layer only; ignored otherwise.
  * @param {Array}  [params.modules] - `[{ key, state, until, reason }]`.
+ * @param {Object} [params.quotas]  - Partial `{ maxStudents, …, aiMonthlyTokens }`
+ *   patch. ADMIN layer only: a quota is what was SOLD, so a manager setting
+ *   their own would be a manager writing their own bill.
+ * @param {Object} [params.ai]      - Partial `{ llmProfile, features }` patch,
+ *   same layer rule and same reason (phase 2 — the AI joins the grid).
  * @param {Date}   [params.now]
  * @returns {Promise<{ok: boolean, blockers?: Array, warnings?: Array, entitlement?: Object, resolved?: Object}>}
  */
-const applyChanges = async ({ campusId, layer, actor, plan, modules = [], now = new Date() }) => {
-  const { entitlement: raw, found } = await readRaw(campusId);
+const applyChanges = async ({
+  campusId, layer, actor, plan, modules = [], quotas, ai, now = new Date(),
+}) => {
+  const { entitlement: stored, found, campus } = await readRaw(campusId);
   if (!found) return { ok: false, notFound: true };
+
+  // A campus the migration has not covered yet is folded from its legacy
+  // configuration BEFORE anything is applied. Storing the submitted change on
+  // its own would give the campus a tier with no grandfathering behind it, and
+  // every module outside that tier — used daily until then — would disappear as
+  // a side effect of an unrelated edit. The read path deliberately does not do
+  // this; see the header of `entitlement.legacy.js` for the asymmetry.
+  const foldedLegacy = !stored;
+  const raw = stored || foldLegacyEntitlement(campus, { now, actorId: actor?.id || null });
 
   const before = resolveEntitlement(raw, { now });
   const offer = resolveOffer(raw);
@@ -191,9 +245,22 @@ const applyChanges = async ({ campusId, layer, actor, plan, modules = [], now = 
   if (plan !== undefined && !Object.values(FEATURE_PLANS).includes(plan)) {
     authority.push({
       status: 400,
-      code: 'FEATURE_PLAN_INVALID',
+      code: FEATURE_ERROR_CODES.FEATURE_PLAN_INVALID,
       message: `plan must be one of: ${Object.values(FEATURE_PLANS).join(', ')}`,
     });
+  }
+  // Shape only. What a quota or an AI profile MEANS belongs to whoever owns the
+  // vocabulary — the AI console validates its own fields, the schema enforces
+  // the ranges. This door stays ignorant of both, which is what lets it serve
+  // every module without growing a branch per module.
+  for (const [field, patch] of [['quotas', quotas], ['ai', ai]]) {
+    if (patch !== undefined && (typeof patch !== 'object' || patch === null || Array.isArray(patch))) {
+      authority.push({
+        status: 400,
+        code: FEATURE_ERROR_CODES.FEATURE_PATCH_INVALID,
+        message: `${field} must be an object`,
+      });
+    }
   }
   if (authority.length) return { ok: false, blockers: authority };
 
@@ -215,11 +282,25 @@ const applyChanges = async ({ campusId, layer, actor, plan, modules = [], now = 
     setById: actor?.id || null,
   }));
 
+  // Values follow the same layer rule as the plan: the offer sets them, the
+  // usage layer never does, and submitting one there is inert rather than an
+  // error (the route above refuses it explicitly, so it cannot arrive by hand).
+  const isOffer = layer === OVERRIDE_LAYERS.ADMIN;
+  const nextQuotas = isOffer && quotas ? mergePatch(raw?.quotas, quotas) : raw?.quotas;
+  const nextAi     = isOffer && ai     ? mergePatch(raw?.ai, ai)         : raw?.ai;
+
   const nextRaw = {
     ...(raw || {}),
     ...(nextPlan !== undefined ? { plan: nextPlan } : {}),
+    ...(nextQuotas !== undefined ? { quotas: nextQuotas } : {}),
+    ...(nextAi !== undefined ? { ai: nextAi } : {}),
     modules: pruneRedundant([...kept, ...written], nextPlan),
   };
+  // `mergePatch` returning undefined means the last deviation was cleared —
+  // the key must then LEAVE the stored object, not linger as an empty husk that
+  // reads as "configured" on the pilot screen.
+  if (nextQuotas === undefined) delete nextRaw.quotas;
+  if (nextAi === undefined) delete nextRaw.ai;
 
   // ── Family B — impact, on the effective before/after pair ────────────────
   const after = resolveEntitlement(nextRaw, { now });
@@ -233,7 +314,10 @@ const applyChanges = async ({ campusId, layer, actor, plan, modules = [], now = 
     actorRole: actor?.role,
     changes: {
       layer,
-      ...(plan !== undefined && layer === OVERRIDE_LAYERS.ADMIN ? { plan } : {}),
+      ...(foldedLegacy ? { foldedLegacy: true } : {}),
+      ...(plan !== undefined && isOffer ? { plan } : {}),
+      ...(quotas !== undefined && isOffer ? { quotas } : {}),
+      ...(ai !== undefined && isOffer ? { ai } : {}),
       modules: written.map(({ key, state, until, reason }) => ({ key, state, until, reason })),
     },
   });
@@ -254,5 +338,6 @@ module.exports = {
   resolveOffer,
   describeForCampus,
   pruneRedundant,
+  mergePatch,
   applyChanges,
 };

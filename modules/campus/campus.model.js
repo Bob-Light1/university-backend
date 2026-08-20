@@ -87,9 +87,25 @@ const entitlementSchema = new mongoose.Schema(
       /** 0 = unlimited, same convention as aiEntitlement.monthlyTokenBudget. */
       aiMonthlyTokens:      { type: Number, min: [0, 'aiMonthlyTokens cannot be negative'] },
     },
-    /** The only genuinely AI-specific leftover once the module joins the grid. */
+    /**
+     * What stays genuinely AI-specific once the module joins the grid (phase 2).
+     * The tier lives in `plan` and the budget in `quotas.aiMonthlyTokens` — one
+     * grid, one budget list; only these two have no equivalent elsewhere.
+     *
+     * `features` holds the DEVIATIONS from `AI_PLAN_PRESETS[plan].features`,
+     * never the full set (§3): a campus whose AI matches its tier stores
+     * nothing and follows the grid when the tier changes, instead of dragging a
+     * frozen copy of the old one behind it. No defaults, for the same reason —
+     * an absent flag means "whatever the plan grants", not `false`.
+     */
     ai: {
       llmProfile: { type: String, trim: true, maxlength: 50 },
+      features: {
+        chat:      { type: Boolean },
+        search:    { type: Boolean },
+        analytics: { type: Boolean },
+        advisors:  { type: Boolean },
+      },
     },
   },
   { _id: false }

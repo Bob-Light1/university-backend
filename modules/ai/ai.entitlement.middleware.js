@@ -9,6 +9,20 @@
  * feature-in-plan → monthly token budget. Distinct statuses on purpose:
  * 503 "AI disabled" (not deployed) ≠ 403 "not subscribed" ≠ 429 "budget spent".
  *
+ * Since phase 2 of `CAMPUS_ENTITLEMENT_DESIGN.md` the four rungs of that ladder
+ * read the UNIFIED per-campus entitlement instead of the AI's own object: the
+ * subscription is the state of the `ai` key, the tier is the campus tier, the
+ * budget is `quotas.aiMonthlyTokens`. What is genuinely AI-specific — the
+ * sub-features, the token budget, the LLM profile — stays owned by the AI.
+ * `shared/lib/entitlement/entitlement.ai.js` is where the two meet, and where
+ * the transitional fallback to the legacy object lives (§3.2).
+ *
+ * The generic gate mounted on `/api/ai` (§7.1) already refuses the whole module
+ * when the campus hides it and refuses every mutation when it is frozen. This
+ * one is NOT a duplicate of it: it runs per AI sub-feature, it resolves the
+ * campus a global role is acting ON (`?campusId=`, which the generic gate
+ * deliberately does not narrow, §5.2), and it owns the token budget.
+ *
  * On success sets:
  *  - req.aiEntitlement : { enabled, plan, llmProfile, monthlyTokenBudget, features }
  *  - req.aiCampusId    : effective campus scope ('' for global roles without one)
@@ -16,7 +30,8 @@
 
 const { sendError, sendValidationError, asyncHandler } = require('../../shared/utils/response-helpers');
 const { buildCampusFilter, isValidObjectId } = require('../../shared/utils/validation-helpers');
-const { AI_ERROR_CODES, AI_PLANS } = require('../../shared/constants/ai.constants');
+const { AI_ERROR_CODES, AI_PLANS, AI_PLAN_PRESETS } = require('../../shared/constants/ai.constants');
+const { resolveAiEntitlement } = require('../../shared/lib/entitlement/entitlement.ai');
 const { GLOBAL_ROLES } = require('./ai.s2s');
 const aiService = require('./ai.service');
 
@@ -31,7 +46,9 @@ const PLATFORM_ENTITLEMENT = Object.freeze({
   plan: AI_PLANS.PREMIUM,
   llmProfile: 'free',
   monthlyTokenBudget: 0,
-  features: Object.freeze({ chat: true, search: true, analytics: true, advisors: true }),
+  // Derived, not restated: a fifth AI feature must reach the platform context
+  // by being added to the top tier, never by someone remembering this line.
+  features: AI_PLAN_PRESETS[AI_PLANS.PREMIUM].features,
 });
 
 /** Marker for a malformed ?campusId= — a 400, never a silent scope widening. */
@@ -95,9 +112,20 @@ const requireAiFeature = (feature) =>
       return next();
     }
 
-    // 2. Campus subscription. Lazy require: campus is a module hub (see its facade note).
+    // 2. Campus subscription — read from the UNIFIED entitlement since phase 2,
+    // with the legacy object answering for a campus the migration has not
+    // reached yet (§3.2). `resolveAiEntitlement` owns which side answers, so
+    // this file never asks the question twice.
+    //
+    // The campus is read directly rather than through the entitlement cache:
+    // the cache holds a resolved entitlement and nothing else, while this gate
+    // additionally needs `status` (a suspended tenant must stop spending) and,
+    // until §3.2 lands, the legacy object. One read, both facts. The AI surface
+    // is a handful of routes, not the 26 the cached gate fronts (§7.2).
+    //
+    // Lazy require: campus is a module hub (see its facade note).
     const campus = await require('../campus').service.getCampusAiEntitlement(campusId);
-    const entitlement = campus?.aiEntitlement;
+    const entitlement = campus ? resolveAiEntitlement(campus) : null;
     if (!campus || campus.status !== 'active' || !entitlement?.enabled) {
       return sendError(res, 403, 'AI is not enabled for this campus', {
         code: AI_ERROR_CODES.AI_NOT_ENABLED,
