@@ -437,6 +437,28 @@ npm run seed:test:self-check       # 16 contrôles : budget, idempotence, verify
 
 ---
 
+## 11quater. Feuille de route produit — `docs/architecture/ERP_ROADMAP.md`
+
+**La source de vérité de l'avancement produit**, sur les quatre briques. Elle remplace
+`ERP_2026_v2.pdf` (l'ancien catalogue commercial, archivé hors dépôt) comme référence de
+planification : ce PDF contient six affirmations que le code contredit, toutes traitées au §11
+de la feuille de route — ne jamais s'y référer pour établir un état d'avancement.
+
+- **Cinq phases**, établies d'après l'état *mesuré* du code et non d'après ce qui a été annoncé :
+  `1-A` livré · `1-B` commencé et pas fini · `2` socle de fabrication · `3` ERP complet ·
+  `4` premium et industrialisation. **206–266 j** restants hors application mobile.
+- **Le §0 est le tableau de bord** et fait foi, comme celui de `QA_TEST_STRATEGY.md`. Un commit
+  qui termine ou démarre un chantier met à jour, *dans le même commit*, la ligne du §0 et la
+  colonne `État` de la phase concernée. Les deux tableaux de bord doivent rester cohérents :
+  un chantier `CH-*` terminé se répercute dans les deux.
+- **Ce qui est vendu est un palier, pas une phase** — `free` 15 clés / `standard` 22 / `premium`
+  26, dérivés de `PLAN_PRESETS`. Les phases sont un calendrier de production interne, que le
+  client n'a pas à connaître. Les deux grilles commerciales (§10) s'adossent aux paliers.
+- **Une vue rendue est publiée comme artifact**, régénérée depuis ce fichier aux jalons où elle
+  doit être montrée. Le fichier fait foi ; la vue est un instantané daté, jamais l'inverse.
+
+---
+
 ## 12. Compaction instructions
 
 Always preserve: current task and status (done / in progress / blocked); files created or modified this session (one-line each); campus-isolation or middleware-chain decisions; active errors and root cause if known; validation/schema changes decided this session; the next step or open question.
