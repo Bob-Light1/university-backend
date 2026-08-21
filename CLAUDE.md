@@ -410,6 +410,33 @@ for an untracked scratch folder. It is not: it holds the ERP training program (~
 
 ---
 
+## 11ter. Fixture de test déterministe — `tests/fixtures/`
+
+Le jeu de données synthétique sur lequel s'appuient les couches de test (CH-0 de
+`docs/architecture/QA_TEST_STRATEGY.md`, livré le 2026-08-21).
+
+```bash
+npm run seed:test -- --ephemeral   # base jetable en mémoire : aucun MongoDB requis
+npm run seed:test -- --print       # table des 18 comptes (9 rôles × 2 campus)
+npm run seed:test:self-check       # 16 contrôles : budget, idempotence, verify, login réel
+```
+
+- **Deux campus, neuf rôles connectés, 283 documents, identifiants figés.** Les `ObjectId`
+  sont dérivés d'une clé métier (`student:A:001`), les dates d'une **ancre** fixe, et le sel
+  bcrypt de la graine — deux exécutions produisent une base identique octet pour octet.
+- **Le seed refuse toute base qui n'est pas locale et nommée comme une base de test**
+  (`seed.config.js`, `assertTestDatabaseUri`). Il purge avant de construire : ne jamais
+  affaiblir ce garde-fou pour faire passer une URI.
+- **Les volumes attendus vivent dans `seed.config.js` (`COUNTS`)** et nulle part ailleurs :
+  `verify.js` les lit, il ne les redéclare pas.
+- **Les marqueurs de suppression y passent par le helper** (`ctx.softDelete(model)`), comme
+  partout ailleurs (§5.1). La fixture matérialise volontairement les trois pièges : un
+  `Result` `ARCHIVED` **vivant**, une `Announcement` `archived` **vivante** (expirée), un
+  `Document` supprimé qui **garde** `status: PUBLISHED`.
+- `tests/fixtures/.generated/` est gitignoré : il contient le mot de passe de test en clair.
+
+---
+
 ## 12. Compaction instructions
 
 Always preserve: current task and status (done / in progress / blocked); files created or modified this session (one-line each); campus-isolation or middleware-chain decisions; active errors and root cause if known; validation/schema changes decided this session; the next step or open question.

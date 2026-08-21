@@ -7,6 +7,8 @@
     "dev": "nodemon server.js",
     "postinstall": "node -e \"console.log('Dependencies ready')\"",
     "test": "jest",
+    "seed:test": "node tests/fixtures/seed.js",
+    "seed:test:self-check": "node tests/fixtures/self-check.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test:watch": "jest --watch"
@@ -50,6 +52,7 @@
     "eslint": "^9.39.4",
     "globals": "^17.6.0",
     "jest": "^30.4.2",
+    "mongodb-memory-server": "^11.2.0",
     "nodemon": "^3.1.11",
     "supertest": "^7.2.2"
   }

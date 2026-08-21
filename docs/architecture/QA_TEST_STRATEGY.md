@@ -12,8 +12,9 @@
 > Rédigé le **2026-08-20**. Périmètre : les **quatre briques** (`backend/`,
 > `frontend/`, `ai-service/`, `partner/`).
 >
-> **Statut global** : cadrage approuvé ; **aucun chantier démarré**.
-> Prérequis absolu de tout le reste : **CH-0**.
+> **Statut global** : cadrage approuvé ; **CH-0 livré le 2026-08-21**, les autres chantiers non démarrés.
+> Le prérequis absolu de tout le reste — **CH-0** — est donc levé : CH-2, CH-4, CH-5 et CH-6
+> peuvent démarrer.
 >
 > **Révision v1.1 — 2026-08-20**, après audit du document par rapport au code. Trois corrections
 > de fond : `PARTNER` reconnu comme **9ᵉ rôle connecté** (la matrice passe de 160 à **180
@@ -79,7 +80,7 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
 |---|---|---|---|---|---|---|---|
-| **CH-0** | Fixture déterministe multi-campus | 0 | `À FAIRE` | — | 1 sem. | — | 2026-08-20 |
+| **CH-0** | Fixture déterministe multi-campus | 0 | `EN PLACE` | — | 1 sem. | Claude (session Bob Light) | 2026-08-21 |
 | **CH-1** | Socle unitaire backend | 1 | `EN PLACE` — à maintenir | — | continu | — | 2026-08-20 |
 | **CH-2** | Matrice API : auth · rôle · isolation campus | 2 | `À FAIRE` | CH-0 | 1–2 sem. | — | 2026-08-20 |
 | **CH-3** | Tests composant frontend | 3 | `À FAIRE` | — *(CH-2 pour les handlers MSW, §7.2)* | 2–3 sem. | — | 2026-08-20 |
@@ -330,9 +331,9 @@ scénario d'échec classique de ce type de projet, et il s'évite par l'ordre de
 | | |
 |---|---|
 | **Couche** | 0 |
-| **État** | `À FAIRE` |
+| **État** | `EN PLACE` — livré le 2026-08-21 |
 | **Dépend de** | — |
-| **Bloque** | CH-2, CH-4, CH-5, CH-6 |
+| **Bloque** | CH-2, CH-4, CH-5, CH-6 — **débloqués** |
 | **Effort** | 1 semaine-développeur |
 | **Brique** | `backend/` |
 
@@ -546,9 +547,84 @@ une ressource du partenaire B du **même** campus. Un filtre purement campus lai
 > cible : elle serait écrite, exécutée, et verte sans rien vérifier. Le §4.3 a été corrigé en
 > conséquence.
 
-### 4.10 Reste à faire
+### 4.10 Ce qui a été livré — 2026-08-21
 
-*Chantier non démarré. À renseigner par le premier intervenant.*
+Le chantier est **terminé**. Arborescence conforme au §4.5, aux deux ajouts près signalés
+ci-dessous.
+
+```
+backend/
+  tests/
+    fixtures/
+      seed.js                # purge + build + verify + export ; CLI (--verify/--print/--ephemeral)
+      seed.config.js         # ancre, graine, VOLUMES ATTENDUS, garde-fou de destruction
+      ids.js                 # ObjectId dérivés, horloge figée, sel bcrypt dérivé
+      models.js              # ← ajout : chargement des 58 modèles depuis le disque
+      verify.js              # 127 assertions d'intégrité, toutes dérivées de seed.config.js
+      exports.js             # écrit/lit .generated/accounts.json + table `--print`
+      self-check.js          # ← ajout : preuve exécutable du §4.7 (16 contrôles)
+      builders/{campus,academics,actors,records,finance,content}.builder.js
+  tests/unit/fixture-seed.test.js   # garde-fou + déterminisme, sans base, dans le gate CI
+```
+
+**Les deux fichiers en plus.** `models.js` parce que le seed doit connaître *tous* les modèles
+pour les purger, y compris ceux que personne n'importe — il les charge depuis le disque plutôt
+que de faire confiance à `mongoose.modelNames()`, comme `hard-delete.test.js` ; et il ne passe
+pas par la table interne du registre de *hard delete*, qui est privée (`CLAUDE.md` §5.2).
+`self-check.js` parce que la moitié de la définition de terminé n'est pas vérifiable sans base
+et n'a donc pas sa place dans le projet Jest `unit`.
+
+**Commandes**
+
+```bash
+npm run seed:test                    # purge + build + verify sur MONGODB_TEST_URI
+npm run seed:test -- --verify        # vérifie sans reconstruire
+npm run seed:test -- --print         # affiche la table des 18 comptes
+npm run seed:test -- --ephemeral     # base jetable en mémoire (aucun mongod requis)
+npm run seed:test:self-check         # 16 contrôles : budget, idempotence, verify, comptes, login
+```
+
+**Définition de terminé — mesures relevées le 2026-08-21**
+
+| Critère §4.7 | État | Mesure |
+|---|---|---|
+| Seed < 60 s sur base vierge | ✅ | **5,7 à 10,7 s** pour 283 documents, 31 collections |
+| Deux exécutions → `ObjectId` identiques | ✅ | Empreinte SHA-256 de **toute** la base identique d'un run à l'autre |
+| `verify.js` échoue si un compteur manque | ✅ | Testé en supprimant un étudiant : la vérification refuse |
+| Refus hors motif de test — **testé** | ✅ | 6 URI refusées / 5 acceptées, dans `tests/unit/fixture-seed.test.js` |
+| Les trois pièges de suppression présents | ✅ | Assertions dédiées « TRAP 1/2/3 » dans `verify.js` |
+| `.generated/accounts.json` couvre les 9 rôles | ✅ | 18 comptes ; **2 `PARTNER` par campus**, chacun avec ses prospects et commissions |
+| Aucun littéral de marqueur de suppression (R7) | ✅ | `ctx.softDelete(model)` → `softDeletePatch()` ; idem pour les lectures de `verify.js` |
+| Une commande suffit à un nouvel intervenant | ✅ | `npm run seed:test -- --ephemeral` ne demande **aucun** MongoDB installé |
+
+En prime, non exigé par le §4.7 mais décisif pour CH-2/CH-4 : **les neuf rôles se connectent
+réellement** sur l'application (`supertest` sur `app.js`, `200` + jeton pour chacun des neuf
+points d'entrée de connexion). Un catalogue de comptes que les routes de login refusent serait
+passé vert sur tous les autres critères.
+
+**Écarts assumés par rapport au §4.3** — tous trois consignés au §16 :
+
+- `Level` est seedé **globalement** (5 niveaux) et non 3 + 2 : le schéma ne porte aucun champ de
+  campus et le registre de *hard delete* le déclare `campusPath: null` (**D-21**) ;
+- un gestionnaire de classe est **unique par enseignant** (index partiel unique sur
+  `classManager`), donc les classes au-delà du nombre d'enseignants vivants n'en ont pas (**D-22**) ;
+- « dont 2 `isDeleted` » sur la ligne finance est lu comme **2 par collection** de campus A
+  (2 revenus, 2 dépenses, 2 frais), et non 2 au total (**D-23**).
+
+### 4.11 Reste à faire
+
+- [ ] **Recette par une seconde personne** (D-14) : dérouler `npm run seed:test:self-check` et
+      relire les volumes du §4.3 ligne à ligne contre `seed.config.js`.
+- [ ] Trancher **D-06** en même temps que le démarrage de CH-2 : `startEphemeralDatabase()`
+      livre déjà un `MongoMemoryReplSet` prêt pour le `globalSetup`, mais le choix
+      « mémoire vs conteneur en CI » reste à consigner.
+- [ ] Le portail public (`QuizQuestion`, `Testimonial`, `FaqEntry`, `CoursePreview`,
+      `CompetitionPrize`) n'est **pas** seedé — hors périmètre déclaré au §4.2, à reprendre par
+      CH-6 s'il en a besoin.
+- [ ] `GaetConstraint`, `Notification`, `UserPreferences`, `PrintJob`, `FinalTranscript` et les
+      pièces jointes GED (`DocumentVersion`, `DocumentShare`, `DocumentTemplate`) ne sont pas
+      seedés non plus : aucune couche supérieure ne les réclame aujourd'hui, mais CH-4 en aura
+      besoin dès qu'un parcours GAET ou une notification entrera dans les parcours canoniques.
 
 ---
 
@@ -857,7 +933,23 @@ backend/
 
 ### 6.9 Reste à faire
 
-*Chantier non démarré. À renseigner par le premier intervenant.*
+*Chantier non démarré.* Ce que CH-0 lui a déjà livré, au 2026-08-21, pour qu'il ne soit pas
+réécrit :
+
+- `tests/fixtures/seed.js` exporte **`startEphemeralDatabase()`** — un `MongoMemoryReplSet`
+  (jeu de répliques, donc transactions du *hard delete* possibles) dont le `dbPath` est en
+  tmpfs pour la raison mesurée en **D-25**. C'est le corps du `globalSetup` du §6.5 ;
+- le **garde-fou accepte déjà l'URI éphémère** que ce `globalSetup` lui présentera : hôte de
+  bouclage sur port éphémère + nom de base préfixé *ou* UUID. Le §4.4 demandait de le vérifier
+  avant d'écrire la première ligne de CH-2 : c'est fait, et testé
+  (`tests/unit/fixture-seed.test.js`) ;
+- `tests/fixtures/exports.js` expose **`readAccounts()`** : `tokens.js` doit signer ses jetons
+  depuis ce catalogue plutôt que redériver des identifiants, sinon un compte renommé casse en
+  silence. Il porte les **2 comptes `PARTNER` par campus** de la famille C′, avec la liste de
+  leurs prospects et commissions — l'oracle de C′ est donc déjà écrit ;
+- `verify.js` expose **`CAMPUS_PATH`**, la correspondance modèle → champ de campus
+  (`campusId` / `schoolCampus` / `campus`). `fixture-index.js` (§6.6) en a besoin pour la
+  famille C″ et ne doit pas la redéclarer.
 
 ---
 
@@ -1634,6 +1726,12 @@ ces soustractions est exactement le périmètre de CH-5.
 | **D-18** | 2026-08-20 | La matrice CH-2 gagne une famille **C″** : routes de liste, jeton scopé, aucun identifiant d'un autre campus dans le corps | La fuite la plus probable n'est pas un accès à une ressource nommée mais un `GET` de collection au filtre oublié, qui répond `200` — vert dans les familles A/B/C, et sans signal visuel (§9.2). Sans C″, « la frontière est couverte » était un abus | Tranché — voir §6.4 |
 | **D-19** | 2026-08-20 | Les cas **d'écriture** de la famille C s'exécutent dans un fichier dédié qui re-seede, jamais contre la base partagée | La famille C porte un rôle autorisé et atteint le code métier : sur un `POST`/`PUT`/`DELETE`, une isolation trouée **modifie la fixture** et rend les cas suivants dépendants de l'ordre. La suite deviendrait instable le jour où elle trouve un vrai bug — l'inverse de R1 | Tranché — voir §6.5 |
 | **D-20** | 2026-08-20 | Les captures de référence de CH-4 sont produites sur **Chromium seul** — 100 références | Une référence visuelle est propre à son moteur de rendu ; les trois moteurs triplent la ligne de base sans rien apprendre de plus. Ils restent utilisés pour les parcours fonctionnels | Tranché — voir §8.4 |
+| **D-21** | 2026-08-21 | `Level` est seedé **globalement** (5 niveaux), et non 3 + 2 comme l'annonce le tableau du §4.3 | `level.model.js` ne déclare aucun champ de campus, et `hard-delete.registry.js` déclare `campusPath: null` pour cette entité. Lui inventer un campus ferait passer un test d'isolation qui doit échouer — l'erreur exacte que D-15 corrige pour `Partner` et `GradingScale`, dans l'autre sens | Tranché — §4.3 à lire avec cette réserve |
+| **D-22** | 2026-08-21 | Une classe de fixture n'a un gestionnaire que s'il reste un enseignant **vivant** non déjà gestionnaire ; au-delà, `classManager` reste `null` | `class.model.js` porte un index unique partiel sur `classManager` : un enseignant gère au plus une classe, à l'échelle de la plateforme. Campus A a 4 classes pour 2 enseignants vivants. Relevé au premier seed, par un `E11000` à la construction des index — pas par lecture du schéma | Tranché |
+| **D-23** | 2026-08-21 | « dont 2 `isDeleted` » (ligne finance du §4.3) est lu comme **2 par collection** du campus A : 2 revenus, 2 dépenses, 2 frais de scolarité | La formulation est ambiguë et la lecture haute est la seule qui donne à chacune des trois collections une ligne supprimée à filtrer. Les volumes vivent dans `COUNTS` (`seed.config.js`), donc l'autre lecture est un changement d'une ligne | Tranché |
+| **D-24** | 2026-08-21 | Le mot de passe de fixture est haché avec un **sel dérivé de la graine**, non tiré au hasard | bcrypt tire un sel par appel : le même mot de passe produit une empreinte différente à chaque exécution, et deux seeds consécutifs divergeaient alors sur **chaque document de compte**, en violation directe de l'idempotence du §4.4. Acceptable ici et seulement ici : ces identifiants sont publiés en clair dans `.generated/accounts.json`, et le garde-fou interdit au seed d'atteindre autre chose qu'une base de test locale | Tranché |
+| **D-25** | 2026-08-21 | La base éphémère de `--ephemeral` (et, plus tard, du `globalSetup` de CH-2) stocke ses données sur **`/dev/shm`**, pas sur le disque | `mongodb-memory-server` écrit sur le système de fichiers ordinaire malgré son nom. Sur cette machine, la construction des index déclarés coûte **250 s depuis le disque et moins de 3 s depuis un tmpfs** : le budget de 60 s du §4.7 est inatteignable sur disque et confortable en mémoire. À reprendre dans **D-06** — un conteneur en CI doit monter son `dbPath` en tmpfs pour la même raison | Tranché — mesuré |
+| **D-26** | 2026-08-21 | Le seed pilote lui-même la création des collections et des index (`autoIndex` et `autoCreate` désactivés) | Laissés actifs, Mongoose crée une collection par modèle compilé dès la connexion : la purge court alors contre ce que Mongoose construit, et la base finit un run avec ~25 collections vides qu'un second run ne recrée pas. Deux seeds, deux bases différentes — l'idempotence tombait sur un détail invisible depuis les données | Tranché |
 
 ---
 
