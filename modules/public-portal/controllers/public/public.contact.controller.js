@@ -12,13 +12,12 @@
 
 const { enqueueIngestion } = require('../../public-portal.queue');
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
-const campusSvc = () => require('../../../campus').service;
+const { resolvePortalCampus } = require('../../portal-campus');
 
 const {
   asyncHandler,
   sendSuccess,
   sendError,
-  sendNotFound,
 } = require('../../../../shared/utils/response-helpers');
 const { firstLengthViolation } = require('../../../../shared/utils/validation-helpers');
 
@@ -67,9 +66,12 @@ const submitContact = asyncHandler(async (req, res) => {
   // Resolve campus (optional — allows anonymous messages without a ref)
   let campusId = null;
   if (campusSlug?.trim()) {
-    const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
-
-    if (!campus) return sendNotFound(res, 'Campus');
+    // A submission is a write on the portal surface: a hidden portal answers
+    // 404, a frozen one refuses the intake (§9.2).
+    const campus = await resolvePortalCampus(res, {
+      slug: campusSlug.toLowerCase().trim(), write: true,
+    });
+    if (!campus) return;
     campusId = campus._id;
   }
 

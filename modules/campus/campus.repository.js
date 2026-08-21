@@ -85,8 +85,13 @@ const getCampusName = (campusId) =>
 const getCampusForPdf = (campusId) =>
   Campus.findById(campusId).select('campus_name campus_image location').lean();
 
+/**
+ * Storage quota inputs. Both quota carriers are projected: `entitlement.quotas`
+ * is the source of truth, `features` is still the only one populated on a
+ * campus the migration has not reached (§3.2, §9.3).
+ */
 const getCampusStorageInfo = (campusId) =>
-  Campus.findById(campusId).select('features campus_name').lean();
+  Campus.findById(campusId).select('features entitlement campus_name').lean();
 
 const getCampusDefaults = (campusId) =>
   Campus.findById(campusId).select('defaultLanguage defaultTimezone defaultGradeFormat').lean();
@@ -176,10 +181,48 @@ const getCampusEntitlement = (campusId) =>
     // selector the day §3.2 removes the fields.
     .select('entitlement features aiEntitlement campus_name status').lean();
 
-/** Entitlement + audit trail (admin console only — audit is select:false elsewhere). */
+/**
+ * Every campus that CARRIES an entitlement, with just enough to resolve it.
+ *
+ * Only these can ever resolve to anything other than "everything enabled": a
+ * campus with no `entitlement` is fail-open by definition (§4.3), so the estate
+ * scan a background job needs is bounded by the campuses somebody configured,
+ * not by the tenant count. `.lean()` for the same reason as
+ * {@link getCampusEntitlement} — the resolver only ever sees raw data.
+ */
+const listCampusEntitlements = () =>
+  Campus.find({ entitlement: { $exists: true, $ne: null } })
+    .select('entitlement').lean();
+
+/**
+ * EVERY campus with its raw entitlement — the estate matrix of the admin
+ * console (§13.1).
+ *
+ * Deliberately unfiltered, unlike {@link listCampusEntitlements}: a campus
+ * carrying no entitlement resolves to "everything enabled" (§4.3), and that is
+ * precisely a line the admin must see — an unconfigured tenant is the one with
+ * every paid module open. Filtering here would answer "who has what" with only
+ * the campuses somebody already touched.
+ *
+ * `status` travels so the matrix can tell an archived campus from a live one
+ * (CLAUDE.md §5.1 — `Campus` is soft-deleted through its status enum).
+ */
+const listCampusesForEstate = () =>
+  Campus.find({})
+    .select('campus_name entitlement status')
+    .sort({ campus_name: 1 })
+    .lean();
+
+/**
+ * Entitlement + audit trail (admin console only — audit is select:false
+ * elsewhere). `aiEntitlement` travels for the same reason as in
+ * {@link getCampusEntitlement}: the pilot dialog renders the AI values through
+ * `resolveAiEntitlement()`, which answers from the legacy object for a campus
+ * the migration has not reached yet (§3.2).
+ */
 const getCampusEntitlementWithAudit = (campusId) =>
   Campus.findById(campusId)
-    .select('entitlement campus_name status +entitlementAudit').lean();
+    .select('entitlement aiEntitlement campus_name status +entitlementAudit').lean();
 
 /**
  * Replaces the entitlement object and appends an audit entry in the same write
@@ -232,6 +275,8 @@ module.exports = {
   getCampusEntitlement,
   getCampusEntitlementWithAudit,
   setCampusEntitlement,
+  listCampusEntitlements,
+  listCampusesForEstate,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,

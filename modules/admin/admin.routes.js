@@ -16,6 +16,7 @@
  *  PATCH  /api/admin/:id/status          → updateAdminStatus     (ADMIN only)
  *  GET    /api/admin/campuses/:id/ai-entitlement → getCampusAiEntitlement    (ADMIN | DIRECTOR)
  *  PUT    /api/admin/campuses/:id/ai-entitlement → updateCampusAiEntitlement (ADMIN | DIRECTOR)
+ *  GET    /api/admin/entitlement/overview        → getEntitlementOverview   (ADMIN | DIRECTOR)
  *  GET    /api/admin/campuses/:id/entitlement    → getCampusEntitlement      (ADMIN | DIRECTOR)
  *  PATCH  /api/admin/campuses/:id/entitlement    → updateCampusEntitlement   (ADMIN | DIRECTOR)
  */
@@ -43,6 +44,7 @@ const {
 const {
   getCampusEntitlement,
   updateCampusEntitlement,
+  getEntitlementOverview,
 } = require('./controllers/admin.entitlement.controller');
 
 const { authenticate, authorize } = require('../../shared/middleware/auth');
@@ -50,6 +52,7 @@ const { authenticate, authorize } = require('../../shared/middleware/auth');
 const {
   loginLimiter,
   strictLimiter,
+  apiLimiter,
 } = require('../../shared/middleware/rate-limiter');
 
 const router = express.Router();
@@ -176,6 +179,20 @@ router.put(
   authenticate,
   authorize(['ADMIN', 'DIRECTOR']),
   updateCampusAiEntitlement,
+);
+
+/**
+ * GET /api/admin/entitlement/overview
+ * The estate matrix: every campus × every module, with the tier of each campus
+ * (CAMPUS_ENTITLEMENT_DESIGN.md §13.1). Declared before `/campuses/:id/...`
+ * and before every `/:id` route (CLAUDE.md §7).
+ */
+router.get(
+  '/entitlement/overview',
+  authenticate,
+  authorize(['ADMIN', 'DIRECTOR']),
+  apiLimiter,
+  getEntitlementOverview,
 );
 
 /**

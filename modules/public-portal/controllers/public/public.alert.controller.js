@@ -13,7 +13,7 @@ const { asyncHandler, sendSuccess, sendError } = require('../../../../shared/uti
 const { firstLengthViolation } = require('../../../../shared/utils/validation-helpers');
 const { enqueueIngestion } = require('../../public-portal.queue');
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
-const campusSvc = () => require('../../../campus').service;
+const { resolvePortalCampus } = require('../../portal-campus');
 
 const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 
@@ -54,10 +54,9 @@ const submitAlert = asyncHandler(async (req, res) => {
   const defaultSlug = process.env.DEFAULT_CAMPUS_SLUG ?? '';
   const slug = campusSlug?.trim() || defaultSlug;
 
-  const campus = await campusSvc().getActiveCampusBySlug(slug, '_id');
-  if (!campus) {
-    return sendError(res, 404, 'Campus not found.');
-  }
+  // Next-batch alerts are lead intake: gated as a write (§9.2).
+  const campus = await resolvePortalCampus(res, { slug, write: true });
+  if (!campus) return;
 
   // Persistence deferred to the ingestion queue: existing lead → notifyNextBatch
   // = true; otherwise a minimal lead is created (partner module, in the worker).

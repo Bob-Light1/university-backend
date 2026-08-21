@@ -18,8 +18,14 @@
  */
 
 jest.mock('../../modules/exam/exam.repository');
+// The per-campus emission gate is pinned in tests/unit/entitlement.jobs.test.js;
+// here it is stubbed so the job's own behaviour is what these tests measure.
+jest.mock('../../shared/lib/entitlement', () => ({
+  jobs: { suppressedCampusIds: jest.fn().mockResolvedValue([]) },
+}));
 
 const repo = require('../../modules/exam/exam.repository');
+const { jobs: entitlementJobs } = require('../../shared/lib/entitlement');
 const { runAntiCheatJob, analyzeSession } = require('../../modules/exam/exam-anticheat.cron');
 
 const SESSION_A = '507f1f77bcf86cd799439011';
@@ -67,6 +73,7 @@ const identicalPapers = (n) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  entitlementJobs.suppressedCampusIds.mockResolvedValue([]);
   repo.bulkPushAntiCheatFlags.mockResolvedValue(null);
   repo.findSubmissionsForAntiCheat.mockResolvedValue([]);
   jest.spyOn(console, 'log').mockImplementation(() => {});
@@ -232,5 +239,27 @@ describe('B9-⑦ — the pairwise loop performs no I/O', () => {
     // Under cosine these two vectors were proportional → similarity 1.0 → flagged.
     expect(result.flagged).toBe(0);
     expect(repo.bulkPushAntiCheatFlags).toHaveBeenCalledWith([]);
+  });
+});
+
+describe('entitlement — a campus whose Examinations module is off takes no scan (§9.1)', () => {
+  test('the exclusion reaches BOTH queries, batch and backlog figure', async () => {
+    // Flagging a submission is a verdict issued in the module's name: emission,
+    // not hygiene. Excluded inside the query rather than after the read — a
+    // batch filtered afterwards would return mostly rows the job may not touch,
+    // starve the campuses it may, and re-fill identically on the next run
+    // because those sessions keep their null marker.
+    entitlementJobs.suppressedCampusIds.mockResolvedValue(['camp-off']);
+    buildStore([]);
+
+    await runAntiCheatJob();
+
+    expect(entitlementJobs.suppressedCampusIds).toHaveBeenCalledWith('exam');
+    expect(repo.findSessionsPendingAntiCheat)
+      .toHaveBeenCalledWith(expect.any(Number), { excludeCampusIds: ['camp-off'] });
+    // The backlog figure carries it too: a count including sessions the job is
+    // forbidden to scan would grow forever and read as a failing job.
+    expect(repo.countSessionsPendingAntiCheat)
+      .toHaveBeenCalledWith({ excludeCampusIds: ['camp-off'] });
   });
 });

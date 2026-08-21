@@ -26,9 +26,9 @@ const crypto      = require('crypto');
 const mongoose    = require('mongoose'); // kept for ObjectId cast/validation
 const repo        = require('../../public-portal.repository');
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
-const campusSvc = () => require('../../../campus').service;
+const { resolvePortalCampus } = require('../../portal-campus');
 
-const { asyncHandler, sendSuccess, sendError, sendNotFound, sendConflict } = require('../../../../shared/utils/response-helpers');
+const { asyncHandler, sendSuccess, sendError, sendConflict } = require('../../../../shared/utils/response-helpers');
 
 // Abandoned pending sessions are reaped by the TTL index after this delay.
 const PENDING_SESSION_TTL_MS = 2 * 60 * 60 * 1000; // 2h
@@ -44,9 +44,10 @@ const getQuizQuestions = asyncHandler(async (req, res) => {
 
   if (!campusSlug?.trim()) return sendError(res, 400, 'campusSlug is required.');
 
-  const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
-
-  if (!campus) return sendNotFound(res, 'Campus');
+  // Entitlement-aware resolution (§9.2): a campus whose public portal is
+  // hidden answers 404 exactly like one that does not exist.
+  const campus = await resolvePortalCampus(res, { slug: campusSlug.toLowerCase().trim(), select: '_id' });
+  if (!campus) return;
 
   const normalizedCategory = category?.toLowerCase().trim() || null;
 
@@ -128,6 +129,16 @@ const submitQuiz = asyncHandler(async (req, res) => {
     return sendConflict(res, 'This quiz session has already been submitted.');
   }
 
+  // The campus comes from the SESSION, so the portal entitlement is checked
+  // here rather than from the body (§9.2). It matters even though `GET /quiz`
+  // is gated too: a session issued before the portal was closed would otherwise
+  // still be submittable, and a scored session is a lead. The campus is fetched
+  // once and reused for the placement recommendation below.
+  const campus = await resolvePortalCampus(res, {
+    id: session.schoolCampus, select: '_id programs', write: true,
+  });
+  if (!campus) return;
+
   const servedIds = (session.servedQuestionIds || []).map((id) => String(id));
   if (servedIds.length === 0) {
     return sendError(res, 400, 'This quiz session has no questions to score.');
@@ -177,16 +188,13 @@ const submitQuiz = asyncHandler(async (req, res) => {
 
   // For placement tests, map score to a campus program recommendation.
   let recommendedProgram = null;
-  if (session.category === 'placement') {
-    const campus = await campusSvc().getActiveCampusById(session.schoolCampus, '_id programs');
-    if (campus?.programs?.length) {
-      const programs = campus.programs;
-      const idx = Math.min(
-        Math.floor((score / 100) * programs.length),
-        programs.length - 1,
-      );
-      recommendedProgram = programs[idx];
-    }
+  if (session.category === 'placement' && campus.programs?.length) {
+    const programs = campus.programs;
+    const idx = Math.min(
+      Math.floor((score / 100) * programs.length),
+      programs.length - 1,
+    );
+    recommendedProgram = programs[idx];
   }
 
   return sendSuccess(res, 201, 'Quiz submitted successfully.', {

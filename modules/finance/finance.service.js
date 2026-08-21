@@ -287,7 +287,23 @@ const MAX_OVERDUE_BATCHES  = 1000; // hard safety bound on a single run
  * atomically, so under horizontal scaling a debt is reminded at most once.
  * Best-effort: a send failure never interrupts the sweep (delivery is retried by
  * the notification module).
- * @returns {Promise<{ transitioned: number, reminded: number }>}
+ *
+ * ENTITLEMENT (design doc §9.1) — the two halves are governed differently, and
+ * the split is the whole point of the rule "silence the emission, never the
+ * hygiene":
+ *
+ *  - the transition runs for EVERY campus. A debt past its due date is a fact
+ *    about a date, not an action taken in the module's name: it is invisible
+ *    where Finance is hidden, and where Finance is merely frozen, freezing the
+ *    transition too would leave the ledger showing `pending` on debts that are
+ *    plainly overdue — a frozen module must keep its history readable (§4.1),
+ *    not turn it into a lie. It would also fire a burst of transitions the day
+ *    the module came back.
+ *  - the reminders are suppressed per campus. They are outbound mail in the
+ *    name of a module the operator switched off — the case this chantier exists
+ *    for.
+ *
+ * @returns {Promise<{ transitioned: number, reminded: number, suppressedCampuses: number }>}
  */
 async function runOverdueJob() {
   const now    = new Date();
@@ -295,12 +311,16 @@ async function runOverdueJob() {
 
   const { modifiedCount: transitioned = 0 } = await financeRepo.markPastDueOverdue(now);
 
+  // Resolved once per run, not once per debt.
+  const excludeCampusIds = await require('../../shared/lib/entitlement').jobs
+    .suppressedCampusIds('finance');
+
   // Batched cadence sweep. Each claimed debt gets `lastRemindedAt = now`, dropping
   // out of the next batch's window → the candidate set strictly shrinks and the
   // loop terminates (the batch cap is a defensive upper bound only).
   let reminded = 0;
   for (let i = 0; i < MAX_OVERDUE_BATCHES; i += 1) {
-    const batch = await financeRepo.findRemindableOverdueFees(cutoff, OVERDUE_BATCH);
+    const batch = await financeRepo.findRemindableOverdueFees(cutoff, OVERDUE_BATCH, { excludeCampusIds });
     if (!batch.length) break;
     for (const { _id } of batch) {
       const claimed = await financeRepo.claimFeeForReminder(_id, cutoff, now);
@@ -311,10 +331,13 @@ async function runOverdueJob() {
     if (batch.length < OVERDUE_BATCH) break;
   }
 
-  if (transitioned || reminded) {
-    console.log(`💸 [finance] overdue sweep: ${transitioned} marked overdue, ${reminded} reminder(s) sent`);
+  if (transitioned || reminded || excludeCampusIds.length) {
+    console.log(
+      `💸 [finance] overdue sweep: ${transitioned} marked overdue, ${reminded} reminder(s) sent`
+      + (excludeCampusIds.length ? `, ${excludeCampusIds.length} campus(es) silenced (Finance not active)` : '')
+    );
   }
-  return { transitioned, reminded };
+  return { transitioned, reminded, suppressedCampuses: excludeCampusIds.length };
 }
 
 // ── AI advisor aggregates (M5b — PHASE3_AI_DESIGN.md §6.5/§6.6) ───────────────

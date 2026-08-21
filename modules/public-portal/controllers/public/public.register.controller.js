@@ -28,13 +28,12 @@
 const partnerService = require('../../../partner').service; // partner module facade (§3)
 const { enqueueIngestion } = require('../../public-portal.queue');
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
-const campusSvc = () => require('../../../campus').service;
+const { resolvePortalCampus } = require('../../portal-campus');
 
 const {
   asyncHandler,
   sendSuccess,
   sendError,
-  sendNotFound,
 } = require('../../../../shared/utils/response-helpers');
 const { firstLengthViolation } = require('../../../../shared/utils/validation-helpers');
 
@@ -104,6 +103,12 @@ const publicPreRegister = asyncHandler(async (req, res) => {
       return sendError(res, 404, 'Invalid or inactive referral code.');
     }
 
+    // The partner code carries the campus, so the portal entitlement is checked
+    // against it directly — a referral link must not be a way around a portal
+    // its campus has closed (§9.2).
+    const campus = await resolvePortalCampus(res, { id: partner.schoolCampus, write: true });
+    if (!campus) return;
+
     campusId     = partner.schoolCampus;
     resolvedCode = partner.partnerCode;
 
@@ -119,11 +124,10 @@ const publicPreRegister = asyncHandler(async (req, res) => {
       return sendError(res, 400, 'campusSlug is required for direct registrations.');
     }
 
-    const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
-
-    if (!campus) {
-      return sendNotFound(res, 'Campus');
-    }
+    const campus = await resolvePortalCampus(res, {
+      slug: campusSlug.toLowerCase().trim(), write: true,
+    });
+    if (!campus) return;
 
     campusId = campus._id;
   }

@@ -16,6 +16,8 @@
  *   - setCampusAiEntitlement    : replaces the AI entitlement + audit entry (admin).
  *   - getCampusEntitlement      : unified entitlement (gate middleware, admin/campus read).
  *   - getCampusEntitlementWithAudit : entitlement + audit trail (admin console).
+ *   - listCampusEntitlements    : every configured entitlement (background jobs, §9.1).
+ *   - listCampusesForEstate     : every campus + raw entitlement (admin estate matrix).
  *   - setCampusEntitlement      : replaces the entitlement + audit entry (both layers).
  *   - getActiveCampusBySlug     : public portal resolution by slug (active status).
  *   - getActiveCampusById       : public portal resolution by _id (active status).
@@ -46,6 +48,8 @@ const setCampusAiEntitlement    = (campusId, entitlement, auditEntry) =>
   campusRepo.setCampusAiEntitlement(campusId, entitlement, auditEntry);
 const getCampusEntitlement      = (campusId) => campusRepo.getCampusEntitlement(campusId);
 const getCampusEntitlementWithAudit = (campusId) => campusRepo.getCampusEntitlementWithAudit(campusId);
+const listCampusEntitlements    = () => campusRepo.listCampusEntitlements();
+const listCampusesForEstate     = () => campusRepo.listCampusesForEstate();
 const setCampusEntitlement      = (campusId, entitlement, auditEntry) =>
   campusRepo.setCampusEntitlement(campusId, entitlement, auditEntry);
 const getActiveCampusBySlug     = (slug, select) => campusRepo.getActiveCampusBySlug(slug, select);
@@ -69,6 +73,8 @@ module.exports = {
   getCampusEntitlement,
   getCampusEntitlementWithAudit,
   setCampusEntitlement,
+  listCampusEntitlements,
+  listCampusesForEstate,
   getActiveCampusBySlug,
   getActiveCampusById,
   listActivePublicCampuses,

@@ -27,7 +27,11 @@ const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 const { PLAN_PRESETS, FEATURE_PLANS } = require('../../../shared/constants/features.constants');
 const { OVERRIDE_LAYERS } = require('../../../shared/utils/entitlement');
 const entitlement = require('../../../shared/lib/entitlement');
-const { applyAndRespond } = require('../../../shared/lib/entitlement/entitlement.controller');
+const { resolveAiEntitlement } = require('../../../shared/lib/entitlement/entitlement.ai');
+const {
+  applyAndRespond,
+  PILOT_REQUIREMENTS,
+} = require('../../../shared/lib/entitlement/entitlement.controller');
 
 /**
  * GET /api/admin/campuses/:id/entitlement
@@ -44,7 +48,7 @@ const getCampusEntitlement = asyncHandler(async (req, res) => {
   }
 
   const [report, campus] = await Promise.all([
-    entitlement.service.describeForCampus(id),
+    entitlement.service.describeForCampus(id, { layer: OVERRIDE_LAYERS.ADMIN }),
     require('../../campus').service.getCampusEntitlementWithAudit(id),
   ]);
   if (!report.found) return sendNotFound(res, 'Campus');
@@ -53,6 +57,15 @@ const getCampusEntitlement = asyncHandler(async (req, res) => {
     ...report,
     plans: Object.values(FEATURE_PLANS),
     planPresets: PLAN_PRESETS,
+    // The AI values the dialog edits, resolved by the module that owns them —
+    // never re-derived here. Phase 4 folds the standalone AI console into this
+    // screen, so the tier change and the budget it implies are decided in one
+    // place instead of two that each know half the consequence.
+    ai: resolveAiEntitlement(campus),
+    // Same reason as on the manager's route: the dialog reads its own
+    // constraints from the server instead of mirroring literals that would
+    // drift the day one of them changes.
+    requirements: PILOT_REQUIREMENTS,
     audit: (campus?.entitlementAudit || []).slice(-20).reverse(),
   });
 });
@@ -82,4 +95,25 @@ const updateCampusEntitlement = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getCampusEntitlement, updateCampusEntitlement };
+/**
+ * GET /api/admin/entitlement/overview
+ * The estate matrix (§13.1): every campus, its tier, and the effective state of
+ * every module. One row per tenant — the screen an admin opens to answer "who
+ * has what, and since when".
+ *
+ * Read-only and deliberately state-only: editing one campus goes through the
+ * per-campus route above, which is the one that carries the refusal checks.
+ *
+ * @access ADMIN | DIRECTOR
+ */
+const getEntitlementOverview = asyncHandler(async (req, res) => {
+  const estate = await entitlement.service.describeEstate();
+
+  return sendSuccess(res, 200, 'OK', {
+    ...estate,
+    plans: Object.values(FEATURE_PLANS),
+    planPresets: PLAN_PRESETS,
+  });
+});
+
+module.exports = { getCampusEntitlement, updateCampusEntitlement, getEntitlementOverview };

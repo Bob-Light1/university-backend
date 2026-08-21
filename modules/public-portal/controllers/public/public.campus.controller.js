@@ -15,6 +15,7 @@
 const partnerService = require('../../../partner').service; // partner module facade (§3)
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
 const campusSvc = () => require('../../../campus').service;
+const { resolvePortalCampus, filterPortalCampuses } = require('../../portal-campus');
 
 const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
 
@@ -41,16 +42,20 @@ const getCampusInfo = asyncHandler(async (req, res) => {
 
     partnerCode = partner.partnerCode;
     // status:active filter — consistent with slug resolution; an archived
-    // campus must never leak via a still-active partner code.
-    campus = await campusSvc().getActiveCampusById(partner.schoolCampus, CAMPUS_PUBLIC_FIELDS);
+    // campus must never leak via a still-active partner code. The portal
+    // entitlement is applied on both branches by the same helper (§9.2), so a
+    // partner link cannot reach a campus its slug could not.
+    campus = await resolvePortalCampus(res, {
+      id: partner.schoolCampus, select: CAMPUS_PUBLIC_FIELDS,
+    });
   } else {
     // Resolution via campusSlug
-    campus = await campusSvc().getActiveCampusBySlug(slug.toLowerCase().trim(), CAMPUS_PUBLIC_FIELDS);
+    campus = await resolvePortalCampus(res, {
+      slug: slug.toLowerCase().trim(), select: CAMPUS_PUBLIC_FIELDS,
+    });
   }
 
-  if (!campus) {
-    return sendNotFound(res, 'Campus');
-  }
+  if (!campus) return;   // already answered — 404 for absent AND for hidden
 
   return sendSuccess(res, 200, 'Campus info retrieved.', {
     campusSlug:    campus.campusSlug,
@@ -78,8 +83,10 @@ const getCampusInfo = asyncHandler(async (req, res) => {
  * institution has several campuses (spec §3.4).
  */
 const listCampuses = asyncHandler(async (req, res) => {
-  const campuses = await campusSvc().listActivePublicCampuses(
-    'campus_name campusSlug campus_image location.city location.country'
+  const campuses = await filterPortalCampuses(
+    await campusSvc().listActivePublicCampuses(
+      'campus_name campusSlug campus_image location.city location.country'
+    )
   );
 
   const data = campuses.map((campus) => ({

@@ -29,8 +29,7 @@ const { OVERRIDE_LAYERS } = require('../../../shared/utils/entitlement');
 const entitlement = require('../../../shared/lib/entitlement');
 const {
   applyAndRespond,
-  MIN_REASON_LENGTH,
-  MAX_REASON_LENGTH,
+  PILOT_REQUIREMENTS,
 } = require('../../../shared/lib/entitlement/entitlement.controller');
 
 /**
@@ -65,14 +64,16 @@ const getEntitlement = asyncHandler(async (req, res) => {
   const campusId = resolveTargetCampus(req, res);
   if (!campusId) return undefined;
 
-  const report = await entitlement.service.describeForCampus(campusId);
+  const report = await entitlement.service.describeForCampus(campusId, {
+    layer: OVERRIDE_LAYERS.CAMPUS,
+  });
   if (!report.found) return sendNotFound(res, 'Campus');
 
   return sendSuccess(res, 200, 'OK', {
     ...report,
     // Travel with the payload rather than being mirrored as frontend literals,
     // the way the hard-delete dialog reads its own requirements from the server.
-    requirements: { minReasonLength: MIN_REASON_LENGTH, maxReasonLength: MAX_REASON_LENGTH },
+    requirements: PILOT_REQUIREMENTS,
   });
 });
 

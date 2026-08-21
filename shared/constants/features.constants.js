@@ -132,6 +132,28 @@ const FEATURE_ERROR_CODES = Object.freeze({
  */
 const MAX_UNTIL_MONTHS = 12;
 
+/**
+ * Quota values a campus gets when nothing has been decided for it — the last
+ * step of the chain `entitlement.quotas` → legacy `features` → here (§9.3).
+ *
+ * Declared HERE rather than as Mongoose schema defaults so the two readers
+ * cannot drift: the quota is consumed from a full campus document
+ * (`campus.model.js` instance methods) and from a `.lean()` projection
+ * (`document.campus.middleware.js`), and a `.lean()` read applies no default.
+ * The legacy `features` sub-schema derives its own defaults from this object,
+ * so the number exists once (CLAUDE.md §0.1).
+ *
+ * `0` is NOT unlimited here — these are ceilings, and an accidental zero would
+ * lock a campus out of creating anything. Unlimited is expressed by a large
+ * explicit value, never by a magic number.
+ */
+const DEFAULT_QUOTAS = Object.freeze({
+  maxStudents:          1000,
+  maxTeachers:          100,
+  maxClasses:           50,
+  maxDocumentStorageMB: 5120,
+});
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 /**
@@ -451,6 +473,7 @@ module.exports = {
   CRON_NATURE,
   FEATURE_ERROR_CODES,
   MAX_UNTIL_MONTHS,
+  DEFAULT_QUOTAS,
   FEATURE_REGISTRY,
   UNGATED_MOUNTS,
   FEATURE_KEYS,

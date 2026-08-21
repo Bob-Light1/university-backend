@@ -12,6 +12,11 @@
  *  notification (Africa's Talking + Resend/SendGrid) is a Phase 3 prerequisite — not triggered
  *  here, notifiedAt stays null until wired up.
  *
+ *  ENTITLEMENT: the closing is hygiene and always runs; the winner notifications
+ *  are emission and are withheld when the campus's public portal is not active
+ *  (CAMPUS_ENTITLEMENT_DESIGN.md §9.1). The ranking is still frozen, so nothing
+ *  is lost — only the outbound message is.
+ *
  *  Schedule: 1st of the month at 00:05 UTC, registered by
  *  `shared/lib/register-jobs.js`. The timezone is not incidental here: this job
  *  derives the current period in UTC (see `currentPeriod` below), so a schedule
@@ -74,13 +79,25 @@ const closeCompetition = async (competitionId) => {
 
   await repo.saveCompetitionDoc(competition);
 
+  // The closing itself is HYGIENE and always runs: a competition left active
+  // past its period never settles, and its ranking would drift with sessions
+  // played after the fact. The winner mails and SMS are EMISSION — outbound
+  // messages in the name of the public portal — and are withheld when the
+  // module is not active on this campus (design doc §9.1).
+  const mayEmit = await require('../../shared/lib/entitlement').jobs
+    .isEmissionAllowed(competition.schoolCampus, 'public-portal');
+
   const brandName = process.env.BRAND_NAME || process.env.NEXT_PUBLIC_BRAND_NAME || 'AcadERP';
-  const { notified } = await notifyWinners(competition, brandName);
+  const { notified } = mayEmit
+    ? await notifyWinners(competition, brandName)
+    : { notified: 0 };
 
   console.log(
-    `[CompetitionClosing] Closed competition ${competition.period} (campus ${competition.schoolCampus}) — ${competition.winners.length} winner(s), ${notified} notified.`
+    `[CompetitionClosing] Closed competition ${competition.period} (campus ${competition.schoolCampus}) — ${competition.winners.length} winner(s), ${notified} notified`
+    + (mayEmit ? '' : ' (portal not active — winners frozen, no notification sent)')
+    + '.'
   );
-  return { winners: competition.winners.length };
+  return { winners: competition.winners.length, notified };
 };
 
 /**

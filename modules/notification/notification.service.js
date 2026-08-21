@@ -20,6 +20,9 @@ const repo      = require('./notification.repository');
 const channels  = require('./channels');
 const templates = require('./templates');
 const config    = require('../../shared/configs/general.config');
+const { featureOfTemplate } = require('./notification.features');
+// Lazy: the entitlement service reaches the campus facade, which is a module hub.
+const entitlementJobs = () => require('../../shared/lib/entitlement').jobs;
 
 const Notification = require('./models/notification.model');
 const CHANNELS = Notification.CHANNELS;
@@ -44,7 +47,9 @@ const contactFor = (channel, recipient) => {
  * @param {Object} [params.data]       render variables
  * @param {string} [params.locale]     overrides the recipient's locale
  * @param {string} [params.groupKey]   optional grouping key
- * @returns {Promise<Object[]>} the created notifications (lean rows enriched with the status)
+ * @returns {Promise<Object[]>} the created notifications (lean rows enriched with
+ *   the status) — EMPTY when the sending module is not active on the recipient's
+ *   campus (§9.4).
  */
 async function notify({ recipient, channels: chans, template, data = {}, locale, groupKey = null }) {
   if (!recipient || !recipient.id || !recipient.model) {
@@ -52,6 +57,19 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
   }
   if (!template || !templates.has(template)) {
     throw new Error(`notify: unknown template '${template}'`);
+  }
+
+  // Per-campus entitlement (design doc §9.4). Placed HERE, ahead of the render
+  // and the persistence, so a suppressed emission leaves no row behind: an
+  // in-app notification is as much an emission as an email — it appears in the
+  // recipient's inbox under the name of a module their campus was told is off.
+  // A missing campus, an unattributable template or an unreadable entitlement
+  // all send (fail-open, §4.3): the foundation is a delivery backbone, and
+  // silence is the one failure mode nobody reports.
+  const feature = featureOfTemplate(template);
+  if (feature && recipient.campusId
+      && !(await entitlementJobs().isEmissionAllowed(recipient.campusId, feature))) {
+    return [];
   }
 
   let requested = (Array.isArray(chans) && chans.length ? chans : ['inapp'])

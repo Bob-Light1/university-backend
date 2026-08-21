@@ -10,18 +10,27 @@
 > `CLAUDE.md`) et reprend le chantier sans contexte de la discussion d'origine.
 > Ce document est sa source de vérité.
 >
-> **Statut** : **phases 0, 1, 2 et 3 livrées** (registre gelé + socle backend +
-> absorption de l'IA + consommation frontend). Toutes les décisions porteur sont
-> tranchées (§14). L'API est protégée et pilotable, l'IA est un module de la
-> grille, et l'interface consomme les états sans dupliquer la moindre règle ;
-> il reste les phases 4 et 5 — dont la **phase 5 (les bords), qui ne doit jamais
-> être reportée** au-delà de la livraison des phases 1-4.
-> Seule action porteur en attente : lancer `scripts/migrate-entitlement.js`
-> sur la base réelle (voir §10, phase 1.2).
+> **Statut** : **TOUTES LES PHASES LIVRÉES (0 → 5)**. Registre gelé, socle
+> backend, absorption de l'IA, consommation frontend, pilotage UI et les bords.
+> Toutes les décisions porteur sont tranchées (§14). L'API est protégée, l'IA est
+> un module de la grille, l'interface consomme les états sans dupliquer la
+> moindre règle, **rien n'émet plus au nom d'un module coupé** (crons, portail
+> public, quotas, notifications), et les deux couches de décision — l'offre
+> ADMIN et l'usage CAMPUS_MANAGER — se pilotent depuis l'interface.
 >
-> **Révisions** : **v1.6 (2026-08-20)** — phase 3 livrée ; §8.2 (surface réelle
-> livrée), §8.4 (nouveau — ce que la phase 3 a tranché) et §10 phase 3 mis à
-> jour d'après le code écrit. **v1.5 (2026-08-20)** — phase 2 livrée ; §3 (`entitlement.ai.features`),
+> Reste **hors code** : lancer `scripts/migrate-entitlement.js` sur la base
+> réelle (§10, phase 1.2), puis la **QA visuelle** sur un campus migré, qui est
+> le seul contrôle capable de fermer les deux derniers points de la DoD (§15).
+> Le retrait de `features` / `aiEntitlement` du schéma (§3.2) vient après cette
+> validation, pas avant.
+>
+> **Révisions** : **v1.8 (2026-08-20)** — phase 4 livrée, chantier clos ;
+> §8.5 (nouveau — ce que la phase 4 a tranché), §10 phase 4, §11 et §15 mis à
+> jour d'après le code écrit ; §13.1 précisé (la vue parc existe). **v1.7 (2026-08-20)** — phase 5 livrée ; §9.1 (nouveau bloc
+> « ce que la phase 5 a tranché »), §9.2, §9.3, §9.4 réécrits d'après le code
+> écrit ; §10 phase 5, §11 et §15 mis à jour. **v1.6 (2026-08-20)** — phase 3
+> livrée ; §8.2 (surface réelle livrée), §8.4 (nouveau — ce que la phase 3 a
+> tranché) et §10 phase 3 mis à jour d'après le code écrit. **v1.5 (2026-08-20)** — phase 2 livrée ; §3 (`entitlement.ai.features`),
 > §3.2 (repli legacy au premier write), §10 phase 2 et §17 mis à jour d'après le
 > code écrit. **v1.4 (2026-08-15)** — phase 1 livrée ; §7.1 (montage dérivé
 > du registre + `optionalAuth`), §6.3.3 (arêtes globales exclues, `level`
@@ -698,6 +707,72 @@ resterait un bug ; celui-ci ne fait que refuser d'afficher.
 
 ---
 
+### 8.5 Ce que la phase 4 a tranché en écrivant le code
+
+**Ce qu'une couche a le droit de sélectionner est calculé par la garde, pas
+redessiné par l'écran.** La tentation était de griser les états côté React à
+partir de `core`, `offerState` et du rang des trois états. C'est exactement la
+duplication que le §8.2 interdit, et elle échoue du côté que personne ne voit :
+un bouton simplement absent pour un opérateur qui y a droit. `describeForCampus()`
+prend donc la couche appelante en paramètre et renvoie `allowedStates` par
+module, obtenu en interrogeant `checkOverrideAuthority()` — la fonction que la
+route appellera de toute façon au moment d'écrire. Une seule implémentation, et
+l'écran ne peut pas être plus permissif que le serveur.
+
+**Seuls les contrôles déclaratifs peuvent voyager ainsi.** `allowedStates` porte
+le noyau et le plafond de l'offre. Il ne porte **pas** les contrôles pilotés par
+la donnée (§6.3.3) — un module qui détient des enregistrements, un module dont
+une autre collection a encore besoin : ils dépendent de ce que le campus a
+stocké, ils sont sondés au moment de l'écriture, et les prédire à l'affichage
+reviendrait à deviner. L'écran laisse donc demander, et affiche le 409 avec
+**toute** la liste des refus. C'est le même parti que le rapport d'impact de la
+suppression définitive.
+
+**L'IA perd son dialogue, pas ses réglages.** `AiEntitlementDialog` pilotait un
+module derrière un champ « palier » qui était devenu, en phase 2, le palier de
+**toute la plateforme** (D-D) : un admin qui passait un campus en `premium` pour
+son IA élargissait son offre entière sans qu'aucun écran ne le dise. Le palier
+est désormais au-dessus de la matrice qu'il déplace, et l'aperçu nomme les
+modules que le changement ouvre **et ceux qu'il ferme** avant d'enregistrer.
+Ce qui reste réellement propre à l'IA — profil LLM, budget de jetons, quatre
+sous-fonctions — vit dans un onglet du même dialogue ; l'activation, elle, est
+la ligne `ai` de la matrice, comme tout le monde.
+
+**Un seul enregistrement, donc une seule ligne d'audit.** La porte générique
+(`applyAndRespond`) transporte désormais aussi les champs de **valeur**
+(`quotas`, `ai`) que `applyChanges()` acceptait depuis la phase 2 mais qu'aucune
+route ne lui passait — seule la console IA le faisait, par son propre chemin.
+Le dialogue envoie donc palier, modules, quotas et réglages IA dans **un** PATCH :
+un audit, un refus, et aucun état à moitié appliqué où le palier aurait bougé
+sans les modules qu'il gouverne. Les valeurs suivent la même règle de couche que
+le palier — refusées explicitement à la couche usage, jamais ignorées.
+
+**La vue parc ne se compose pas d'appels par campus.** `describeEstate()` fait
+**une** lecture et résout en mémoire : le resolver est pur, donc N campus coûtent
+N appels de fonction et un seul aller-retour base. Le cache par campus n'est
+délibérément pas consulté — une matrice recousue à partir d'entrées d'âges
+différents montrerait deux campus à deux instants différents. Et la ligne qui
+compte le plus est celle **qu'on serait tenté de filtrer** : un campus sans
+entitlement, donc en fail-open, est précisément le locataire qui dispose
+aujourd'hui de tous les modules payants. Il est signalé, pas masqué.
+
+**Les libellés se traduisent sans que le registre bouge.** `useModuleLabel()`
+résout `common.features.modules.<clé>` avec le libellé anglais du registre en
+repli : ajouter un module au backend continue de ne demander aucune livraison
+frontend — il s'affiche simplement en anglais jusqu'à sa traduction. `useFeature`
+passe par le même résolveur, donc l'écran « module non activé », le bandeau
+`read_only` et les matrices de pilotage ne peuvent pas nommer la même clé de
+trois façons.
+
+**Défaut de la phase 3 corrigé au passage** : `features.notActivatedBody` et
+`features.frozenBody` étaient écrits en `{{module}}` dans les dix locales. Le
+projet tourne sous `i18next-icu` (`src/i18n/i18n.js`), dont l'interpolation est
+à accolade simple — les deux phrases n'ont jamais résolu leur variable. Les
+1 180 chaînes du namespace `features` compilent désormais sous `IntlMessageFormat`
+dans les dix langues.
+
+---
+
 ## 9. Les bords — partie non négociable
 
 C'est la portion qu'on est tenté de reporter, et c'est celle qui produit les
@@ -744,21 +819,125 @@ simple liste de noms. `tests/unit/feature-registry.test.js` compare cette
 déclaration à `projectJobs()` **par nom, pas par comptage** : un job ajouté ou
 renommé sans mise à jour du registre fait échouer la suite.
 
+#### Ce que la phase 5 a tranché en écrivant ces trois jobs
+
+**La nature est une propriété du JOB ; l'émission est une propriété d'un SITE à
+l'intérieur.** `competition-closing` est déclaré `HYGIENE` — la clôture doit
+toujours régler le classement, sans quoi un concours resté actif ne se ferme
+jamais et son palmarès continue de bouger — et il porte pourtant une émission :
+les mails aux gagnants. Dériver le comportement de `nature` seul aurait donné
+l'un des deux, jamais les deux. La carte des sites d'émission est donc
+**déclarée** dans `shared/lib/entitlement/entitlement.jobs.js` et épinglée dans
+les deux sens : tout cron marqué `EMISSION` au registre doit y figurer (un
+nouveau job émetteur ne peut pas partir non câblé), et tout nom qui y figure
+doit être un job réellement planifié, appartenant à la feature qu'il nomme (un
+job renommé ne peut pas laisser derrière lui une garde qui ne pointe sur rien).
+
+**`finance-overdue` se coupe en deux, et le §9.1 le disait déjà.** Le job fait
+deux choses de natures opposées. Le passage en `overdue` **tourne pour tous les
+campus** : c'est un fait à propos d'une date, invisible là où Finance est
+masqué, et là où Finance est seulement gelé le figer laisserait le grand-livre
+afficher `pending` sur des dettes manifestement échues — un module gelé doit
+garder son historique *lisible* (§4.1), pas le rendre faux. Il déclencherait en
+prime une rafale de transitions le jour de la réactivation. Seules les
+**relances** sont supprimées par campus. C'est l'application littérale de « on
+coupe l'émission, jamais l'hygiène », à la granularité où les deux se séparent
+réellement.
+
+**L'exclusion doit atteindre la REQUÊTE, pas le résultat.** Filtrer après coup
+paraît équivalent et ne l'est pas : `claimFeeForReminder` estampille
+`lastRemindedAt` et incrémente `reminderCount` **au moment où il prend la dette**,
+donc une relance jetée après le claim aurait quand même consommé le créneau de
+relance — le campus serait silencieux aujourd'hui *et* ses dettes non
+relançables pendant toute une fenêtre de cadence une fois le module revenu. Même
+histoire pour `exam-anticheat`, qui rendrait des lots de sessions qu'il n'a pas
+le droit de scanner, affamerait celles qu'il peut scanner, et les retrouverait
+identiques au run suivant puisqu'elles gardent leur marqueur nul. D'où
+`suppressedCampusIds(feature)` → `$nin`, résolu **une fois par run**, jamais par
+ligne. Le compteur de reliquat porte la même exclusion : un backlog comptant des
+sessions interdites au job grossirait indéfiniment et se lirait comme une panne.
+
+**L'émission exige `enabled`, pas seulement « non masqué ».** Émettre est une
+mutation du monde extérieur : la porte lit donc `isFeatureActive(..., { write:
+true })`, le prédicat exact que la garde HTTP utilise pour refuser un POST. La
+règle est écrite une seule fois, dans le résolveur, et n'est jamais redite.
+
+**Un module `core` répond sans requête.** Il est `enabled` pour tout le monde par
+construction (§5.1) ; ce n'est pas une micro-optimisation mais le chemin le plus
+fréquent — `account.welcome` et `account.activate` partent une fois par compte
+créé, et personne ne devrait payer un défaut de cache pour réapprendre que le
+module comptes ne peut pas être coupé.
+
 ### 9.2 Portail public
 
-`/api` (public-portal) n'est pas authentifié : pas de `campusId` dans un JWT. Le
-campus se résout depuis le slug ou le paramètre de route, jamais depuis
-`req.user`.
+`/api/public` n'est pas authentifié : pas de `campusId` dans un JWT. La garde
+applicative n'y voit aucune identité et laisse passer **par construction**
+(§7.1). Le contrôle a donc lieu là où le campus devient connu — juste après sa
+résolution — dans `modules/public-portal/portal-campus.js`, qui absorbe aussi le
+`if (!campus) return sendNotFound(...)` que les dix contrôleurs répétaient.
+
+**`hidden` répond 404, exactement comme un campus absent ou archivé.** C'est le
+§4.1.2 pris au mot : pour un visiteur du web public, un module non activé doit
+être indiscernable d'un module jamais construit. Un 403 « ce campus n'a pas
+souscrit au portail » publierait la situation commerciale d'un locataire à
+quiconque possède une URL. Les trois cas partagent **un seul chemin de code**
+plutôt que de s'accorder par convention.
+
+**`read_only` ferme la collecte, pas le site.** Le portail continue de servir
+programmes, FAQ, témoignages et classement, et refuse les cinq soumissions
+(préinscription, réponse au quiz, contact, candidature partenaire, alerte
+prochaine session) avec le code `FEATURE_READ_ONLY` déjà utilisé par la surface
+authentifiée. Un campus qui suspend son recrutement en gardant sa page en ligne
+est exactement le cas que cet état sert ; répondre 404 y couperait tout le site.
+
+La liste de sélection (`GET /api/public/campuses`) est filtrée : c'est le seul
+endroit où un campus apparaît sans avoir été demandé nommément, et y laisser un
+campus masqué reviendrait à annoncer une page qui répond ensuite 404. Les campus
+gelés y restent — leur site est debout, seule l'entrée est fermée.
 
 ### 9.3 Quotas
 
-`maxStudents` / `maxTeachers` / `maxClasses` / `maxDocumentStorageMB` lus depuis
-`entitlement.quotas`. Ancien `features` retiré après validation.
+`maxStudents` / `maxTeachers` / `maxClasses` / `maxDocumentStorageMB` lus par
+`resolveQuota(campus, name)` (`shared/utils/entitlement.js`, pur) : chaîne
+`entitlement.quotas` → `features` (héritage) → `DEFAULT_QUOTAS` → repli de
+déploiement optionnel. Cinq sites câblés : les quatre méthodes `canAdd*` de
+`campus.model.js` et le préflight de stockage de la GED.
+
+**L'étape héritée n'est pas décorative** : tant que `scripts/migrate-entitlement.js`
+n'a pas tourné, `entitlement` est absent partout et `features` est la **seule**
+source portant le plafond réel d'un campus. La supprimer remettrait tout le parc
+au défaut le jour du déploiement. Les défauts du sous-schéma `features` dérivent
+désormais de `DEFAULT_QUOTAS`, donc le nombre existe une fois (§0.1) — il était
+écrit trois fois, dont un `|| 5120` en dur dans la GED.
+
+Une valeur stockée inutilisable (0, négative, non numérique) **retombe** sur la
+source suivante au lieu d'être appliquée : `0` ne veut dire « illimité » nulle
+part ici, il veut dire « personne ne peut plus rien créer ». Et un nom de quota
+inconnu **lève** au lieu de résoudre vers `undefined` — `n < undefined` est
+`false`, donc une faute de frappe refuserait toute création sans rien dire.
+
+Ancien `features` retiré après validation prod, avec `aiEntitlement` (§3.2).
 
 ### 9.4 Notifications
 
-Aucune émission (in-app ou email) pour un module non actif sur le campus
-destinataire.
+Aucune émission (in-app **ou** email) pour un module non actif sur le campus
+destinataire. Le contrôle vit dans `notify()` — la porte unique par laquelle
+passent les sept émetteurs — **avant le rendu et avant la persistance** : une
+notification in-app est une émission au même titre qu'un email, elle atterrit
+dans la boîte du destinataire au nom d'un module dont son campus a été informé
+qu'il est coupé.
+
+Le socle notifications ne sait rien des modules qu'il sert (façade §3) : la
+seule chose qu'il détient et qui identifie l'émetteur est la **clé de
+template**. L'attribution est donc **déclarée**, dans
+`modules/notification/notification.features.js`, et la suite de tests refuse un
+template ajouté sans propriétaire. `generic` — le passe-plat dont le contenu est
+écrit par l'appelant — est attribué à `null` et n'est jamais supprimé : rien
+dans son contenu ne dit de quel module il vient, et deviner ferait taire une
+annonce à l'échelle du campus.
+
+Cette porte couvre aussi, par construction, l'émission de `finance-overdue`
+(§9.1) : la relance d'impayé passe par `notify()` comme le reste.
 
 ---
 
@@ -877,27 +1056,49 @@ vérifier à la QA visuelle**, avec un campus migré.
 
 ---
 
-### Phase 4 — Pilotage (UI) · 2 j
+### Phase 4 — Pilotage (UI) · 2 j — ✅ **livrée le 2026-08-20**
 
-- **Admin** : `AiEntitlementDialog.jsx` → `EntitlementDialog.jsx`. Plan + matrice
-  des modules, badge « inclus au plan / override », historique d'audit (déjà
-  affiché aujourd'hui pour l'IA).
-- **Campus manager** : nouvel onglet dans `CampusSettings` — modules de son
-  offre, 3 états, sélecteur de date `until`, **motif obligatoire** sur toute
-  désactivation.
-- **Vue parc (admin)** : matrice campus × modules.
-- i18n des libellés du registre (10 locales). **Trois surfaces les consomment
-  déjà** depuis la phase 3 — l'écran « module non activé », le bandeau
-  `read_only` et l'aperçu d'impact — et affichent d'ici là le libellé anglais du
-  registre (`FEATURE_REGISTRY[key].label`, transporté par la réponse
-  d'hydratation). Le reste des chaînes de la phase 3 est déjà traduit dans les
-  10 locales (`common.features.*`).
+Ce que la phase a tranché en écrivant le code : §8.5.
+
+| Surface | Livrable |
+|---|---|
+| **Admin — un campus** | `EntitlementDialog.jsx` (remplace `AiEntitlementDialog.jsx`, supprimé) : palier + aperçu de son effet, matrice des 26 modules, badges « inclus / décidé par la plateforme / décidé par le campus / hors offre », `until`, motif, historique d'audit **en phrases** et non en JSON, onglet IA (profil LLM · budget · 4 sous-fonctions) |
+| **Campus manager** | Onglet « Modules » dans `CampusSettings` → `CampusModulesSection.jsx` : son offre, 3 états, `until`, **motif obligatoire** sur toute restriction, ré-hydratation de sa propre navigation après enregistrement |
+| **Vue parc (admin)** | `EntitlementEstate.jsx` sur `/admin/entitlement` : matrice campus × modules, palier par ligne, campus **non configurés signalés**, ligne cliquable → le dialogue (jamais d'édition par cellule : c'est le chemin qui porte le motif et le rapport d'impact) |
+| **Socle partagé** | `useEntitlementPilot.js` (chargement · brouillon · dirty · refus) et `components/entitlement/` — les deux couches ne diffèrent que par leurs endpoints, tout le reste est écrit une fois |
+| **i18n** | `common.features.modules.*` (26 clés) + `common.features.pilot.*` (85 clés) dans les **10 locales**, via `useModuleLabel()` avec repli sur le libellé anglais du registre |
+
+**Backend ajouté par la phase** : `GET /api/admin/entitlement/overview`
+(`describeEstate()` — une lecture, résolution en mémoire) · `allowedStates` par
+module dans `describeForCampus({ layer })`, calculé par la garde · `quotas` et
+`ai` transportés par la porte générique · `PILOT_REQUIREMENTS` servi aux deux
+routes GET plutôt que recopié côté frontend.
+
+**Contrôles** : suite backend **1385 tests / 66 suites** verte, `eslint` sans
+erreur nouvelle sur les fichiers touchés, `npm run build` vert, et les
+**1 180 chaînes** du namespace `features` compilent sous `IntlMessageFormat`
+dans les 10 langues. Le frontend n'a toujours aucun framework de test (limite
+connue depuis la phase 3) : ce que cette phase ajoute d'épinglable vit côté
+backend — `allowedStates` contre la garde, la matrice parc contre le resolver,
+les champs de valeur contre la porte générique.
 
 ---
 
-### Phase 5 — Les bords · 1,5 j · **non négociable**
+### Phase 5 — Les bords · 1,5 j · **non négociable** — ✅ **livrée le 2026-08-20**
 
 Livrables du §9 : 7 crons, portail public, quotas, notifications.
+
+| Bord | Livrable |
+|---|---|
+| §9.1 — crons | `shared/lib/entitlement/entitlement.jobs.js` (`isEmissionAllowed` · `suppressedCampusIds` · carte `EMISSION_SITES`) · `finance-overdue` (relances exclues **dans la requête**, transition conservée) · `exam-anticheat` (lot **et** compteur de reliquat exclus) · `competition-closing` (clôture toujours, n'émet plus) · les 4 jobs d'hygiène **non touchés** |
+| §9.2 — portail public | `modules/public-portal/portal-campus.js` · 10 contrôleurs câblés · `hidden` → 404 indiscernable · `read_only` → lectures servies, 5 soumissions refusées · liste de sélection filtrée |
+| §9.3 — quotas | `resolveQuota()` + `DEFAULT_QUOTAS` · 4 méthodes `canAdd*` + préflight de stockage GED · chaîne `entitlement.quotas` → `features` → défaut |
+| §9.4 — notifications | garde dans `notify()`, **avant persistance** · attribution déclarée `notification.features.js` |
+
+**Tests livrés dans la phase** : `tests/unit/entitlement.jobs.test.js` (22),
+`portal-campus.test.js` (9), `competition.closing.cron.test.js` (5), plus les
+cas ajoutés aux suites voisines (finance, anti-triche, notifications). Suite
+complète **1368 tests / 66 suites**, lint sans erreur ni avertissement nouveau.
 
 ---
 
@@ -909,8 +1110,8 @@ Livrables du §9 : 7 crons, portail public, quotas, notifications.
 | 1 — Socle backend | 2,5 j | ✅ API protégée, pilotage par API — ✅ **livrée le 2026-08-15** |
 | 2 — Absorption IA | 1 j | ✅ — ✅ **livrée le 2026-08-20** |
 | 3 — Front | 2 j | ✅ UI cohérente — ✅ **livrée le 2026-08-20** |
-| 4 — Pilotage UI | 2 j | ✅ autonomie du manager |
-| 5 — Bords | 1,5 j | ❌ **doit sortir avec 1-4** |
+| 4 — Pilotage UI | 2 j | ✅ autonomie du manager — ✅ **livrée le 2026-08-20** |
+| 5 — Bords | 1,5 j | ❌ **doit sortir avec 1-4** — ✅ **livrée le 2026-08-20** |
 | **Total** | **~9,5 j** | |
 
 > **Règle ferme : ne jamais livrer les phases 1-3 sans la phase 5.** Un système
@@ -928,6 +1129,10 @@ Livrables du §9 : 7 crons, portail public, quotas, notifications.
 | `tests/unit/entitlement-deps.test.js` | couper `subject` alors que `result` est actif → 409 |
 | `tests/integration/entitlement.test.js` | `hidden` → 403 sur GET ; `read_only` → 200 GET / 403 POST ; couche campus ne peut pas élargir l'offre |
 | Suite IA existante | inchangée — critère d'acceptation de la phase 2 |
+| `tests/unit/entitlement.jobs.test.js` | **la carte des sites d'émission ne peut pas dériver du registre** (dans les deux sens) ; le repli ouvert sur chaque mode de défaillance ; chaque template de notification a un propriétaire déclaré ; la chaîne des quotas |
+| `tests/unit/portal-campus.test.js` | `hidden` répond **octet pour octet** comme un campus absent ; `read_only` sert les pages et refuse les soumissions ; le chemin `?ref=` est fermé comme le chemin slug |
+| `tests/unit/competition.closing.cron.test.js` | le job d'hygiène **clôture quand même** et gèle son palmarès, n'émet plus |
+| `tests/unit/entitlement.service.test.js` (phase 4) | `allowedStates` **est la garde**, pas une seconde lecture des règles : noyau fermé aux deux couches, offre qui élargit, usage arrêté au plafond ; la matrice parc liste le campus non configuré, résout chaque ligne sur son propre objet en **une** lecture, lit `until` à l'instant donné et **ne sert jamais une ligne depuis le cache par campus** ; les champs de valeur passent la porte générique et sont **refusés**, non ignorés, à la couche usage |
 
 ---
 
@@ -950,7 +1155,7 @@ Livrables du §9 : 7 crons, portail public, quotas, notifications.
 
 | Rôle | Expérience |
 |---|---|
-| **ADMIN** | Matrice de tout le parc. Vend un plan, ouvre/ferme un module par campus, voit qui a quoi et depuis quand |
+| **ADMIN** | Matrice de tout le parc (`/admin/entitlement`). Vend un plan, ouvre/ferme un module par campus, voit qui a quoi et depuis quand — et repère d'un coup d'œil les campus **non configurés**, qui disposent de tout |
 | **CAMPUS_MANAGER** | Onglet « Modules » dans ses réglages : son offre, et ce qu'il choisit d'allumer dedans |
 | **Utilisateur final** (prof, étudiant, parent, staff) | **Ne voit rien du système.** Il voit une plateforme plus simple |
 
@@ -1034,29 +1239,52 @@ serait vendu inutilisable.
 
 ## 15. Definition of Done
 
-- [ ] Tout module monté dans `app.js` est déclaré au registre (test CI vert)
+- [x] Tout module monté dans `app.js` est déclaré au registre (test CI vert)
+      *(`tests/unit/feature-registry.test.js`)*
 - [x] Aucune règle d'accès dupliquée côté frontend *(phase 3 — le filtrage vit
       dans `AppShell`, la décision dans `useFeature`, et le registre voyage
       dans la réponse au lieu d'être recopié)*
-- [ ] Les 7 crons filtrent sur l'entitlement
+- [x] Les 7 crons filtrent sur l'entitlement *(phase 5 — 3 gardés, 4 d'hygiène
+      délibérément non gardés, la carte épinglée contre le registre)*
 - [ ] Un module `hidden` est indiscernable d'un module inexistant pour un
       utilisateur final (vérifié sur les 8 portails) — *mécanique livrée en
       phase 3 (entrées retirées, groupes vides et séparateurs orphelins repliés,
       accès direct par URL renvoyé sur un écran explicite) ; **reste la QA
       visuelle réelle**, qui suppose un campus migré*
-- [ ] Un module `read_only` conserve tout son historique consultable
-- [ ] Un module portant des enregistrements ne peut pas passer `hidden` (§4.1.1)
-- [ ] Les crons d'hygiène tournent même module coupé ; les crons d'émission se
-      taisent (§9.1)
+- [x] Un module `read_only` conserve tout son historique consultable *(gate §7.1 +
+      bandeau phase 3 + §9.1 : la transition d'impayé continue pour ne pas rendre
+      un grand-livre gelé faux)*
+- [x] Un module portant des enregistrements ne peut pas passer `hidden` (§4.1.1)
+      *(garde phase 1 + affiché en phase 4 : le refus arrive avec **toute** sa
+      liste, jamais un item à la fois)*
+- [x] Les crons d'hygiène tournent même module coupé ; les crons d'émission se
+      taisent (§9.1) *(phase 5)*
 - [ ] Audit, export ADMIN et droits des personnes concernées survivent à
-      `hidden` (§4.1.2)
-- [ ] Aucun appel Mongoose introduit hors `campus.repository.js` ; le resolver
-      ne reçoit que des données brutes (§15bis.3)
-- [ ] Un CAMPUS_MANAGER ne peut ni élargir son offre, ni se verrouiller
-- [ ] Toute mutation d'entitlement est tracée avec acteur, motif et horodatage
-- [ ] La suite de tests IA existante passe sans modification
+      `hidden` (§4.1.2) — *mécanique en place (§5.2 : les rôles globaux ne sont
+      bornés par aucun entitlement, et la vue parc de la phase 4 le montre) ;
+      **reste la vérification de bout en bout à la QA visuelle***
+- [x] Aucun appel Mongoose introduit hors `campus.repository.js` ; le resolver
+      ne reçoit que des données brutes (§15bis.3) *(la vue parc de la phase 4
+      lit par `listCampusesForEstate()` dans le repository campus, `.lean()`,
+      et résout en mémoire — seule dérogation, bornée et déclarée : les sondes
+      d'usage)*
+- [x] Un CAMPUS_MANAGER ne peut ni élargir son offre, ni se verrouiller
+      *(garde serveur phase 1 ; en phase 4 l'écran ne lui **propose** même pas
+      l'état interdit — `allowedStates` vient de la garde, pas d'une règle
+      recopiée)*
+- [x] Toute mutation d'entitlement est tracée avec acteur, motif et horodatage
+      *(phase 1 pour l'écriture, phase 4 pour la lecture : l'historique est
+      rendu en phrases, et un override créé par le repli legacy est signalé
+      comme non décidé par l'acteur dont le nom figure sur la ligne)*
+- [x] La suite de tests IA existante passe sans modification *(critère
+      d'acceptation de la phase 2, toujours vrai après les phases 3, 4 et 5)*
 - [ ] `features` et `aiEntitlement` retirés du schéma après validation prod
-- [ ] i18n des libellés dans les 10 locales
+      — *opération distincte et postérieure (§3.2). Depuis la phase 4 plus
+      aucun écran ne les lit : la route `ai-entitlement` n'a plus de client*
+- [x] i18n des libellés dans les 10 locales *(phase 4 — 26 libellés de modules
+      + 85 chaînes de pilotage ; `useModuleLabel()` retombe sur le libellé
+      anglais du registre, donc un module ajouté au backend n'exige toujours
+      aucune livraison frontend)*
 
 ---
 
@@ -1172,7 +1400,9 @@ croyant à une barrière.
 | 2026-08-15 | **PHASE 1 LIVRÉE — socle backend.** 9 livrables (1.1 → 1.9) : schéma `Campus.entitlement` + `entitlementAudit` **ajoutés à côté** de `features` / `aiEntitlement` (§3.2, rien retiré) · resolver pur `shared/utils/entitlement.js` · sondes `shared/lib/entitlement/entitlement.usage.js` · garde · cache TTL 60 s · `shared/middleware/entitlement.js` monté en une ligne · `GET /api/settings/entitlement` · `PATCH /api/admin/campuses/:id/entitlement` (offre) · `PATCH /api/campus/:id/entitlement` (usage) · `scripts/migrate-entitlement.js`. **Tests livrés dans la phase** : 83 unitaires (resolve · deps · service) + 18 d'intégration sur la garde ; suite complète **1265 tests verts / 61 suites**, lint 0 erreur. **Quatre points tranchés à l'écriture** : (1) le contrôle de données porte sur la **transition effective** et non sur la charge utile, ce qui couvre le déclassement de palier (§6.3.4) ; (2) les arêtes portées par une collection **globale** ne bloquent pas, et `level` / `subject` d'un campus mature se **gèlent** au lieu de se masquer (§6.3.4) ; (3) la garde lit l'identité via `optionalAuth` — montée avant les routeurs, elle précède leur `authenticate()` (§7.1) ; (4) dérogation Mongoose assumée et bornée pour les sondes (§15bis.3). **Deux défauts trouvés par les tests** : le chemin `subjectId` déclaré à la racine sur `GaetConstraint` et `StudentSchedule` (il est imbriqué — un bloqueur qui ne bloque jamais), et `describeForCampus` qui ne renvoyait qu'**un** override quand les deux couches en portent un (la décision de l'ADMIN s'affichait sur l'écran du manager) |
 | 2026-08-20 | **PHASE 2 LIVRÉE — absorption de l'IA.** L'IA rejoint la grille pour l'activation et garde ce qui lui est propre (budget, profil LLM, sous-features). `shared/lib/entitlement/entitlement.ai.js` (vue IA, **forme de sortie identique** à l'ancien `aiEntitlement`, donc contrat frontend intact) · `entitlement.legacy.js` (le repli legacy → unifié, désormais **partagé** entre `scripts/migrate-entitlement.js` et le premier write) · gate IA, `signalIngest` et console admin `PUT /admin/campuses/:id/ai-entitlement` rebranchés sur la porte unique · `applyChanges()` ouvert aux champs de valeur (`quotas`, `ai`) avec fusion partielle et `null` = effacement · `AI_PLANS` dérivé de `FEATURE_PLANS` · `PLATFORM_ENTITLEMENT` dérivé du preset premium. **Critère d'acceptation tenu** : `tests/unit/ai.entitlement.test.js` passe **sans une ligne modifiée**. Suite complète **1326 tests / 63 suites**, lint 0 erreur (+31 tests : `entitlement.ai.test.js` 22, service 9). **Deux défauts trouvés en écrivant la phase** : (1) la migration **grand-pérennisait `ai`** comme les 25 autres modules — elle aurait offert un module payant, facturé à l'usage, à tout le parc le jour de son exécution ; (2) un premier write sur un campus non migré aurait stocké un **palier sans grand-père**, faisant disparaître Finance / Examens / Documents comme effet de bord d'une édition IA. **Deux points tranchés** : l'IA est la seule exception au fail-open (une donnée absente peut allumer un module, jamais une dépense, §3.2) ; `plan` étant le palier plateforme (D-D), la console IA élargit toute l'offre — conséquence assumée, rendue visible en phase 4. |
 | 2026-08-20 | **PHASE 3 LIVRÉE — front, consommation.** L'interface consomme les états sans réimplémenter une seule règle. **7 fichiers créés** : miroir de constantes `src/config/featureConstants.js` (états + codes d'erreur **seuls** — clés, libellés et paliers voyagent dans le champ `registry` de la réponse, donc un module ajouté au registre backend n'exige aucune livraison frontend) · `entitlementService.js` · `EntitlementContext.jsx` (hydratation unique par identité × campus, cache module comme `useHardDelete`, Snackbar global) · `useFeature.js` · `FeatureGate.jsx` (`mode="write"` pour `read_only`) · `FeatureGuard.jsx` (composé avec `ProtectedRoute`) · `api/featureRefusal.js` (canal intercepteur → provider, sans cycle d'import). **3 socles modifiés** : `main.jsx`, `AppShell.jsx` (le filtrage vit **là et nulle part ailleurs** — six portails déclarent `feature:`, un seul décide), intercepteur axios (§8.3). **6 portails annotés**, **6 tables de routes gardées**, **10 `common.json`** (`common.features.*`). `npm run build` vert, aucune erreur lint nouvelle. **Six points tranchés à l'écriture** (§8.4) : (1) le fail-open ne se transpose pas au rendu — « je ne sais pas encore » withhold, « je n'ai pas pu savoir » reste fail-open ; (2) la place du provider est contrainte des trois côtés (routeur, auth, thème + frontière Suspense i18n en `useSuspense: true`) ; (3) `Admin.jsx` / `Director.jsx` **ne sont pas filtrés** — rôles globaux, ce sont eux que sert le badge ; (4) groupes vides et séparateurs orphelins sont repliés, un en-tête de section vide est l'« onglet vide » du §4.1.2 ; (5) `read_only` garde sa route **et** son entrée de menu, et est **annoncé par un bandeau unique** plutôt que par un masquage partiel des boutons (le §6.2 écarte la granularité par bouton en v1, et la faire à moitié fait conclure à l'utilisateur que les boutons restants sont cassés) ; (6) le portail parent garde sur le module qui **possède** la donnée (`result`) et non sur celui qui sert la route (`parent`) — **seul endroit du chantier où la garde frontend est plus stricte que la garde serveur**, assumé. |
-| — | ***Prochaine étape : PHASE 5** — les bords (§9 : 7 crons, portail public, quotas, notifications), 1,5 j. **À faire avant la phase 4, pas après** : la règle ferme du §10 interdit de livrer les phases 1-3 sans la phase 5, et elles sont désormais toutes les trois écrites. Un système de flags que les crons ignorent envoie des e-mails au nom d'un module coupé — le pire des deux mondes. La phase 4 (pilotage UI, 2 j) suit.*<br>***Action porteur, une seule*** : lancer `node scripts/migrate-entitlement.js --dry-run` puis sans le drapeau sur la base réelle. Tant qu'elle n'a pas tourné, aucun campus ne porte d'`entitlement` et **tout reste activé partout** (fail-open, §4.3) — le socle est donc inerte, jamais bloquant, frontend compris. Seule exception depuis la phase 2 : l'IA, qui continue de lire son drapeau de souscription historique. |
+| 2026-08-20 | **PHASE 5 LIVRÉE — les bords.** La partie qu'on reporte, et celle qui produit les incidents visibles par le client final. **§9.1 crons** : `shared/lib/entitlement/entitlement.jobs.js` (`isEmissionAllowed` · `suppressedCampusIds` · carte `EMISSION_SITES` épinglée **dans les deux sens** contre le registre) ; `finance-overdue` relances exclues, transition conservée ; `exam-anticheat` lot **et** compteur de reliquat exclus ; `competition-closing` clôture toujours, n'émet plus ; les 4 jobs d'hygiène non touchés. **§9.2 portail public** : `portal-campus.js`, 10 contrôleurs câblés, `hidden` → 404 indiscernable d'un campus absent, `read_only` → lectures servies et 5 soumissions refusées, liste de sélection filtrée. **§9.3 quotas** : `resolveQuota()` + `DEFAULT_QUOTAS`, 5 sites, chaîne `entitlement.quotas` → `features` → défaut. **§9.4 notifications** : garde dans `notify()` **avant persistance**, attribution template → module déclarée. Suite complète **1368 tests / 66 suites** (+42), lint sans erreur ni avertissement nouveau. **Cinq points tranchés à l'écriture** (§9.1) : (1) la nature est une propriété du JOB, l'émission une propriété d'un SITE — `competition-closing` est hygiène *et* porte une émission, donc la carte est déclarée et non dérivée ; (2) `finance-overdue` se coupe en deux — la transition en `overdue` tourne pour tous, sans quoi un grand-livre gelé afficherait `pending` sur des dettes échues et une rafale partirait à la réactivation ; (3) l'exclusion doit atteindre la **requête** — `claimFeeForReminder` estampille `lastRemindedAt` à la prise, donc un filtrage après coup consommerait quand même le créneau de relance ; (4) l'émission exige `enabled`, pas « non masqué » — c'est une mutation du monde extérieur, donc le prédicat de la garde HTTP en écriture ; (5) un module `core` répond sans requête (`account.*` part une fois par compte créé). **Un point tranché au §9.2** : un portail masqué répond **404**, pas 403 — un refus explicite publierait la situation commerciale d'un locataire à quiconque possède une URL. |
+| 2026-08-21 | **PHASE 4 LIVRÉE — pilotage UI. CHANTIER CLOS.** Les deux couches de décision se pilotent enfin depuis l'interface. **Frontend, 8 fichiers créés** : socle partagé `hooks/useEntitlementPilot.js` (chargement · brouillon · dirty · motif · refus) et `components/entitlement/` (`EntitlementMatrix` · `ModuleRow` · `PlanSelector` · `AiValuesSection` + `aiPreset.js` · `EntitlementAudit` · `EntitlementRefusal`), `hooks/useModuleLabel.js` ; **3 écrans** : `EntitlementDialog.jsx` (admin, un campus — **remplace `AiEntitlementDialog.jsx`, supprimé**), `CampusModulesSection.jsx` + onglet « Modules » dans `CampusSettings`, `EntitlementEstate.jsx` sur `/admin/entitlement` (vue parc) ; `entitlementService.js` étendu aux 5 appels de pilotage, `admin_service.js` **débarrassé** de ses deux clients IA devenus une seconde porte vers la même décision. **i18n** : `common.features.modules.*` (26) + `common.features.pilot.*` (85) dans les **10 locales**. **Backend ajouté** : `GET /api/admin/entitlement/overview` (`describeEstate()` — **une** lecture, résolution en mémoire, cache par campus délibérément ignoré), `allowedStates` par module dans `describeForCampus({ layer })` **calculé par la garde elle-même**, `quotas` / `ai` transportés par la porte générique (un seul PATCH, donc une seule ligne d'audit), `PILOT_REQUIREMENTS` servi aux deux GET. Suite complète **1403 tests / 66 suites** verte, lint sans erreur nouvelle, `npm run build` vert, **1 180 chaînes du namespace `features` compilées sous `IntlMessageFormat`** dans les 10 langues. **Six points tranchés à l'écriture** (§8.5) : (1) ce qu'une couche peut sélectionner vient de `checkOverrideAuthority()`, jamais d'un grisage recalculé côté React ; (2) seuls les contrôles **déclaratifs** voyagent — les contrôles pilotés par la donnée restent un 409 affiché, jamais prédit ; (3) l'IA perd son dialogue mais garde ses réglages, et son palier est enfin montré pour ce qu'il est depuis la phase 2: celui de toute la plateforme ; (4) un seul enregistrement pour palier + modules + valeurs, donc aucun état à moitié appliqué ; (5) la vue parc **signale** le campus non configuré au lieu de le filtrer — c'est le locataire qui a tous les modules payants ; (6) les libellés se traduisent sans que le registre bouge. **Un défaut de la phase 3 corrigé au passage** : `features.notActivatedBody` et `features.frozenBody` étaient écrits en `{{module}}` dans les 10 locales alors que le projet tourne sous `i18next-icu` (accolade simple) — les deux phrases n'ont jamais résolu leur variable. |
+| — | ***Il ne reste aucune phase de code.***<br>***Action porteur, une seule et inchangée*** : lancer `node scripts/migrate-entitlement.js --dry-run` puis sans le drapeau sur la base réelle. Tant qu'elle n'a pas tourné, aucun campus ne porte d'`entitlement` et **tout reste activé partout** (fail-open, §4.3), bords compris — les crons n'excluent personne, le portail sert tout le monde, les quotas retombent sur `features`. Seule exception depuis la phase 2 : l'IA, qui continue de lire son drapeau de souscription historique. La vue parc rend cet état visible d'un coup d'œil : tous les campus y sont marqués « non configuré » tant que la migration n'a pas tourné.<br>***Puis, dans cet ordre*** : (1) **QA visuelle sur un campus migré** — c'est le seul contrôle capable de fermer les deux derniers points de la DoD (§15), et notamment de vérifier la correspondance entrée de menu ↔ clé et route ↔ garde, que rien n'épingle et dont la divergence est silencieuse dans les deux sens ; (2) retrait de `features` / `aiEntitlement` du schéma et de la route `ai-entitlement` (§3.2), **après** validation prod, pas avant.<br>***Suivi inter-briques connu, non bloquant*** : le portail Next.js (brique 4) relaie la réponse de l'ERP telle quelle et affiche un message générique sur tout non-2xx. Un 403 `FEATURE_READ_ONLY` sur une soumission s'y affiche donc correctement mais sans texte dédié. Aucun contrat n'a changé (ni route, ni forme de réponse, ni champ lu) ; le message spécifique est un ajout d'i18n côté portail, désormais utile puisque l'état `read_only` est réellement posable.*
 
 *(Tenir cette section à jour à chaque phase close — c'est le point d'entrée d'une
 reprise du chantier par un tiers.)*

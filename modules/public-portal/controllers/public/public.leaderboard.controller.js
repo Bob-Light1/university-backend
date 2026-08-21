@@ -16,9 +16,9 @@
 
 const repo = require('../../public-portal.repository');
 // Lazy require to the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
-const campusSvc = () => require('../../../campus').service;
+const { resolvePortalCampus } = require('../../portal-campus');
 
-const { asyncHandler, sendSuccess, sendError, sendNotFound } = require('../../../../shared/utils/response-helpers');
+const { asyncHandler, sendSuccess, sendError } = require('../../../../shared/utils/response-helpers');
 
 const getLeaderboard = asyncHandler(async (req, res) => {
   const {
@@ -48,9 +48,10 @@ const getLeaderboard = asyncHandler(async (req, res) => {
       return sendError(res, 400, 'campusSlug is required for campus scope.');
     }
 
-    const campus = await campusSvc().getActiveCampusBySlug(campusSlug.toLowerCase().trim(), '_id');
-
-    if (!campus) return sendNotFound(res, 'Campus');
+    // Entitlement-aware resolution (§9.2): a campus whose public portal is
+    // hidden answers 404 exactly like one that does not exist.
+    const campus = await resolvePortalCampus(res, { slug: campusSlug.toLowerCase().trim(), select: '_id' });
+    if (!campus) return;
 
     filter.schoolCampus = campus._id;
   }

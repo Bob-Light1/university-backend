@@ -22,7 +22,11 @@ const {
   sendNotFound,
   sendValidationError,
 } = require('../../utils/response-helpers');
-const { FEATURE_STATES, FEATURE_KEYS } = require('../../constants/features.constants');
+const {
+  FEATURE_STATES,
+  FEATURE_KEYS,
+  MAX_UNTIL_MONTHS,
+} = require('../../constants/features.constants');
 const service = require('./entitlement.service');
 
 /**
@@ -35,15 +39,37 @@ const MAX_REASON_LENGTH = 300;
 const MAX_MODULES_PER_CALL = FEATURE_KEYS.length;
 
 /**
+ * The constraints a pilot screen must respect, served BY the two GET routes
+ * rather than mirrored as frontend literals — the same shape the hard-delete
+ * dialog reads its own `requirements` from. One object for both layers, so the
+ * admin dialog and the manager tab cannot disagree about the minimum length of
+ * a justification.
+ */
+const PILOT_REQUIREMENTS = Object.freeze({
+  minReasonLength: MIN_REASON_LENGTH,
+  maxReasonLength: MAX_REASON_LENGTH,
+  maxUntilMonths: MAX_UNTIL_MONTHS,
+});
+
+/**
+ * The two parts of an entitlement that carry VALUES rather than module states.
+ * Both belong to the OFFER: a quota and an LLM profile are what was sold, so a
+ * manager setting their own would be a manager writing their own bill.
+ */
+const VALUE_FIELDS = Object.freeze(['quotas', 'ai']);
+
+/**
  * Validates the PATCH body.
  *
  * @param {Object} body
- * @param {boolean} allowPlan - true for the offer layer only.
- * @returns {{errors: Array, plan: string|undefined, modules: Array}}
+ * @param {boolean} allowPlan - true for the offer layer only. Also gates the
+ *   value fields, which follow the same layer rule as the tier.
+ * @returns {{errors: Array, plan: string|undefined, modules: Array, values: Object}}
  */
 const parsePayload = (body = {}, allowPlan = false) => {
   const errors = [];
   const modules = [];
+  const values = {};
   let plan;
 
   if (body.plan !== undefined) {
@@ -101,11 +127,31 @@ const parsePayload = (body = {}, allowPlan = false) => {
     }
   }
 
-  if (plan === undefined && modules.length === 0 && !errors.length) {
+  // Shape only, deliberately — what a quota or an LLM profile MEANS belongs to
+  // whoever owns the vocabulary: the schema enforces the ranges and the enums
+  // as the last line of defence (CLAUDE.md §6), and the service refuses a
+  // non-object outright. Growing a branch per field here is how a generic door
+  // ends up knowing about the AI.
+  for (const field of VALUE_FIELDS) {
+    if (body[field] === undefined) continue;
+    if (!allowPlan) {
+      // Refused rather than ignored, for the same reason as `plan` above.
+      errors.push({ field, message: `Only the platform administration can change ${field}` });
+      continue;
+    }
+    if (typeof body[field] !== 'object' || body[field] === null || Array.isArray(body[field])) {
+      errors.push({ field, message: `${field} must be an object` });
+      continue;
+    }
+    values[field] = body[field];
+  }
+
+  if (plan === undefined && modules.length === 0
+      && !Object.keys(values).length && !errors.length) {
     errors.push({ field: 'body', message: 'No entitlement change submitted' });
   }
 
-  return { errors, plan, modules };
+  return { errors, plan, modules, values };
 };
 
 /**
@@ -149,7 +195,7 @@ const sendRefusal = (res, result) => {
  * @returns {Promise<Object>} the Express response.
  */
 const applyAndRespond = async (req, res, { campusId, layer, allowPlan }) => {
-  const { errors, plan, modules } = parsePayload(req.body, allowPlan);
+  const { errors, plan, modules, values } = parsePayload(req.body, allowPlan);
   if (errors.length) return sendValidationError(res, errors);
 
   const result = await service.applyChanges({
@@ -157,6 +203,7 @@ const applyAndRespond = async (req, res, { campusId, layer, allowPlan }) => {
     layer,
     actor: req.user,
     ...(plan !== undefined ? { plan } : {}),
+    ...values,
     modules,
   });
 
@@ -167,6 +214,7 @@ const applyAndRespond = async (req, res, { campusId, layer, allowPlan }) => {
     campusId: String(campusId),
     plan: result.resolved.plan,
     features: result.resolved.features,
+    quotas: result.resolved.quotas,
     // Soft edges that will degrade — shown, never enforced (§6.3.1).
     warnings: result.warnings || [],
   });
@@ -175,6 +223,7 @@ const applyAndRespond = async (req, res, { campusId, layer, allowPlan }) => {
 module.exports = {
   MIN_REASON_LENGTH,
   MAX_REASON_LENGTH,
+  PILOT_REQUIREMENTS,
   parsePayload,
   sendRefusal,
   applyAndRespond,

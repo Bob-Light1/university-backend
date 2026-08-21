@@ -5,8 +5,10 @@ const {
   FEATURE_PLANS,
   FEATURE_STATES,
   FEATURE_KEYS,
+  DEFAULT_QUOTAS,
 } = require('../../shared/constants/features.constants');
 const { notDeletedFilter } = require('../../shared/utils/soft-delete');
+const { resolveQuota } = require('../../shared/utils/entitlement');
 
 /**
  * One per-campus deviation from the plan preset (CAMPUS_ENTITLEMENT_DESIGN.md §3).
@@ -399,26 +401,29 @@ const campusSchema = new mongoose.Schema(
       select:  false,
     },
 
-    // Features configuration (for premium features)
+    // Legacy quota configuration. Superseded by `entitlement.quotas` and read
+    // through `resolveQuota()`, which falls back here for every campus the
+    // migration has not covered yet (§3.2). Removed after prod validation.
+    // Defaults come from DEFAULT_QUOTAS so the numbers exist once (§0.1).
     features: {
       maxStudents: {
         type: Number,
-        default: 1000,
+        default: DEFAULT_QUOTAS.maxStudents,
         min: [1, 'Max students must be at least 1']
       },
       maxTeachers: {
         type: Number,
-        default: 100,
+        default: DEFAULT_QUOTAS.maxTeachers,
         min: [1, 'Max teachers must be at least 1']
       },
       maxClasses: {
         type: Number,
-        default: 50,
+        default: DEFAULT_QUOTAS.maxClasses,
         min: [1, 'Max classes must be at least 1']
       },
       maxDocumentStorageMB: {
         type:    Number,
-        default: 5120,      
+        default: DEFAULT_QUOTAS.maxDocumentStorageMB,
         min:     [100, 'Storage quota must be at least 100 MB'],
         max:     [102400, 'Storage quota cannot exceed 100 GB'],
     },
@@ -461,14 +466,20 @@ campusSchema.pre('save', function (next) {
 });
 
 // **METHODS**
-// Check if campus has reached capacity limits
+// Check if campus has reached capacity limits.
+//
+// The ceiling comes from `resolveQuota()`, never from `this.features` directly:
+// `entitlement.quotas` is what the campus was sold (§9.3), `features` is only
+// its pre-unification form and is still the sole source on an unmigrated
+// campus. Reading one of the two here would either ignore every quota decided
+// since the migration, or reset every quota negotiated before it.
 campusSchema.methods.canAddStudent = async function () {
   const Student = mongoose.model('Student');
   const currentCount = await Student.countDocuments({
     schoolCampus: this._id,
     ...notDeletedFilter(Student),
   });
-  return currentCount < this.features.maxStudents;
+  return currentCount < resolveQuota(this, 'maxStudents');
 };
 
 campusSchema.methods.canAddTeacher = async function () {
@@ -477,7 +488,7 @@ campusSchema.methods.canAddTeacher = async function () {
     schoolCampus: this._id,
     ...notDeletedFilter(Teacher),
   });
-  return currentCount < this.features.maxTeachers;
+  return currentCount < resolveQuota(this, 'maxTeachers');
 };
 
 campusSchema.methods.canAddClass = async function () {
@@ -486,7 +497,7 @@ campusSchema.methods.canAddClass = async function () {
     campus: this._id,
     ...notDeletedFilter(Class),
   });
-  return currentCount < this.features.maxClasses;
+  return currentCount < resolveQuota(this, 'maxClasses');
 };
 campusSchema.methods.canAddDocumentStorage = async function(additionalBytes) {
   const Document = mongoose.model('Document');
@@ -501,7 +512,7 @@ campusSchema.methods.canAddDocumentStorage = async function(additionalBytes) {
     { $group: { _id: null, total: { $sum: '$importedFile.sizeBytes' } } }
   ]);
   const usedBytes = result[0]?.total || 0;
-  const maxBytes  = (this.features.maxDocumentStorageMB || 5120) * 1024 * 1024;
+  const maxBytes  = resolveQuota(this, 'maxDocumentStorageMB') * 1024 * 1024;
   
   return (usedBytes + additionalBytes) <= maxBytes;
 };

@@ -19,6 +19,7 @@ const {
   FEATURE_REGISTRY,
   FEATURE_KEYS,
   FEATURE_PLANS,
+  FEATURE_STATES,
   FEATURE_ERROR_CODES,
 } = require('../../constants/features.constants');
 const {
@@ -91,13 +92,35 @@ const resolveOffer = (raw) =>
  * registry metadata the UI needs (label, core, plan tier, why it is floored).
  *
  * @param {string} campusId
+ * @param {Object} [options]
+ * @param {string} [options.layer] - The layer the screen calling this WRITES
+ *   (`OVERRIDE_LAYERS.ADMIN` | `.CAMPUS`). It only shapes `allowedStates`;
+ *   everything else is layer-agnostic.
  * @returns {Promise<Object>}
  */
-const describeForCampus = async (campusId) => {
+const describeForCampus = async (campusId, { layer = OVERRIDE_LAYERS.ADMIN } = {}) => {
   const { entitlement, campusName, found } = await readRaw(campusId);
   const effective = resolveEntitlement(entitlement);
   const offer = resolveOffer(entitlement);
   const overrides = entitlement?.modules || [];
+  const now = new Date();
+
+  /**
+   * The states this layer may actually select on this module, computed by
+   * asking the GUARD rather than by restating its rules on screen: a pilot UI
+   * that greys out its own idea of what is allowed is a second source of truth
+   * for something `checkOverrideAuthority()` already owns, and the half that
+   * drifts is always the looser one.
+   *
+   * Only the DECLARATION-driven controls are represented here (core, offer
+   * ceiling). The data-driven ones — a floored module that holds records, a
+   * module another collection still needs (§6.3.3) — cannot be: they depend on
+   * what the campus has stored, are probed inside a transaction, and are what
+   * the 409 on save exists to say.
+   */
+  const allowedStatesFor = (key) =>
+    Object.values(FEATURE_STATES).filter((state) =>
+      checkOverrideAuthority({ key, state, until: null, layer, offer, now }).blockers.length === 0);
 
   return {
     campusId: String(campusId),
@@ -130,9 +153,57 @@ const describeForCampus = async (campusId) => {
         offerState: getFeatureState(offer, key),
         /** What the tier alone would give — how the UI shows "included in plan" vs "override". */
         planState: planBaseState(effective.plan, key),
+        /** What the calling layer may select — see {@link allowedStatesFor}. */
+        allowedStates: allowedStatesFor(key),
         overrides: { admin: layerOf(OVERRIDE_LAYERS.ADMIN), campus: layerOf(OVERRIDE_LAYERS.CAMPUS) },
       };
     }),
+  };
+};
+
+/**
+ * The estate matrix: one row per campus, one column per module (§13.1).
+ *
+ * Resolved in memory from a single read, not with one `describeForCampus()`
+ * per campus: the resolver is pure, so N campuses cost N calls to a function
+ * and exactly one database round-trip (CLAUDE.md §0.1 — factorisation must not
+ * cost a round-trip). The per-campus screen keeps its own richer endpoint; this
+ * one carries the states alone, which is all a matrix draws.
+ *
+ * The cache is deliberately NOT consulted: it is keyed per campus with its own
+ * TTL, and a matrix stitched from entries of different ages would show two
+ * campuses as of two different moments. One read, one instant.
+ *
+ * @param {Object} [options]
+ * @param {Date}   [options.now] - Evaluation instant, so `until` expiry is
+ *   read exactly as the gate reads it (§4.2).
+ * @returns {Promise<{campuses: Array, features: Array}>}
+ */
+const describeEstate = async ({ now = new Date() } = {}) => {
+  const campuses = await campusService().listCampusesForEstate();
+
+  return {
+    campuses: campuses.map((campus) => {
+      const resolved = resolveEntitlement(campus.entitlement || null, { now });
+      return {
+        campusId: String(campus._id),
+        campusName: campus.campus_name || null,
+        status: campus.status || null,
+        plan: resolved.plan,
+        /** A campus nobody configured yet — every module open by fail-open. */
+        configured: Boolean(campus.entitlement),
+        states: FEATURE_KEYS.reduce((acc, key) => {
+          acc[key] = getFeatureState(resolved, key);
+          return acc;
+        }, {}),
+      };
+    }),
+    features: FEATURE_KEYS.map((key) => ({
+      key,
+      label: FEATURE_REGISTRY[key].label,
+      core: FEATURE_REGISTRY[key].core,
+      minPlan: FEATURE_REGISTRY[key].minPlan,
+    })),
   };
 };
 
@@ -337,6 +408,7 @@ module.exports = {
   resolveForCampus,
   resolveOffer,
   describeForCampus,
+  describeEstate,
   pruneRedundant,
   mergePatch,
   applyChanges,

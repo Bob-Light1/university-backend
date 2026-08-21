@@ -34,6 +34,7 @@ const {
   FEATURE_KEYS,
   FEATURE_REGISTRY,
   PLAN_PRESETS,
+  DEFAULT_QUOTAS,
 } = require('../constants/features.constants');
 
 /** Layer that posted an override — the offer (ADMIN) or the usage (CAMPUS_MANAGER). */
@@ -181,6 +182,51 @@ const isFeatureActive = (resolved, key, { write = false } = {}) => {
   return true;
 };
 
+/**
+ * Effective value of one capacity ceiling for a campus (design doc §9.3).
+ *
+ * Three sources, in order — `entitlement.quotas` (what was sold), the legacy
+ * `features` object (what was sold before the unification, §3.2), then
+ * {@link DEFAULT_QUOTAS}. The legacy step is not decoration: until
+ * `scripts/migrate-entitlement.js` has run on the estate, `entitlement` is
+ * absent everywhere and the second source is the ONLY one carrying a campus's
+ * real ceiling. Dropping it would silently reset every negotiated quota to the
+ * default the day this code shipped.
+ *
+ * A stored value that is not a usable ceiling (0, negative, non-numeric) falls
+ * through to the next source rather than being applied: a quota of 0 does not
+ * mean "unlimited" anywhere in this system, it means nobody can create
+ * anything, and that is never what a missing configuration should express.
+ *
+ * PURE — takes the campus document (full or `.lean()`), returns a number.
+ *
+ * @param {Object|null|undefined} campus - `{ entitlement, features }`.
+ * @param {string} name - One of the {@link DEFAULT_QUOTAS} keys.
+ * @param {Object} [options]
+ * @param {number} [options.fallback] - Deployment-level default replacing the
+ *   built-in one (the GED reads `DOC_DEFAULT_STORAGE_QUOTA_MB` this way). It
+ *   sits at the END of the chain on purpose: an environment variable is a knob
+ *   for a deployment, never a way to overrule what a tenant was sold.
+ * @returns {number}
+ * @throws {Error} on an undeclared quota name — a typo must not resolve to
+ *   `undefined` and become an unbounded comparison (`n < undefined` is false,
+ *   so every creation would be refused with no message saying why).
+ */
+const resolveQuota = (campus, name, { fallback } = {}) => {
+  if (!Object.prototype.hasOwnProperty.call(DEFAULT_QUOTAS, name)) {
+    throw new Error(`resolveQuota: unknown quota '${name}'`);
+  }
+  const usable = (value) => typeof value === 'number' && Number.isFinite(value) && value > 0;
+
+  const fromEntitlement = campus?.entitlement?.quotas?.[name];
+  if (usable(fromEntitlement)) return fromEntitlement;
+
+  const fromLegacy = campus?.features?.[name];
+  if (usable(fromLegacy)) return fromLegacy;
+
+  return usable(fallback) ? fallback : DEFAULT_QUOTAS[name];
+};
+
 module.exports = {
   OVERRIDE_LAYERS,
   ALL_ENABLED,
@@ -189,4 +235,5 @@ module.exports = {
   resolveEntitlement,
   getFeatureState,
   isFeatureActive,
+  resolveQuota,
 };

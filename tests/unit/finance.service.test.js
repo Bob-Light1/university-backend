@@ -21,11 +21,17 @@ jest.mock('../../modules/student', () => ({
 jest.mock('../../modules/settings', () => ({
   service: { getPreferredLanguage: jest.fn().mockResolvedValue('fr') },
 }));
+// The per-campus emission gate is pinned in tests/unit/entitlement.jobs.test.js;
+// here we only assert that the job asks it and forwards its answer (§9.1).
+jest.mock('../../shared/lib/entitlement', () => ({
+  jobs: { suppressedCampusIds: jest.fn().mockResolvedValue([]) },
+}));
 
 const repo = require('../../modules/finance/finance.repository');
 const { service: notification } = require('../../modules/notification');
 const { service: studentService } = require('../../modules/student');
 const finance = require('../../modules/finance/finance.service');
+const { jobs: entitlementJobs } = require('../../shared/lib/entitlement');
 
 // The balance notification is fire-and-forget + resolves the contact first (await):
 // we let the microtask queue drain before asserting the call to notify.
@@ -202,6 +208,8 @@ describe('remindBalance', () => {
 });
 
 describe('runOverdueJob', () => {
+  beforeEach(() => entitlementJobs.suppressedCampusIds.mockResolvedValue([]));
+
   const overdueFee = (id) => ({
     _id: id, student: 's', schoolCampus: 'c',
     amountDue: 100, amountPaid: 0, currency: 'XAF', dueDate: new Date('2020-01-01'), balance: 100,
@@ -218,7 +226,7 @@ describe('runOverdueJob', () => {
     expect(repo.claimFeeForReminder).toHaveBeenCalledWith('a', expect.any(Date), expect.any(Date));
     expect(repo.claimFeeForReminder).toHaveBeenCalledWith('b', expect.any(Date), expect.any(Date));
     expect(notification.notify).toHaveBeenCalledTimes(2);
-    expect(res).toEqual({ transitioned: 3, reminded: 2 });
+    expect(res).toEqual({ transitioned: 3, reminded: 2, suppressedCampuses: 0 });
   });
 
   test('une dette déjà relancée par une autre instance (claim → null) n\'est pas notifiée', async () => {
@@ -232,6 +240,28 @@ describe('runOverdueJob', () => {
     expect(res.reminded).toBe(1);
   });
 
+  test('les campus dont Finance est coupé sont exclus de la requête, pas après le claim', async () => {
+    // Design doc §9.1. The exclusion has to reach the QUERY: `claimFeeForReminder`
+    // stamps `lastRemindedAt` and bumps `reminderCount` on pickup, so a reminder
+    // dropped afterwards would still burn the debt's dunning slot and leave it
+    // un-remindable for a whole cadence window once the module came back.
+    entitlementJobs.suppressedCampusIds.mockResolvedValue(['camp-off']);
+    repo.markPastDueOverdue.mockResolvedValue({ modifiedCount: 2 });
+    repo.findRemindableOverdueFees.mockResolvedValue([]);
+
+    const res = await finance.runOverdueJob();
+
+    expect(entitlementJobs.suppressedCampusIds).toHaveBeenCalledWith('finance');
+    expect(repo.findRemindableOverdueFees).toHaveBeenCalledWith(
+      expect.any(Date), expect.any(Number), { excludeCampusIds: ['camp-off'] },
+    );
+    // The transition is HYGIENE and still runs for everyone: a debt past its due
+    // date is a fact about a date, and freezing it would leave a frozen ledger
+    // showing `pending` on plainly overdue debts.
+    expect(repo.markPastDueOverdue).toHaveBeenCalledWith(expect.any(Date));
+    expect(res).toEqual({ transitioned: 2, reminded: 0, suppressedCampuses: 1 });
+  });
+
   test('aucune dette en retard → rien à faire', async () => {
     repo.markPastDueOverdue.mockResolvedValue({ modifiedCount: 0 });
     repo.findRemindableOverdueFees.mockResolvedValue([]);
@@ -240,7 +270,7 @@ describe('runOverdueJob', () => {
 
     expect(repo.claimFeeForReminder).not.toHaveBeenCalled();
     expect(notification.notify).not.toHaveBeenCalled();
-    expect(res).toEqual({ transitioned: 0, reminded: 0 });
+    expect(res).toEqual({ transitioned: 0, reminded: 0, suppressedCampuses: 0 });
   });
 });
 

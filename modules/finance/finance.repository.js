@@ -262,13 +262,21 @@ const markPastDueOverdue = (now) =>
  * deterministic ordering across batches.
  * @param {Date} cutoff
  * @param {number} limit
+ * @param {Object} [options]
+ * @param {Array}  [options.excludeCampusIds] campuses that must not be reminded.
  * @returns {Promise<Object[]>}
  */
-const findRemindableOverdueFees = (cutoff, limit = 200) =>
+const findRemindableOverdueFees = (cutoff, limit = 200, { excludeCampusIds = [] } = {}) =>
   StudentFee.find({
     ...FEE_LIVE,
     status: 'overdue',
     $or: [{ lastRemindedAt: null }, { lastRemindedAt: { $lt: cutoff } }],
+    // Campuses whose Finance module is not active (design doc §9.1). Excluded
+    // in the QUERY rather than after the claim: `claimFeeForReminder` stamps
+    // `lastRemindedAt` and bumps `reminderCount` on pickup, so a debt dropped
+    // afterwards would still burn its dunning slot and stay un-remindable for a
+    // whole cadence window once the module came back.
+    ...(excludeCampusIds.length ? { schoolCampus: { $nin: excludeCampusIds } } : {}),
   })
     .sort({ dueDate: 1 })
     .limit(limit)

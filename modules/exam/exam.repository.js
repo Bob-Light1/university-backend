@@ -165,8 +165,25 @@ const findSessionsForExport = (filter) =>
  * the limit returns is unspecified, so the same sessions could be served every night while
  * others were never scanned at all.
  */
-const findSessionsPendingAntiCheat = (limit) =>
-  ExamSession.find({ status: 'COMPLETED', antiCheatScannedAt: null, ...SESSION_LIVE })
+/**
+ * Sessions awaiting an anti-cheat scan.
+ *
+ * @param {number} limit
+ * @param {Object} [options]
+ * @param {Array}  [options.excludeCampusIds] campuses whose Examinations module
+ *   is not active (design doc §9.1). Excluded in the QUERY, not after the read:
+ *   a batch filtered afterwards would return mostly rows the job may not touch
+ *   and starve the campuses it may, while those sessions kept their null marker
+ *   and re-filled the next batch identically.
+ * @returns {Promise<Object[]>}
+ */
+const findSessionsPendingAntiCheat = (limit, { excludeCampusIds = [] } = {}) =>
+  ExamSession.find({
+    status: 'COMPLETED',
+    antiCheatScannedAt: null,
+    ...SESSION_LIVE,
+    ...(excludeCampusIds.length ? { schoolCampus: { $nin: excludeCampusIds } } : {}),
+  })
     .select('_id completedAt antiCheatScannedAt lastSubmissionAt')
     .sort({ completedAt: 1 })
     .limit(limit)
@@ -177,8 +194,15 @@ const findSessionsPendingAntiCheat = (limit) =>
  * The outstanding count, not the processed one: a job can only report what it did, and a
  * backlog is exactly what that number hides.
  */
-const countSessionsPendingAntiCheat = () =>
-  ExamSession.countDocuments({ status: 'COMPLETED', antiCheatScannedAt: null, ...SESSION_LIVE });
+const countSessionsPendingAntiCheat = ({ excludeCampusIds = [] } = {}) =>
+  ExamSession.countDocuments({
+    status: 'COMPLETED',
+    antiCheatScannedAt: null,
+    ...SESSION_LIVE,
+    // Same exclusion as the batch above: a backlog figure that counted sessions
+    // the job is not allowed to scan would grow forever and read as a failure.
+    ...(excludeCampusIds.length ? { schoolCampus: { $nin: excludeCampusIds } } : {}),
+  });
 
 /** Stamps a session as scanned (anti-cheat cron). */
 const markSessionAntiCheatScanned = (sessionId, at = new Date()) =>

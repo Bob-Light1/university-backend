@@ -171,7 +171,15 @@ const analyzeSession = async (sessionId) => {
 const runAntiCheatJob = async () => {
   console.log('[AntiCheatCron] Starting nightly anti-cheat analysis...');
 
-  const sessions = await repo.findSessionsPendingAntiCheat(BATCH_SIZE);
+  // Campuses whose Examinations module is not active take no scan at all
+  // (design doc §9.1): flagging a submission is a visible verdict issued in the
+  // module's name — an emission, not hygiene. Resolved once per run and applied
+  // inside both queries, so neither the batch nor the backlog figure counts
+  // sessions this job may not touch.
+  const excludeCampusIds = await require('../../shared/lib/entitlement').jobs
+    .suppressedCampusIds('exam');
+
+  const sessions = await repo.findSessionsPendingAntiCheat(BATCH_SIZE, { excludeCampusIds });
 
   let totalFlagged = 0;
   let totalPairs   = 0;
@@ -194,13 +202,15 @@ const runAntiCheatJob = async () => {
     }
   }
 
-  const remaining = await repo.countSessionsPendingAntiCheat();
+  const remaining = await repo.countSessionsPendingAntiCheat({ excludeCampusIds });
 
   console.log(
     `[AntiCheatCron] Done. Sessions scanned: ${scanned}/${sessions.length}, `
-    + `Pairs: ${totalPairs}, Flagged: ${totalFlagged}, Still pending: ${remaining}.`
+    + `Pairs: ${totalPairs}, Flagged: ${totalFlagged}, Still pending: ${remaining}`
+    + (excludeCampusIds.length ? `, ${excludeCampusIds.length} campus(es) skipped (Examinations not active)` : '')
+    + '.'
   );
-  return { sessions: scanned, totalPairs, totalFlagged, remaining };
+  return { sessions: scanned, totalPairs, totalFlagged, remaining, suppressedCampuses: excludeCampusIds.length };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

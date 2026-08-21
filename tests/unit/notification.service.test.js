@@ -9,10 +9,17 @@
 
 jest.mock('../../modules/notification/notification.repository');
 jest.mock('../../modules/notification/channels');
+// Per-campus entitlement (CAMPUS_ENTITLEMENT_DESIGN.md §9.4). The gate itself is
+// pinned in tests/unit/entitlement.jobs.test.js; here we pin that the foundation
+// ASKS it, and where in the sequence it asks.
+jest.mock('../../shared/lib/entitlement', () => ({
+  jobs: { isEmissionAllowed: jest.fn().mockResolvedValue(true) },
+}));
 
 const repo     = require('../../modules/notification/notification.repository');
 const channels = require('../../modules/notification/channels');
 const service  = require('../../modules/notification/notification.service');
+const { jobs: entitlementJobs } = require('../../shared/lib/entitlement');
 
 // Canal factice configurable.
 const makeChannel = (over = {}) => ({
@@ -23,6 +30,7 @@ const makeChannel = (over = {}) => ({
 
 beforeEach(() => {
   jest.clearAllMocks();
+  entitlementJobs.isEmissionAllowed.mockResolvedValue(true);
   // createMany returns the rows enriched with an _id (order preserved).
   repo.createMany.mockImplementation((rows) =>
     Promise.resolve(rows.map((r, i) => ({ _id: `n${i}`, ...r })))
@@ -199,5 +207,60 @@ describe('inbox helpers', () => {
   test('markRead renvoie false quand rien n\'est modifié (anti-IDOR)', async () => {
     repo.markRead.mockResolvedValue({ modifiedCount: 0 });
     await expect(service.markRead('id', 'other')).resolves.toBe(false);
+  });
+});
+
+// ── Per-campus entitlement (§9.4) ────────────────────────────────────────────
+
+describe('notify — module non actif sur le campus du destinataire', () => {
+  test('n\'écrit RIEN et n\'envoie rien quand le module est coupé', async () => {
+    channels.get.mockImplementation(() => makeChannel());
+    entitlementJobs.isEmissionAllowed.mockResolvedValue(false);
+
+    const created = await service.notify({
+      recipient, channels: ['inapp', 'email'], template: 'payment.reminder',
+      data: { amount: 100, currency: 'XAF', dueDate: '2026-01-01' },
+    });
+
+    // The suppression happens BEFORE persistence on purpose: an in-app row is
+    // as much an emission as an email — it lands in the recipient's inbox under
+    // the name of a module their campus was told is switched off.
+    expect(created).toEqual([]);
+    expect(repo.createMany).not.toHaveBeenCalled();
+    expect(entitlementJobs.isEmissionAllowed).toHaveBeenCalledWith('c1', 'finance');
+  });
+
+  test('envoie normalement quand le module est actif', async () => {
+    channels.get.mockImplementation(() => makeChannel());
+
+    const created = await service.notify({
+      recipient, channels: ['inapp'], template: 'payment.reminder',
+      data: { amount: 100, currency: 'XAF', dueDate: '2026-01-01' },
+    });
+
+    expect(created).toHaveLength(1);
+  });
+
+  test('ne consulte pas la porte pour un template attribuable à aucun module', async () => {
+    // `generic` carries caller-authored content: nothing in it says which module
+    // it came from, so suppressing it would silence a campus-wide broadcast.
+    channels.get.mockImplementation(() => makeChannel());
+
+    await service.notify({ recipient, channels: ['inapp'], template: 'generic', data: { body: 'x' } });
+
+    expect(entitlementJobs.isEmissionAllowed).not.toHaveBeenCalled();
+  });
+
+  test('envoie quand le destinataire ne porte pas de campus', async () => {
+    // Fail-open (§4.3): silence is the one failure mode nobody reports.
+    channels.get.mockImplementation(() => makeChannel());
+
+    const created = await service.notify({
+      recipient: { id: 'u1', model: 'Admin', email: 'a@b.c' },
+      channels: ['inapp'], template: 'account.welcome', data: { name: 'X' },
+    });
+
+    expect(entitlementJobs.isEmissionAllowed).not.toHaveBeenCalled();
+    expect(created).toHaveLength(1);
   });
 });

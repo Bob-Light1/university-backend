@@ -22,6 +22,7 @@ const getCampusStorageInfo = (...args) => require('../../campus').service.getCam
 const repo = require('../document.repository');
 
 const { sendError, sendForbidden } = require('../../../shared/utils/response-helpers');
+const { resolveQuota } = require('../../../shared/utils/entitlement');
 
 /** Roles with cross-campus (global) access */
 const GLOBAL_ROLES = ['ADMIN', 'DIRECTOR'];
@@ -129,9 +130,13 @@ const enforceCampusStorageQuota = async (req, res, next) => {
       return sendError(res, 404, 'Campus not found');
     }
 
-    const maxMB = (campus.features?.maxDocumentStorageMB
-               ?? parseInt(process.env.DOC_DEFAULT_STORAGE_QUOTA_MB, 10))
-               || 5120;
+    // `entitlement.quotas` first, legacy `features` for an unmigrated campus,
+    // then the deployment knob, then the platform default (§9.3). The chain
+    // lives in `resolveQuota()` — restating it here would be a second source of
+    // truth for what a tenant was sold.
+    const maxMB = resolveQuota(campus, 'maxDocumentStorageMB', {
+      fallback: parseInt(process.env.DOC_DEFAULT_STORAGE_QUOTA_MB, 10),
+    });
 
     const usedMB = await computeCampusStorageUsageMB(req.campusId);
 

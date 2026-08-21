@@ -26,6 +26,7 @@ const { OVERRIDE_LAYERS } = require('../../shared/utils/entitlement');
 const mockCampusFacade = {
   getCampusEntitlement: jest.fn(),
   setCampusEntitlement: jest.fn(),
+  listCampusesForEstate: jest.fn(),
 };
 
 jest.mock('../../modules/campus', () => ({ service: mockCampusFacade }));
@@ -261,6 +262,156 @@ describe('describeForCampus — the pilot screen payload', () => {
     const report = await service.describeForCampus(CAMPUS_ID);
     const result = report.features.find((f) => f.key === 'result');
     expect(result).toMatchObject({ label: 'Results & transcripts', core: false, minState: FEATURE_STATES.READ_ONLY });
+  });
+});
+
+describe('parsePayload — the value fields the pilot dialog now submits (phase 4)', () => {
+  const { parsePayload } = require('../../shared/lib/entitlement/entitlement.controller');
+
+  it('carries quotas and ai through on the offer layer', () => {
+    const { errors, values } = parsePayload(
+      { quotas: { aiMonthlyTokens: 5000000 }, ai: { llmProfile: 'premium' } },
+      true
+    );
+    expect(errors).toHaveLength(0);
+    expect(values).toEqual({ quotas: { aiMonthlyTokens: 5000000 }, ai: { llmProfile: 'premium' } });
+  });
+
+  it('refuses them on the usage layer rather than dropping them silently', () => {
+    // Same rule as `plan`: a manager who believes they raised their own budget
+    // and received a 200 has been told something false about their bill.
+    const { errors, values } = parsePayload({ quotas: { maxStudents: 99999 } }, false);
+    expect(values).toEqual({});
+    expect(errors[0].field).toBe('quotas');
+  });
+
+  it('still refuses an empty submission', () => {
+    expect(parsePayload({}, true).errors[0].field).toBe('body');
+  });
+
+  it('refuses a value field that is not an object', () => {
+    expect(parsePayload({ ai: 'premium' }, true).errors[0].field).toBe('ai');
+  });
+});
+
+describe('describeForCampus — what each layer may actually select', () => {
+  it('never offers a restricted state on a core module, to either layer', async () => {
+    storedAs({ plan: FEATURE_PLANS.PREMIUM, modules: [] });
+
+    for (const layer of [OVERRIDE_LAYERS.ADMIN, OVERRIDE_LAYERS.CAMPUS]) {
+      const report = await service.describeForCampus(CAMPUS_ID, { layer });
+      const settings = report.features.find((f) => f.key === 'settings');
+      expect(settings.allowedStates).toEqual([FEATURE_STATES.ENABLED]);
+    }
+  });
+
+  it('lets the offer layer widen, and stops the usage layer at the ceiling (§5)', async () => {
+    // Free tier: `gaet` is outside the offer entirely.
+    storedAs({ plan: FEATURE_PLANS.FREE, modules: [] });
+
+    const asAdmin = await service.describeForCampus(CAMPUS_ID, { layer: OVERRIDE_LAYERS.ADMIN });
+    const asManager = await service.describeForCampus(CAMPUS_ID, { layer: OVERRIDE_LAYERS.CAMPUS });
+
+    // The admin sells it — every state is theirs to set.
+    expect(asAdmin.features.find((f) => f.key === 'gaet').allowedStates)
+      .toEqual(expect.arrayContaining([FEATURE_STATES.ENABLED, FEATURE_STATES.HIDDEN]));
+    // The manager cannot grant themselves a module nobody sold them.
+    expect(asManager.features.find((f) => f.key === 'gaet').allowedStates)
+      .toEqual([FEATURE_STATES.HIDDEN]);
+  });
+
+  it('opens the usage layer exactly as far as the offer override reaches', async () => {
+    storedAs({
+      plan: FEATURE_PLANS.FREE,
+      modules: [{ key: 'finance', state: FEATURE_STATES.READ_ONLY, until: null, reason: 'pilot, frozen', setBy: 'admin' }],
+    });
+
+    const report = await service.describeForCampus(CAMPUS_ID, { layer: OVERRIDE_LAYERS.CAMPUS });
+    const finance = report.features.find((f) => f.key === 'finance');
+
+    // Sold frozen: the manager may keep it frozen or hide it, never re-open it.
+    expect(finance.allowedStates).toEqual([FEATURE_STATES.READ_ONLY, FEATURE_STATES.HIDDEN]);
+  });
+});
+
+describe('describeEstate — the admin estate matrix (§13.1)', () => {
+  const DOUALA = '507f1f77bcf86cd799439012';
+  const YAOUNDE = '507f1f77bcf86cd799439013';
+
+  it('lists a campus nobody configured, with every module open', async () => {
+    mockCampusFacade.listCampusesForEstate.mockResolvedValue([
+      { _id: YAOUNDE, campus_name: 'Yaoundé', status: 'active', entitlement: null },
+    ]);
+
+    const { campuses } = await service.describeEstate();
+
+    // The unconfigured tenant is the one with every paid module open (§4.3).
+    // Filtering it out — the shape `listCampusEntitlements()` has — would
+    // answer "who has what" with only the campuses somebody already touched.
+    expect(campuses).toHaveLength(1);
+    expect(campuses[0].configured).toBe(false);
+    expect(campuses[0].states.gaet).toBe(FEATURE_STATES.ENABLED);
+    expect(campuses[0].states.ai).toBe(FEATURE_STATES.ENABLED);
+  });
+
+  it('resolves each row on its own entitlement, in one read', async () => {
+    mockCampusFacade.listCampusesForEstate.mockResolvedValue([
+      {
+        _id: DOUALA,
+        campus_name: 'Douala',
+        status: 'active',
+        entitlement: {
+          plan: FEATURE_PLANS.STANDARD,
+          modules: [{ key: 'announcement', state: FEATURE_STATES.READ_ONLY, until: null, reason: 'to be framed', setBy: 'campus' }],
+        },
+      },
+      { _id: YAOUNDE, campus_name: 'Yaoundé', status: 'archived', entitlement: { plan: FEATURE_PLANS.FREE, modules: [] } },
+    ]);
+
+    const { campuses, features } = await service.describeEstate();
+
+    expect(mockCampusFacade.listCampusesForEstate).toHaveBeenCalledTimes(1);
+    expect(campuses[0]).toMatchObject({ campusName: 'Douala', plan: FEATURE_PLANS.STANDARD, configured: true });
+    expect(campuses[0].states.announcement).toBe(FEATURE_STATES.READ_ONLY);
+    expect(campuses[0].states.finance).toBe(FEATURE_STATES.ENABLED);   // in the standard tier
+    expect(campuses[1].states.finance).toBe(FEATURE_STATES.HIDDEN);    // not in the free one
+    expect(campuses[1].status).toBe('archived');
+
+    // The columns travel with the rows: the matrix draws its header from the
+    // registry rather than from a list copied into the frontend (§8.2).
+    expect(features.map((f) => f.key)).toEqual(expect.arrayContaining(['finance', 'gaet', 'ai']));
+    expect(features.find((f) => f.key === 'settings').core).toBe(true);
+  });
+
+  it('reads `until` expiry at the instant it is given, exactly like the gate', async () => {
+    const until = new Date('2027-03-31T00:00:00Z');
+    mockCampusFacade.listCampusesForEstate.mockResolvedValue([{
+      _id: DOUALA,
+      campus_name: 'Douala',
+      status: 'active',
+      entitlement: {
+        plan: FEATURE_PLANS.FREE,
+        modules: [{ key: 'finance', state: FEATURE_STATES.ENABLED, until, reason: 'pilot T2', setBy: 'admin' }],
+      },
+    }]);
+
+    const during = await service.describeEstate({ now: new Date('2027-02-01T00:00:00Z') });
+    const after = await service.describeEstate({ now: new Date('2027-04-01T00:00:00Z') });
+
+    expect(during.campuses[0].states.finance).toBe(FEATURE_STATES.ENABLED);
+    expect(after.campuses[0].states.finance).toBe(FEATURE_STATES.HIDDEN);
+  });
+
+  it('never serves a row from the per-campus cache', async () => {
+    // A matrix stitched from entries of different ages shows two campuses as
+    // of two different moments. One read, one instant.
+    await service.resolveForCampus(DOUALA);
+    mockCampusFacade.listCampusesForEstate.mockResolvedValue([
+      { _id: DOUALA, campus_name: 'Douala', status: 'active', entitlement: { plan: FEATURE_PLANS.FREE, modules: [] } },
+    ]);
+
+    const { campuses } = await service.describeEstate();
+    expect(campuses[0].plan).toBe(FEATURE_PLANS.FREE);
   });
 });
 
