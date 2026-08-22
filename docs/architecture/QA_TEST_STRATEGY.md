@@ -16,6 +16,16 @@
 > Le prérequis absolu de tout le reste — **CH-0** — est donc levé : CH-2, CH-4, CH-5 et CH-6
 > peuvent démarrer.
 >
+> **Retour de `ERP_ROADMAP.md` (audit v4, 2026-08-22)** — deux faits mesurés là-bas appartiennent
+> à ce document, et sa règle de cohérence joue **dans les deux sens** :
+> **(1)** deux harnais hors Jest existent désormais — `npm run test:journey` (21 contrôles, vraie
+> base, replica set jetable) et `npm run test:visual` (16 contrôles, SPA buildée, Chrome sans tête,
+> 2 portails sur 8). La ligne « tests end-to-end, toutes briques : 0 » du §1 est **périmée**, et
+> CH-4 hérite d'un précédent qui dé-risque son démarrage sans réduire sa charge.
+> **(2)** le socle unitaire de CH-1 est **instable** : deux exécutions complètes le 2026-08-22
+> donnent 3 rouges chacune, sur des suites différentes (pool Puppeteer du GED, service de
+> stockage). **À stabiliser avant CH-2**, qui pose une suite bloquante au-dessus.
+>
 > **Révision v1.1 — 2026-08-20**, après audit du document par rapport au code. Trois corrections
 > de fond : `PARTNER` reconnu comme **9ᵉ rôle connecté** (la matrice passe de 160 à **180
 > contextes**, et gagne une famille d'isolation **intra-campus** — décision D-12) ; le périmètre
@@ -117,16 +127,16 @@ reproductible — ce qui est tout ce qu'on lui demande.
 
 | Indicateur | Valeur | Commande de vérification (depuis `~/Projects`) |
 |---|---|---|
-| Routes déclarées (backend) | **546** | `cd university/backend && grep -rhoE "router\.(get\|post\|put\|patch\|delete)\(" modules/ shared/ \| wc -l` |
+| Routes déclarées (backend) | **547** *(2026-08-22)* | `cd university/backend && grep -rhoE "router\.(get\|post\|put\|patch\|delete)\(" modules/ shared/ \| wc -l` |
 | Fichiers de modèles Mongoose | **58** | `cd university/backend && find . -name "*.model.js" -not -path "./node_modules/*" -not -path "./docs/*" \| wc -l` |
 | Modèles Mongoose enregistrés distincts | **57** | `cd university/backend && grep -rhoE "mongoose\.model\([\"'][A-Za-z_]+" --include=*.js . --exclude-dir=node_modules --exclude-dir=docs \| tr -d "\"'" \| sed -E "s/.*\(//" \| sort -u \| grep -vE "^(X\|__SoftDeleteAmbiguous__)$" \| wc -l` |
 | Modules métier | **25** | `cd university/backend && ls modules/ \| wc -l` |
-| Fichiers de test unitaires backend | **59** | `cd university/backend && find tests/unit -name "*.test.js" \| wc -l` |
+| Fichiers de test unitaires backend | **64** *(2026-08-22)* | `cd university/backend && find tests/unit -name "*.test.js" \| wc -l` |
 | Fichiers de test d'intégration backend | **3** | `cd university/backend && find tests/integration -name "*.test.js" \| wc -l` |
-| Fichiers `.jsx` (frontend) | **256** | `cd university/frontend && find src -name "*.jsx" \| wc -l` |
+| Fichiers `.jsx` (frontend) | **265** *(2026-08-22 — arbre non commité, voir §15 de `ERP_ROADMAP.md`)* | `cd university/frontend && find src -name "*.jsx" \| wc -l` |
 | Tests frontend | **0** — aucun outil installé | `cd university/frontend && grep -E "vitest\|jest\|playwright\|cypress\|testing-library" package.json` |
 | Tests portail Next.js | **0** — aucun outil installé | `cd partner && grep -E "vitest\|jest\|playwright\|cypress\|testing-library" package.json` |
-| Tests end-to-end, toutes briques | **0** | — |
+| Tests end-to-end, toutes briques | **2 harnais hors Jest** — `test:journey` · `test:visual` *(2026-08-22)* | `cd university/backend && grep -E '"test:(journey\|visual)"' package.json` |
 | Rôles applicatifs connectés | **9** | `ADMIN · DIRECTOR · CAMPUS_MANAGER · TEACHER · STUDENT · PARENT · MENTOR · STAFF · PARTNER` |
 | Locales | **10** — dont `ar` (RTL) | `cd university/frontend && ls public/locales` |
 | Thèmes | **2** — clair, sombre | — |

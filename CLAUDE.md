@@ -440,13 +440,19 @@ npm run seed:test:self-check       # 16 contrôles : budget, idempotence, verify
 ## 11quater. Feuille de route produit — `docs/architecture/ERP_ROADMAP.md`
 
 **La source de vérité de l'avancement produit**, sur les quatre briques. Elle remplace
-`ERP_2026_v2.pdf` (l'ancien catalogue commercial, archivé hors dépôt) comme référence de
-planification : ce PDF contient six affirmations que le code contredit, toutes traitées au §11
-de la feuille de route — ne jamais s'y référer pour établir un état d'avancement.
+`ERP_2026_v2.pdf` (l'ancien catalogue commercial) comme référence de planification : ce
+catalogue contenait six affirmations que le code contredit, toutes traitées au §11 de la
+feuille de route — ne jamais s'y référer pour établir un état d'avancement.
+
+⚠️ **Le fichier `ERP_2026_v2.pdf` a été écrasé le 2026-08-22** par la vue rendue de la feuille
+de route (décision du porteur). Le catalogue ne subsiste que par les citations relevées à son
+§11 : c'est la seule trace de ce qui a été affirmé, et la raison pour laquelle elles y sont
+conservées mot pour mot.
 
 - **Cinq phases**, établies d'après l'état *mesuré* du code et non d'après ce qui a été annoncé :
   `1-A` livré · `1-B` commencé et pas fini · `2` socle de fabrication · `3` ERP complet ·
-  `4` premium et industrialisation. **206–266 j** restants hors application mobile.
+  `4` premium et industrialisation. **212–275 j** restants hors application mobile, et la phase
+  1-A chiffrée en **valeur de reconstruction** (204–284 j) depuis l'audit v4 du 2026-08-22.
 - **Le §0 est le tableau de bord** et fait foi, comme celui de `QA_TEST_STRATEGY.md`. Un commit
   qui termine ou démarre un chantier met à jour, *dans le même commit*, la ligne du §0 et la
   colonne `État` de la phase concernée. Les deux tableaux de bord doivent rester cohérents :
