@@ -29,11 +29,15 @@
 > JSDoc, messages de log, noms de fichiers — reste en anglais**, conformément au
 > §0 de `CLAUDE.md`.
 >
-> **Révisions** : **v3.0 (2026-08-21)** — première rédaction. Quatre arbitrages
-> porteur tranchés à l'écriture (§14, D-R1 à D-R4) : l'exploitation devient un
-> chantier de phase 2, le durcissement de l'authentification rejoint la phase
-> 1-B, les trois locales vendues et absentes seront livrées, et le document porte
-> **deux** grilles commerciales au lieu d'une.
+> **Révisions** : **v3.1 (2026-08-22)** — absorption des trois commits parallèles
+> du chantier entitlement (D-R7). La ligne 2 de la phase 1-B rétrécit : migration
+> constatée faite, QA visuelle jouée 16/16 et promue en harnais permanent. Deux
+> effets de bord enregistrés (§4.3, §7.2). Total 206–266 → **206–265 j**.
+> **v3.0 (2026-08-21)** — première rédaction. Quatre arbitrages porteur tranchés
+> à l'écriture (§14, D-R1 à D-R4) : l'exploitation devient un chantier de phase
+> 2, le durcissement de l'authentification rejoint la phase 1-B, les trois
+> locales vendues et absentes seront livrées, et le document porte **deux**
+> grilles commerciales au lieu d'une.
 
 ---
 
@@ -77,7 +81,7 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `À FAIRE` | 1-A | 26–38 j | 2026-08-21 |
+| **1-B** | L'inachevé, à fermer | `À FAIRE` | 1-A | 26–37 j | 2026-08-21 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -86,11 +90,11 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 **États autorisés** : `À FAIRE` · `EN COURS` · `BLOQUÉ (motif)` · `LIVRÉ` ·
 `ABANDONNÉ (motif)`.
 
-**Total hors application mobile native** : **206 à 266 jours·développeur**.
+**Total hors application mobile native** : **206 à 265 jours·développeur**.
 L'application mobile (25–35 j) fait l'objet d'un chiffrage séparé, comme dans la
 v2.
 
-**Chemin critique** : `1-B → 2 → 3 → 4-A`, soit **135 à 186 jours**. La voie 4-B
+**Chemin critique** : `1-B → 2 → 3 → 4-A`, soit **135 à 185 jours**. La voie 4-B
 se mène en parallèle de la phase 3 dès que le contrat de plateforme de la phase 2
 est acquis, et CH-3, CH-7 et le chantier d'exploitation de la phase 2 sont eux
 aussi parallélisables. **Ce sont des charges, pas des délais** : à deux
@@ -177,7 +181,7 @@ relie aux trois autres.
 
 ```
   1-A ──▶ 1-B ──▶  2  ──▶  3  ──▶ 4-A
- livré   26–38 j  42–57 j  47–63 j  20–28 j
+ livré   26–37 j  42–57 j  47–63 j  20–28 j
                      │                 
                      └──────▶ 4-B  (parallélisable dès le contrat acquis)
                               71–80 j
@@ -249,13 +253,14 @@ produirait un chiffre invérifiable.
 | Module IA — chat, RAG, analytics narrés | `B1·B3·B2` | Passerelle inerte sans configuration, jeton S2S à courte durée, ingestion de la GED, recherche hybride RRF, chat SSE, budget consolidé et alerte à 80 %, métriques Prometheus, purge de rétention |
 | Portail public & parrainage | `B4·B1` | Préinscription, programmes, quiz et classement, concours avec clôture mensuelle, liens courts `/r/{code}`, QR à la volée, anti-fraude unifiée, analytics QR contre lien |
 | Thème clair / sombre & 10 locales | `B2·B4` | Fabrique de thème, jetons de statut comme source unique des surfaces, RTL, 10 locales × 18 espaces de noms |
-| Socle de test — CH-0 & CH-1 | `B1` | 63 suites unitaires ; fixture déterministe de 2 campus, 283 documents, 31 collections, 127 assertions, 18 comptes couvrant les 9 rôles, base éphémère sans MongoDB installé |
+| Socle de test — CH-0 & CH-1 | `B1` | **1 407 tests / 68 suites** ; fixture déterministe de 2 campus, 283 documents, 31 collections, 127 assertions, 18 comptes couvrant les 9 rôles, base éphémère sans MongoDB installé |
+| Deux harnais hors Jest | `B1·B2` | `npm run test:journey` (21 contrôles, vraie base, replica set jetable, l'app réelle) et `npm run test:visual` (16 contrôles, SPA **buildée** servie en statique, Chrome sans tête via `puppeteer-core`). Nés du chantier entitlement, ils sont le premier précédent E2E du dépôt |
 
 ---
 
 ## §5 — Phase 1-B · L'inachevé, à fermer avant tout le reste
 
-**État** : `À FAIRE` · **Charge** : **26–38 j** · **Dépend de** : 1-A
+**État** : `À FAIRE` · **Charge** : **26–37 j** · **Dépend de** : 1-A
 
 C'est la phase la plus rentable du document, et la moins visible. Chaque ligne
 est un travail déjà payé à 70–90 % **dont la valeur reste nulle tant que la
@@ -268,7 +273,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | # | Chantier | Briques | Ce qui existe déjà | Ce qui manque | Charge | État |
 |---|---|---|---|---|---|---|
 | 1 | Fixture déterministe (CH-0) | `B1` | Seed reproductible, empreinte SHA-256 identique d'une exécution à l'autre, 9 rôles qui se connectent réellement | Recette par une seconde personne ; arbitrage mémoire contre conteneur en CI ; 8 collections non seedées — GAET, notifications, préférences, file d'impression, transcripts finaux, pièces jointes GED — que les parcours E2E réclameront | 2–3 j | `À FAIRE` |
-| 2 | Entitlement par campus | `B1·B2` | Six phases de conception livrées, code en place, toutes les décisions tranchées | Exécution de `migrate-entitlement.js` sur la base réelle, QA visuelle d'un campus migré, puis retrait des champs hérités du schéma. **Trois actions d'exploitation, zéro ligne de code** | 1–2 j | `À FAIRE` |
+| 2 | Entitlement par campus | `B1·B2` | Six phases livrées. **Migration faite le 2026-08-20** (constatée le 21 : `--dry-run` rapporte 3 skip, audit `actorRole: SYSTEM`, même horodatage à la milliseconde sur les trois campus). **QA visuelle faite le 2026-08-22, 16/16** (`npm run test:visual`), et promue en harnais permanent | Dans cet ordre : (1) étendre `test:visual` aux **quatre portails non rendus** — étudiant, parent, mentor, staff — seul contrôle capable de fermer la case §4.1.2 de la DoD, et le seul qui épingle la correspondance route ↔ garde, silencieuse dans les deux sens ; (2) **ensuite seulement**, retrait de `features` / `aiEntitlement` du schéma et de la route `ai-entitlement`, qui n'a plus de client depuis la phase 4 | 1 j | `À FAIRE` |
 | 3 | Authentification — durcissement | `B1·B2` | JWT sur 9 rôles, bcrypt 12 tours, limiteur de débit sur les points de connexion, flux d'activation par jeton | Jetons de rafraîchissement, **révocation côté serveur** — aucun mécanisme n'existe aujourd'hui, un jeton volé vaut 7 jours — et verrouillage temporaire de compte après échecs répétés | 3–4 j | `À FAIRE` |
 | 4 | Module IA — sortie de conception | `B1·B3` | M0 à M6 livrés, tests verts des deux côtés, charge mesurée sous SLO en local | QA visuelle réelle de l'UI, SLO du chat mesuré sur l'infrastructure cible, benchmark d'embedding hors ligne avant de figer l'index de production | 2–3 j | `À FAIRE` |
 | 5 | Portail d'inscription en ligne | `B1·B4` | Pipeline de prospects en 7 statuts jusqu'à `enrolled`, anti-fraude, lien court et QR | Pièces jointes au dossier, workflow de validation directeur, **création effective de l'étudiant** au passage à `enrolled` — aujourd'hui seule la commission partenaire se déclenche — et notification du candidat | 3–4 j | `À FAIRE` |
@@ -280,7 +285,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | 11 | Catalogue de langues | `B2·B4` | 10 locales × 18 espaces de noms, RTL fonctionnel, sélecteur et préférence utilisateur | Les **trois locales vendues et absentes** — latin, lingala, haoussa — soit 54 fichiers de traduction. Le japonais et le portugais, livrés mais hors catalogue, sont conservés et entrent dans l'offre (D-R3). **Traite l'écart 2 du §11** | 3–4 j | `À FAIRE` |
 | 12 | Import / export — volet tableur | `B1·B2` | CSV en lecture et en écriture partout : étudiants, enseignants, résultats, prospects | Lecture et écriture XLSX. La v2 inclut « migration depuis CSV/Excel » dans chaque palier et annonce un export Excel du tableau de bord financier ; aucune dépendance tableur n'est installée | 1–2 j | `À FAIRE` |
 
-**Total Phase 1-B : 26–38 j**
+**Total Phase 1-B : 26–37 j**
 
 ---
 
@@ -339,7 +344,7 @@ que les parcours end-to-end figent une surface stable plutôt que d'être rééc
 
 | # | Chantier | Briques | Contenu | Charge | État |
 |---|---|---|---|---|---|
-| 9 | End-to-end déterministe (CH-4) | `B1·B2·B4` | 30 à 60 parcours canoniques sous Playwright, captures de référence, bloquant en intégration continue. **Zéro test end-to-end existe aujourd'hui**, toutes briques confondues | 10–15 j | `À FAIRE` |
+| 9 | End-to-end déterministe (CH-4) | `B1·B2·B4` | 30 à 60 parcours canoniques sous Playwright, captures de référence, bloquant en intégration continue. **Précédent acquis** : `test:visual` prouve déjà qu'on sait servir la SPA buildée et la piloter sans tête sur la fixture, et a payé deux pièges de mesure — le tiroir est un rail à groupes repliés, et `AppShell` persiste leur état, ce qui rendait un comptage aléatoire d'un run à l'autre. Reste l'écart d'échelle : 16 contrôles sur 2 portails contre 30–60 parcours sur 4 briques avec captures de référence | 10–15 j | `À FAIRE` |
 | 10 | Charge · performance · sécurité · accessibilité (CH-6) | `B1·B2·B3·B4` | Quatre disciplines, quatre outils dédiés : plan de charge, budgets de performance, scan de sécurité alimenté par la table de routes, audit d'accessibilité | 10 j | `À FAIRE` |
 
 **Total Phase 3 : 47–63 j**
@@ -394,11 +399,11 @@ son périmètre dépend d'arbitrages de publication qui ne sont pas rendus.
 | Phase | Nature | Charge | Cumul | Coût indicatif |
 |---|---|---|---|---|
 | **1-A** | Acquis — non rechiffré | — | — | — |
-| **1-B** | Douze chantiers à fermer | 26–38 j | 26–38 j | 1,95–2,85 M XAF |
-| **2** | Vérifiabilité, versionnage, exploitation | 42–57 j | 68–95 j | 3,15–4,28 M XAF |
-| **3** | Huit manques métier + non-régression | 47–63 j | 115–158 j | 3,53–4,73 M XAF |
-| **4** | Pédagogie + industrialisation | 91–108 j | 206–266 j | 6,83–8,10 M XAF |
-| | **Total hors application mobile** | **206–266 j** | | **15,45–19,95 M XAF** |
+| **1-B** | Douze chantiers à fermer | 26–37 j | 26–37 j | 1,95–2,78 M XAF |
+| **2** | Vérifiabilité, versionnage, exploitation | 42–57 j | 68–94 j | 3,15–4,28 M XAF |
+| **3** | Huit manques métier + non-régression | 47–63 j | 115–157 j | 3,53–4,73 M XAF |
+| **4** | Pédagogie + industrialisation | 91–108 j | 206–265 j | 6,83–8,10 M XAF |
+| | **Total hors application mobile** | **206–265 j** | | **15,45–19,88 M XAF** |
 | *hors total* | Application mobile native | 25–35 j | | 1,88–2,63 M XAF |
 
 **Répartition par nature de travail** — utile pour arbitrer ce qui est
@@ -409,7 +414,7 @@ externalisable :
 | Fonctionnalités métier vendables | 57–80 j | ~29 % |
 | Dispositif de test (CH-2 à CH-6) | 50–70 j | ~25 % |
 | Machinerie de livraison sous licence | 51 j | ~22 % |
-| Fermeture de l'inachevé (1-B) | 26–38 j | ~14 % |
+| Fermeture de l'inachevé (1-B) | 26–37 j | ~13 % |
 | Exploitation, contrat, registre, documentation | 22–27 j | ~10 % |
 
 Les cinq natures recomposent exactement le total (206–266 j) : aucune ligne du
@@ -537,7 +542,7 @@ est construit, pas comment.
 |---|---|---|
 | `QA_TEST_STRATEGY.md` | **Fournit** les chantiers CH-0 à CH-7. CH-0 et CH-1 sont en phase 1-A/1-B, CH-2/3/7 en phase 2, CH-4/6 en phase 3, CH-5 en phase 4-B | Les deux tableaux de bord doivent rester cohérents. Un chantier CH terminé se répercute **ici** dans le même commit |
 | `FEATURE_DELIVERY_DESIGN.md` | **Fournit** la voie 4-B. Ses phases 0 et 0 bis sont remontées en **phase 2** de ce document (contrat de plateforme, éclatement du registre) parce qu'elles ont une valeur propre hors licence | Ses phases 1 à 6 restent groupées en 4-B. L'ordre imposé de son §20.2 est préservé |
-| `CAMPUS_ENTITLEMENT_DESIGN.md` | **Fondation.** Ses trois paliers sont la structure des deux grilles du §10 | Chantier clos. Seuls restent les trois gestes d'exploitation de la ligne 2 de la phase 1-B |
+| `CAMPUS_ENTITLEMENT_DESIGN.md` | **Fondation.** Ses trois paliers sont la structure des deux grilles du §10 | Chantier clos, migration faite, QA visuelle faite. Reste la ligne 2 de la phase 1-B : les deux dernières cases de sa DoD (§15). Ses deux harnais de QA sont devenus un acquis transverse — voir §4.3 |
 | `PHASE3_AI_DESIGN.md` | Le module IA, livré M0→M6 | Reste la ligne 4 de la phase 1-B. Sort du périmètre on-premise en V1 (D-J) |
 | `POSTGRES_MIGRATION_ASSESSMENT.md` | Évalué, non engagé | Un changement de moteur serait un changement **majeur** de contrat, donc un nouveau snapshot de palier. À ne pas engager pendant les phases 2 à 4 |
 | `docs/cours/` *(dépôt imbriqué)* | **Angle mort.** Douze fichiers de solution résolvent ce backend depuis leur position sur le disque, et certaines leçons comptent des figures réelles — modules, routes, modèles | Tout chantier qui déplace ou retire un module **fait mentir une leçon**. Lancer `docs/cours/check-solutions.sh` après les lignes 3 et 11 de la phase 4-B, après avoir réétalonné la ligne de base |
@@ -554,6 +559,7 @@ est construit, pas comment.
 | **D-R4** | 2026-08-21 | **Le document porte deux grilles commerciales** — SaaS hébergé et licence on-premise — au lieu d'une | La licence on-premise est un modèle de revenu à part entière dont la voie 4-B construit la machinerie. Ne pas la tarifer reviendrait à financer 51 jours d'outillage sans énoncer ce qu'ils vendent |
 | **D-R5** | 2026-08-21 | **Les grilles s'adossent aux paliers du registre**, pas aux phases de développement | Un client ne peut pas observer une phase, et rien dans le code ne sait en appliquer une. Les trois paliers `free`/`standard`/`premium` sont en revanche appliqués gate par gate, campus par campus |
 | **D-R6** | 2026-08-21 | **Les niveaux de prix sont repris de la v2 et remappés, non recalculés** | Re-dériver une grille depuis les charges de la v3 suppose une version produit qui n'existera qu'à la fin de la phase 2. Décision rouverte à ce moment-là |
+| **D-R7** | 2026-08-22 | **Absorption des trois commits parallèles du chantier entitlement** (`98f2a79`, `c02fb51`, `e778496`). La ligne 2 de la phase 1-B passe de 1–2 j à 1 j : la migration était déjà faite au 2026-08-20, la QA visuelle a été jouée le 2026-08-22 (16/16) et **promue en harnais permanent**. Ne restent que les deux dernières cases de la DoD du chantier | **Premier exercice de la règle de maintenance** de ce document, et il valide son intérêt : la ligne était périmée le jour même de sa rédaction. Deux effets de bord enregistrés — le socle de test de la phase 1-A passe à 1 407 tests / 68 suites, et `test:visual` devient un précédent qui dé-risque CH-4 sans en réduire la charge |
 
 ---
 
@@ -571,7 +577,8 @@ Toutes s'exécutent depuis `~/Projects`.
 | Fichiers de modèles Mongoose | **58** | `cd university/backend && find . -name "*.model.js" -not -path "./node_modules/*" -not -path "./docs/*" \| wc -l` |
 | Clés du registre d'entitlement | **26** | `cd university/backend && node -e "console.log(require('./shared/constants/features.constants').FEATURE_KEYS.length)"` |
 | Composition des paliers | **15 / 22 / 26** | `cd university/backend && node -e "const p=require('./shared/constants/features.constants').PLAN_PRESETS; for (const k of ['free','standard','premium']) console.log(k, p[k].length)"` |
-| Suites unitaires backend | **63** | `cd university/backend && find tests/unit -name "*.test.js" \| wc -l` |
+| Suites backend, tous projets Jest | **68** — 64 unitaires · 3 d'intégration · 1 de contrat | `cd university/backend && find tests -name "*.test.js" \| wc -l` |
+| Harnais hors Jest | **2** — `test:journey` · `test:visual` | `cd university/backend && grep -E '"test:(journey\|visual)"' package.json` |
 | Fichiers de composants frontend | **256** | `cd university/frontend && find src -name "*.jsx" \| wc -l` |
 | Tests frontend | **0** | `cd university/frontend && grep -E "vitest\|jest\|playwright\|testing-library" package.json` |
 | Tests end-to-end, toutes briques | **0** | — |
