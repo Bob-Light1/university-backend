@@ -96,6 +96,12 @@ module.exports = [
       'coverage/**',
       'uploads/**',
       'logs/**',
+      // `docs/` est ignoré par git (.gitignore ligne 7) et `docs/cours/` est un
+      // DÉPÔT GIT DISTINCT imbriqué ici (cf. CLAUDE.md §11bis) : ses solutions
+      // d'exercice sont volontairement écrites hors conventions du backend
+      // (fragments non exécutables, tableaux à trous). Un `checkout` de CI ne
+      // les contient pas ; les exclure aligne le lint local sur le lint CI.
+      'docs/**',
     ],
   },
 
