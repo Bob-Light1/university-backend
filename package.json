@@ -10,6 +10,7 @@
     "seed:test": "node tests/fixtures/seed.js",
     "seed:test:self-check": "node tests/fixtures/self-check.js",
     "test:journey": "node tests/fixtures/journey.js",
+    "test:visual": "node tests/fixtures/visual.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "test:watch": "jest --watch"

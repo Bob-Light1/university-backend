@@ -150,4 +150,16 @@ module.exports = [
       },
     },
   },
+
+  // Harnais visuel — le corps des `page.evaluate()` s'exécute DANS le
+  // navigateur, pas dans Node : `document`, `window` et `MouseEvent` y sont
+  // légitimes. Portée volontairement réduite à ce seul fichier.
+  {
+    files: ['tests/fixtures/visual.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+      },
+    },
+  },
 ];
