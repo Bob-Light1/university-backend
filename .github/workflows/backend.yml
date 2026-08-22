@@ -32,17 +32,17 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # 68 suites, 1407 tests, no database: app.js builds the Express app and
+      # 68 suites, 1408 tests, no database: app.js builds the Express app and
       # server.js is what connects Mongo, so the whole suite runs offline.
       - name: Test
         run: npm test
 
-      # Non-blocking on purpose. The audit currently reports 18 findings, 13 of
-      # them high, and 7 of those require MAJOR upgrades of direct dependencies
-      # (puppeteer, cloudinary, nodemailer, sharp, multer-storage-cloudinary) —
-      # the PDF pipeline, uploads and e-mail. That is a scheduled upgrade, not a
-      # CI fix. The report stays visible in the job log; lint and tests decide
-      # whether the build is green. Restore blocking once the upgrade lands.
-      - name: Security audit (report only)
-        run: npm audit --audit-level=high
-        continue-on-error: true
+      # Blocking again. The 18 findings that forced `continue-on-error` are gone:
+      # six transitive bumps plus major upgrades of cloudinary (1 → 2), nodemailer
+      # (6 → 9), sharp (0.34 → 0.35) and an override pinning exceljs onto uuid 11.
+      # One chain survives — extract-zip, reachable only from the browser-download
+      # path this backend never runs — and it is accepted BY NAME in the gate, with
+      # its reason and the condition that removes it. Any OTHER high or critical
+      # fails the build, which a blanket `--audit-level=high` could no longer do.
+      - name: Security audit
+        run: npm run audit:ci

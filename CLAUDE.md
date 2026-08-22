@@ -332,6 +332,36 @@ The dialog can always go back to step 1 (`rerunPreview`): a ticket lives 5 minut
 - Passwords: bcrypt rounds = 12. JWT payload minimal `{ id, role, campusId }`, expiry 7d.
 - Append-only audit log entry on every post-publication mutation.
 
+### 8.1 Dependency audit — a gate with a named exception, not a switch
+
+`npm audit --audit-level=high` is all-or-nothing: one advisory nobody can act on turns the CI step
+into `continue-on-error`, and from then on it gates nothing. The backend workflow runs
+`npm run audit:ci` → **`scripts/audit-gate.js`** instead. It keys findings by their root GHSA id
+(one advisory propagating through three packages is one decision) and fails on **any** unaccepted
+high or critical — *and* on an accepted entry that has stopped being reported, so an exception
+cannot outlive its reason unnoticed. Adding an exception means writing `reason` and `removeWhen`
+next to it; accept only what the deployment provably cannot reach.
+
+One entry stands today: **GHSA-jmr9-qjv8-65gv** (`extract-zip`), reachable only from the browser
+*download* path this backend never runs. It is unfixable in place: upstream removed the dependency in
+`@puppeteer/browsers` 3.x, which is ESM-only and needs Node ≥ 22.12, as is every `puppeteer-core`
+built on it — and `require('puppeteer-core')` against v25 throws under CommonJS and under Jest.
+`puppeteer-core` therefore stays on the 24.x line. Clearing it is a runtime migration; see also
+`engines.node` (`20.x`, and Node 20 is past end of life).
+
+**`package.json` carries two `overrides`, both load-bearing** — neither is cosmetic:
+- `uuid: ^11.1.1` — `exceljs` 4.4.0 (latest) pins the vulnerable `uuid@^8`. It calls only `v4`,
+  which uuid 11 still exports from its CommonJS build.
+- `multer-storage-cloudinary → cloudinary: $cloudinary` — that package is unmaintained and its
+  `peerDependencies` still pin `cloudinary@^1.21.0`, the vulnerable line. It touches exactly two
+  methods (`uploader.upload_stream`, `uploader.destroy`), both unchanged in v2. **Without this
+  override a clean `npm install` stops on `ERESOLVE`.**
+
+Unit tests mock `cloudinary`, `nodemailer`, `sharp` and `puppeteer-core`, so they stay green through
+a broken upgrade of any of them. `optimizeImage()` is the sharpest case: it ends in
+`catch { return buffer; }`, so a broken image pipeline returns the input and reports success. Verify
+those four against real inputs, not against the suite.
+
 ---
 
 ## 9. Registered routes (mounted in `app.js`)
