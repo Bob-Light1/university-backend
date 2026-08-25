@@ -93,7 +93,7 @@ token must also pin the partner id.
 
 - Every DB query on scoped collections (`Student`, `Teacher`, `Class`, `Subject`, `Result`, `Schedule`, `Attendance`, `Document`, `Announcement`, `Staff`) **must** include `campusId` for non-global roles.
 - `req.body.campusId` is **never** trusted for scoped roles — always `req.user.campusId`.
-- Use helper `getCampusFilter(req, res)`; never inline the filter. Check `isGlobalRole(role)` before skipping it.
+- Use `buildCampusFilter(user, requestedCampusId)` (`shared/utils/validation-helpers.js`); never inline the filter. Modules wrap it in a local `getCampusFilter(req, …)` — that wrapper delegates, it never rebuilds the fragment. Check `isGlobalRole(role)` before skipping it.
 - Document routes: always `enforceCampusAccess` (`document.campus.middleware.js`).
 
 ---
@@ -123,14 +123,24 @@ Response shape: `{ success, message, data, meta }`.
 
 ## 5. Models
 
-- Campus-scoped: `campusId: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
+- **The scoped field is `schoolCampus`, not `campusId`** — 41 models against 8, and it is what
+  `buildCampusFilter()` emits (`shared/utils/validation-helpers.js`: `{ schoolCampus: user.campusId }`).
+  A new campus-scoped model declares
+  `schoolCampus: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
+  **Do not read the token field back into the schema**: the JWT payload carries `campusId` (§8),
+  the documents carry `schoolCampus`, and the helper is the piece that maps one onto the other.
+  A model that declares `campusId` is invisible to every filter built from that helper — the
+  query does not fail, it silently scopes on a path that does not exist.
+- **The eight exceptions really do use `campusId`**, and they are a family, not an accident: the
+  GED (`Document`, `DocumentVersion`, `DocumentShare`, `DocumentTemplate`, `DocumentAudit`) plus
+  `PrintJob`, `ActivationToken` and `UserPreferences`. They are scoped by their own paths —
+  document routes through `enforceCampusAccess` (`document.campus.middleware.js`, §2) — never by
+  `buildCampusFilter()`. `campus.model.js` shows the split in one file: `canAddStudent()` counts
+  on `schoolCampus`, `canAddDocumentStorage()` counts on `campusId`, and both are correct.
 - Truly global collection: **`Course` only** — no campus field at all.
-- **Campus-scoped under a different field name — `schoolCampus`, not `campusId`**: `Partner`,
-  `PartnerLead`, `PartnerCommission`, `PartnerApplication`, `GradingScale`. `partner.model.js`
-  declares `schoolCampus` **required** under an explicit isolation invariant and indexes it four
-  times; `GradingScale.getDefault(campusId)` filters on it; the `PARTNER` token's `campusId` is
-  derived from it. Grepping for `campusId` alone will therefore report these as global and they
-  are not — the mistake that reached `docs/architecture/QA_TEST_STRATEGY.md` v1.1 (its D-15).
+- Grepping for one name alone reports the other family as global, and it is not — the mistake
+  that reached `docs/architecture/QA_TEST_STRATEGY.md` v1.1 (its D-15), which recorded it for
+  `Partner` / `GradingScale` while stating the majority convention backwards.
 - The reliable inventory of what is campus-scoped is the **hard-delete registry**: its suite fails
   until a scoped model is declared on the `campus` entry (§5.2), which no grep guarantees.
 - Enums: `Object.freeze({})` — exported and reused across backend controllers/validators (the frontend mirrors the same values in its Yup schemas).
@@ -444,62 +454,252 @@ for an untracked scratch folder. It is not: it holds the ERP training program (~
 
 ---
 
-## 11ter. Fixture de test déterministe — `tests/fixtures/`
+## 11ter. Deterministic test fixture — `tests/fixtures/`
 
-Le jeu de données synthétique sur lequel s'appuient les couches de test (CH-0 de
-`docs/architecture/QA_TEST_STRATEGY.md`, livré le 2026-08-21).
+The synthetic dataset every test layer builds on (CH-0 of
+`docs/architecture/QA_TEST_STRATEGY.md`, delivered 2026-08-21).
 
 ```bash
-npm run seed:test -- --ephemeral   # base jetable en mémoire : aucun MongoDB requis
-npm run seed:test -- --print       # table des 18 comptes (9 rôles × 2 campus)
-npm run seed:test:self-check       # 16 contrôles : budget, idempotence, verify, login réel
+npm run seed:test -- --ephemeral   # throwaway in-memory database: no MongoDB required
+npm run seed:test -- --print       # table of the 18 accounts (9 roles × 2 campuses)
+npm run seed:test:self-check       # 16 checks: budget, idempotence, verify, real login
 ```
 
-- **Deux campus, neuf rôles connectés, 283 documents, identifiants figés.** Les `ObjectId`
-  sont dérivés d'une clé métier (`student:A:001`), les dates d'une **ancre** fixe, et le sel
-  bcrypt de la graine — deux exécutions produisent une base identique octet pour octet.
-- **Le seed refuse toute base qui n'est pas locale et nommée comme une base de test**
-  (`seed.config.js`, `assertTestDatabaseUri`). Il purge avant de construire : ne jamais
-  affaiblir ce garde-fou pour faire passer une URI.
-- **Les volumes attendus vivent dans `seed.config.js` (`COUNTS`)** et nulle part ailleurs :
-  `verify.js` les lit, il ne les redéclare pas.
-- **Les marqueurs de suppression y passent par le helper** (`ctx.softDelete(model)`), comme
-  partout ailleurs (§5.1). La fixture matérialise volontairement les trois pièges : un
-  `Result` `ARCHIVED` **vivant**, une `Announcement` `archived` **vivante** (expirée), un
-  `Document` supprimé qui **garde** `status: PUBLISHED`.
-- `tests/fixtures/.generated/` est gitignoré : il contient le mot de passe de test en clair.
+- **Two campuses, nine signed-in roles, 283 documents, frozen credentials.** `ObjectId`s are
+  derived from a business key (`student:A:001`), dates from a fixed **anchor**, and the bcrypt
+  salt from the seed — two runs produce a byte-identical database.
+- **The seed refuses any database that is not local and named like a test database**
+  (`seed.config.js`, `assertTestDatabaseUri`). It purges before building: never weaken that
+  guard to make a URI pass.
+- **Expected volumes live in `seed.config.js` (`COUNTS`)** and nowhere else: `verify.js` reads
+  them, it does not restate them.
+- **Deletion markers go through the helper there too** (`ctx.softDelete(model)`), as everywhere
+  else (§5.1). The fixture deliberately materializes all three traps: a **live** `ARCHIVED`
+  `Result`, a **live** (expired) `archived` `Announcement`, and a deleted `Document` that
+  **keeps** `status: PUBLISHED`.
+- `tests/fixtures/.generated/` is gitignored: it holds the test password in clear text.
 
 ---
 
-## 11quater. Feuille de route produit — `docs/architecture/ERP_ROADMAP.md`
+## 11quater. Product roadmap — `docs/architecture/ERP_ROADMAP.md`
 
-**La source de vérité de l'avancement produit**, sur les quatre briques. Elle remplace
-`ERP_2026_v2.pdf` (l'ancien catalogue commercial) comme référence de planification : ce
-catalogue contenait six affirmations que le code contredit, toutes traitées au §11 de la
-feuille de route — ne jamais s'y référer pour établir un état d'avancement.
+**The source of truth for product progress**, across the four bricks. It replaces
+`ERP_2026_v2.pdf` (the former commercial catalogue) as the planning reference: that catalogue
+held six claims the code contradicts, all handled in §11 of the roadmap — never cite it to
+establish a state of progress.
 
-⚠️ **Le fichier `ERP_2026_v2.pdf` a été écrasé le 2026-08-22** par la vue rendue de la feuille
-de route (décision du porteur). Le catalogue ne subsiste que par les citations relevées à son
-§11 : c'est la seule trace de ce qui a été affirmé, et la raison pour laquelle elles y sont
-conservées mot pour mot.
+⚠️ **`ERP_2026_v2.pdf` was overwritten on 2026-08-22** by the rendered view of the roadmap
+(owner's decision). The catalogue survives only through the quotations collected in its §11:
+that is the only remaining trace of what was claimed, and the reason they are kept there
+verbatim.
 
-- **Cinq phases**, établies d'après l'état *mesuré* du code et non d'après ce qui a été annoncé :
-  `1-A` livré · `1-B` commencé et pas fini · `2` socle de fabrication · `3` ERP complet ·
-  `4` premium et industrialisation. **212–275 j** restants hors application mobile, et la phase
-  1-A chiffrée en **valeur de reconstruction** (204–284 j) depuis l'audit v4 du 2026-08-22.
-- **Le §0 est le tableau de bord** et fait foi, comme celui de `QA_TEST_STRATEGY.md`. Un commit
-  qui termine ou démarre un chantier met à jour, *dans le même commit*, la ligne du §0 et la
-  colonne `État` de la phase concernée. Les deux tableaux de bord doivent rester cohérents :
-  un chantier `CH-*` terminé se répercute dans les deux.
-- **Ce qui est vendu est un palier, pas une phase** — `free` 15 clés / `standard` 22 / `premium`
-  26, dérivés de `PLAN_PRESETS`. Les phases sont un calendrier de production interne, que le
-  client n'a pas à connaître. Les deux grilles commerciales (§10) s'adossent aux paliers.
-- **Une vue rendue est publiée comme artifact**, régénérée depuis ce fichier aux jalons où elle
-  doit être montrée. Le fichier fait foi ; la vue est un instantané daté, jamais l'inverse.
+- **Five phases**, established from the *measured* state of the code rather than from what was
+  announced: `1-A` delivered · `1-B` started and unfinished · `2` production groundwork ·
+  `3` the complete ERP · `4` premium and industrialization. **212–275 days** remaining
+  excluding the native mobile app, with phase 1-A costed as **reconstruction value**
+  (204–284 d) since the v4 audit of 2026-08-22.
+- **§0 is the dashboard** and is authoritative, like the one in `QA_TEST_STRATEGY.md`. A commit
+  that finishes or starts a work item updates, *in the same commit*, the §0 row and the `État`
+  column of the phase concerned. Both dashboards must stay consistent: a finished `CH-*` item
+  shows up in both.
+- **What is sold is a tier, not a phase** — `free` 15 keys / `standard` 22 / `premium` 26,
+  derived from `PLAN_PRESETS`. Phases are an internal production schedule the customer never
+  needs to know. Both commercial grids (§10) hang off the tiers.
+- **A rendered view is published as an artifact**, regenerated from this file at the milestones
+  where it must be shown. The file is authoritative; the view is a dated snapshot, never the
+  reverse.
 
 ---
 
-## 12. Compaction instructions
+## 12. Feature lifecycle — the single pattern
+
+**Every new feature follows these ten steps, in this order.** The point is not ceremony: it is
+that a feature delivered in August and one delivered in March produce the *same* set of
+artifacts, in the same places, under the same names.
+
+Two rules govern the sequence and explain why it cannot be rearranged:
+
+> **R1 — Tests come before audits.** An audit finds between 5 and 14 issues here (measured
+> across the 13 audits in the history). Fixing them with no safety net and writing the tests
+> *afterwards* produces tests that describe the code as it ended up and prove nothing about the
+> bug. **An audit finding is closed by a test that was red before the fix** — otherwise the
+> audit was just a re-read.
+>
+> **R2 — Entitlement is a design decision, not a final wiring step.** It sets the module
+> boundary: a feature spread across three modules can be switched off in none of them. It is
+> decided at step 1, declared at step 3, and only *verified* at step 10.
+
+### 12.1 Phase A — Design
+
+**Step 1 — The design note.** A feature starts with a document, never with a file. It lives in
+**`docs/architecture/features/<slug>.md`** — and nowhere else: `.gitignore:7` ignores `docs/*`
+with `docs/architecture/` as the only exception, so a `docs/features/` would be tracked by
+nobody. One page is enough; fixed template:
+
+| Section | What it freezes |
+|---|---|
+| Problem & scope | what is in, and **what is explicitly out** |
+| Bricks touched | backend · frontend · ai-service · portal (table at the top of this file) |
+| Contract | `Object.freeze({})` enums, error codes, response shape (§4), field names |
+| Campus scope | `schoolCampus` by default, or the eight-model `campusId` family (§5); and for `PARTNER`, the double key (§2) |
+| Deletion | the model's convention: `status` / `isDeleted` / `deletedAt` (§5.1) |
+| Entitlement | key inherited from the module, **or** a new key if the unit sells on its own (R2, §12.3) |
+| Registries | which of the eleven in §12.5 are touched |
+| Definition of done | §12.6, copied in and amended if needed |
+
+A full `docs/architecture/<NAME>.md` — in the format of the eight existing ones — only for a
+**work item of its own**: several phases, a new invariant, or ≥ 2 bricks restructured. Prose in
+French, every code artifact in English (§0).
+
+**Filling the template means reading this map, and the map can be wrong. When the code
+contradicts it, the map is corrected first — in its own commit, before the note is finished.**
+Every later audit is run *against the note* (step 6), so a note built on a false premise
+launders that premise into the feature and into whatever is audited after it. The first run of
+this pattern found §5 inverted — 41 models on `schoolCampus` against 8 on `campusId`, stated the
+other way round — because the template asks which campus field the new model carries. That is
+the step working, not a detour from it.
+
+**Step 1 may conclude that the feature should not be built, or not as scoped.** A design step
+that cannot say no is a formality. Rescoping here costs a page; rescoping at step 6 costs the
+build.
+
+The roadmap row comes from here too: create it in `ERP_ROADMAP.md` §0 if the feature is new to
+the plan — but most work already has one, and then step 1 changes nothing. The row flips to
+`EN COURS` at step 2, when code starts, not here: a design note can still be abandoned.
+
+### 12.2 Phase B — Build
+
+**Step 2 — Model and data.** The `ERP_ROADMAP.md` §0 row flips to `EN COURS` here. Mongoose
+schema (`timestamps`, compound indexes on the real query
+patterns), a deletion marker matching step 1, `STRATEGY_OVERRIDES` if the model carries both
+markers (§5.1), an **expand-only** migration under `scripts/`, and a declaration in
+`hard-delete.registry.js` — the entity itself *and* the `campus` entry if the model is scoped
+(§5.2).
+
+> Four suites go red **at this step**, before any feature-specific test exists:
+> `hard-delete.test.js`, `soft-delete.test.js`, `facades.test.js`,
+> `entitlement.frontend-keys.test.js`. These are not tests "to write later": they are the
+> registries demanding their declaration. Satisfy them here, not at step 5.
+
+**Step 3 — The backend, bottom-up, registries included.** `repository` (`.lean()`, filters
+**derived** through `notDeletedFilter` / `getCampusFilter`, never hand-written) → `service`
+(cross-document rules, quotas, transactions) → `controllers` (`asyncHandler`, response helpers,
+~300 lines per concern) → `routes` (named routes before `/:id`, limiters, JSDoc `@route`
+`@desc` `@access`) → `index.js` (public surface) → mounting in `app.js`. No `require` pierces a
+neighbouring module's facade. The eleven registries of §12.5 are declared **here**, along the
+way, not in a catch-up pass.
+
+**Step 4 — The consumers, in the same task.** Frontend: `src/services/<x>Service.js`, hook,
+screen, Yup schema mirroring the enums (§6), **i18n across all 10 locales**
+(`public/locales/<ar|de|en|es|fr|it|ja|pt|ru|zh-CN>/`), a `feature:` key on the navigation
+entry, `useHardDelete` if the entity is deletable (§5.2). The Next.js portal if the surface is
+public (§10). `ai-service` if the content is ingested. Check the **environment wiring**, not
+only the code: `PORTAL_URL`, `AI_SERVICE_URL`, `VITE_API_BASE_URL`, `ERP_API_URL`. *You do not
+test at step 9 a brick you did not wire here.*
+
+### 12.3 Phase C — Prove
+
+**Step 5 — Tests for the feature.** Unit repository (models mocked through
+`tests/helpers/soft-delete-stub.js`) → unit service → facade contract → integration as soon as
+the route carries a guard (campus isolation, entitlement, danger zone). Test data goes in the
+deterministic fixture, volumes in `seed.config.js` (`COUNTS`) and nowhere else (§11ter).
+**A campus-isolation guard with no isolation test is a guard that was not delivered.**
+
+**Step 6 — Audit of the feature's code.** An adversarial re-read **against the step 1 note**,
+not against the memory of what was intended: is the contract honoured, are the filters derived,
+is no literal duplicated, are the errors consistent, are the `Promise.all` preserved. Every
+finding is recorded, then closed per R1.
+
+**Step 7 — Audit of the platform *with* the feature.** Distinct from the previous one, and the
+most profitable: what the new code changes **elsewhere**. Counters and aggregates that now
+include new rows; campus quotas; the entitlement `dependsOn` graph; neighbouring crons; danger
+zone cascade volume; `ref:` references resolved at runtime by Mongoose, which grep does not see.
+
+**Step 8 — Audit of the tests.** The test that never goes red is the default failure mode here:
+in an aggregation `$match`, a non-existent field raises nothing and returns `0` — a zero total
+reads as a figure, not as a broken query; a model mocked as a bare bag of `jest.fn()` validates
+any deletion convention at all. For every new test: **make it fail on purpose once**. If it
+stays green, it guarantees nothing.
+
+**Step 9 — Run it across every brick.** `npm test` · `npm run lint` · `npm run audit:ci` ·
+`npm run seed:test:self-check` if the fixture moved · `npm run test:journey` if a journey is
+touched · `docs/cours/check-solutions.sh` if the structure moved. Then the consuming bricks:
+frontend build, portal, ai-service.
+
+**Step 10 — Browser QA.** `npm run test:visual`, **then eyes on the screen**: both themes, at
+least two roles including one campus-scoped role, and the entitlement toggle in all **three**
+states — `enabled`, `read_only` (history stays readable, every mutation is refused), `hidden`.
+This is the historically skipped step: four work items were declared finished with "visual QA
+still pending". **Not done = feature not delivered.**
+
+> **Reminder on entitlement** — the gate is **fail-open** and **is not a security boundary**: an
+> unknown or missing key means allowed. Campus isolation (§2) is the boundary; entitlement is
+> commercial packaging. And the granularity is the **module** — 26 keys today, for tiers of
+> `free` 15 / `standard` 22 / `premium` 26. One key per feature would blow up the grid: a
+> feature inside an existing module inherits that module's key.
+
+### 12.4 Closing out
+
+In the **same commit** as the code:
+
+- `CLAUDE.md`: §1 (modules), §9 (routes), §10 (special modules), §11 (crons);
+- `ERP_ROADMAP.md` §0 **and** the phase row; `QA_TEST_STRATEGY.md` §0 if a `CH-*` item moves —
+  both dashboards must stay consistent (§11quater);
+- the step 1 note, updated with whatever the build proved wrong — a note that lies is worse than
+  no note, since the next audit will lean on it;
+- a conventional commit `type(scope): …`, message in English, stating **what changes** rather
+  than what was done.
+
+**The course is conditional.** The obligation is a green `check-solutions.sh` (step 9). A lesson
+is written only if the feature introduces a **new pattern** — not one more instance of a pattern
+already taught — and its commit is made **from `docs/cours/`**, never from here (§11bis).
+
+### 12.5 The eleven declarative registries
+
+What is expensive here is not writing the logic: it is forgetting one of these declarations.
+Almost none of them produces a clean error — but a wrong count, a missing button, a guard that
+guards nothing, or a red suite in a module nobody touched.
+
+Walk all eleven, and **write down the ones that receive nothing**. A recorded "nothing" is a
+finding; an unrecorded one cannot be told apart from a registry nobody opened. On the first run,
+six of the eleven were "nothing" — and that is what made the other five trustworthy.
+
+| # | Registry | Touch it when | What breaks if forgotten |
+|---|---|---|---|
+| 1 | `app.js` | a route is added or renamed | 404; the route exists for no client |
+| 2 | `modules/<x>/index.js` | a new export | a neighbour pierces the facade → `facades.test.js` red |
+| 3 | `shared/constants/features.constants.js` | a module or sellable surface | it escapes the tiers, so it escapes the product; the frontend mirror is pinned by `entitlement.frontend-keys.test.js` |
+| 4 | `hard-delete.registry.js` | a new model, deletable **or** merely campus-scoped | `hard-delete.test.js` red; otherwise orphan rows behind a removed campus |
+| 5 | `soft-delete.js` (`STRATEGY_OVERRIDES`) | a model carrying `status:'archived'` **and** `deletedAt` | the helper **throws** — that is the protection, not the failure |
+| 6 | `register-jobs.js` + §11 | a new cron | the job does not run and the server starts up healthy |
+| 7 | `tests/fixtures/seed.config.js` (`COUNTS`) | the fixture gains documents | `verify.js` and `self-check` are wrong, and say nothing useful |
+| 8 | `shared/i18n/catalogs/` + `public/locales/×10` | any text meant for a human | a raw key on screen, or an English notification to a French-speaking parent |
+| 9 | `frontend/src/services/` + the navigation `feature:` key | any route consumed | a dead screen, or one visible on a tier that did not pay for it |
+| 10 | `docs/cours/COURSE_HOOKS.md` (**generated**) | a file is moved or renamed | `check-solutions.sh` red: a lesson cites a dead path |
+| 11 | `CLAUDE.md` §1/§9/§10/§11 | every single time | the next session works from an out-of-date map |
+
+### 12.6 Definition of done
+
+A feature is finished when **all** of these are true — not before:
+
+- [ ] design note written, and updated with whatever the build proved wrong;
+- [ ] contract frozen on the backend, no literal duplicated in any client;
+- [ ] campus scope applied through `getCampusFilter()`, `req.body.campusId` never read for a scoped role;
+- [ ] deletion filters **derived** from the model, never hand-written;
+- [ ] the eleven registries of §12.5 walked one by one;
+- [ ] every consuming brick wired, environment wiring included, i18n across 10 locales;
+- [ ] unit tests + campus isolation + integration where a guard exists; each one seen red at least once;
+- [ ] the three audits done, **each finding closed by a test that was red before the fix**;
+- [ ] `npm test`, `lint`, `audit:ci` green; `check-solutions.sh` green if the structure moved;
+- [ ] browser QA done: two themes, two roles, the three entitlement states;
+- [ ] `CLAUDE.md`, `ERP_ROADMAP.md` §0 (and `QA_TEST_STRATEGY.md` §0 where relevant) updated in the same commit.
+
+**What is not finished gets said.** A scope reduced along the way is the owner's decision, not
+the implementer's: deliver the rest and state what is missing, never shrink in silence.
+
+---
+
+## 13. Compaction instructions
 
 Always preserve: current task and status (done / in progress / blocked); files created or modified this session (one-line each); campus-isolation or middleware-chain decisions; active errors and root cause if known; validation/schema changes decided this session; the next step or open question.
 
