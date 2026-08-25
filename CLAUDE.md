@@ -551,11 +551,26 @@ A full `docs/architecture/<NAME>.md` — in the format of the eight existing one
 **work item of its own**: several phases, a new invariant, or ≥ 2 bricks restructured. Prose in
 French, every code artifact in English (§0).
 
-Also add the corresponding row to `ERP_ROADMAP.md` §0 **before** writing code, not after.
+**Filling the template means reading this map, and the map can be wrong. When the code
+contradicts it, the map is corrected first — in its own commit, before the note is finished.**
+Every later audit is run *against the note* (step 6), so a note built on a false premise
+launders that premise into the feature and into whatever is audited after it. The first run of
+this pattern found §5 inverted — 41 models on `schoolCampus` against 8 on `campusId`, stated the
+other way round — because the template asks which campus field the new model carries. That is
+the step working, not a detour from it.
+
+**Step 1 may conclude that the feature should not be built, or not as scoped.** A design step
+that cannot say no is a formality. Rescoping here costs a page; rescoping at step 6 costs the
+build.
+
+The roadmap row comes from here too: create it in `ERP_ROADMAP.md` §0 if the feature is new to
+the plan — but most work already has one, and then step 1 changes nothing. The row flips to
+`EN COURS` at step 2, when code starts, not here: a design note can still be abandoned.
 
 ### 12.2 Phase B — Build
 
-**Step 2 — Model and data.** Mongoose schema (`timestamps`, compound indexes on the real query
+**Step 2 — Model and data.** The `ERP_ROADMAP.md` §0 row flips to `EN COURS` here. Mongoose
+schema (`timestamps`, compound indexes on the real query
 patterns), a deletion marker matching step 1, `STRATEGY_OVERRIDES` if the model carries both
 markers (§5.1), an **expand-only** migration under `scripts/`, and a declaration in
 `hard-delete.registry.js` — the entity itself *and* the `campus` entry if the model is scoped
@@ -644,6 +659,10 @@ already taught — and its commit is made **from `docs/cours/`**, never from her
 What is expensive here is not writing the logic: it is forgetting one of these declarations.
 Almost none of them produces a clean error — but a wrong count, a missing button, a guard that
 guards nothing, or a red suite in a module nobody touched.
+
+Walk all eleven, and **write down the ones that receive nothing**. A recorded "nothing" is a
+finding; an unrecorded one cannot be told apart from a registry nobody opened. On the first run,
+six of the eleven were "nothing" — and that is what made the other five trustworthy.
 
 | # | Registry | Touch it when | What breaks if forgotten |
 |---|---|---|---|
