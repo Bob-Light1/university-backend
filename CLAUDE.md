@@ -93,7 +93,7 @@ token must also pin the partner id.
 
 - Every DB query on scoped collections (`Student`, `Teacher`, `Class`, `Subject`, `Result`, `Schedule`, `Attendance`, `Document`, `Announcement`, `Staff`) **must** include `campusId` for non-global roles.
 - `req.body.campusId` is **never** trusted for scoped roles — always `req.user.campusId`.
-- Use helper `getCampusFilter(req, res)`; never inline the filter. Check `isGlobalRole(role)` before skipping it.
+- Use `buildCampusFilter(user, requestedCampusId)` (`shared/utils/validation-helpers.js`); never inline the filter. Modules wrap it in a local `getCampusFilter(req, …)` — that wrapper delegates, it never rebuilds the fragment. Check `isGlobalRole(role)` before skipping it.
 - Document routes: always `enforceCampusAccess` (`document.campus.middleware.js`).
 
 ---
@@ -123,14 +123,24 @@ Response shape: `{ success, message, data, meta }`.
 
 ## 5. Models
 
-- Campus-scoped: `campusId: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
+- **The scoped field is `schoolCampus`, not `campusId`** — 41 models against 8, and it is what
+  `buildCampusFilter()` emits (`shared/utils/validation-helpers.js`: `{ schoolCampus: user.campusId }`).
+  A new campus-scoped model declares
+  `schoolCampus: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
+  **Do not read the token field back into the schema**: the JWT payload carries `campusId` (§8),
+  the documents carry `schoolCampus`, and the helper is the piece that maps one onto the other.
+  A model that declares `campusId` is invisible to every filter built from that helper — the
+  query does not fail, it silently scopes on a path that does not exist.
+- **The eight exceptions really do use `campusId`**, and they are a family, not an accident: the
+  GED (`Document`, `DocumentVersion`, `DocumentShare`, `DocumentTemplate`, `DocumentAudit`) plus
+  `PrintJob`, `ActivationToken` and `UserPreferences`. They are scoped by their own paths —
+  document routes through `enforceCampusAccess` (`document.campus.middleware.js`, §2) — never by
+  `buildCampusFilter()`. `campus.model.js` shows the split in one file: `canAddStudent()` counts
+  on `schoolCampus`, `canAddDocumentStorage()` counts on `campusId`, and both are correct.
 - Truly global collection: **`Course` only** — no campus field at all.
-- **Campus-scoped under a different field name — `schoolCampus`, not `campusId`**: `Partner`,
-  `PartnerLead`, `PartnerCommission`, `PartnerApplication`, `GradingScale`. `partner.model.js`
-  declares `schoolCampus` **required** under an explicit isolation invariant and indexes it four
-  times; `GradingScale.getDefault(campusId)` filters on it; the `PARTNER` token's `campusId` is
-  derived from it. Grepping for `campusId` alone will therefore report these as global and they
-  are not — the mistake that reached `docs/architecture/QA_TEST_STRATEGY.md` v1.1 (its D-15).
+- Grepping for one name alone reports the other family as global, and it is not — the mistake
+  that reached `docs/architecture/QA_TEST_STRATEGY.md` v1.1 (its D-15), which recorded it for
+  `Partner` / `GradingScale` while stating the majority convention backwards.
 - The reliable inventory of what is campus-scoped is the **hard-delete registry**: its suite fails
   until a scoped model is declared on the `campus` entry (§5.2), which no grep guarantees.
 - Enums: `Object.freeze({})` — exported and reused across backend controllers/validators (the frontend mirrors the same values in its Yup schemas).
@@ -531,7 +541,7 @@ nobody. One page is enough; fixed template:
 | Problem & scope | what is in, and **what is explicitly out** |
 | Bricks touched | backend · frontend · ai-service · portal (table at the top of this file) |
 | Contract | `Object.freeze({})` enums, error codes, response shape (§4), field names |
-| Campus scope | `campusId` or `schoolCampus` (§5); and for `PARTNER`, the double key (§2) |
+| Campus scope | `schoolCampus` by default, or the eight-model `campusId` family (§5); and for `PARTNER`, the double key (§2) |
 | Deletion | the model's convention: `status` / `isDeleted` / `deletedAt` (§5.1) |
 | Entitlement | key inherited from the module, **or** a new key if the unit sells on its own (R2, §12.3) |
 | Registries | which of the eleven in §12.5 are touched |
