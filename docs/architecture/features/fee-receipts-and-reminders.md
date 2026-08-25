@@ -122,8 +122,9 @@ remindersSent: [{ kind: <REMINDER_KINDS>, sentAt: Date }]   // borné à 4 entr�
 ```
 
 `lastRemindedAt` / `reminderCount` sont **conservés** et continuent de gouverner la
-relance d'impayé : migration expand-only, aucune écriture rétroactive. La réclamation
+relance d'impayé : ajout purement additif, aucune écriture rétroactive. La réclamation
 atomique de chaque type teste l'absence de son propre `kind`, jamais celle d'un autre.
+Le champ n'a finalement demandé **aucun script** de migration — voir §9.
 
 ## 7. Registres touchés (§12.5)
 
@@ -161,4 +162,41 @@ Reprise du §12.6, amendée : les cases i18n et cron s'appliquent, la case
 
 ## 9. Ce que la construction a démenti
 
-*(à remplir à l'étape 10 — une note qui ment est pire que pas de note)*
+**Étape 2 (2026-08-25) — trois écarts, tous dans le sens de la simplification.**
+
+**① L'enum porte trois valeurs, pas quatre.** Le §2 annonçait `OVERDUE` parmi les types,
+« existant, aujourd'hui implicite ». Il n'y entre pas. La cadence d'impayé **se répète** —
+un rappel par fenêtre, tant que la dette tient, d'où le `$inc` de `reminderCount` — tandis
+que la cadence avant échéance tire chaque type **au plus une fois**, ce qui est précisément
+ce qui rend `remindersSent[]` réclamable de façon idempotente. Déclarer `overdue` dans un
+tableau dont l'invariant est « une entrée par type » aurait invité quelqu'un à l'y écrire,
+et recréé la collision décrite au §6. Le fichier `fee-reminder-kind.js` porte cette absence
+en commentaire, pour que le prochain lecteur ne la prenne pas pour un oubli.
+
+**② Aucun script de migration.** Le §6 en annonçait un, expand-only. Il n'en faut pas, et
+c'est vérifié contre un vrai MongoDB plutôt que supposé — une ligne écrite *avant* le
+changement, donc sans le chemin `remindersSent` du tout :
+
+| Vérifié | Résultat |
+|---|---|
+| la ligne héritée est sélectionnée par le filtre de réclamation (`$ne` matche un champ absent) | oui |
+| la première réclamation `$push` gagne, la seconde renvoie `null` | oui — pas de doublon |
+| le tableau ne contient qu'une entrée | oui |
+| `lastRemindedAt` / `reminderCount` restent intacts | oui |
+| l'index `status_1_dueDate_1` est bâti sans script | oui |
+
+Le seul script justifiable aurait été la création d'index ; ce dépôt ne fixe pas
+`autoIndex`, donc Mongoose la fait à la connexion comme pour tous les autres index.
+Écrire une migration qui n'écrit rien aurait été de la cérémonie.
+
+**③ L'entitlement est appliqué plus tôt que la note ne le disait.** Le §5 s'appuyait sur
+`notify()` refusant d'émettre pour un module inactif. C'est vrai, mais `findRemindableOverdueFees`
+fait déjà mieux : il exclut `suppressedCampusIds('finance')` **dans la requête**, avec une
+raison écrite — la réclamation estampille le marqueur au ramassage, donc une dette écartée
+après coup brûlerait son créneau et resterait muette une fenêtre entière une fois le module
+réactivé. Le balayage avant échéance doit reproduire ce filtre à l'étape 3, et non se reposer
+sur `notify()`. C'est une contrainte de plus que la note n'avait pas vue.
+
+**Ce qui n'a pas bougé** : la portée campus, la famille de suppression, l'absence de clé
+d'entitlement, le non-stockage du PDF, et les six registres à « rien » — les quatre suites de
+registres sont vertes sans qu'une ligne y soit ajoutée (353 tests).
