@@ -463,21 +463,21 @@ those four against real inputs, not against the suite.
 
 `docs/cours/` is **its own git repository**, nested here on purpose. It is invisible to this
 repo (`.gitignore` line 7, `docs/*`), so `git status` never shows it and it is easy to mistake
-for an untracked scratch folder. It is not: it holds the ERP training program (~73 100 lines,
-220 files) with its own history, its own remote and its own commit cadence.
+for an untracked scratch folder. It is not: it holds the ERP training program (~74 900 lines,
+222 files) with its own history, its own remote and its own commit cadence.
 
 - **Commit course changes from `docs/cours/`**, never from here. The two histories are unrelated.
-- **Do not move or delete that folder.** 43 solution files resolve *this* backend from their
-  position on disk — 8 straight through `require()`/`path.join('../../../../…')`, 35 through a
+- **Do not move or delete that folder.** 44 solution files resolve *this* backend from their
+  position on disk — 8 straight through `require()`/`path.join('../../../../…')`, 36 through a
   named `REPO_ROOT`/`BACKEND = path.resolve(__dirname, '../../../..')`. A symlink does not help;
   Node resolves the real path. Lesson `f1.1` reaches **all four bricks**, the portal included
   (from `~/Projects/partner`), so moving any of them breaks it. `docs/cours/README.md`
   §"Where this lives" states the invariant.
-- **Changing backend code can silently break lessons.** The Track 08–14, 18–19 and F solutions
+- **Changing backend code can silently break lessons.** The Track 08–15, 18–19 and F solutions
   load real modules and count real figures (modules, routes, models, exported surfaces) against
   numbers printed in the lesson prose. `docs/cours/check-solutions.sh` is the check, in two
   phases: `check-references.js` resolves every repository path cited in the lessons, then all
-  65 executable solutions run their own assertions (14 snippets are listed and skipped). All
+  66 executable solutions run their own assertions (14 snippets are listed and skipped). All
   green today. Worth running after a structural refactor — a red figure check means a lesson now
   states a false number, and the fix belongs in the lesson text, not in the assertion.
 
