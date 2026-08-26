@@ -137,7 +137,16 @@ Response shape: `{ success, message, data, meta }`.
   document routes through `enforceCampusAccess` (`document.campus.middleware.js`, §2) — never by
   `buildCampusFilter()`. `campus.model.js` shows the split in one file: `canAddStudent()` counts
   on `schoolCampus`, `canAddDocumentStorage()` counts on `campusId`, and both are correct.
-- Truly global collection: **`Course` only** — no campus field at all.
+- Truly global collections: **six**, and `Course` is only the best known of them. Measured against
+  the loaded schemas, these carry **no campus path of any name**: `Course`, `Level`,
+  `ExpenseCategory` (the finance lookup table — its CRUD is therefore platform-wide for a
+  `CAMPUS_MANAGER`, and its "used by N expense(s)" refusal quotes a count taken across every
+  campus), plus `Admin`, `Campus` and `Counter`, which are structurally not scoped — two are the
+  tenant boundary and its counter, the third is a global actor. **`StaffRole` is scoped on a third
+  path name**, `campus` — a grep for `schoolCampus|campusId` reports it as global and it is not.
+  `hard-delete.registry.js:419,433` already declared `campusPath: null` for two entries citing this
+  line when it named one; corrected 2026-08-26 while authoring course lesson 15.1 (§12.1: the map is
+  fixed before the note leans on it).
 - Grepping for one name alone reports the other family as global, and it is not — the mistake
   that reached `docs/architecture/QA_TEST_STRATEGY.md` v1.1 (its D-15), which recorded it for
   `Partner` / `GradingScale` while stating the majority convention backwards.
