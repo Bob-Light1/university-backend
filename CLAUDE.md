@@ -307,9 +307,29 @@ Both refuse the flag rather than silently returning the live list, which would r
 The dialog can always go back to step 1 (`rerunPreview`): a ticket lives 5 minutes and reading a long impact report outlasts it easily, and a `409` on execute means the ticket is spent — the report is dropped so the operator re-reads an impact that may have changed, instead of resubmitting a token the server has already refused. `minReasonLength` / `maxReasonLength` travel on `report.requirements` rather than being mirrored as frontend literals; the local constant is a fallback only.
 
 **Outside this system**, only three exceptions — none of them business data:
-- `ActivationToken` cleanup (`account.service.js`) and TTL-expiring collections;
+- `ActivationToken` cleanup (`account.service.js`) and the **four** TTL indexes that are genuinely
+  ephemeral: `ActivationToken.expiresAt`, `DocumentShare.expiresAt`, `PrintJob.createdAt`
+  (30 d, `PRINT_JOB_TTL_DAYS` — job metadata, and §5.1 already records that deletion is not a
+  concept for it) and `QuizSession.expiresAt`, which is set only on an abandoned `pending` session
+  and `null` on a completed one — the model declares that invariant in its own header;
 - the GED teardown reached *through* the gate (`document.service.hardDeleteDocument`);
 - **public-portal marketing content** — `portal-admin.factory.js` `remove()` hard-deletes `Testimonial` / `FaqEntry` / `QuizQuestion` / `CoursePreview` / `CompetitionPrize` / `ContactMessage` with a plain campus-scoped `findOneAndDelete`. Deliberate: this is editorial content with no academic, financial or personal record attached, and it is authored and discarded in the same screen. It is CASCADEd when its campus goes.
+
+⚠️ **A fifth TTL index is not an exception, it is a hole.** `Document` declares `expiresAt`
+(`document.model.js:223`, documented "for temporary generated documents") **and a TTL index on it**
+(`:305`) — business data, carrying an append-only ledger, registered as a deletable entity with a
+`customExecutor` and four controls in front of it. Nothing in the module ever writes that path, so
+it is reachable by exactly one route: `PATCH /api/documents/:id` `$set`s the request body verbatim
+(`document.service.js:446-454`; the `createDocument.schema.js` its JSDoc credits does not exist, and
+there is no `modules/document/validations/`). One field assignment therefore has MongoDB hard-delete
+a document within the minute — no `deletedAt`, no `DocumentAudit` row, no `DeletionAudit` row, no
+file cleanup, no ai-service prune, and none of the four controls above. The same unfiltered `$set`
+also reaches `campusId`, a declared non-`immutable` path: a scoped role moves a row to another
+tenant past all three isolation layers, each of which passed on the *read*.
+
+Taught with a runnable check in the course (lesson 14.4, finding ㊷) and **not fixed**. The fix is a
+field whitelist on that one `$set` — a cross-brick change, since the GED form decides what the
+whitelist must contain, so it is a §12 work item and not a one-line patch.
 
 ---
 
@@ -434,21 +454,21 @@ those four against real inputs, not against the suite.
 
 `docs/cours/` is **its own git repository**, nested here on purpose. It is invisible to this
 repo (`.gitignore` line 7, `docs/*`), so `git status` never shows it and it is easy to mistake
-for an untracked scratch folder. It is not: it holds the ERP training program (~65 100 lines,
-210 files) with its own history, its own remote and its own commit cadence.
+for an untracked scratch folder. It is not: it holds the ERP training program (~73 100 lines,
+220 files) with its own history, its own remote and its own commit cadence.
 
 - **Commit course changes from `docs/cours/`**, never from here. The two histories are unrelated.
-- **Do not move or delete that folder.** 38 solution files resolve *this* backend from their
-  position on disk — 8 straight through `require()`/`path.join('../../../../…')`, 30 through a
+- **Do not move or delete that folder.** 43 solution files resolve *this* backend from their
+  position on disk — 8 straight through `require()`/`path.join('../../../../…')`, 35 through a
   named `REPO_ROOT`/`BACKEND = path.resolve(__dirname, '../../../..')`. A symlink does not help;
   Node resolves the real path. Lesson `f1.1` reaches **all four bricks**, the portal included
   (from `~/Projects/partner`), so moving any of them breaks it. `docs/cours/README.md`
   §"Where this lives" states the invariant.
-- **Changing backend code can silently break lessons.** The Track 08–12, 18–19 and F solutions
+- **Changing backend code can silently break lessons.** The Track 08–14, 18–19 and F solutions
   load real modules and count real figures (modules, routes, models, exported surfaces) against
   numbers printed in the lesson prose. `docs/cours/check-solutions.sh` is the check, in two
   phases: `check-references.js` resolves every repository path cited in the lessons, then all
-  60 executable solutions run their own assertions (14 snippets are listed and skipped). All
+  65 executable solutions run their own assertions (14 snippets are listed and skipped). All
   green today. Worth running after a structural refactor — a red figure check means a lesson now
   states a false number, and the fix belongs in the lesson text, not in the assertion.
 
