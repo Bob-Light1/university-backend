@@ -438,8 +438,8 @@ for an untracked scratch folder. It is not: it holds the ERP training program (~
 204 files) with its own history, its own remote and its own commit cadence.
 
 - **Commit course changes from `docs/cours/`**, never from here. The two histories are unrelated.
-- **Do not move or delete that folder.** 35 solution files resolve *this* backend from their
-  position on disk — 8 straight through `require()`/`path.join('../../../../…')`, 27 through a
+- **Do not move or delete that folder.** 38 solution files resolve *this* backend from their
+  position on disk — 8 straight through `require()`/`path.join('../../../../…')`, 30 through a
   named `REPO_ROOT`/`BACKEND = path.resolve(__dirname, '../../../..')`. A symlink does not help;
   Node resolves the real path. Lesson `f1.1` reaches **all four bricks**, the portal included
   (from `~/Projects/partner`), so moving any of them breaks it. `docs/cours/README.md`
@@ -448,7 +448,7 @@ for an untracked scratch folder. It is not: it holds the ERP training program (~
   load real modules and count real figures (modules, routes, models, exported surfaces) against
   numbers printed in the lesson prose. `docs/cours/check-solutions.sh` is the check, in two
   phases: `check-references.js` resolves every repository path cited in the lessons, then all
-  57 executable solutions run their own assertions (14 snippets are listed and skipped). All
+  60 executable solutions run their own assertions (14 snippets are listed and skipped). All
   green today. Worth running after a structural refactor — a red figure check means a lesson now
   states a false number, and the fix belongs in the lesson text, not in the assertion.
 
