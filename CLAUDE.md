@@ -434,8 +434,8 @@ those four against real inputs, not against the suite.
 
 `docs/cours/` is **its own git repository**, nested here on purpose. It is invisible to this
 repo (`.gitignore` line 7, `docs/*`), so `git status` never shows it and it is easy to mistake
-for an untracked scratch folder. It is not: it holds the ERP training program (~60 700 lines,
-204 files) with its own history, its own remote and its own commit cadence.
+for an untracked scratch folder. It is not: it holds the ERP training program (~65 100 lines,
+210 files) with its own history, its own remote and its own commit cadence.
 
 - **Commit course changes from `docs/cours/`**, never from here. The two histories are unrelated.
 - **Do not move or delete that folder.** 38 solution files resolve *this* backend from their
