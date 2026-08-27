@@ -108,8 +108,8 @@ const registerJobs = (cron, jobs, options = {}) => {
 };
 
 /**
- * The platform's seven jobs (CLAUDE.md §11). Every require is deferred into a
- * loader so that a broken module is one failed job, not seven.
+ * The platform's eight jobs (CLAUDE.md §11). Every require is deferred into a
+ * loader so that a broken module is one failed job, not eight.
  */
 const projectJobs = () => [
   { name: 'document-retention',  schedule: '0 2 * * 0',    load: () => require('../../modules/document').service.runRetentionJob },
@@ -118,6 +118,10 @@ const projectJobs = () => [
   { name: 'competition-closing', schedule: '5 0 1 * *',    load: () => require('../../modules/public-portal').service.runCompetitionClosingJob },
   { name: 'notification-retry',  schedule: '*/10 * * * *', load: () => require('../../modules/notification').service.runRetryJob },
   { name: 'finance-overdue',     schedule: '0 6 * * *',    load: () => require('../../modules/finance').service.runOverdueJob },
+  // 07:00, after the 06:00 overdue sweep: the past-due transition of the day is
+  // then already applied, so a debt that fell due overnight is dunned by that
+  // job rather than greeted here with a "due today" notice.
+  { name: 'finance-due-soon',    schedule: '0 7 * * *',    load: () => require('../../modules/finance').service.runDueSoonJob },
   { name: 'print-queue-sweep',   schedule: '*/2 * * * *',  load: () => require('../../modules/academic-print').service.runPrintQueueJob },
 ];
 

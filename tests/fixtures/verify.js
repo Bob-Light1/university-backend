@@ -15,6 +15,7 @@
  */
 
 const { notDeletedFilter, deletedOnlyFilter } = require('../../shared/utils/soft-delete');
+const { preDueWindow, dueReminderKind, REMINDER_KIND_VALUES } = require('../../modules/finance/fee-reminder-kind');
 const { model } = require('./models');
 const { oid } = require('./ids');
 const { COUNTS, CAMPUS_KEYS, ACADEMIC_YEAR, ANCHOR_DATE } = require('./seed.config');
@@ -311,6 +312,49 @@ const verify = async ({ silent = false } = {}) => {
       }),
       COUNTS[campusKey].studentFeesOverdue
     );
+  }
+
+  // Pre-due debts: the window the 07:00 sweep reads, derived from the cadence
+  // itself and evaluated at the anchor. A fixture whose every live debt sits 30
+  // days out lets that job report zero for ever without anyone noticing.
+  const { from, to } = preDueWindow(ANCHOR_DATE);
+  for (const campusKey of CAMPUS_KEYS) {
+    const dueSoon = await model('StudentFee').find({
+      schoolCampus: campusIds[campusKey],
+      ...notDeletedFilter(model('StudentFee')),
+      status: { $in: ['pending', 'partial'] },
+      dueDate: { $gte: from, $lt: to },
+    }).lean();
+
+    report.expect(
+      `Debts inside the pre-due window — campus ${campusKey}`,
+      dueSoon.length,
+      COUNTS[campusKey].studentFeesDueSoon
+    );
+
+    if (COUNTS[campusKey].studentFeesDueSoon) {
+      // One debt per kind, and each one still owing something: a settled debt
+      // is in the window but is not remindable.
+      // Compared as a boolean rather than as a literal string: an expectation
+      // here may never restate a volume or a list — those belong to their source
+      // of truth (`COUNTS`, and the cadence module for the kinds).
+      const kinds = dueSoon.map((fee) => dueReminderKind(fee.dueDate, ANCHOR_DATE)).sort();
+      report.expect(
+        `One debt per pre-due kind — campus ${campusKey}`,
+        kinds.join(',') === [...REMINDER_KIND_VALUES].sort().join(','),
+        true
+      );
+      report.expect(
+        `Every pre-due debt still owes — campus ${campusKey}`,
+        dueSoon.every((fee) => fee.amountPaid < fee.amountDue),
+        true
+      );
+      report.expect(
+        `No pre-due notice recorded yet — campus ${campusKey}`,
+        dueSoon.every((fee) => (fee.remindersSent || []).length === 0),
+        true
+      );
+    }
   }
 
   // Stable identifiers: the whole point of the deterministic derivation.

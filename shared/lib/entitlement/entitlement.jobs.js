@@ -63,6 +63,7 @@ const campusService = () => require('../../../modules/campus').service;
  */
 const EMISSION_SITES = Object.freeze({
   'finance-overdue':     'finance',
+  'finance-due-soon':    'finance',
   'exam-anticheat':      'exam',
   'competition-closing': 'public-portal',
 });

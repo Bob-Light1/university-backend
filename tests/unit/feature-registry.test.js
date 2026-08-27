@@ -424,10 +424,13 @@ describe('crons', () => {
   });
 
   test('emission jobs are the ones a disabled module must silence', () => {
-    const emission = FEATURE_CRONS
+    // Dédupliqué : un module peut porter PLUSIEURS jobs d'émission (finance en a
+    // deux, impayés à 06:00 et pré-échéance à 07:00). Ce qui est épinglé ici est
+    // l'ensemble des modules concernés ; les noms de jobs le sont par le test
+    // « the registry declares exactly the jobs the platform schedules ».
+    const emission = [...new Set(FEATURE_CRONS
       .filter((cron) => cron.nature === CRON_NATURE.EMISSION)
-      .map((cron) => cron.feature)
-      .sort();
+      .map((cron) => cron.feature))].sort();
     expect(emission).toEqual(['exam', 'finance']);
   });
 });

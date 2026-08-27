@@ -361,6 +361,13 @@ whitelist must contain, so it is a §12 work item and not a one-line patch.
 - Public routes first, then `router.use(authenticate)`.
 - JSDoc per route: `@route` `@desc` `@access`.
 - `apiLimiter` on GET, `uploadLimiter` on file uploads, `loginLimiter` on auth endpoints.
+- **A route that renders a PDF takes `pdfLimiter`, not `apiLimiter`** (`shared/middleware/rate-limiter.js`:
+  5/min, keyed on the **user** and not on the IP). Rendering is not a read: each request takes a page in
+  the platform's single Puppeteer pool, whose cap bounds *concurrency* and not arrival rate, so a burst on
+  one route delays every other one — the print-queue sweep included. Keyed per user because a campus office
+  reaches the API from one NAT address, where an IP budget lets the first cashier silence all the others.
+  Two routes carry it today: the GED export (`/api/documents/:id/export/pdf`, `/bulk/export`, `/bulk/print`)
+  and the fee receipt (`/api/finance/payments/:id/receipt`).
 
 ---
 
@@ -435,7 +442,15 @@ those four against real inputs, not against the suite.
 
 **Notification** (`/api/notifications`) — multi-channel (in-app + email) with templates; recipient-language i18n via `UserPreferences`; retry cron flushing external sends.
 
-**Finance** (`/api/finance`) — fees, expenses, income; nightly overdue-fee detection + reminders.
+**Finance** (`/api/finance`) — fees, expenses, income; nightly overdue-fee detection + reminders,
+plus a **pre-due cadence** (J-7 / J-3 / due day) that fires from its own marker,
+`StudentFee.remindersSent[]`, never from the `lastRemindedAt` / `reminderCount` pair the overdue
+dunning claims on — writing one from the other makes the debt skip its overdue reminder on the day
+it falls past due, silently (`modules/finance/fee-reminder-kind.js` carries the reasoning).
+`GET /payments/:id/receipt` renders the payment receipt as a PDF, in the **student's** language and
+through the platform's single Puppeteer pool: `academic-print` exports `renderPdf` /
+`getCampusBranding` for it, because a second pool would double the Chrome footprint and escape the
+graceful shutdown. The PDF is never stored — see `docs/architecture/features/fee-receipts-and-reminders.md` §4.
 
 **Public-portal** (`/api`) — public-facing: pre-registration, programs, quiz/leaderboard, recruitment competitions; monthly competition-closing cron. Its client is brick 4, the Next.js portal at `/home/adminsecu/Projects/partner` — changing anything here means changing it there too.
 
@@ -453,6 +468,7 @@ those four against real inputs, not against the suite.
 | Nightly 03:00 | Exam anti-cheat |
 | Nightly 01:00 | Announcement expiry |
 | Nightly 06:00 | Finance overdue fees + reminders |
+| Nightly 07:00 | Finance pre-due reminders (J-7 / J-3 / due day) — after 06:00, so the day's past-due transition is already applied |
 | 1st of month 00:05 | Competition closing |
 | Every 10 min | Notification retry (external sends) |
 | Every 2 min | Print queue sweep |

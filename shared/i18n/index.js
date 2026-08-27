@@ -9,7 +9,10 @@
  * live in `./catalogs/*`; each domain drops its own there.
  */
 
-const { SUPPORTED_LANGUAGES, DEFAULT_LOCALE, RTL_LANGUAGES, isSupported, normalize } = require('./languages');
+const {
+  SUPPORTED_LANGUAGES, DEFAULT_LOCALE, RTL_LANGUAGES,
+  DATE_LOCALES, HTML_LANGS, isSupported, normalize, localeContext,
+} = require('./languages');
 
 /**
  * Picks the localized string from a dictionary { en, fr, ... }.
@@ -49,8 +52,11 @@ module.exports = {
   SUPPORTED_LANGUAGES,
   DEFAULT_LOCALE,
   RTL_LANGUAGES,
+  DATE_LOCALES,
+  HTML_LANGS,
   isSupported,
   normalize,
+  localeContext,
   pick,
   interpolate,
   t,

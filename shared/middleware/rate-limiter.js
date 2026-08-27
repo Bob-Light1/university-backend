@@ -130,6 +130,40 @@ const uploadLimiter = rateLimit({
   skip: (req) => req.fileTooLarge === true
 });
 
+/**
+ * Rate limiter for PDF rendering — 5 per minute, per authenticated user.
+ *
+ * Rendering a PDF is not a read: every one of these requests takes a page in the
+ * platform's single Puppeteer pool, whose cap (`PRINT_MAX_CONCURRENCY`) bounds
+ * CONCURRENCY and not arrival rate — past it, renders queue, and a burst on one
+ * route delays every other one, the print-queue worker included.
+ *
+ * Keyed on the user rather than on the IP, unlike every limiter above: a campus
+ * office reaches the API from a single NAT address, so an IP budget would let
+ * the first cashier to print silence all the others.
+ *
+ * Lived in `document.routes.js` until the fee receipt became the platform's
+ * second per-user PDF route (§0.1: two copies of a budget drift, and the copy
+ * nobody edits is the one that stays wrong).
+ */
+const pdfLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  store: makeStore('pdf'),
+  // `ipKeyGenerator` normalizes IPv6 (required by express-rate-limit v7+) and is
+  // only the fallback: these routes are authenticated.
+  keyGenerator: (req) => req.user?.id ?? ipKeyGenerator(req.ip),
+  standardHeaders: true,
+  legacyHeaders: false,
+  handler: (req, res) => {
+    res.status(429).json({
+      success: false,
+      message: 'PDF generation rate limit exceeded. Please wait before retrying.',
+      retryAfter: 60
+    });
+  }
+});
+
 // Fallback prefix counter for custom limiters declared without an explicit one.
 // Deterministic by declaration order, so the same bucket is shared across
 // instances — but prefer an explicit options.prefix for robustness across deploys.
@@ -186,6 +220,7 @@ module.exports = {
   apiLimiter,
   strictLimiter,
   uploadLimiter,
+  pdfLimiter,
   createCustomLimiter,
   shutdownRateLimiter
 };

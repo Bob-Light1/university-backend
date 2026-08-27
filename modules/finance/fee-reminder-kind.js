@@ -91,10 +91,26 @@ function dueReminderKind(dueDate, now = new Date()) {
   return winner;
 }
 
+/**
+ * The date window the pre-due sweep has to read, derived from the cadence itself
+ * rather than restated: from midnight UTC today (inclusive) to midnight UTC the
+ * day after the longest lead time (exclusive). Adding a fourth kind at J-14
+ * widens the window by editing one table.
+ *
+ * @param {Date} [now]
+ * @returns {{ from: Date, to: Date }}
+ */
+function preDueWindow(now = new Date()) {
+  const maxLead = Math.max(...Object.values(REMINDER_LEAD_DAYS));
+  const from = startOfUtcDay(now);
+  return { from: new Date(from), to: new Date(from + (maxLead + 1) * DAY_MS) };
+}
+
 module.exports = {
   REMINDER_KINDS,
   REMINDER_KIND_VALUES,
   REMINDER_LEAD_DAYS,
   daysUntilDue,
   dueReminderKind,
+  preDueWindow,
 };

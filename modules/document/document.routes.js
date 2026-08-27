@@ -33,7 +33,7 @@ const router = express.Router();
 
 // ── Existing platform middleware ──────────────────────────────────────────────
 const { authenticate }    = require('../../shared/middleware/auth');
-const { apiLimiter }      = require('../../shared/middleware/rate-limiter');
+const { apiLimiter, pdfLimiter } = require('../../shared/middleware/rate-limiter');
 const { hardDeleteFlagLimiter } = require('../../shared/lib/hard-delete');
 
 // ── Document-module middleware ────────────────────────────────────────────────
@@ -62,21 +62,9 @@ const auditCtrl    = require('./controllers/document.audit.controller');
 
 // ── Rate limiters ─────────────────────────────────────────────────────────────
 
-/** PDF export / print: 5 requests per minute per authenticated user */
-const pdfLimiter = rateLimit({
-  windowMs:        60 * 1000,
-  max:             5,
-  // Prefer the authenticated user's id for keying; fall back to normalized IP
-  // (ipKeyGenerator handles IPv6 normalization — required by express-rate-limit v7+).
-  keyGenerator:    (req) => req.user?.id ?? ipKeyGenerator(req),
-  standardHeaders: true,
-  legacyHeaders:   false,
-  handler:         (req, res) => res.status(429).json({
-    success: false,
-    message: 'PDF generation rate limit exceeded. Please wait before retrying.',
-    retryAfter: 60,
-  }),
-});
+// PDF export / print: 5 requests per minute per authenticated user. The budget
+// now lives in `shared/middleware/rate-limiter.js` — the fee receipt is the
+// second route that renders a PDF, and two copies of one budget drift.
 
 /** Public share access: 10 requests per minute per IP */
 const shareLimiter = rateLimit({

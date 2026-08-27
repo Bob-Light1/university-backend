@@ -133,12 +133,12 @@ describe('registerJobs — horloge de déclenchement (B9-②)', () => {
     expect(CRON_TIMEZONE).toBe('UTC');
   });
 
-  test('AUCUN des sept jobs réels n’est enregistré sans fuseau', () => {
+  test('AUCUN des huit jobs réels n’est enregistré sans fuseau', () => {
     const cron = fakeCron();
 
     registerJobs(cron, projectJobs(), { timezone: CRON_TIMEZONE, logger: silent });
 
-    expect(cron.registered).toHaveLength(7);
+    expect(cron.registered).toHaveLength(8);
     for (const r of cron.registered) expect(r.opts.timezone).toBe('UTC');
   });
 
@@ -165,21 +165,22 @@ describe('registerJobs — horloge de déclenchement (B9-②)', () => {
   });
 });
 
-describe('projectJobs — les sept jobs réels de la plateforme', () => {
-  test('les sept se chargent depuis les façades et s’enregistrent', () => {
+describe('projectJobs — les huit jobs réels de la plateforme', () => {
+  test('les huit se chargent depuis les façades et s’enregistrent', () => {
     const cron = fakeCron();
 
     const { scheduled, failed } = registerJobs(cron, projectJobs(), { timezone: 'UTC', logger: silent });
 
     expect(failed).toEqual([]);
-    expect(scheduled).toHaveLength(7);
+    expect(scheduled).toHaveLength(8);
     expect(scheduled).toEqual(expect.arrayContaining([
       'document-retention', 'exam-anticheat', 'announcement-expiry',
-      'competition-closing', 'notification-retry', 'finance-overdue', 'print-queue-sweep',
+      'competition-closing', 'notification-retry', 'finance-overdue',
+      'finance-due-soon', 'print-queue-sweep',
     ]));
   });
 
-  test('les sept horaires correspondent à ceux documentés dans CLAUDE.md §11', () => {
+  test('les huit horaires correspondent à ceux documentés dans CLAUDE.md §11', () => {
     const byName = Object.fromEntries(projectJobs().map((j) => [j.name, j.schedule]));
 
     expect(byName).toEqual({
@@ -189,6 +190,8 @@ describe('projectJobs — les sept jobs réels de la plateforme', () => {
       'competition-closing': '5 0 1 * *',
       'notification-retry':  '*/10 * * * *',
       'finance-overdue':     '0 6 * * *',
+      // 07:00 : après la bascule des impayés de 06:00, jamais avant.
+      'finance-due-soon':    '0 7 * * *',
       'print-queue-sweep':   '*/2 * * * *',
     });
   });

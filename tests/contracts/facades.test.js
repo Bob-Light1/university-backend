@@ -58,8 +58,8 @@ describe('API inter-modules — fonctions de service attendues', () => {
     ['exam',            ['runAntiCheatJob']],
     ['announcement',    ['runExpiryJob']],
     ['public-portal',   ['runCompetitionClosingJob']],
-    ['finance',         ['runOverdueJob']],
-    ['academic-print',  ['runPrintQueueJob']],
+    ['finance',         ['runOverdueJob', 'runDueSoonJob']],
+    ['academic-print',  ['runPrintQueueJob', 'renderPdf', 'getCampusBranding']],
   ];
 
   describe.each([...CONTRACTS, ...CRON_CONTRACTS])('modules/%s.service', (name, fns) => {
