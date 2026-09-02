@@ -166,6 +166,24 @@ describe('reçu — la réponse', () => {
     expect(res.body.toString()).toBe('%PDF-1.4 receipt');
   });
 
+  test('le nom du fichier survit au cross-origin — l\'en-tête est EXPOSÉ', async () => {
+    // The SPA and the API never share an origin — front on Vercel and API
+    // elsewhere in production, :5173 against :5000 in the visual harness. A
+    // response header the API does not list in `Access-Control-Expose-Headers`
+    // is invisible to the SPA's JavaScript, so `saveBlobResponse` reads
+    // `undefined`, falls back to `receipt-<paymentId>.pdf`, and the receipt
+    // NUMBER the server took care to compute never reaches the disk.
+    //
+    // Asserting the header is SENT (the test above) says nothing about that:
+    // supertest is same-origin and reads every header. This one was found in a
+    // browser, at the design note's browser-QA step — see its §9⑲.
+    const res = await auth(request(app).get(ROUTE).set('Origin', 'http://localhost:5173'), 'CAMPUS_MANAGER');
+
+    expect(res.status).toBe(200);
+    expect((res.headers['access-control-expose-headers'] || '').split(/,\s*/))
+      .toEqual(expect.arrayContaining(['Content-Disposition']));
+  });
+
   test('hors portée : 404, jamais 403 — un 403 confirmerait que la ligne existe', async () => {
     financeService.getPaymentReceipt.mockResolvedValue(null);
     const res = await auth(request(app).get(ROUTE), 'CAMPUS_MANAGER');

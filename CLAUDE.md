@@ -374,6 +374,15 @@ whitelist must contain, so it is a §12 work item and not a one-line patch.
 ## 8. Security (enforce on every new module)
 
 - `helmet()` + `express-mongo-sanitize` applied globally in `app.js` — do not repeat.
+- **CORS is configured once in `app.js`, and `exposedHeaders` is part of the contract.** The SPA
+  never shares an origin with the API (front on Vercel, `:5173` against `:5000` locally), so a
+  response header absent from that list is invisible to its JavaScript however correctly the server
+  sends it. `Content-Disposition` is listed there because **every binary download reads the file
+  name from it** — the fee receipt through `saveBlobResponse`, the GED export through
+  `ExportDialog` — and without it both silently fall back to a name built from an id, dropping the
+  business identifier the server computed (a receipt number, a job's file name). A same-origin test
+  cannot see this: assert it with an `Origin` header, as `tests/integration/finance.receipt.test.js`
+  does. Adding a route that streams a file means checking this list, not only the route.
 - `campusId` never from `req.body` for scoped roles.
 - Passwords: bcrypt rounds = 12. JWT payload minimal `{ id, role, campusId }`, expiry 7d.
 - Append-only audit log entry on every post-publication mutation.
@@ -680,6 +689,12 @@ frontend build, portal, ai-service.
 **Step 10 — Browser QA.** `npm run test:visual`, **then eyes on the screen**: both themes, at
 least two roles including one campus-scoped role, and the entitlement toggle in all **three**
 states — `enabled`, `read_only` (history stays readable, every mutation is refused), `hidden`.
+A pass worth playing twice belongs **in** that harness rather than in a checklist: it carries two
+acts today (entitlement, fee receipts), and the screenshots it leaves in
+`tests/fixtures/.generated/visual/` are what a human then reads. Write the assertions against the
+catalogue the SPA loads (`dist/locales`), never against English strings — the fixture's accounts do
+not read English — and give each portal its own browser context, since `localStorage` belongs to
+the origin and the last sign-in otherwise becomes the identity of every open page.
 This is the historically skipped step: four work items were declared finished with "visual QA
 still pending". **Not done = feature not delivered.**
 

@@ -156,12 +156,16 @@ Reprise du §12.6, amendée : les cases i18n et cron s'appliquent, la case
       **et le test de non-collision du §6** — une dette relancée à J-3 doit rester réclamable
       par la relance d'impayé ; chacun vu rougir une fois (§9⑫) ;
 - [x] les trois audits passés, chaque constat fermé par un test qui rougissait avant (§9⑬ à ⑮) ;
-- [x] `npm test` (1 546), `lint`, `audit:ci` verts ; `seed:test:self-check` vert 16/16 (la fixture bouge) ;
+- [x] `npm test` (**1 566** au 2026-09-02 — 1 546 était le relevé du 2026-08-27, avant les deux
+      commits de la branche A et le test du constat ⑲), `lint`, `audit:ci` verts ;
+      `seed:test:self-check` vert 16/16 (la fixture bouge) ;
 - [x] `docs/cours/check-solutions.sh` — **vert, 67/67** depuis le 2026-09-02 (§9⑯ et §9⑰) ;
-- [ ] QA navigateur : deux thèmes, `CAMPUS_MANAGER` + `STUDENT`, les trois états d'entitlement ;
+- [x] QA navigateur : deux thèmes, `CAMPUS_MANAGER` + `STUDENT`, les trois états d'entitlement —
+      **jouée le 2026-09-02**, et écrite dans `npm run test:visual` plutôt que passée à la main
+      (§9⑲) : **36/36**, dont une régression trouvée et corrigée sur place ;
 - [x] le préavis `due_today` est délivré : défaut §9⑰ **corrigé** par la branche A (§9⑱),
       fermé par quatre tests vus rouges — dont l'invariant inter-cadences qui manquait ;
-- [ ] `CLAUDE.md` §7/§10/§11, `ERP_ROADMAP.md` §0 et la ligne 6 de la phase 1-B, dans le même commit.
+- [x] `CLAUDE.md` §7/§8/§10/§11, `ERP_ROADMAP.md` §0 et la ligne 6 de la phase 1-B, dans le même commit.
 
 ## 9. Ce que la construction a démenti
 
@@ -506,3 +510,78 @@ place le huitième dans sa taxonomie — le cas d'arbitrage éditorial que l'ét
 Côté backend, trois commentaires devenus faux ont été corrigés dans le même passage :
 `document.retention.cron.js` (« all seven background jobs »), `entitlement.jobs.js` (« two of the
 seven ») et l'en-tête de `entitlement.jobs.test.js`.
+
+**2026-09-02 — l'étape 10 jouée, et ce que seule une page rendue montre.**
+
+La QA navigateur a été **écrite dans le harnais** (`npm run test:visual`, second acte) plutôt que
+jouée à la main, comme la QA d'entitlement l'avait été au 2026-08-22 (D-R7 de la feuille de route).
+Le motif est le même : une passe manuelle prouve l'état d'un jour, un harnais le prouve à chaque
+exécution — et il est ici la seule chose qui regarde le **fichier qui arrive sur le disque**. Le
+harnais passe de 16 à **36 contrôles**, tous verts ; les captures restent l'artefact qu'un humain
+lit (`tests/fixtures/.generated/visual/`).
+
+**⑲ Le nom du reçu n'atteignait jamais le disque.** Le SPA et l'API ne partagent **jamais** une
+origine — front sur Vercel et API ailleurs en production, `:5173` contre `:5000` dans le harnais.
+`app.js` déclarait `exposedHeaders: ['Authorization']`, et un en-tête absent de cette liste est
+**invisible au JavaScript** du SPA quelle que soit la façon dont le serveur l'envoie.
+`saveBlobResponse` lisait donc `undefined` pour `Content-Disposition`, retombait sur son nom de
+repli, et le fichier arrivait sous `receipt-<id du paiement>.pdf` — 24 caractères hexadécimaux à la
+place du numéro de reçu que `finance.service.js` prend soin de composer. Le premier téléchargement
+du harnais a produit `receipt-3a3079ca994b4e1791a54411.pdf` ; après correctif,
+`receipt-PAY-A-002.pdf`.
+
+Trois choses rendent ce défaut intéressant plutôt qu'anecdotique :
+
+- **aucun test existant ne pouvait le voir.** `tests/integration/finance.receipt.test.js` vérifiait
+  déjà que l'en-tête est *envoyé* — supertest est same-origin et lit tout. Le constat est fermé par
+  un test qui pose une origine (`.set('Origin', …)`) et exige `Content-Disposition` dans
+  `Access-Control-Expose-Headers` : rouge (`Received: ["Authorization"]`) avant le correctif, vert
+  après ;
+- **le défaut ne se limite pas au reçu.** `ExportDialog.jsx` (export GED) lit le même en-tête et
+  retombait de la même façon. Une ligne d'`app.js` répare les deux ;
+- **le commentaire de `downloadBlob.js` disait déjà pourquoi il fallait lire cet en-tête** — « le
+  serveur est celui qui connaît l'identifiant métier ». L'intention était juste ; c'est la
+  configuration CORS, écrite deux ans plus tôt et à un autre étage, qui la vidait.
+
+**Quatre contrôles ont d'abord échoué pour de mauvaises raisons**, et chacun a coûté une exécution
+complète du harnais. Ils sont consignés parce qu'ils sont les pièges de *ce* type de test, pas des
+accidents :
+
+| Symptôme | Cause réelle |
+|---|---|
+| l'écran du gestionnaire répond « Access Denied » | `localStorage` appartient à l'**origine**, pas à l'onglet : le dernier connecté devenait l'identité de toutes les pages ouvertes. Chaque portail a désormais son propre contexte de navigateur (`portalPage`) |
+| « 2 boutons de reçu pour 1 paiement », puis « le clic ne produit aucun fichier » | le `Tooltip` de `ReceiptButton` porte le **même `aria-label`** que le bouton qu'il enveloppe. Le compte doublait, et surtout le clic tombait sur le `<span>` : rien ne se passait, et le contrôle accusait le téléchargement |
+| le fichier n'arrivait nulle part | `Browser.setDownloadBehavior` sans `browserContextId` ne vaut que pour le contexte **par défaut** — donc pour aucun des portails ouverts ci-dessus |
+| trois contrôles rouges sur un écran parfait | ils étaient écrits en **anglais** et les comptes de la fixture lisent le français. Le harnais interroge maintenant le **même catalogue que le SPA** (`dist/locales`), ce qui les rend indépendants de la locale et, accessoirement, rouges sur une clé brute laissée à l'écran |
+
+Deux propriétés de plateforme se sont invitées au passage, toutes deux hors périmètre de ce
+chantier et notées ici pour la suivante : `app.js` mesure **100 requêtes par quart d'heure et par
+adresse** sur tout `/api/`, budget qu'une passe navigateur épuise en chargements de pages (le
+harnais le remet à zéro entre ses actes, et le budget qui protège réellement le pool PDF est celui
+**par utilisateur**, épinglé dans la suite d'intégration) ; et trois navigateurs simultanés — celui
+du harnais, celui du pool PDF, mongod par-dessus — suffisent à faire disparaître le premier en
+cours de route, ce que le harnais annonce désormais au lieu d'attendre indéfiniment.
+
+**Les trois états d'entitlement, dont celui que la donnée refuse.** `finance` déclare `FeePayment`
+et `Income` comme écritures : sur un campus qui en porte, `hidden` est **refusé** (409
+`FEATURE_HAS_RECORDS`, « freeze it instead ») — ce refus est un contrôle à part entière, parce qu'un
+masquage à moitié appliqué serait pire que son absence. Le troisième état est donc **vu** sur le
+campus B, dont les écritures sont retirées d'abord, dans une base dont la vie entière est ce
+processus : le menu de l'étudiant perd son entrée Finance, et l'URL directe donne l'écran « Module
+non activé » et non une page qui se remplit de 403. Le contrôle « avant masquage » est le témoin
+négatif de celui « après » — c'est ce qui empêche cette paire d'être verte sur un menu vide.
+
+**Ce que la QA a confirmé, et qui n'allait pas de soi** : le relevé de l'étudiant est rendu dans
+**sa** langue, un paiement porte exactement un bouton de reçu, le PDF fait 48 ko et commence par
+`%PDF-`, les deux écrans suivent le thème sombre par la **préférence** de l'utilisateur (l'écrire
+dans `localStorage` ne prouve rien : `AuthContext` réapplique `UserPreferences.theme` à chaque
+rechargement), et **le reçu reste téléchargeable sous gel** — c'est une lecture, et c'est
+précisément le document dont un campus a besoin pendant que son abonnement est suspendu.
+
+**Effet de bord, dans l'autre dépôt.** Fermer la ligne 6 a fait **rougir la garde du cours** :
+`lesson-15.2-challenge.js` vérifiait que la ligne du roadmap était encore `EN COURS` — sa
+démonstration « inachevé, pas abandonné » s'appuyait dessus. Le constat est juste et la leçon garde
+son propos : ce qui distingue l'inachevé de l'abandon est que la **ligne existe** dans un état
+déclaré, pas l'état qu'elle porte. Corrigé depuis `docs/cours/` (§11bis de `CLAUDE.md`), version
+**2.17.3**, garde de nouveau **67/67**. À retenir pour les quatorze autres lignes de la phase 1-B :
+la clôture d'une ligne est un changement de code pour le dépôt du cours.

@@ -61,7 +61,15 @@ const corsOptions = {
   credentials: true, // Allow credentials (cookies, authorization headers)
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Portal-Key'],
-  exposedHeaders: ['Authorization'],
+  // `Content-Disposition` is exposed, not merely sent: the SPA lives on another
+  // origin (Vercel here, :5173 against :5000 in the visual harness), and a
+  // header absent from this list is invisible to its JavaScript. Every binary
+  // download reads the FILE NAME from it — the fee receipt through
+  // `saveBlobResponse`, the GED export through `ExportDialog` — and without it
+  // both silently fall back to a name built from an id, dropping the receipt
+  // number the server computed. Found at the browser-QA step of the fee-receipt
+  // work item: a same-origin test reads every header and sees nothing wrong.
+  exposedHeaders: ['Authorization', 'Content-Disposition'],
   optionsSuccessStatus: 200, // For legacy browsers
   maxAge: 86400 // 24 hours - cache preflight requests
 };

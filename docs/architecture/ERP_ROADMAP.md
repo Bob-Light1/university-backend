@@ -10,10 +10,11 @@
 > `QA_TEST_STRATEGY.md` l'est pour le dispositif de test, dont il reprend
 > volontairement la convention.
 >
-> **Statut** : v4.0 — cadrage établi d'après l'état **mesuré** du code, et non
+> **Statut** : v4.1 — cadrage établi d'après l'état **mesuré** du code, et non
 > d'après le catalogue commercial qui le précède. Mesures refaites sur les
-> **quatre** briques le **2026-08-22** (§15). Phase 1-A livrée ; **phase 1-B ouverte le
-> 2026-08-25** sur sa ligne 6 (frais — reçu et échéancier) ; phases 2 à 4 non démarrées.
+> **quatre** briques le **2026-08-22** (§15). Phase 1-A livrée ; **phase 1-B en
+> cours** — sa ligne 6 (frais — reçu et échéancier) est **livrée le 2026-09-02**,
+> première ligne de la phase à l'être ; phases 2 à 4 non démarrées.
 >
 > **Prérequis de lecture** : `CLAUDE.md` (les quatre briques, les invariants
 > d'isolation et de suppression). Documents dont cette feuille de route dérive :
@@ -37,7 +38,12 @@
 > JSDoc, messages de log, noms de fichiers — reste en anglais**, conformément au
 > §0 de `CLAUDE.md`.
 >
-> **Révisions** : **v4.0 (2026-08-22)** — **audit du document contre le code des
+> **Révisions** : **v4.1 (2026-09-02)** — **clôture de la ligne 6 de la phase
+> 1-B** (D-R18). L'étape 10 du patron §12 est jouée et promue en harnais
+> permanent, ce qui fait remonter un défaut d'en-tête CORS invisible à toute la
+> suite d'intégration. Le restant de la phase passe de 32–47 à **30–44 j**, le
+> total de 212–275 à **210–272 j**, et les tableaux monétaires du §9 suivent.
+> **v4.0 (2026-08-22)** — **audit du document contre le code des
 > quatre briques et contre les documents voisins de `docs/architecture/`**. Cinq
 > affirmations que le code contredit sont corrigées (§4.3, §5 l. 9 et 11, §6 l. 4
 > et 5, §7.1 l. 7, §8.2 l. 7, §11 écarts 2/5/6) ; **une contradiction de prix
@@ -100,7 +106,7 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 32–47 j | 2026-09-02 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-09-02 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -109,8 +115,8 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 **États autorisés** : `À FAIRE` · `EN COURS` · `BLOQUÉ (motif)` · `LIVRÉ` ·
 `ABANDONNÉ (motif)`.
 
-**Total hors application mobile native** : **212 à 275 jours·développeur**, soit
-**15,9 à 20,6 M XAF** au taux du §9. L'application mobile (25–35 j) fait l'objet
+**Total hors application mobile native** : **210 à 272 jours·développeur**, soit
+**15,75 à 20,40 M XAF** au taux du §9. L'application mobile (25–35 j) fait l'objet
 d'un chiffrage séparé, comme dans la v2.
 
 **La phase 1-A est chiffrée depuis la v4** — non comme un devis, mais comme une
@@ -119,7 +125,7 @@ livré et le reste-à-faire sont donc **du même ordre de grandeur**. Le program
 est à **43–57 % de sa charge totale**, et non aux quatre cinquièmes que suggère
 un décompte de modules livrés.
 
-**Chemin critique** : `1-B → 2 → 3 → 4-A`, soit **141 à 195 jours**. La voie 4-B
+**Chemin critique** : `1-B → 2 → 3 → 4-A`, soit **139 à 192 jours**. La voie 4-B
 se mène en parallèle de la phase 3 dès que le contrat de plateforme de la phase 2
 est acquis, et CH-3, CH-7 et le chantier d'exploitation de la phase 2 sont eux
 aussi parallélisables. **Ce sont des charges, pas des délais** : à deux
@@ -220,7 +226,7 @@ phase 3 ; la v4 corrige (phase 1-B, ligne 13).
 
 ```
   1-A ──▶ 1-B ──▶  2  ──▶  3  ──▶ 4-A
- livré   32–47 j  42–57 j  47–63 j  20–28 j
+ livré   30–44 j  42–57 j  47–63 j  20–28 j
                      │                 
                      └──────▶ 4-B  (parallélisable dès le contrat acquis)
                               71–80 j
@@ -299,7 +305,7 @@ produirait un chiffre invérifiable.
 
 ## §5 — Phase 1-B · L'inachevé, à fermer avant tout le reste
 
-**État** : `À FAIRE` · **Charge** : **32–47 j** · **Dépend de** : 1-A
+**État** : `EN COURS` · **Charge** : **30–44 j** · **Dépend de** : 1-A
 
 C'est la phase la plus rentable du document, et la moins visible. Chaque ligne
 est un travail déjà payé à 70–90 % **dont la valeur reste nulle tant que la
@@ -312,11 +318,11 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | # | Chantier | Briques | Ce qui existe déjà | Ce qui manque | Charge | État |
 |---|---|---|---|---|---|---|
 | 1 | Fixture déterministe (CH-0) | `B1` | Seed reproductible, empreinte SHA-256 identique d'une exécution à l'autre, 9 rôles qui se connectent réellement | Recette par une seconde personne ; arbitrage mémoire contre conteneur en CI ; 8 collections non seedées — GAET, notifications, préférences, file d'impression, transcripts finaux, pièces jointes GED — que les parcours E2E réclameront | 2–3 j | `À FAIRE` |
-| 2 | Entitlement par campus | `B1·B2` | Six phases livrées. **Migration faite le 2026-08-20** (constatée le 21 : `--dry-run` rapporte 3 skip, audit `actorRole: SYSTEM`, même horodatage à la milliseconde sur les trois campus). **QA visuelle faite le 2026-08-22, 16/16** (`npm run test:visual`), et promue en harnais permanent | Dans cet ordre : (1) étendre `test:visual` aux **quatre portails non rendus** — étudiant, parent, mentor, staff — seul contrôle capable de fermer la case §4.1.2 de la DoD, et le seul qui épingle la correspondance route ↔ garde, silencieuse dans les deux sens ; (2) **ensuite seulement**, retrait de `features` / `aiEntitlement` du schéma et de la route `ai-entitlement`, qui n'a plus de client depuis la phase 4 | 1 j | `À FAIRE` |
+| 2 | Entitlement par campus | `B1·B2` | Six phases livrées. **Migration faite le 2026-08-20** (constatée le 21 : `--dry-run` rapporte 3 skip, audit `actorRole: SYSTEM`, même horodatage à la milliseconde sur les trois campus). **QA visuelle faite le 2026-08-22, 16/16** (`npm run test:visual`), et promue en harnais permanent | Dans cet ordre : (1) étendre `test:visual` aux portails non rendus — **le portail étudiant l'est depuis le 2026-09-02** (D-R18), restent **parent, mentor, staff** — seul contrôle capable de fermer la case §4.1.2 de la DoD, et le seul qui épingle la correspondance route ↔ garde, silencieuse dans les deux sens ; (2) **ensuite seulement**, retrait de `features` / `aiEntitlement` du schéma et de la route `ai-entitlement`, qui n'a plus de client depuis la phase 4 | 1 j | `À FAIRE` |
 | 3 | Authentification — durcissement | `B1·B2` | JWT sur 9 rôles, bcrypt 12 tours, limiteur de débit sur les points de connexion, flux d'activation par jeton | Jetons de rafraîchissement, **révocation côté serveur** — aucun mécanisme n'existe aujourd'hui, un jeton volé vaut 7 jours — et verrouillage temporaire de compte après échecs répétés | 3–4 j | `À FAIRE` |
 | 4 | Module IA — sortie de conception | `B1·B3` | M0 à M6 livrés, tests verts des deux côtés, charge mesurée sous SLO en local | QA visuelle réelle de l'UI, SLO du chat mesuré sur l'infrastructure cible, benchmark d'embedding hors ligne avant de figer l'index de production | 2–3 j | `À FAIRE` |
 | 5 | Portail d'inscription en ligne | `B1·B4` | Pipeline de prospects en 7 statuts jusqu'à `enrolled`, anti-fraude, lien court et QR | Pièces jointes au dossier, workflow de validation directeur, **création effective de l'étudiant** au passage à `enrolled` — aujourd'hui seule la commission partenaire se déclenche — et notification du candidat | 3–4 j | `À FAIRE` |
-| 6 | Frais — reçus et échéancier | `B1·B2` | Reçu PDF rendu à la demande (`GET /finance/payments/:id/receipt`, langue de l'**étudiant**, pool Puppeteer partagé) ; cadence avant échéance J-7 / J-3 / Jour J sur son propre marqueur `remindersSent[]` ; les deux briques câblées, i18n × 10 ; **étapes 1 à 9 du §12 faites** — 1 546 tests verts, trois audits fermés par des tests vus rouges, fixture ancrée sur la cadence | **La garde `docs/cours/check-solutions.sh` est verte** depuis le 2026-09-02 (67/67, cours v2.17.2). Le défaut que sa fermeture a fait remonter — le préavis `due_today` jamais délivré, la cadence n'en émettant que 2 sur 3 — est **corrigé** le même jour : la bascule d'impayé passe à la fin du jour d'échéance (branche A, §9⑰–⑱), fermée par quatre tests vus rouges dont l'invariant inter-cadences qui manquait. Vérifié contre un vrai MongoDB dans les deux sens. **Reste la seule case de la DoD : la QA navigateur de l'étape 10**, qui ne se délègue pas. Détail : `docs/architecture/features/fee-receipts-and-reminders.md` §9⑰–⑱ | 2–3 j | `EN COURS` |
+| 6 | Frais — reçus et échéancier | `B1·B2` | Reçu PDF rendu à la demande (`GET /finance/payments/:id/receipt`, langue de l'**étudiant**, pool Puppeteer partagé) ; cadence avant échéance J-7 / J-3 / Jour J sur son propre marqueur `remindersSent[]` ; les deux briques câblées, i18n × 10 | **Rien — les dix étapes du §12 sont tenues.** L'étape 10 a été jouée le 2026-09-02 et **écrite dans `npm run test:visual`** plutôt que passée à la main (précédent D-R7) : le harnais passe de 16 à **36 contrôles**, tous verts — deux thèmes par la *préférence* de l'utilisateur, `CAMPUS_MANAGER` + `STUDENT`, et les trois états d'entitlement dont `hidden`, refusé tant que le module porte des écritures et donc **vu** sur un campus vidé des siennes. Elle a trouvé un défaut que rien d'autre ne pouvait voir : le nom du reçu ne survivait pas au cross-origin (§9⑲ de la note), corrigé et fermé par un test vu rouge. 1 566 tests verts. Détail : `docs/architecture/features/fee-receipts-and-reminders.md` §9⑲ | 2–3 j | `LIVRÉ` |
 | 7 | Notifications WhatsApp Business | `B1` | Canal Meta Cloud API en appel natif, inerte sans jeton, préférence par utilisateur | Gabarits approuvés par Meta — obligatoires hors de la fenêtre de 24 h, donc pour la quasi-totalité des envois ERP ; consentement explicite ; webhook de statut ; câblage des quatre événements vendus | 2–3 j | `À FAIRE` |
 | 8 | Journal d'audit transverse | `B1` | Trois registres append-only : audit documentaire, registre de suppression, historique de statut des prospects | Journal unique de toutes les mutations post-publication, export d'audit, rétention configurable par campus. **Traite l'écart 3 du §11** | 3–4 j | `À FAIRE` |
 | 9 | Dossiers RH enseignants | `B1·B2` | GED versionnée, documents rattachés à l'enseignant, champ `expiresAt` déclaré | Catégorie RH dédiée ; **prévenir au lieu de supprimer** — le seul mécanisme d'expiration disponible est un index TTL, et c'est ce chantier qui l'armerait : lire la ligne 14 avant d'écrire une date d'expiration sur un document ; historique des modifications de poste | 2–3 j | `À FAIRE` |
@@ -327,8 +333,9 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | 14 | GED — l'expiration TTL contourne la danger zone | `B1` | Suppression définitive harmonisée (`shared/lib/hard-delete/`) ; teardown complet du GED dans `document.service.hardDeleteDocument` — fichier importé, instantané PDF, QR, instantanés de **chaque** version, liens de partage, ré-ingestion ai-service | `document.model.js` déclare `index({ expiresAt: 1 }, { expireAfterSeconds: 0 })`. **Aucun code n'écrit ce champ aujourd'hui : le piège est armé, pas déclenché.** Le jour où il l'est, Mongo retire la ligne **hors** du seul chemin de suppression autorisé (§5.2 de `CLAUDE.md`) : rien ne nettoie les fichiers, rien ne purge les liens de partage, rien ne ré-ingère côté IA, et **aucune ligne n'arrive au registre de suppression**. Soit le champ est retiré, soit son expiration passe par le service | 1–2 j | `À FAIRE` |
 | 15 | Quotas dérivés du palier | `B1·B2` | `Campus.quotas` réellement appliqué par `canAddStudent` / `canAddTeacher` / `canAddClass` / `canAddDocumentStorage` | **La grille du §10 vend au-dessus de ce que le code applique** : elle facture « par campus de **2 000 élèves** » et « hébergement **≤ 20 Go** » quand `DEFAULT_QUOTAS` vaut **1 000 élèves et 5 Go** — le 1 001ᵉ élève et le 5,1ᵉ Go sont refusés à un client qui a payé pour le double et le quadruple. Les quotas sont aujourd'hui une dérogation par campus, jamais une propriété du palier : les dériver de `PLAN_PRESETS`, ou aligner la grille (D-R10) | 1–2 j | `À FAIRE` |
 
-**Total Phase 1-B : 32–47 j** — *la v3 annonçait 26–37 j ; l'audit de la v4 a
-ajouté trois lignes (13 à 15) et élargi la ligne 11.*
+**Total Phase 1-B : 30–44 j** — *la v3 annonçait 26–37 j ; l'audit de la v4 a
+ajouté trois lignes (13 à 15) et élargi la ligne 11 (32–47 j) ; la **ligne 6 est
+livrée** le 2026-09-02 et sort du restant (−2 à −3 j).*
 
 ---
 
@@ -511,7 +518,7 @@ devis opposable. Il se cite pour fixer un plancher de licence, valoriser l'actif
 ou instruire une diligence ; il ne se facture pas.
 
 **Le résultat qui compte** : l'ancre C place le livré à **204–284 j** et le
-restant à **212–275 j**. Les deux sont **du même ordre**. Compter les modules
+restant à **210–272 j**. Les deux sont **du même ordre**. Compter les modules
 donne l'impression d'un produit aux quatre cinquièmes fait ; compter la charge
 le place à **43–57 %**. Les deux tiers du restant ne sont d'ailleurs pas des
 fonctionnalités (§9.3) — ce que la v2 chiffrait à zéro.
@@ -521,13 +528,13 @@ fonctionnalités (§9.3) — ce que la v2 chiffrait à zéro.
 | Phase | Nature | Charge | Cumul | Coût |
 |---|---|---|---|---|
 | **1-A** | Acquis — **valeur de reconstruction**, §9.2 | *(204–284 j)* | — | *(15,30–21,30 M XAF)* |
-| **1-B** | Quinze chantiers à fermer | 32–47 j | 32–47 j | 2,40–3,53 M XAF |
-| **2** | Vérifiabilité, versionnage, exploitation | 42–57 j | 74–104 j | 3,15–4,28 M XAF |
-| **3** | Huit manques métier + non-régression | 47–63 j | 121–167 j | 3,53–4,73 M XAF |
-| **4** | Pédagogie + industrialisation | 91–108 j | 212–275 j | 6,83–8,10 M XAF |
-| | **Total restant, hors mobile** | **212–275 j** | | **15,90–20,63 M XAF** |
+| **1-B** | Quinze chantiers, dont un livré | 30–44 j | 30–44 j | 2,25–3,30 M XAF |
+| **2** | Vérifiabilité, versionnage, exploitation | 42–57 j | 72–101 j | 3,15–4,28 M XAF |
+| **3** | Huit manques métier + non-régression | 47–63 j | 119–164 j | 3,53–4,73 M XAF |
+| **4** | Pédagogie + industrialisation | 91–108 j | 210–272 j | 6,83–8,10 M XAF |
+| | **Total restant, hors mobile** | **210–272 j** | | **15,75–20,40 M XAF** |
 | *hors total* | Application mobile native | 25–35 j | | 1,88–2,63 M XAF |
-| | **Programme complet — 1-A incluse** | **416–559 j** | | **31,20–41,93 M XAF** |
+| | **Programme complet — 1-A incluse** | **414–556 j** | | **31,05–41,70 M XAF** |
 
 **Répartition par nature de travail** — utile pour arbitrer ce qui est
 externalisable :
@@ -537,10 +544,10 @@ externalisable :
 | Fonctionnalités métier vendables | 57–80 j | ~28 % |
 | Dispositif de test (**CH-2 à CH-7**) | 50–70 j | ~25 % |
 | Machinerie de livraison sous licence | 51 j | ~21 % |
-| Fermeture de l'inachevé (1-B) | 32–47 j | ~16 % |
+| Fermeture de l'inachevé (1-B) | 30–44 j | ~15 % |
 | Exploitation, contrat, registre, documentation | 22–27 j | ~10 % |
 
-Les cinq natures recomposent **exactement** le total (212–275 j) : aucune ligne
+Les cinq natures recomposent **exactement** le total (210–272 j) : aucune ligne
 n'est comptée deux fois ni oubliée. *La v3 intitulait la deuxième nature « CH-2 à
 CH-6 » tout en y comptant les 5 jours de CH-7, qui n'apparaissaient dans aucune
 autre — l'intitulé est corrigé, pas le chiffre.* **Deux tiers de la charge
@@ -643,11 +650,11 @@ Tous les prix de ce document sont **hors taxes**. À 19,25 % :
 
 Le taux est hérité, non recalculé (D-R6). Ce qu'il change :
 
-| Taux | Restant (212–275 j) | Phase 1-A (204–284 j) | **Programme complet** |
+| Taux | Restant (210–272 j) | Phase 1-A (204–284 j) | **Programme complet** |
 |---|---|---|---|
-| 60 000 XAF | 12,72–16,50 M | 12,24–17,04 M | **24,96–33,54 M** |
-| **75 000 XAF** *(retenu)* | **15,90–20,63 M** | **15,30–21,30 M** | **31,20–41,93 M** |
-| 90 000 XAF | 19,08–24,75 M | 18,36–25,56 M | **37,44–50,31 M** |
+| 60 000 XAF | 12,60–16,32 M | 12,24–17,04 M | **24,84–33,36 M** |
+| **75 000 XAF** *(retenu)* | **15,75–20,40 M** | **15,30–21,30 M** | **31,05–41,70 M** |
+| 90 000 XAF | 18,90–24,48 M | 18,36–25,56 M | **37,26–50,04 M** |
 
 ### 9.8 Points morts
 
@@ -657,13 +664,17 @@ produit. Voici celui du produit.
 **Point mort d'exploitation** — couvrir le socle de plateforme (98 500 XAF/mois) :
 **un seul campus Essentiel y suffit**. L'exploitation n'est pas le problème.
 
-**Point mort du programme** — amortir 31,20 à 41,93 M XAF de production *et* le
+**Point mort du programme** — amortir 31,05 à 41,70 M XAF de production *et* le
 socle, en marge de contribution :
 
 | Horizon | Marge mensuelle nécessaire | Essentiel seul | Standard seul | Premium seul |
 |---|---|---|---|---|
-| **24 mois** | 1,40 – 1,85 M XAF | **14 à 19 campus** | **6 à 8 campus** | **4 à 5 campus** |
-| **36 mois** | 0,97 – 1,26 M XAF | **10 à 13 campus** | **4 à 5 campus** | **3 campus** |
+| **24 mois** | 1,39 – 1,84 M XAF | **14 à 19 campus** | **6 à 8 campus** | **4 à 5 campus** |
+| **36 mois** | 0,96 – 1,26 M XAF | **10 à 13 campus** | **4 à 5 campus** | **3 campus** |
+
+*Les parcs sont inchangés : la marge nécessaire bouge de ~1 %, les marges par
+campus (99 450 / 232 000 / 442 400 XAF) ne bougent pas, et aucun arrondi ne
+franchit un seuil.*
 
 Trois lectures, et elles commandent la stratégie commerciale plus que n'importe
 quelle ligne technique de ce document :
@@ -860,6 +871,7 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R15** | 2026-08-22 | **Le coût de revient d'exploitation entre au document** (§9.4) avec les marges par palier, les points morts (§9.8), la TVA et la sensibilité au taux. Ses montants sont des **hypothèses de tarifs publics explicitement étiquetées**, jamais des relevés | Le §10 vendait un abonnement mensuel adossé à un engagement de service sans qu'aucune charge lui réponde. La structure importait plus que les montants, et elle a livré un résultat que rien n'annonçait : **WhatsApp, vendu dès l'Essentiel parce que `notification` est une clé du noyau, consomme 38 à 75 % du prix de ce palier** |
 | **D-R16** | 2026-08-22 | **La contradiction de prix n'est pas tranchée ici, elle devient un arbitrage ouvert** (§12, D-R8). Trois documents portent deux grilles sous les mêmes trois noms `free`/`standard`/`premium` | Ce n'est pas une coquille à corriger d'un côté : c'est une **collision de vocabulaire** entre les paliers de modules et les plans du module IA, que `CAMPUS_ENTITLEMENT_DESIGN.md` D-D a fusionnés en croyant unifier. Trancher unilatéralement reviendrait à fixer un prix dans un document de planning — précisément ce que D-R5 refuse |
 | **D-R17** | 2026-08-27 | **La ligne 6 tient les étapes 1 à 9 du patron §12 et s'arrête à deux cases**, énoncées plutôt que contournées : la garde du cours est rouge et la QA navigateur n'est pas jouée. Trois constats d'audit fermés en chemin, chacun par un test rouge avant correction — `{name}` jamais interpolé dans **toutes** les relances de frais (« Bonjour , » depuis l'origine du gabarit d'impayé), date d'échéance en ISO quelle que soit la langue, et le reçu — seul rendu PDF de la plateforme atteignable par un `STUDENT` — laissé derrière le quota générique par IP au lieu du budget par utilisateur que la GED applique déjà. Ce dernier devient `pdfLimiter` dans `shared/middleware/rate-limiter.js`, la copie locale du GED est supprimée, et la règle entre au §7 de `CLAUDE.md`. Effet de bord enregistré : le socle de test passe de 1 426 à **1 546 tests / 71 suites** (D-R7 en notait 1 407 / 68) | La règle de maintenance de ce document dit d'écrire ce qui reste, pas d'arrondir. Les deux cases ouvertes ne sont pas du même genre : la QA navigateur est du temps d'opérateur, la garde du cours est un **arbitrage de contenu** — la piste 09 s'intitule *Seven Jobs, Four Postures* et compte sept jobs sur toute sa narration, or il y en a huit depuis ce chantier. Substituer le chiffre partout ou assumer la date de gel de la leçon est une décision d'auteur, prise dans le dépôt du cours et pas ici |
+| **D-R18** | 2026-09-02 | **La ligne 6 de la phase 1-B est livrée**, et son étape 10 — la QA navigateur — est **écrite dans le harnais** (`npm run test:visual`, 16 → **36 contrôles**) plutôt que jouée à la main. Le portail étudiant y est rendu pour la première fois, ce qui entame la ligne 2. Restant 1-B : **32–47 → 30–44 j** ; total **212–275 → 210–272 j**, tableaux monétaires du §9 recomposés | La QA manuelle prouve l'état d'un jour ; le harnais le prouve à chaque exécution, et c'est le précédent posé par D-R7. Le bénéfice est immédiat et vérifie la règle : elle a trouvé ce qu'aucun test existant ne pouvait voir — `exposedHeaders` n'exposait pas `Content-Disposition`, donc **tout téléchargement binaire arrivait sous un nom de repli** dès lors que le SPA et l'API ne partagent pas une origine, c'est-à-dire toujours. Le reçu perdait son numéro, l'export GED son nom de fichier ; supertest, same-origin, lisait l'en-tête et ne voyait rien. Corrigé en une ligne d'`app.js`, fermé par un test vu rouge |
 
 ---
 
