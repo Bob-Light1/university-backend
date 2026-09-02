@@ -195,3 +195,62 @@ describe('FeePayment — schéma réel', () => {
     expect(FeePayment.schema.path('deletedAt')).toBeUndefined();
   });
 });
+
+// ── The two cadences must not hide debts from each other (§9⑰) ───────────────
+//
+// This is the check that was missing, and its absence cost a third of the
+// cadence. Each rule was tested alone and each was right alone: the pre-due rule
+// wanted a `due_today` notice, and the past-due rule called the same debt
+// overdue on the same morning an hour earlier. The sweep at 07:00 reads STORED
+// status, so the 06:00 transition decided what the 07:00 job was allowed to see.
+//
+// The invariant is not "these two functions return X": it is that a debt the
+// cadence still owes a notice to is never transitioned out of the sweep's reach
+// first. It is asserted across the whole window rather than on one day, because
+// only the last day of it was ever wrong.
+describe('la bascule d\'impayé ne retire jamais une dette que la cadence doit encore prévenir', () => {
+  const { computeStatus } = require('../../modules/finance/fee-status');
+
+  /** Midnight UTC, which is what `<input type="date">` sends for every ERP fee. */
+  const midnightIn = (days) => new Date(Date.UTC(2026, 5, 17 + days));
+  const OVERDUE_SWEEP_HOUR = 6;   // register-jobs.js: '0 6 * * *'
+  const PRE_DUE_SWEEP_HOUR = 7;   // register-jobs.js: '0 7 * * *'
+  const at = (day, hour) => new Date(Date.UTC(2026, 5, 17 - day, hour));
+
+  const maxLead = Math.max(...Object.values(REMINDER_LEAD_DAYS));
+
+  test.each(Array.from({ length: maxLead + 1 }, (_, i) => maxLead - i))(
+    'à J-%i, ce que la règle veut envoyer à 07:00 est encore lisible par le balayage',
+    (day) => {
+      const due  = midnightIn(0);
+      const kind = dueReminderKind(due, at(day, PRE_DUE_SWEEP_HOUR));
+      expect(kind).not.toBeNull(); // every day of the window owes a notice
+
+      // What the 06:00 job leaves behind, evaluated by the same rule it mirrors.
+      const statusAfterSweep = computeStatus(
+        { amountDue: 100, amountPaid: 0, dueDate: due },
+        at(day, OVERDUE_SWEEP_HOUR),
+      );
+
+      // The 07:00 sweep selects `pending`/`partial`. Anything else is invisible
+      // to it, and the notice is lost for good — the kind is claimed at most once.
+      expect(['pending', 'partial']).toContain(statusAfterSweep);
+    },
+  );
+
+  test('le lendemain, l\'inverse : plus aucun préavis dû, et la dette est en retard', () => {
+    const due = midnightIn(0);
+    expect(dueReminderKind(due, at(-1, PRE_DUE_SWEEP_HOUR))).toBeNull();
+    expect(computeStatus({ amountDue: 100, amountPaid: 0, dueDate: due }, at(-1, OVERDUE_SWEEP_HOUR)))
+      .toBe('overdue');
+  });
+
+  test('les deux balayages restent dans cet ordre, et c\'est l\'ordre qui rend la règle vraie', () => {
+    const { projectJobs } = require('../../shared/lib/register-jobs');
+    const jobs = projectJobs();
+    const hourOf = (name) => Number(jobs.find((j) => j.name === name).schedule.split(' ')[1]);
+    expect(hourOf('finance-overdue')).toBe(OVERDUE_SWEEP_HOUR);
+    expect(hourOf('finance-due-soon')).toBe(PRE_DUE_SWEEP_HOUR);
+    expect(hourOf('finance-overdue')).toBeLessThan(hourOf('finance-due-soon'));
+  });
+});

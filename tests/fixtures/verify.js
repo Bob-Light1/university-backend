@@ -16,6 +16,7 @@
 
 const { notDeletedFilter, deletedOnlyFilter } = require('../../shared/utils/soft-delete');
 const { preDueWindow, dueReminderKind, REMINDER_KIND_VALUES } = require('../../modules/finance/fee-reminder-kind');
+const { computeStatus } = require('../../modules/finance/fee-status');
 const { model } = require('./models');
 const { oid } = require('./ids');
 const { COUNTS, CAMPUS_KEYS, ACADEMIC_YEAR, ANCHOR_DATE } = require('./seed.config');
@@ -352,6 +353,26 @@ const verify = async ({ silent = false } = {}) => {
       report.expect(
         `No pre-due notice recorded yet — campus ${campusKey}`,
         dueSoon.every((fee) => (fee.remindersSent || []).length === 0),
+        true
+      );
+      // The hour matters, and it used to be the fixture's luck rather than the
+      // code's correctness: with a 09:00 due date the due-today debt survived a
+      // 06:00 past-due pass, so the cadence looked deliverable when production —
+      // whose due dates come from `<input type="date">` — could not deliver it.
+      // Pinned as a boolean derived from the debt itself, never as a literal hour.
+      report.expect(
+        `Pre-due debts are stamped at midnight, like the ERP form's — campus ${campusKey}`,
+        dueSoon.every((fee) => fee.dueDate.getTime()
+          === Date.UTC(fee.dueDate.getUTCFullYear(), fee.dueDate.getUTCMonth(), fee.dueDate.getUTCDate())),
+        true
+      );
+      // …and the invariant that costs a notice when it breaks: the 06:00 sweep
+      // must leave every one of them readable by the 07:00 sweep.
+      report.expect(
+        `The 06:00 pass leaves every pre-due debt claimable — campus ${campusKey}`,
+        dueSoon.every((fee) => ['pending', 'partial'].includes(
+          computeStatus(fee, new Date(from.getTime() + 6 * 3600 * 1000))
+        )),
         true
       );
     }

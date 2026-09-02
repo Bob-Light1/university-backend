@@ -159,8 +159,8 @@ Reprise du §12.6, amendée : les cases i18n et cron s'appliquent, la case
 - [x] `npm test` (1 546), `lint`, `audit:ci` verts ; `seed:test:self-check` vert 16/16 (la fixture bouge) ;
 - [x] `docs/cours/check-solutions.sh` — **vert, 67/67** depuis le 2026-09-02 (§9⑯ et §9⑰) ;
 - [ ] QA navigateur : deux thèmes, `CAMPUS_MANAGER` + `STUDENT`, les trois états d'entitlement ;
-- [ ] **⚠️ un défaut ouvert, découvert en fermant la garde du cours** : le préavis `due_today`
-      n'est jamais délivré (§9⑰). La cadence vendue en compte trois et en émet deux ;
+- [x] le préavis `due_today` est délivré : défaut §9⑰ **corrigé** par la branche A (§9⑱),
+      fermé par quatre tests vus rouges — dont l'invariant inter-cadences qui manquait ;
 - [ ] `CLAUDE.md` §7/§10/§11, `ERP_ROADMAP.md` §0 et la ligne 6 de la phase 1-B, dans le même commit.
 
 ## 9. Ce que la construction a démenti
@@ -355,14 +355,14 @@ pas un encaissement.
 
 | Vérification | Résultat |
 |---|---|
-| `npm test` (backend) | **1 546 tests, 71 suites, vert** (1 426 avant l'étape 5) |
+| `npm test` (backend) | **1 546 tests, 71 suites, vert** (1 426 avant l'étape 5 ; **1 565** après §9⑱) |
 | `npm run lint` (backend) | 0 erreur (44 avertissements préexistants) |
-| `npm run audit:ci` | vert |
-| `npm run seed:test:self-check` | **16/16**, dont la vérification 132 contrôles |
+| `npm run audit:ci` | vert (rouge le 2026-09-02 sur deux avis `browserslist` sans rapport avec ce chantier — override `^4.28.8`, §9⑱) |
+| `npm run seed:test:self-check` | **16/16**, dont la vérification 132 contrôles (134 depuis §9⑱) |
 | `frontend` : `npm run build` | vert |
 | `frontend` : `npm run lint` | 91 erreurs **préexistantes**, aucune dans les fichiers de la fonctionnalité |
 | `ai-service`, portail | non touchés (§ tableau des briques) |
-| `docs/cours/check-solutions.sh` | **rouge : 57 réussites, 10 échecs** |
+| `docs/cours/check-solutions.sh` | **rouge : 57 réussites, 10 échecs** — vert 67/67 depuis le 2026-09-02 (§9⑰) |
 
 **⑯ La garde du cours est rouge, et la note s'était trompée en disant qu'elle ne s'appliquait pas.**
 Le §8 annonçait « aucun changement structurel ». Faux : un cron de plus, une route de plus, deux
@@ -422,15 +422,73 @@ Trois choses à retenir sur *pourquoi personne ne l'a vu* :
   filtre d'entitlement « dans la requête ». La question voisine — *que reste-t-il dans la requête
   après le job de 06:00 ?* — n'a pas été posée.
 
-C'est un constat d'étape 7 (audit de la plateforme *avec* la fonctionnalité) arrivé après l'étape 9,
-et il n'est **pas corrigé** : les deux réparations possibles ne coûtent pas la même chose et le
-choix appartient au porteur.
+C'est un constat d'étape 7 (audit de la plateforme *avec* la fonctionnalité) arrivé après l'étape 9.
+Trois réparations étaient possibles, et elles ne coûtaient pas la même chose :
 
 | Branche | Le changement | Ce qu'il coûte |
 |---|---|---|
 | **A — déplacer la bascule à la fin du jour d'échéance** (`dueDate < minuit du jour`) | `computeStatus` + `markPastDueOverdue` | sémantique de statut visible partout : une dette due aujourd'hui s'affiche `pending` et non `overdue`. C'est la réparation que la leçon recommande au constat ⑯, et la seule qui rende l'ordre 06:00 → 07:00 correct |
 | **B — élargir le filtre du balayage au statut `overdue` pour le seul `due_today`** | `findFeesDueSoon` | la même dette reçoit « due aujourd'hui » à 07:00 et sa première relance d'impayé à 06:00, une heure plus tôt |
 | **C — avancer le balayage avant 06:00** | une ligne du manifeste | ne règle rien : la dette bascule quand même à 06:00 et reçoit les deux courriers le même matin |
+
+**⑱ Branche A retenue par le porteur, le 2026-09-02 — et la règle y gagne indépendamment du
+défaut.** Une échéance est un **jour**, pas un instant : `<input type="date">` envoie minuit, donc
+`dueDate < now` déclarait une dette en retard à 00:00:01 du jour même où elle était due. La
+correction ne se contente pas de rendre le troisième préavis atteignable, elle rend la règle vraie —
+*le débiteur possède la totalité de sa journée d'échéance*.
+
+| Fichier | Ce qui change |
+|---|---|
+| `fee-status.js` | `startOfUtcDay(dueDate) < startOfUtcDay(now)` ; `startOfUtcDay` et `DAY_MS` y sont **exportés** — c'est le fichier qui possède la frontière |
+| `fee-reminder-kind.js` | sa copie privée de `startOfUtcDay` **supprimée**, importée de `fee-status.js` (§0.1). Deux définitions de « quel jour sommes-nous » sont exactement ce qui a laissé les deux cadences diverger |
+| `finance.repository.js` | `markPastDueOverdue` borne sur `new Date(startOfUtcDay(now))`, importé et non redit |
+
+**Quatre tests, tous vus rouges avant le correctif** (R1) — et l'un d'eux est le test qui manquait,
+pas un test du correctif :
+
+| Suite | Ce qu'elle verrouille | Vue rouge |
+|---|---|---|
+| `fee-status.test.js` (+5) | la journée d'échéance appartient au débiteur : 06:00, 23:59, minuit le lendemain, l'acompte, et l'échéance horodatée en cours de journée | 2 rouges |
+| `fee-reminder-kind.test.js` (+3, dont un `test.each` sur toute la fenêtre) | **l'invariant qui manquait** : à chaque jour J-7…J-0, ce que la règle veut envoyer à 07:00 doit rester lisible par le balayage après la passe de 06:00 | 1 rouge, à J-0 exactement |
+| `finance.repository.test.js` (+4) | `markPastDueOverdue` et `touchReminded` — les deux **écritures** nocturnes, jusqu'ici épinglées par rien (constat ㉒ de la leçon 15.2, désormais **fermé**) | 3 rouges |
+| `tests/fixtures/verify.js` (+2 × 2 campus) | les dettes avant échéance portent minuit, **et** la passe de 06:00 les laisse toutes réclamables | — |
+
+L'invariant mérite d'être lu pour lui-même : il n'affirme pas qu'une fonction renvoie une valeur,
+il affirme que **les deux règles ne se cachent pas des dettes l'une à l'autre**. Chacune était juste
+seule ; c'est leur composition, à une heure d'intervalle, qui était fausse. Aucun test unitaire de
+l'une ou de l'autre ne pouvait le voir.
+
+**Vérifié contre une vraie base, dans les deux sens** — le correctif ne se contente pas de rendre le
+préavis atteignable, il doit laisser la bascule intacte :
+
+```
+  jour  statut à 06:00   balayage 07:00   type voulu            bascule
+  ───   ──────────────   ──────────────   ─────────             ───────
+  J-7   pending                1          due_in_7d  → envoyé
+  J-3   pending                1          due_in_3d  → envoyé
+  J-0   pending                1          due_today  → envoyé   jour J 23:59 → pending
+  J+1                                                           lendemain 00:00 → overdue
+```
+
+Les trois préavis partent, et la dette devient bien impayée — le lendemain, jamais pendant sa
+journée.
+
+**Deux effets de bord de l'étape 9 rejouée, tous deux hors périmètre de ce chantier :**
+
+- `npm run audit:ci` était **rouge** sur deux avis `browserslist` (GHSA-c83g-rgw3-j3cx,
+  GHSA-73wf-gq98-2v4g) publiés depuis l'étape 9 initiale. Le paquet n'est atteint que par
+  `jest → @babel/core`, donc inatteignable en production, mais le correctif est un patch sur un
+  chemin **de développement** — moins cher à prendre qu'à justifier dans une exception. Troisième
+  entrée `overrides` (`^4.28.8`), inscrite au §8.1 de `CLAUDE.md`. Gate vert.
+- la garde du cours cédait par intermittence sur `09.1` et `f2.3` : `TIMEOUT_S=30` était trop juste
+  pour deux solutions qui chargent tous les modules du backend et lancent un venv Python. Portée à
+  90 s dans `docs/cours/` (v2.17.2). Une expiration rapportée comme `FAIL` à côté d'un contrôle de
+  chiffre est une garde qui crie au loup.
+
+**La fixture cesse d'être chanceuse.** Ses dettes avant échéance héritaient du 09:00 de l'ancre, et
+c'est cette heure — pas le code — qui les faisait survivre à la passe de 06:00. Elles portent
+désormais minuit, comme celles du formulaire ERP (`dueAtMidnight`), et `verify.js` vérifie les deux
+propriétés plutôt que de les supposer. `COUNTS` est inchangé : aucun document n'est ajouté.
 
 **⑯ (rappel) La garde était rouge sur onze solutions, pas dix.** Le décompte de l'étape 9 en
 annonçait dix ; `09.1` et `f2.3` échouaient aussi, mais par **temps d'exécution** sous la charge des

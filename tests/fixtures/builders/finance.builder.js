@@ -121,6 +121,20 @@ const buildExpenses = (campusKey, ctx) => {
 const PRE_DUE_LEADS = REMINDER_KIND_VALUES.map((kind) => REMINDER_LEAD_DAYS[kind]);
 
 /**
+ * Midnight UTC, `leadDays` days after the anchor — what `<input type="date">`
+ * sends, and therefore what every fee created through the ERP form carries.
+ *
+ * `ctx.at()` inherits the anchor's 09:00, and that hour was hiding a live defect:
+ * the pre-due debt survived a 06:00 past-due pass because of it, so the fixture
+ * reported a cadence that production could not deliver (design note §9⑰). The
+ * transition is day-based now, and this makes the fixture stop being lucky.
+ */
+const dueAtMidnight = (ctx, leadDays) => {
+  const d = ctx.at(leadDays);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
+
+/**
  * Student debts. The first `studentFeesOverdue` of each campus are past due with a
  * balance left — that is what the nightly reminder cron looks for. The
  * `studentFeesDueSoon` that follow are anchored ON the pre-due cadence (J-7, J-3,
@@ -178,7 +192,7 @@ const buildStudentFees = (campusKey, ctx) => {
           // debts than there are kinds is a config drift, and it must surface as
           // the verifier's "one debt per kind" failure — not as a cast error on
           // an undefined lead time.
-          ? ctx.at(PRE_DUE_LEADS[preDueIndex % PRE_DUE_LEADS.length])
+          ? dueAtMidnight(ctx, PRE_DUE_LEADS[preDueIndex % PRE_DUE_LEADS.length])
           : ctx.at(30 + i),
       createdBy: ctx.adminIds.ADMIN,
       ...stamps(150 - i * 5),

@@ -35,6 +35,8 @@ jest.mock('../../modules/finance/models/expense-category.model', () => stubbed('
 jest.mock('../../modules/finance/models/studentFee.model', () => stubbed('StudentFee', 'isDeleted', {
   find: jest.fn(),
   findOneAndUpdate: jest.fn(),
+  updateMany: jest.fn().mockResolvedValue({ modifiedCount: 0 }),
+  updateOne: jest.fn().mockResolvedValue({ modifiedCount: 1 }),
 }));
 jest.mock('../../modules/finance/models/feePayment.model', () => ({
   modelName: 'FeePayment',
@@ -224,5 +226,63 @@ describe('findPaymentById', () => {
     FeePayment.findOne.mockReturnValue(chainOf(null));
     expect(await repo.findPaymentById('pay-1', { schoolCampus: CAMPUS })).toBeNull();
     expect(FeePayment.findOne.mock.calls[0][0].schoolCampus).toBe(CAMPUS);
+  });
+});
+
+// ── The two nightly WRITES (finding ㉒ of course lesson 15.2) ─────────────────
+//
+// These were the last two exported functions with no test at any level that saw
+// their filter, and they are the two that mutate. A path that does not exist in
+// an `updateMany` filter raises nothing: `modifiedCount: 0`, which the job logs
+// as `0 marked overdue` — exactly what a quiet night looks like.
+describe('markPastDueOverdue', () => {
+  const { startOfUtcDay } = require('../../modules/finance/fee-status');
+
+  test('ne bascule que les dettes vivantes, impayées, dont la JOURNÉE d\'échéance est passée (§9⑰)', async () => {
+    const now = new Date('2026-06-17T06:00:00.000Z');
+    await repo.markPastDueOverdue(now);
+
+    const [filter, update] = StudentFee.updateMany.mock.calls[0];
+    expect(filter).toEqual({
+      isDeleted: false, // derived from the schema (§5.1)
+      dueDate: { $ne: null, $lt: new Date(startOfUtcDay(now)) },
+      status: { $in: ['pending', 'partial'] },
+      $expr: { $lt: ['$amountPaid', '$amountDue'] },
+    });
+    expect(update).toEqual({ $set: { status: 'overdue' } });
+  });
+
+  test('la borne est minuit du jour de la passe, jamais l\'heure de la passe', async () => {
+    // The bug this closes: with `$lt: now`, a debt due at 00:00 today was
+    // transitioned at 06:00 and became invisible to the 07:00 pre-due sweep,
+    // which reads STORED status. Its `due_today` notice was never sent.
+    const now = new Date('2026-06-17T06:00:00.000Z');
+    await repo.markPastDueOverdue(now);
+
+    const bound = StudentFee.updateMany.mock.calls[0][0].dueDate.$lt;
+    expect(bound.toISOString()).toBe('2026-06-17T00:00:00.000Z');
+    expect(bound.getTime()).toBeLessThan(now.getTime());
+  });
+
+  test('une dette due aujourd\'hui à minuit n\'est pas dans le filtre ; celle d\'hier l\'est', async () => {
+    const now = new Date('2026-06-17T06:00:00.000Z');
+    await repo.markPastDueOverdue(now);
+    const { $lt } = StudentFee.updateMany.mock.calls[0][0].dueDate;
+
+    expect(new Date(Date.UTC(2026, 5, 17)).getTime() < $lt.getTime()).toBe(false); // today
+    expect(new Date(Date.UTC(2026, 5, 16)).getTime() < $lt.getTime()).toBe(true);  // yesterday
+  });
+});
+
+describe('touchReminded', () => {
+  test('estampille la cadence d\'impayé et incrémente son compteur, et rien d\'autre', async () => {
+    const now = new Date('2026-06-17T06:00:00.000Z');
+    await repo.touchReminded('fee-1', now);
+
+    const [filter, update] = StudentFee.updateOne.mock.calls[0];
+    expect(filter).toEqual({ _id: 'fee-1' });
+    expect(update).toEqual({ $set: { lastRemindedAt: now }, $inc: { reminderCount: 1 } });
+    // The other half of §6: the overdue cadence never touches the pre-due marker.
+    expect(JSON.stringify(update)).not.toContain('remindersSent');
   });
 });

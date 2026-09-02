@@ -11,6 +11,8 @@
 
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
 const { notDeletedFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
+// The past-due boundary comes from the rule that owns it — never restated here.
+const { startOfUtcDay } = require('./fee-status');
 
 const Income          = require('./models/income.model');
 const Expense         = require('./models/expense.model');
@@ -240,8 +242,14 @@ const softDeleteFee = (id, extra = {}) =>
 /**
  * Bulk-transitions every past-due unpaid debt (`pending`/`partial`) to `overdue`
  * in a single atomic write — no per-document save, no arbitrary cap, so a spike of
- * newly-overdue debts is never silently dropped. Mirrors `computeStatus` (a past-due
- * debt with a remaining balance is `overdue`).
+ * newly-overdue debts is never silently dropped. Mirrors `computeStatus` (a debt
+ * with a remaining balance is `overdue` once its due DAY is over), and mirrors it
+ * through `startOfUtcDay` rather than by restating the boundary: the two ran on
+ * different definitions once, and the cost was a third of the pre-due cadence
+ * (design note §9⑰).
+ *
+ * The bound is midnight of the run's own day, so a debt due today survives this
+ * sweep and is still `pending` when the 07:00 pre-due sweep looks for it.
  * @param {Date} now
  * @returns {Promise<{ modifiedCount: number }>}
  */
@@ -249,7 +257,7 @@ const markPastDueOverdue = (now) =>
   StudentFee.updateMany(
     {
       ...FEE_LIVE,
-      dueDate: { $ne: null, $lt: now },
+      dueDate: { $ne: null, $lt: new Date(startOfUtcDay(now)) },
       status: { $in: ['pending', 'partial'] },
       $expr: { $lt: ['$amountPaid', '$amountDue'] }, // remaining balance > 0
     },

@@ -395,9 +395,15 @@ built on it — and `require('puppeteer-core')` against v25 throws under CommonJ
 `puppeteer-core` therefore stays on the 24.x line. Clearing it is a runtime migration; see also
 `engines.node` (`20.x`, and Node 20 is past end of life).
 
-**`package.json` carries two `overrides`, both load-bearing** — neither is cosmetic:
+**`package.json` carries three `overrides`, all load-bearing** — none is cosmetic:
 - `uuid: ^11.1.1` — `exceljs` 4.4.0 (latest) pins the vulnerable `uuid@^8`. It calls only `v4`,
   which uuid 11 still exports from its CommonJS build.
+- `browserslist: ^4.28.8` — two high advisories (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g) against
+  `<= 4.28.6`, reached only through `jest → @babel/core → helper-compilation-targets`. Nothing here
+  reads a `browserslist-stats.json`, so neither is exploitable in this deployment — but the fix is a
+  patch release on a **dev**-only path, which is cheaper to take than to write an exception for.
+  An `overrides` entry rather than a devDependency: browserslist is nobody's direct dependency here,
+  and declaring it as one would outlive the advisory.
 - `multer-storage-cloudinary → cloudinary: $cloudinary` — that package is unmaintained and its
   `peerDependencies` still pin `cloudinary@^1.21.0`, the vulnerable line. It touches exactly two
   methods (`uploader.upload_stream`, `uploader.destroy`), both unchanged in v2. **Without this

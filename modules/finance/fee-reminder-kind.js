@@ -42,11 +42,10 @@ const REMINDER_LEAD_DAYS = Object.freeze({
 /** Enum values, for the schema and for validators. */
 const REMINDER_KIND_VALUES = Object.freeze(Object.values(REMINDER_KINDS));
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Midnight UTC of a date — the jobs fire on UTC (`register-jobs.js`), not on host time. */
-const startOfUtcDay = (date) =>
-  Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+// Midnight UTC and the day length come from `fee-status.js`, which owns the
+// past-due boundary. Two definitions of "which day is it" is exactly what let
+// the 06:00 transition and this cadence disagree (design note §9⑰).
+const { startOfUtcDay, DAY_MS } = require('./fee-status');
 
 /**
  * Whole days from `now` to `dueDate`, counted in UTC days rather than in elapsed
