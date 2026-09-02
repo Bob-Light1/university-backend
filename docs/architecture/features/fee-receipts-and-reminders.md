@@ -157,8 +157,10 @@ Reprise du §12.6, amendée : les cases i18n et cron s'appliquent, la case
       par la relance d'impayé ; chacun vu rougir une fois (§9⑫) ;
 - [x] les trois audits passés, chaque constat fermé par un test qui rougissait avant (§9⑬ à ⑮) ;
 - [x] `npm test` (1 546), `lint`, `audit:ci` verts ; `seed:test:self-check` vert 16/16 (la fixture bouge) ;
-- [ ] `docs/cours/check-solutions.sh` — **rouge, 57/67** : la structure a bougé (§9⑯) ;
+- [x] `docs/cours/check-solutions.sh` — **vert, 67/67** depuis le 2026-09-02 (§9⑯ et §9⑰) ;
 - [ ] QA navigateur : deux thèmes, `CAMPUS_MANAGER` + `STUDENT`, les trois états d'entitlement ;
+- [ ] **⚠️ un défaut ouvert, découvert en fermant la garde du cours** : le préavis `due_today`
+      n'est jamais délivré (§9⑰). La cadence vendue en compte trois et en émet deux ;
 - [ ] `CLAUDE.md` §7/§10/§11, `ERP_ROADMAP.md` §0 et la ligne 6 de la phase 1-B, dans le même commit.
 
 ## 9. Ce que la construction a démenti
@@ -387,3 +389,62 @@ substitution mécanique.
 
 **Reste donc, avant de pouvoir déclarer la ligne 6 livrée** : la garde du cours au vert (dépôt
 `docs/cours/`), puis l'étape 10 — la QA navigateur, qui ne se délègue pas.
+
+**2026-09-02 — la garde du cours fermée, et ce qu'elle a fait remonter.**
+
+**⑰ Le préavis « Jour J » n'est jamais délivré.** Fermer la leçon 15.2 imposait de trancher la
+prédiction qu'elle portait (son constat ⑰, écrit *avant* que le code existe) : au lieu de la
+substituer, elle a été **mesurée contre un vrai MongoDB**, en rejouant la cadence entière jour par
+jour avec les deux requêtes réelles.
+
+```
+  jour  statut à 06:00 après markPastDueOverdue   balayage 07:00   type voulu par la règle
+  ────  ─────────────────────────────────────     ──────────────   ──────────────────────
+  J-7   pending                                        1            due_in_7d  → envoyé
+  J-3   pending                                        1            due_in_3d  → envoyé
+  J-0   overdue                                        0            due_today
+```
+
+`markPastDueOverdue` sélectionne `dueDate: { $lt: now }` à 06:00 ; une dette dont l'échéance est
+horodatée à minuit UTC — ce que `<input type="date">` envoie, donc **toute** dette créée par le
+formulaire ERP — est déjà `overdue` quand le balayage de 07:00 la cherche parmi les
+`pending`/`partial`. **Un tiers de la cadence déclarée ne part jamais**, silencieusement : le
+journal écrit `2 reminder(s) sent` et c'est aussi ce à quoi ressemble une nuit normale.
+
+Trois choses à retenir sur *pourquoi personne ne l'a vu* :
+
+- **la fixture ne le voit pas** : son ancre est `2026-06-15T09:00:00Z`, donc la dette « due
+  aujourd'hui » porte une échéance à 09:00 et survit au passage de 06:00. C'est l'horloge de la
+  fixture, pas le code, qui rend le troisième préavis atteignable ;
+- **le test de service ne le voit pas non plus** : il moque le repository, donc il vérifie que le
+  service *demande* une réclamation `DUE_TODAY` sur une dette que la requête ne renverra jamais ;
+- **la note l'avait sous les yeux** : le §9③ notait déjà que le balayage devait reproduire le
+  filtre d'entitlement « dans la requête ». La question voisine — *que reste-t-il dans la requête
+  après le job de 06:00 ?* — n'a pas été posée.
+
+C'est un constat d'étape 7 (audit de la plateforme *avec* la fonctionnalité) arrivé après l'étape 9,
+et il n'est **pas corrigé** : les deux réparations possibles ne coûtent pas la même chose et le
+choix appartient au porteur.
+
+| Branche | Le changement | Ce qu'il coûte |
+|---|---|---|
+| **A — déplacer la bascule à la fin du jour d'échéance** (`dueDate < minuit du jour`) | `computeStatus` + `markPastDueOverdue` | sémantique de statut visible partout : une dette due aujourd'hui s'affiche `pending` et non `overdue`. C'est la réparation que la leçon recommande au constat ⑯, et la seule qui rende l'ordre 06:00 → 07:00 correct |
+| **B — élargir le filtre du balayage au statut `overdue` pour le seul `due_today`** | `findFeesDueSoon` | la même dette reçoit « due aujourd'hui » à 07:00 et sa première relance d'impayé à 06:00, une heure plus tôt |
+| **C — avancer le balayage avant 06:00** | une ligne du manifeste | ne règle rien : la dette bascule quand même à 06:00 et reçoit les deux courriers le même matin |
+
+**⑯ (rappel) La garde était rouge sur onze solutions, pas dix.** Le décompte de l'étape 9 en
+annonçait dix ; `09.1` et `f2.3` échouaient aussi, mais par **temps d'exécution** sous la charge des
+67 exécutions successives, pas par un chiffre faux — les deux passent isolément et sont vertes à la
+reprise. C'est une propriété de la garde (`TIMEOUT_S=30`) qu'il vaut mieux connaître : un échec de
+la garde n'est pas toujours un chiffre qui a bougé.
+
+Correction faite depuis `docs/cours/` (§11bis), version **2.17.1** : huit lignes de chiffres
+substituées, et quatre passages réécrits parce que le code avait *décidé* quelque chose —
+15.2 §6.4 (la prédiction tranchée), §8.4 (la cadence rejouée), le constat ㉑ (fermé par le fait que
+le code a été écrit, pas relu) et le constat ㉒ (à moitié fermé : les deux *écritures* nocturnes ne
+sont toujours épinglées par rien). `09.4` garde son décompte de sept jobs, daté, avec une note qui
+place le huitième dans sa taxonomie — le cas d'arbitrage éditorial que l'étape 9 avait signalé.
+
+Côté backend, trois commentaires devenus faux ont été corrigés dans le même passage :
+`document.retention.cron.js` (« all seven background jobs »), `entitlement.jobs.js` (« two of the
+seven ») et l'en-tête de `entitlement.jobs.test.js`.

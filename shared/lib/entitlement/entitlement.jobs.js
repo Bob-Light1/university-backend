@@ -14,7 +14,7 @@
  * prevent, and it is the one the client notices.
  *
  * ── THE RULE: SILENCE THE EMISSION, NEVER THE HYGIENE ───────────────────────
- * "Module off ⇒ job off" is wrong, and dangerously so for two of the seven.
+ * "Module off ⇒ job off" is wrong, and dangerously so for two of the eight.
  * `document-retention` answers a legal duty (stopping it keeps personal data
  * past its lawful period — a silent compliance breach); `print-queue-sweep`
  * drains in-flight jobs (stopping it hangs them forever). Each cron therefore

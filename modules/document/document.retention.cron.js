@@ -9,7 +9,7 @@
  *
  * ADMIN users are notified of all retention-triggered deletions via the event system.
  *
- * Schedule: every Sunday at 02:00 UTC. Registered — like all seven background
+ * Schedule: every Sunday at 02:00 UTC. Registered — like all eight background
  * jobs — by `shared/lib/register-jobs.js`, which owns the schedule, the timezone
  * and the per-job failure guard. Do not call `cron.schedule` from here.
  */

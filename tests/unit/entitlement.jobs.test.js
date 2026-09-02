@@ -4,7 +4,7 @@
  * Phase 5 — "the edges" (`docs/architecture/CAMPUS_ENTITLEMENT_DESIGN.md` §9).
  *
  * The gate on the HTTP surface is pinned by `tests/integration/entitlement.test.js`.
- * What this suite pins is everything that happens WITHOUT a request: the seven
+ * What this suite pins is everything that happens WITHOUT a request: the eight
  * crons, the notification foundation, the public portal and the quotas. Those
  * are the sites where a mistake is silent — a cron has no user watching it, and
  * "no email was sent" is the one failure nobody reports.
