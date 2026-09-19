@@ -1,50 +1,61 @@
 # Current task and handoff
 
 Last updated: 2026-09-19.
-Status: COMPLETED — backend-only branding CI fix; targeted validation passed.
+Status: COMPLETED — dependency audit remediation and validation.
 Branch observed: `feat/fee-receipts-and-reminders`.
 
 ## Objective and changes
 
-Fix the GitHub CI failure caused by `tests/unit/product-brand.test.js` loading
-`../frontend/src/config/brand.js`, which is absent from a backend-only checkout.
-Removed the filesystem/VM loader and the frontend-specific assertion. The suite
-now tests the real backend brand configuration, including blank/unset product
-names and whitespace-only establishment overrides, and retains the real XLSX test.
-No resolver was copied into the tests, no production behavior changed, and no
-second repository checkout or token was added to the workflow.
+Fix the next GitHub CI failure, now in the security audit after the branding tests
+passed. The initial audit reproduced seven blocking root advisories, not only sharp.
 
-Affected files:
-- `tests/unit/product-brand.test.js`: backend-owned behavior only.
-- `docs/architecture/features/product-home-and-branding.md`: clarify that frontend
-  URL validation is no longer covered by this backend unit suite.
-- `docs/current_task.md`: current objective and verification evidence.
+- `package.json` / `package-lock.json`: sharp 0.35.3 → 0.35.4 (libheif 1.23.2),
+  nodemailer 9.0.5 → 9.1.1, transitive js-yaml 3.15.1 → 3.15.2 and 4.3.1 → 4.3.2.
+  Existing overrides and dependency major versions are preserved.
+- `scripts/audit-gate.js`: retain the original extract-zip exception unchanged and
+  add a separate exact-ID exception for GHSA-7pqw-9j4j-h8q3, which has no patched
+  release. The installed Puppeteer archive extractor is only called by its browser
+  installer; both backend PDF services launch an explicit existing binary. No
+  backend script or workflow invokes that downloader. Removal conditions are recorded.
+- `tests/unit/audit-gate.test.js`: verify both named exceptions, rejection of sharp
+  and unknown extract-zip advisories, and removal of stale exceptions.
+- `CLAUDE.md` §8.1: update the count and rationale of named exceptions.
+- `docs/architecture/features/product-home-and-branding.md`: record the resolved
+  audit gate while preserving the remaining frontend lint release debt.
 
 ## Verification
 
-Exported tracked HEAD into `/tmp/backend-brand-ci-check`, without a sibling
-frontend; only installed backend dependencies are linked from the working tree.
-The original targeted suite reproduced the exact ENOENT for
-`/tmp/frontend/src/config/brand.js` (one failure, two passes).
-Copied the corrected test into that isolated checkout: all six targeted tests
-passed without a frontend checkout.
-Backend lint passed with zero errors and 42 existing warnings.
-The sandbox blocked a full-suite HTTP listener with EPERM. The full-suite retry
-outside the sandbox was manually interrupted after about ten minutes without a
-summary (exit 130); the full suite is not claimed as passing. Targeted validation
-completed independently. Whitespace, tracked-file and handoff-link checks passed.
+- Initial `npm run audit:ci`: reproduced seven unaccepted root advisories.
+- Updated `npm run audit:ci`: PASS, zero unaccepted advisories, two named exceptions.
+  Raw totals remain 0 critical, 3 high, 5 moderate; this is not a zero-findings audit.
+- Backend lint: zero errors, 42 existing warnings.
+- Real runtime checks: passed PNG/JPEG uploads through GED storage, with 3200×1600
+  images actually resized to 3000×1500 (detecting silent optimizer fallback), and
+  Nodemailer MIME generation with a synthetic attachment using an offline transport.
+- Isolated `npm ci --no-audit --no-fund`: PASS, 774 packages installed from the
+  corrected lockfile in `/tmp/backend-security-clean-ci`.
+- `npm ls sharp nodemailer js-yaml extract-zip --all`: PASS, resolved versions
+  match the intended updates.
+- Full Jest suite: PASS, 74 suites / 1579 tests, including five new audit-gate
+  regression checks (296.852 seconds).
+- Clean-install native versions: sharp 0.35.4, libheif 1.23.2, nodemailer 9.1.1.
+- Final diff whitespace and local documentation references: PASS. The new test
+  is visible as an untracked file and must be included in the eventual commit.
 
-## Preserved release gates and scope
+Logs and temporary checks are in `/tmp/backend-security-*`. Initial direct JSON
+registry requests failed (DNS in the sandbox and a separate endpoint error outside);
+the final audit gate fetched and evaluated a valid report successfully.
 
-The working tree was clean at the start. No frontend, portal, AI, dependency,
-workflow or production-code changes were needed. No commit or push was made.
-The existing dependency-audit and frontend-lint release gates remain documented in
-[the branding design](architecture/features/product-home-and-branding.md#remaining-release-gates);
-they were not retested or remediated here. No CH-* item or product phase changed.
+## Scope and remaining work
+
+The working tree was clean at the start. No product/API contract, frontend, portal,
+AI service or runtime major-version migration was changed. No commit or push made.
+The earlier backend-only branding test repair is already in HEAD; the user reports
+GitHub tests passed. Existing frontend lint debt remains in the branding design.
 
 ## Next action
 
-The patch is ready for review and commit; GitHub CI has not been rerun remotely.
-A complete-suite result remains unverified locally. Frontend resolver coverage
-belongs in the frontend repository; introducing its test infrastructure is outside
-this targeted backend CI repair.
+Changes are ready for review and commit, including both package manifests and the
+new regression test. No commit or push was requested or performed. GitHub CI has
+not been rerun remotely. The two accepted extract-zip advisories and remaining
+moderate findings are not fixed; their tracking and removal conditions remain.

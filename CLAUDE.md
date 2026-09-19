@@ -398,12 +398,19 @@ high or critical — *and* on an accepted entry that has stopped being reported,
 cannot outlive its reason unnoticed. Adding an exception means writing `reason` and `removeWhen`
 next to it; accept only what the deployment provably cannot reach.
 
-One entry stands today: **GHSA-jmr9-qjv8-65gv** (`extract-zip`), reachable only from the browser
+Two named entries stand today: **GHSA-jmr9-qjv8-65gv** and **GHSA-7pqw-9j4j-h8q3**
+(`extract-zip`), reachable only from the browser
 *download* path this backend never runs. It is unfixable in place: upstream removed the dependency in
 `@puppeteer/browsers` 3.x, which is ESM-only and needs Node ≥ 22.12, as is every `puppeteer-core`
 built on it — and `require('puppeteer-core')` against v25 throws under CommonJS and under Jest.
 `puppeteer-core` therefore stays on the 24.x line. Clearing it is a runtime migration; see also
 `engines.node` (`20.x`, and Node 20 is past end of life).
+
+The second advisory has no patched `extract-zip` release as of 2026-09-19. Its
+reachability was rechecked against both PDF services and the installed browser
+installer. Keep both exceptions keyed by their exact GHSA IDs; a new advisory
+still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
+`tests/unit/audit-gate.test.js` verifies unknown findings and stale exceptions fail.
 
 **`package.json` carries three `overrides`, all load-bearing** — none is cosmetic:
 - `uuid: ^11.1.1` — `exceljs` 4.4.0 (latest) pins the vulnerable `uuid@^8`. It calls only `v4`,

@@ -114,17 +114,20 @@ counted as final successes.
 
 ### Remaining release gates
 
-`npm run audit:ci` reports 0 critical, 6 high and 5 moderate dependency findings,
-with seven unaccepted advisories: extract-zip `GHSA-7pqw-9j4j-h8q3`, js-yaml
-`GHSA-2883-xcg3-v3hh`, nodemailer `GHSA-8m3c-c648-2xjj`, `GHSA-wmmp-3585-3rmp`,
-`GHSA-2x7j-588g-ccc2`, `GHSA-cc9r-2j5m-2m83`, and sharp `GHSA-rgj7-g3m4-5g8c`.
-The existing exception is not broadened. This feature did not introduce these
-packages, and a successful UI review does not waive the dependency gate.
+The dependency follow-up on 2026-09-19 passes `npm run audit:ci` after upgrading
+sharp to 0.35.4 (libheif 1.23.2), nodemailer to 9.1.1 and both js-yaml branches to
+3.15.2 / 4.3.2. The lockfile includes the fixes used by `npm ci`.
+The original extract-zip exception remains unchanged. The separate
+[GHSA-7pqw-9j4j-h8q3](https://github.com/advisories/GHSA-7pqw-9j4j-h8q3)
+exception records the verified unused browser-download path and its removal
+conditions in `scripts/audit-gate.js`. No sharp exception was added.
+The audit still reports 3 high and 5 moderate package findings, with zero critical
+and zero unaccepted blocking advisories; passing the gate does not mean zero risk.
 
 The nine existing ERP lint errors occur in AdminDashboard, the older admin Navbar,
 AppNavBar, LoginPage, DirectorDashboard and main.jsx. Their baseline comparison
-prevents attributing them to this change, but they remain release debt. These two
-gates prevent declaring the entire CLAUDE.md definition of done satisfied.
+prevents attributing them to this change, but they remain release debt. This remaining
+gate prevents declaring the entire CLAUDE.md definition of done satisfied.
 
 ## Deployment configuration
 
