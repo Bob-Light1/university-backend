@@ -37,6 +37,7 @@ Remotes: `Bob-Light1/university-backend` · `university-frontend` · `university
 
 ## 0. Language & comments — MANDATORY
 
+- **Code and documentation must be written in English** (owner instruction, 2026-09-18; see [AGENTS.md](AGENTS.md)). This supersedes older French-prose allowances in project guides. Product translations stay in their target locales; conversational replies follow the user's language.
 - **All comments, JSDoc, log messages, and identifiers in code and files MUST be written in English**, following professional conventions (clear, concise, no redundant narration of obvious code).
 - JSDoc per file (`@file` / `@description`) and per public function/route.
 - This applies to every new and edited file — no French in code artifacts.
@@ -445,6 +446,15 @@ those four against real inputs, not against the suite.
 
 ---
 
+## Deployment product presentation
+
+The ERP product home is separate from applicant intake. Configuration and verification
+are documented in [product-home-and-branding.md](docs/architecture/features/product-home-and-branding.md).
+`shared/configs/brand.config.js` resolves `PRODUCT_BRAND_NAME` (default Wewigo) for
+software metadata and preserves `BRAND_NAME` / `NEXT_PUBLIC_BRAND_NAME` for existing
+institutional notifications. Sender addresses remain explicit configuration.
+No API, persistence, scope or entitlement contract is added by this presentation work.
+
 ## 10. Special modules
 
 **GAET** (`/api/gaet`) — Automatic Timetable Generation. `GaetConstraint` with 7-state machine (`DRAFT → GENERATING → GENERATED → PUBLISHED → …`); CPU-bound worker on an isolated thread; conflict service; zombie recovery at boot (`GENERATING` > 15 min → `FAILED`).
@@ -592,9 +602,10 @@ Two rules govern the sequence and explain why it cannot be rearranged:
 ### 12.1 Phase A — Design
 
 **Step 1 — The design note.** A feature starts with a document, never with a file. It lives in
-**`docs/architecture/features/<slug>.md`** — and nowhere else: `.gitignore:7` ignores `docs/*`
-with `docs/architecture/` as the only exception, so a `docs/features/` would be tracked by
-nobody. One page is enough; fixed template:
+**`docs/architecture/features/<slug>.md`** — and nowhere else: `.gitignore` ignores `docs/*`
+except `docs/architecture/` and the three context documents (`context.md`, `current_task.md`,
+`project_resume.md`), so a `docs/features/` would still be tracked by nobody. Context documents
+do not replace feature notes. One page is enough; fixed template:
 
 | Section | What it freezes |
 |---|---|
@@ -608,8 +619,8 @@ nobody. One page is enough; fixed template:
 | Definition of done | §12.6, copied in and amended if needed |
 
 A full `docs/architecture/<NAME>.md` — in the format of the eight existing ones — only for a
-**work item of its own**: several phases, a new invariant, or ≥ 2 bricks restructured. Prose in
-French, every code artifact in English (§0).
+**work item of its own**: several phases, a new invariant, or ≥ 2 bricks restructured. Prose and
+code artifacts in English (§0).
 
 **Filling the template means reading this map, and the map can be wrong. When the code
 contradicts it, the map is corrected first — in its own commit, before the note is finished.**

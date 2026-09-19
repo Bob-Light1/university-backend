@@ -19,6 +19,8 @@
  */
 
 const repo = require('./public-portal.repository');
+const { getPortalBrandName } = require('../../shared/configs/brand.config');
+const { escapeHtml } = require('../../shared/utils/html');
 
 // ── Lazy-load integrations (no crash when packages are absent) ────────────────
 
@@ -40,7 +42,7 @@ try {
 // ── Client factories (created once, reused across calls) ─────────────────────
 
 function getResendClient() {
-  if (!Resend || !process.env.RESEND_API_KEY) return null;
+  if (!Resend || !process.env.RESEND_API_KEY || !process.env.RESEND_FROM_EMAIL) return null;
   return new Resend(process.env.RESEND_API_KEY);
 }
 
@@ -74,7 +76,7 @@ async function sendWinnerEmail({ toEmail, firstName, rank, brandName, period, pr
     return false;
   }
 
-  const fromEmail = process.env.RESEND_FROM_EMAIL || `notifications@${brandName?.toLowerCase().replace(/\s+/g, '')}.com`;
+  const fromEmail = process.env.RESEND_FROM_EMAIL;
 
   const subject = lang === 'en'
     ? `🏆 Congratulations, ${firstName}! You won the ${period} quiz — ${brandName}`
@@ -82,18 +84,18 @@ async function sendWinnerEmail({ toEmail, firstName, rank, brandName, period, pr
 
   const html = lang === 'en'
     ? `
-    <h2>Congratulations, ${firstName}!</h2>
-    <p>You finished <strong>${rank}</strong> in the monthly <strong>${brandName}</strong> quiz for ${period}.</p>
-    ${prizeDescription ? `<p>Your reward: <strong>${prizeDescription}</strong></p>` : ''}
+    <h2>Congratulations, ${escapeHtml(firstName)}!</h2>
+    <p>You finished <strong>${escapeHtml(rank)}</strong> in the monthly <strong>${escapeHtml(brandName)}</strong> quiz for ${escapeHtml(period)}.</p>
+    ${prizeDescription ? `<p>Your reward: <strong>${escapeHtml(prizeDescription)}</strong></p>` : ''}
     <p>Our team will contact you shortly to hand over your prize.</p>
-    <p>Keep it up!<br><em>The ${brandName} team</em></p>
+    <p>Keep it up!<br><em>The ${escapeHtml(brandName)} team</em></p>
   `
     : `
-    <h2>Félicitations, ${firstName} !</h2>
-    <p>Vous avez terminé <strong>${rank}</strong> au quiz mensuel de <strong>${brandName}</strong> pour la période ${period}.</p>
-    ${prizeDescription ? `<p>Votre récompense : <strong>${prizeDescription}</strong></p>` : ''}
+    <h2>Félicitations, ${escapeHtml(firstName)} !</h2>
+    <p>Vous avez terminé <strong>${escapeHtml(rank)}</strong> au quiz mensuel de <strong>${escapeHtml(brandName)}</strong> pour la période ${escapeHtml(period)}.</p>
+    ${prizeDescription ? `<p>Votre récompense : <strong>${escapeHtml(prizeDescription)}</strong></p>` : ''}
     <p>Notre équipe vous contactera prochainement pour vous remettre votre prix.</p>
-    <p>Bonne continuation !<br><em>L'équipe ${brandName}</em></p>
+    <p>Bonne continuation !<br><em>L'équipe ${escapeHtml(brandName)}</em></p>
   `;
 
   try {
@@ -164,7 +166,7 @@ function rankLabel(rank, lang = 'fr') {
  * @param {string} [brandName]
  * @returns {Promise<{ notified: number, skipped: number }>}
  */
-async function notifyWinners(competition, brandName = 'AcadERP') {
+async function notifyWinners(competition, brandName = getPortalBrandName()) {
   // Winner contact details via the partner facade (the PartnerLead model
   // belongs to the partner module).
   const { getLeadContact } = require('../partner').service;

@@ -1,3 +1,8 @@
+/**
+ * @file export.service.js
+ * @description Scoped CSV/Excel exports with deployment product metadata.
+ */
+const { getProductName } = require('../configs/brand.config');
 const ExcelJS = require('exceljs');
 const { buildCampusFilter, escapeRegex } = require('../utils/validation-helpers');
 const { csvField } = require('../utils/csv');
@@ -224,7 +229,7 @@ class ExportService {
 
       // Create workbook
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'wewigo';
+      workbook.creator = getProductName();
       workbook.created = new Date();
 
       const worksheet = workbook.addWorksheet(this.entityConfig.name + 's', {

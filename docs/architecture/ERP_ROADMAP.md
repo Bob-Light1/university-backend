@@ -138,6 +138,15 @@ bug de ce projet capable de coûter le produit entier.
 
 ---
 
+### Approved presentation work — 2026-09-18
+
+`IMPLEMENTED — RELEASE GATES BLOCKED`: [Product home and deployment branding](features/product-home-and-branding.md).
+Owner-approved presentation/configuration work across B1/B2/B4; B3 reviewed with no
+commercial brand surface. Existing dependency advisories and legacy ERP lint errors
+remain open; see the feature note for evidence. This does not reorder phases or
+close a QA work item. ERP now has 19 namespaces across its existing 10 locales; the
+portal retains its existing 8 locales. Locale-reconciliation work remains open.
+
 ## §1 — Ce que la v3 change
 
 Quatre déplacements séparent ce document de `ERP_2026_v2.pdf`. Aucun n'est
@@ -332,6 +341,12 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | 13 | Portail public — intégration continue et socle de test | `B4` | Application Next.js 15 livrée : 3 989 lignes, 8 locales, tunnel de préinscription, anti-fraude, liens courts, agent de service et manifeste | **Aucun test et aucune chaîne d'intégration** — seule brique dans ce cas, et **seule brique exposée à un public non authentifié**. Vitest et un socle minimal sur le tunnel et l'anti-fraude, plus un `ci.yml` aligné sur les trois autres. Sans quoi B4 n'est couvert qu'à la phase 3, par CH-4 | 2–3 j | `À FAIRE` |
 | 14 | GED — l'expiration TTL contourne la danger zone | `B1` | Suppression définitive harmonisée (`shared/lib/hard-delete/`) ; teardown complet du GED dans `document.service.hardDeleteDocument` — fichier importé, instantané PDF, QR, instantanés de **chaque** version, liens de partage, ré-ingestion ai-service | `document.model.js` déclare `index({ expiresAt: 1 }, { expireAfterSeconds: 0 })`. **Aucun code n'écrit ce champ aujourd'hui : le piège est armé, pas déclenché.** Le jour où il l'est, Mongo retire la ligne **hors** du seul chemin de suppression autorisé (§5.2 de `CLAUDE.md`) : rien ne nettoie les fichiers, rien ne purge les liens de partage, rien ne ré-ingère côté IA, et **aucune ligne n'arrive au registre de suppression**. Soit le champ est retiré, soit son expiration passe par le service | 1–2 j | `À FAIRE` |
 | 15 | Quotas dérivés du palier | `B1·B2` | `Campus.quotas` réellement appliqué par `canAddStudent` / `canAddTeacher` / `canAddClass` / `canAddDocumentStorage` | **La grille du §10 vend au-dessus de ce que le code applique** : elle facture « par campus de **2 000 élèves** » et « hébergement **≤ 20 Go** » quand `DEFAULT_QUOTAS` vaut **1 000 élèves et 5 Go** — le 1 001ᵉ élève et le 5,1ᵉ Go sont refusés à un client qui a payé pour le double et le quadruple. Les quotas sont aujourd'hui une dérogation par campus, jamais une propriété du palier : les dériver de `PLAN_PRESETS`, ou aligner la grille (D-R10) | 1–2 j | `À FAIRE` |
+
+Presentation follow-up (2026-09-18): the owner approved the
+[product home and deployment branding](features/product-home-and-branding.md)
+refinement is implemented (90/90 browser checks, 73 backend suites passed). Release
+validation remains blocked by existing dependency advisories and legacy ERP lint
+errors; see the feature note. Existing phase work and estimates are unchanged.
 
 **Total Phase 1-B : 30–44 j** — *la v3 annonçait 26–37 j ; l'audit de la v4 a
 ajouté trois lignes (13 à 15) et élargi la ligne 11 (32–47 j) ; la **ligne 6 est
