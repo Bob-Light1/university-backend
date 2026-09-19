@@ -52,6 +52,21 @@ const ACCEPTED = Object.freeze([
       'a module` on Node 20 and under Jest (measured: 7 suites red). A runtime migration, ' +
       'not a version bump.',
   },
+  {
+    ghsa: 'GHSA-7pqw-9j4j-h8q3',
+    module: 'extract-zip',
+    reason:
+      'Unreachable browser-download path, rechecked on 2026-09-19. ' +
+      'The only extract-zip caller is unpackArchive() in @puppeteer/browsers, ' +
+      'called by its installer. Both backend PDF services supply executablePath ' +
+      'from PUPPETEER_EXECUTABLE_PATH or @sparticuz/chromium; no application, ' +
+      'script or workflow downloads a browser or passes uploaded ZIP files to it. ' +
+      'This distinct symlink-entry advisory has no patched extract-zip release.',
+    removeWhen:
+      'A patched extract-zip release becomes available, the dependency is removed ' +
+      'during the Puppeteer/runtime migration, or any browser-download/archive ' +
+      'extraction path becomes reachable in this deployment. Reassess before enabling it.',
+  },
 ]);
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

@@ -87,7 +87,7 @@ const closeCompetition = async (competitionId) => {
   const mayEmit = await require('../../shared/lib/entitlement').jobs
     .isEmissionAllowed(competition.schoolCampus, 'public-portal');
 
-  const brandName = process.env.BRAND_NAME || process.env.NEXT_PUBLIC_BRAND_NAME || 'AcadERP';
+  const brandName = require('../../shared/configs/brand.config').getPortalBrandName();
   const { notified } = mayEmit
     ? await notifyWinners(competition, brandName)
     : { notified: 0 };

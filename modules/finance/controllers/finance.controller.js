@@ -166,6 +166,41 @@ const getStudentLedger = asyncHandler(async (req, res) => {
   return sendSuccess(res, 200, 'Student ledger', ledger);
 });
 
+/**
+ * Streams the PDF receipt of one payment.
+ *
+ * ACCESS — two conditions, composed rather than chosen between:
+ *   - the campus filter, for every role (a manager of campus A never reads a
+ *     receipt of campus B);
+ *   - AND, when the caller is the student, their own id — the platform's only
+ *     other self-service finance route (`/my/ledger`) reads the same way, and
+ *     campus alone would let a student download a classmate's receipt.
+ *
+ * A payment that exists but is out of scope answers 404, never 403: a 403 would
+ * confirm the payment id exists, which is exactly what a probe is looking for.
+ *
+ * @route  GET /api/finance/payments/:id/receipt
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER | STUDENT (own payments)
+ */
+const getPaymentReceipt = asyncHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid payment id');
+  const scope = scopeFor(req, res);
+  if (scope === null) return undefined;
+
+  if (req.user.role === 'STUDENT') scope.student = req.user.id;
+
+  const receipt = await service.getPaymentReceipt(req.params.id, scope);
+  if (!receipt) return sendNotFound(res, 'Payment');
+
+  // A PDF stream, not the { success, data } envelope: the response body IS the
+  // document (§4 covers JSON responses, and a base64 payload would double the
+  // size of every receipt for no reader).
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${receipt.fileName}"`);
+  res.setHeader('Content-Length', receipt.buffer.length);
+  return res.end(receipt.buffer);
+});
+
 // ── Financial summary (income vs expense) ─────────────────────────────────────
 
 const getSummary = asyncHandler(async (req, res) => {
@@ -225,6 +260,7 @@ module.exports = {
   recordPayment,
   remindBalance,
   deleteFee,
+  getPaymentReceipt,
   getStudentLedger,
   getMyLedger,
   getSummary,

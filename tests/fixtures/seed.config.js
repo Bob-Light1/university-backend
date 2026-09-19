@@ -81,6 +81,7 @@ const COUNTS = Object.freeze({
     studentFees: 12,
     studentFeesDeleted: 2,
     studentFeesOverdue: 3,
+    studentFeesDueSoon: 3,   // one per pre-due kind: J-7, J-3, due day
     feePayments: 3,
     examSessions: 2,
     examEnrollments: 4,     // the roster of class A1, one full cycle
@@ -123,6 +124,7 @@ const COUNTS = Object.freeze({
     studentFees: 8,
     studentFeesDeleted: 0,
     studentFeesOverdue: 1,
+    studentFeesDueSoon: 0,   // the pre-due cadence is materialized on campus A only
     feePayments: 2,
     examSessions: 1,
     examEnrollments: 4,

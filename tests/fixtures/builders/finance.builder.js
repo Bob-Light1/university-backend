@@ -17,6 +17,7 @@
 const { oid, pad, stamps } = require('../ids');
 const { COUNTS, CAMPUS_KEYS, ACADEMIC_YEAR, ANCHOR_DATE } = require('../seed.config');
 const { computeStatus } = require('../../../modules/finance/fee-status');
+const { REMINDER_KIND_VALUES, REMINDER_LEAD_DAYS } = require('../../../modules/finance/fee-reminder-kind');
 
 const INCOME_SOURCES = ['Tuition', 'Enrollment Fees', 'Exam', 'Donation'];
 const PAYMENT_METHODS = ['Cash', 'Mobile Money', 'Bank Transfer', 'Cheque'];
@@ -113,8 +114,37 @@ const buildExpenses = (campusKey, ctx) => {
 };
 
 /**
+ * Lead times of the pre-due cadence, longest first — taken from the rule module
+ * rather than restated, so a fourth kind added there lands in the fixture by
+ * widening `studentFeesDueSoon` and nothing else.
+ */
+const PRE_DUE_LEADS = REMINDER_KIND_VALUES.map((kind) => REMINDER_LEAD_DAYS[kind]);
+
+/**
+ * Midnight UTC, `leadDays` days after the anchor — what `<input type="date">`
+ * sends, and therefore what every fee created through the ERP form carries.
+ *
+ * `ctx.at()` inherits the anchor's 09:00, and that hour was hiding a live defect:
+ * the pre-due debt survived a 06:00 past-due pass because of it, so the fixture
+ * reported a cadence that production could not deliver (design note §9⑰). The
+ * transition is day-based now, and this makes the fixture stop being lucky.
+ */
+const dueAtMidnight = (ctx, leadDays) => {
+  const d = ctx.at(leadDays);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+};
+
+/**
  * Student debts. The first `studentFeesOverdue` of each campus are past due with a
- * balance left — that is what the nightly reminder cron looks for.
+ * balance left — that is what the nightly reminder cron looks for. The
+ * `studentFeesDueSoon` that follow are anchored ON the pre-due cadence (J-7, J-3,
+ * due day), which is what makes that sweep testable against something: with every
+ * other debt 30+ days out, the 07:00 job would sweep an empty window and report a
+ * zero that reads as a figure rather than as an untested path.
+ *
+ * They carry a balance by construction — a settled debt is not remindable — and
+ * they deliberately mix `pending` and `partial`, the two statuses the sweep
+ * selects on.
  *
  * @param {string} campusKey
  * @param {Object} ctx
@@ -131,14 +161,20 @@ const buildStudentFees = (campusKey, ctx) => {
     const student = students[i % students.length];
     const deleted = i + 1 > counts.studentFees - counts.studentFeesDeleted;
     const overdue = i < counts.studentFeesOverdue;
-    const paidInFull = !overdue && i % 3 === 0;
-    const partiallyPaid = !overdue && i % 3 === 1;
+    // Index within the pre-due block, or -1 outside it.
+    const preDueIndex = overdue ? -1 : i - counts.studentFeesOverdue;
+    const dueSoon = preDueIndex >= 0 && preDueIndex < counts.studentFeesDueSoon;
+    const paidInFull = !overdue && !dueSoon && i % 3 === 0;
+    const partiallyPaid = !overdue && !dueSoon && i % 3 === 1;
 
     const amountDue = 150000;
     let amountPaid = 0;
     if (paidInFull) amountPaid = amountDue;
     if (partiallyPaid) amountPaid = 50000;
     if (overdue) amountPaid = i === 0 ? 0 : 25000;
+    // A balance is what makes a debt remindable; the middle one is partial so
+    // the sweep's `status $in [pending, partial]` is exercised on both values.
+    if (dueSoon) amountPaid = preDueIndex === 1 ? 50000 : 0;
 
     const fee = {
       _id: oid(`student-fee:${campusKey}:${n}`),
@@ -149,7 +185,15 @@ const buildStudentFees = (campusKey, ctx) => {
       amountDue,
       amountPaid,
       currency: 'XAF',
-      dueDate: overdue ? ctx.at(-45 - i) : ctx.at(30 + i),
+      dueDate: overdue
+        ? ctx.at(-45 - i)
+        : dueSoon
+          // Wraps rather than running off the table: asking for more pre-due
+          // debts than there are kinds is a config drift, and it must surface as
+          // the verifier's "one debt per kind" failure — not as a cast error on
+          // an undefined lead time.
+          ? dueAtMidnight(ctx, PRE_DUE_LEADS[preDueIndex % PRE_DUE_LEADS.length])
+          : ctx.at(30 + i),
       createdBy: ctx.adminIds.ADMIN,
       ...stamps(150 - i * 5),
       ...(deleted ? ctx.softDelete('StudentFee', ctx.at(-9)) : { isDeleted: false }),

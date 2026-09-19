@@ -8,6 +8,9 @@
 const mongoose     = require('mongoose');
 const financeRepo  = require('./finance.repository');
 const { computeStatus } = require('./fee-status');
+const { dueReminderKind, preDueWindow } = require('./fee-reminder-kind');
+const { buildReceiptHtml, receiptNumberOf } = require('./fee-receipt.template');
+const { localeContext } = require('../../shared/i18n');
 const notification = require('../notification').service;
 
 /**
@@ -34,19 +37,46 @@ function countOutstandingFees(campusId) {
 // ── Student payment tracking ──────────────────────────────────────────────────
 
 /**
- * Notifies the student (in-app + email) of an outstanding balance. Fire-and-forget: a
- * send failure must never block the accounting operation (same contract as
- * the other emitters). Contact (email) and language resolved via the
- * student/settings facades — finance never queries their models (facade §3).
- * @param {Object} fee  debt (lean, with virtual `balance`)
+ * `fee.student` may be a raw ObjectId (create/payment paths) or a populated
+ * object (detail/reminder/receipt reads). Resolves the bare id either way, so
+ * the facades and the notification recipient always receive a plain id.
  */
-async function notifyBalanceDue(fee) {
+const studentIdOf = (fee) => fee.student?._id ?? fee.student;
+
+/**
+ * The due date as a reminder prints it: long form, in the recipient's language,
+ * or an em dash when the debt carries none.
+ * @param {Date|string|null} dueDate
+ * @param {string} locale
+ * @returns {string}
+ */
+function formatDueDate(dueDate, locale) {
+  if (!dueDate) return '—';
+  const date = new Date(dueDate);
+  if (Number.isNaN(date.getTime())) return '—';
+  const { dateLocale } = localeContext(locale);
+  return date.toLocaleDateString(dateLocale, { year: 'numeric', month: 'long', day: 'numeric' });
+}
+
+/**
+ * Sends one balance notice to the student (in-app + email). Fire-and-forget: a
+ * send failure must never block the accounting operation (same contract as the
+ * other emitters). Contact (email) and language resolved via the
+ * student/settings facades — finance never queries their models (facade §3).
+ *
+ * Shared by the two cadences deliberately: the overdue dunning notice and the
+ * three pre-due notices differ by their TEMPLATE and by nothing else — same
+ * recipient, same channels, same variables. Keeping one emitter is what
+ * guarantees a pre-due reminder reaches a student's inbox under exactly the
+ * conditions an overdue one does, entitlement gate included.
+ *
+ * @param {Object} fee       debt (lean, with virtual `balance`)
+ * @param {string} template  notification template key
+ */
+async function notifyFeeBalance(fee, template) {
   const balance = fee.balance ?? Math.max(0, (fee.amountDue || 0) - (fee.amountPaid || 0));
   if (balance <= 0) return;
-  // `fee.student` may be a raw ObjectId (create/payment paths) or a populated
-  // object (detail/reminder reads). Resolve the bare id either way so the
-  // facades and the notification recipient always receive a plain id.
-  const studentId = fee.student?._id ?? fee.student;
+  const studentId = studentIdOf(fee);
   try {
     // Contact + language via the facades (finance does not touch the Student model;
     // language from UserPreferences, single source).
@@ -60,18 +90,43 @@ async function notifyBalanceDue(fee) {
         email: contact?.email, prefs: contact?.notificationPrefs,
       },
       channels: ['inapp', 'email'], // email inert without SMTP → skipped
-      template: 'payment.reminder',
+      template,
       locale,
       data: {
+        // `{name}` is spelled out by every email body of the catalog. Passing it
+        // is not decoration: `interpolate` renders a missing variable as an
+        // empty string, so its absence reads as "Hello ," rather than as a bug.
+        name: contact?.firstName || '',
         amount: balance,
         currency: fee.currency,
-        dueDate: fee.dueDate ? new Date(fee.dueDate).toISOString().slice(0, 10) : '—',
+        // Written in the recipient's own language, from the same table the fee
+        // receipt uses (`localeContext`): a student reading the reminder and the
+        // receipt of one debt must not see that day written two ways.
+        dueDate: formatDueDate(fee.dueDate, locale),
       },
     });
   } catch (err) {
-    console.error('[notify] payment.reminder failed:', err.message);
+    console.error(`[notify] ${template} failed:`, err.message);
   }
 }
+
+/**
+ * Notifies the student of an outstanding balance (overdue cadence + every
+ * manual and creation-time notice).
+ * @param {Object} fee  debt (lean, with virtual `balance`)
+ */
+const notifyBalanceDue = (fee) => notifyFeeBalance(fee, 'payment.reminder');
+
+/**
+ * Notifies the student that a debt is about to fall due. The template is derived
+ * from the cadence kind (`payment.due_in_7d` …), never spelled out at the call
+ * site: `fee-reminder-kind.js` owns the list, and a kind added there without its
+ * catalog entry is caught by the notification coverage suite rather than sent
+ * blank.
+ * @param {Object} fee   debt (lean, with virtual `balance`)
+ * @param {string} kind  one of REMINDER_KINDS
+ */
+const notifyDueSoon = (fee, kind) => notifyFeeBalance(fee, `payment.${kind}`);
 
 /**
  * Creates a debt for a student and informs them of the amount due (in-app).
@@ -256,6 +311,55 @@ async function getFeeWithPayments(feeId, scope = {}) {
   return { fee, payments };
 }
 
+/**
+ * Renders the PDF receipt of one payment.
+ *
+ * @param {string|ObjectId} paymentId
+ * @param {Object} [scope] campus filter, plus `student` when the caller is the
+ *   student themself — the route composes both conditions, the service applies
+ *   whatever it is given (§3 of the design note).
+ * @returns {Promise<{ buffer: Buffer, fileName: string, receiptNumber: string }|null>}
+ *   null when no payment matches the scope — the route answers 404 either way,
+ *   so a cross-campus id is indistinguishable from an unknown one.
+ */
+async function getPaymentReceipt(paymentId, scope = {}) {
+  const payment = await financeRepo.findPaymentById(paymentId, scope);
+  if (!payment) return null;
+
+  const studentId = studentIdOf(payment);
+  // The receipt is the STUDENT's proof of payment, so it is rendered in the
+  // student's language even when a campus manager is the one downloading it —
+  // the same rule, and the same source (UserPreferences), as the reminders.
+  const [branding, locale] = await Promise.all([
+    require('../academic-print').service.getCampusBranding(payment.schoolCampus),
+    require('../settings').service.getPreferredLanguage(studentId),
+  ]);
+
+  const html = buildReceiptHtml({
+    payment,
+    fee: payment.fee || {},
+    student: payment.student || {},
+    branding,
+    locale,
+  });
+
+  // One Puppeteer pool for the whole process, owned by academic-print: its FIFO
+  // cap and its graceful shutdown only work while nobody opens a second one.
+  const buffer = await require('../academic-print').service.renderPdf(html, {
+    format: 'A4',
+    margins: { top: '18mm', right: '16mm', bottom: '18mm', left: '16mm' },
+  });
+
+  const receiptNumber = receiptNumberOf(payment);
+  return {
+    buffer,
+    receiptNumber,
+    // Header-safe: the reference is operator-typed free text, and it travels in a
+    // Content-Disposition header.
+    fileName: `receipt-${receiptNumber.replace(/[^\w.-]+/g, '-')}.pdf`,
+  };
+}
+
 /** Soft-delete of a debt. @returns {Promise<Object|null>} */
 function deleteFee(feeId, scope = {}) {
   return financeRepo.softDeleteFee(feeId, scope);
@@ -338,6 +442,72 @@ async function runOverdueJob() {
     );
   }
   return { transitioned, reminded, suppressedCampuses: excludeCampusIds.length };
+}
+
+const DUE_SOON_BATCH   = parseInt(process.env.FINANCE_DUE_SOON_BATCH, 10) || 200;
+const MAX_DUE_SOON_PAGES = 1000; // hard safety bound on a single run
+
+/**
+ * Cron: the PRE-due cadence — notify a student at J-7, J-3 and on the due date,
+ * while the debt can still be settled on time. Its counterpart `runOverdueJob`
+ * only speaks once the money is already late.
+ *
+ * Three properties are load-bearing:
+ *
+ *  - **Pagination is by `_id`, not by `skip`.** Claiming a debt here does not
+ *    remove it from the window (it stays until it falls due), so the candidate
+ *    set does NOT shrink between pages — the assumption the overdue sweep may
+ *    safely make would loop forever here.
+ *  - **The kind is recomputed per debt, from its own due date.** A run missed on
+ *    Sunday does not lose the cadence: a debt read at J-5 still receives the J-7
+ *    notice it never got, and never a staler one than it is due (see
+ *    `dueReminderKind`).
+ *  - **The claim is what makes it idempotent**, not the query: two instances
+ *    sweeping at 07:00 both see the debt, and exactly one `$push` succeeds.
+ *
+ * ENTITLEMENT — the whole job is emission (outbound mail in the name of the
+ * Finance module), so it is suppressed per campus in the QUERY, exactly as the
+ * overdue reminders are. There is no hygiene half to keep running here: unlike
+ * the past-due transition, nothing about a debt's own state changes because a
+ * notice was or was not sent.
+ *
+ * @returns {Promise<{ reminded: number, suppressedCampuses: number }>}
+ */
+async function runDueSoonJob() {
+  const now = new Date();
+  const { from, to } = preDueWindow(now);
+
+  const excludeCampusIds = await require('../../shared/lib/entitlement').jobs
+    .suppressedCampusIds('finance');
+
+  let reminded = 0;
+  let afterId  = null;
+  for (let page = 0; page < MAX_DUE_SOON_PAGES; page += 1) {
+    const batch = await financeRepo.findFeesDueSoon({
+      from, to, afterId, limit: DUE_SOON_BATCH, excludeCampusIds,
+    });
+    if (!batch.length) break;
+
+    for (const fee of batch) {
+      const kind = dueReminderKind(fee.dueDate, now);
+      if (!kind) continue; // outside the cadence (guards against a widened query)
+      const claimed = await financeRepo.claimFeeForPreDueReminder(fee._id, kind, now);
+      if (!claimed) continue; // already sent — by an earlier run or another instance
+      await notifyDueSoon(claimed, kind);
+      reminded += 1;
+    }
+
+    afterId = batch[batch.length - 1]._id;
+    if (batch.length < DUE_SOON_BATCH) break;
+  }
+
+  if (reminded || excludeCampusIds.length) {
+    console.log(
+      `💸 [finance] pre-due sweep: ${reminded} reminder(s) sent`
+      + (excludeCampusIds.length ? `, ${excludeCampusIds.length} campus(es) silenced (Finance not active)` : '')
+    );
+  }
+  return { reminded, suppressedCampuses: excludeCampusIds.length };
 }
 
 // ── AI advisor aggregates (M5b — PHASE3_AI_DESIGN.md §6.5/§6.6) ───────────────
@@ -440,7 +610,9 @@ module.exports = {
   getStudentLedger,
   listFees,
   getFeeWithPayments,
+  getPaymentReceipt,
   deleteFee,
   remindBalance,
   runOverdueJob,
+  runDueSoonJob,
 };

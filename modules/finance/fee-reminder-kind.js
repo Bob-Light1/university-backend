@@ -42,11 +42,10 @@ const REMINDER_LEAD_DAYS = Object.freeze({
 /** Enum values, for the schema and for validators. */
 const REMINDER_KIND_VALUES = Object.freeze(Object.values(REMINDER_KINDS));
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-/** Midnight UTC of a date — the jobs fire on UTC (`register-jobs.js`), not on host time. */
-const startOfUtcDay = (date) =>
-  Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+// Midnight UTC and the day length come from `fee-status.js`, which owns the
+// past-due boundary. Two definitions of "which day is it" is exactly what let
+// the 06:00 transition and this cadence disagree (design note §9⑰).
+const { startOfUtcDay, DAY_MS } = require('./fee-status');
 
 /**
  * Whole days from `now` to `dueDate`, counted in UTC days rather than in elapsed
@@ -91,10 +90,26 @@ function dueReminderKind(dueDate, now = new Date()) {
   return winner;
 }
 
+/**
+ * The date window the pre-due sweep has to read, derived from the cadence itself
+ * rather than restated: from midnight UTC today (inclusive) to midnight UTC the
+ * day after the longest lead time (exclusive). Adding a fourth kind at J-14
+ * widens the window by editing one table.
+ *
+ * @param {Date} [now]
+ * @returns {{ from: Date, to: Date }}
+ */
+function preDueWindow(now = new Date()) {
+  const maxLead = Math.max(...Object.values(REMINDER_LEAD_DAYS));
+  const from = startOfUtcDay(now);
+  return { from: new Date(from), to: new Date(from + (maxLead + 1) * DAY_MS) };
+}
+
 module.exports = {
   REMINDER_KINDS,
   REMINDER_KIND_VALUES,
   REMINDER_LEAD_DAYS,
   daysUntilDue,
   dueReminderKind,
+  preDueWindow,
 };

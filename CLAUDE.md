@@ -37,6 +37,7 @@ Remotes: `Bob-Light1/university-backend` · `university-frontend` · `university
 
 ## 0. Language & comments — MANDATORY
 
+- **Code and documentation must be written in English** (owner instruction, 2026-09-18; see [AGENTS.md](AGENTS.md)). This supersedes older French-prose allowances in project guides. Product translations stay in their target locales; conversational replies follow the user's language.
 - **All comments, JSDoc, log messages, and identifiers in code and files MUST be written in English**, following professional conventions (clear, concise, no redundant narration of obvious code).
 - JSDoc per file (`@file` / `@description`) and per public function/route.
 - This applies to every new and edited file — no French in code artifacts.
@@ -361,12 +362,28 @@ whitelist must contain, so it is a §12 work item and not a one-line patch.
 - Public routes first, then `router.use(authenticate)`.
 - JSDoc per route: `@route` `@desc` `@access`.
 - `apiLimiter` on GET, `uploadLimiter` on file uploads, `loginLimiter` on auth endpoints.
+- **A route that renders a PDF takes `pdfLimiter`, not `apiLimiter`** (`shared/middleware/rate-limiter.js`:
+  5/min, keyed on the **user** and not on the IP). Rendering is not a read: each request takes a page in
+  the platform's single Puppeteer pool, whose cap bounds *concurrency* and not arrival rate, so a burst on
+  one route delays every other one — the print-queue sweep included. Keyed per user because a campus office
+  reaches the API from one NAT address, where an IP budget lets the first cashier silence all the others.
+  Two routes carry it today: the GED export (`/api/documents/:id/export/pdf`, `/bulk/export`, `/bulk/print`)
+  and the fee receipt (`/api/finance/payments/:id/receipt`).
 
 ---
 
 ## 8. Security (enforce on every new module)
 
 - `helmet()` + `express-mongo-sanitize` applied globally in `app.js` — do not repeat.
+- **CORS is configured once in `app.js`, and `exposedHeaders` is part of the contract.** The SPA
+  never shares an origin with the API (front on Vercel, `:5173` against `:5000` locally), so a
+  response header absent from that list is invisible to its JavaScript however correctly the server
+  sends it. `Content-Disposition` is listed there because **every binary download reads the file
+  name from it** — the fee receipt through `saveBlobResponse`, the GED export through
+  `ExportDialog` — and without it both silently fall back to a name built from an id, dropping the
+  business identifier the server computed (a receipt number, a job's file name). A same-origin test
+  cannot see this: assert it with an `Origin` header, as `tests/integration/finance.receipt.test.js`
+  does. Adding a route that streams a file means checking this list, not only the route.
 - `campusId` never from `req.body` for scoped roles.
 - Passwords: bcrypt rounds = 12. JWT payload minimal `{ id, role, campusId }`, expiry 7d.
 - Append-only audit log entry on every post-publication mutation.
@@ -381,16 +398,29 @@ high or critical — *and* on an accepted entry that has stopped being reported,
 cannot outlive its reason unnoticed. Adding an exception means writing `reason` and `removeWhen`
 next to it; accept only what the deployment provably cannot reach.
 
-One entry stands today: **GHSA-jmr9-qjv8-65gv** (`extract-zip`), reachable only from the browser
+Two named entries stand today: **GHSA-jmr9-qjv8-65gv** and **GHSA-7pqw-9j4j-h8q3**
+(`extract-zip`), reachable only from the browser
 *download* path this backend never runs. It is unfixable in place: upstream removed the dependency in
 `@puppeteer/browsers` 3.x, which is ESM-only and needs Node ≥ 22.12, as is every `puppeteer-core`
 built on it — and `require('puppeteer-core')` against v25 throws under CommonJS and under Jest.
 `puppeteer-core` therefore stays on the 24.x line. Clearing it is a runtime migration; see also
 `engines.node` (`20.x`, and Node 20 is past end of life).
 
-**`package.json` carries two `overrides`, both load-bearing** — neither is cosmetic:
+The second advisory has no patched `extract-zip` release as of 2026-09-19. Its
+reachability was rechecked against both PDF services and the installed browser
+installer. Keep both exceptions keyed by their exact GHSA IDs; a new advisory
+still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
+`tests/unit/audit-gate.test.js` verifies unknown findings and stale exceptions fail.
+
+**`package.json` carries three `overrides`, all load-bearing** — none is cosmetic:
 - `uuid: ^11.1.1` — `exceljs` 4.4.0 (latest) pins the vulnerable `uuid@^8`. It calls only `v4`,
   which uuid 11 still exports from its CommonJS build.
+- `browserslist: ^4.28.8` — two high advisories (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g) against
+  `<= 4.28.6`, reached only through `jest → @babel/core → helper-compilation-targets`. Nothing here
+  reads a `browserslist-stats.json`, so neither is exploitable in this deployment — but the fix is a
+  patch release on a **dev**-only path, which is cheaper to take than to write an exception for.
+  An `overrides` entry rather than a devDependency: browserslist is nobody's direct dependency here,
+  and declaring it as one would outlive the advisory.
 - `multer-storage-cloudinary → cloudinary: $cloudinary` — that package is unmaintained and its
   `peerDependencies` still pin `cloudinary@^1.21.0`, the vulnerable line. It touches exactly two
   methods (`uploader.upload_stream`, `uploader.destroy`), both unchanged in v2. **Without this
@@ -423,6 +453,15 @@ those four against real inputs, not against the suite.
 
 ---
 
+## Deployment product presentation
+
+The ERP product home is separate from applicant intake. Configuration and verification
+are documented in [product-home-and-branding.md](docs/architecture/features/product-home-and-branding.md).
+`shared/configs/brand.config.js` resolves `PRODUCT_BRAND_NAME` (default Wewigo) for
+software metadata and preserves `BRAND_NAME` / `NEXT_PUBLIC_BRAND_NAME` for existing
+institutional notifications. Sender addresses remain explicit configuration.
+No API, persistence, scope or entitlement contract is added by this presentation work.
+
 ## 10. Special modules
 
 **GAET** (`/api/gaet`) — Automatic Timetable Generation. `GaetConstraint` with 7-state machine (`DRAFT → GENERATING → GENERATED → PUBLISHED → …`); CPU-bound worker on an isolated thread; conflict service; zombie recovery at boot (`GENERATING` > 15 min → `FAILED`).
@@ -435,7 +474,15 @@ those four against real inputs, not against the suite.
 
 **Notification** (`/api/notifications`) — multi-channel (in-app + email) with templates; recipient-language i18n via `UserPreferences`; retry cron flushing external sends.
 
-**Finance** (`/api/finance`) — fees, expenses, income; nightly overdue-fee detection + reminders.
+**Finance** (`/api/finance`) — fees, expenses, income; nightly overdue-fee detection + reminders,
+plus a **pre-due cadence** (J-7 / J-3 / due day) that fires from its own marker,
+`StudentFee.remindersSent[]`, never from the `lastRemindedAt` / `reminderCount` pair the overdue
+dunning claims on — writing one from the other makes the debt skip its overdue reminder on the day
+it falls past due, silently (`modules/finance/fee-reminder-kind.js` carries the reasoning).
+`GET /payments/:id/receipt` renders the payment receipt as a PDF, in the **student's** language and
+through the platform's single Puppeteer pool: `academic-print` exports `renderPdf` /
+`getCampusBranding` for it, because a second pool would double the Chrome footprint and escape the
+graceful shutdown. The PDF is never stored — see `docs/architecture/features/fee-receipts-and-reminders.md` §4.
 
 **Public-portal** (`/api`) — public-facing: pre-registration, programs, quiz/leaderboard, recruitment competitions; monthly competition-closing cron. Its client is brick 4, the Next.js portal at `/home/adminsecu/Projects/partner` — changing anything here means changing it there too.
 
@@ -453,6 +500,7 @@ those four against real inputs, not against the suite.
 | Nightly 03:00 | Exam anti-cheat |
 | Nightly 01:00 | Announcement expiry |
 | Nightly 06:00 | Finance overdue fees + reminders |
+| Nightly 07:00 | Finance pre-due reminders (J-7 / J-3 / due day) — after 06:00, so the day's past-due transition is already applied |
 | 1st of month 00:05 | Competition closing |
 | Every 10 min | Notification retry (external sends) |
 | Every 2 min | Print queue sweep |
@@ -561,9 +609,10 @@ Two rules govern the sequence and explain why it cannot be rearranged:
 ### 12.1 Phase A — Design
 
 **Step 1 — The design note.** A feature starts with a document, never with a file. It lives in
-**`docs/architecture/features/<slug>.md`** — and nowhere else: `.gitignore:7` ignores `docs/*`
-with `docs/architecture/` as the only exception, so a `docs/features/` would be tracked by
-nobody. One page is enough; fixed template:
+**`docs/architecture/features/<slug>.md`** — and nowhere else: `.gitignore` ignores `docs/*`
+except `docs/architecture/` and the three context documents (`context.md`, `current_task.md`,
+`project_resume.md`), so a `docs/features/` would still be tracked by nobody. Context documents
+do not replace feature notes. One page is enough; fixed template:
 
 | Section | What it freezes |
 |---|---|
@@ -577,8 +626,8 @@ nobody. One page is enough; fixed template:
 | Definition of done | §12.6, copied in and amended if needed |
 
 A full `docs/architecture/<NAME>.md` — in the format of the eight existing ones — only for a
-**work item of its own**: several phases, a new invariant, or ≥ 2 bricks restructured. Prose in
-French, every code artifact in English (§0).
+**work item of its own**: several phases, a new invariant, or ≥ 2 bricks restructured. Prose and
+code artifacts in English (§0).
 
 **Filling the template means reading this map, and the map can be wrong. When the code
 contradicts it, the map is corrected first — in its own commit, before the note is finished.**
@@ -658,6 +707,12 @@ frontend build, portal, ai-service.
 **Step 10 — Browser QA.** `npm run test:visual`, **then eyes on the screen**: both themes, at
 least two roles including one campus-scoped role, and the entitlement toggle in all **three**
 states — `enabled`, `read_only` (history stays readable, every mutation is refused), `hidden`.
+A pass worth playing twice belongs **in** that harness rather than in a checklist: it carries two
+acts today (entitlement, fee receipts), and the screenshots it leaves in
+`tests/fixtures/.generated/visual/` are what a human then reads. Write the assertions against the
+catalogue the SPA loads (`dist/locales`), never against English strings — the fixture's accounts do
+not read English — and give each portal its own browser context, since `localStorage` belongs to
+the origin and the last sign-in otherwise becomes the identity of every open page.
 This is the historically skipped step: four work items were declared finished with "visual QA
 still pending". **Not done = feature not delivered.**
 

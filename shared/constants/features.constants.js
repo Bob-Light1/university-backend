@@ -272,7 +272,13 @@ const FEATURE_REGISTRY = Object.freeze({
     minState: FEATURE_STATES.READ_ONLY, records: ['FeePayment', 'Income'],
     dependsOn: ['campus', 'student'], usesWhenAvailable: ['notification', 'settings'],
     routers: ['/api/finance'], minPlan: FEATURE_PLANS.STANDARD,
-    crons: [{ name: 'finance-overdue', nature: CRON_NATURE.EMISSION }],
+    crons: [
+      { name: 'finance-overdue',  nature: CRON_NATURE.EMISSION },
+      // Pre-due reminders: outbound mail in the module's name and nothing else,
+      // so unlike the overdue job it has no hygiene half to keep running when
+      // the module is switched off.
+      { name: 'finance-due-soon', nature: CRON_NATURE.EMISSION },
+    ],
   },
   exam: {
     label: 'Examinations', core: false,

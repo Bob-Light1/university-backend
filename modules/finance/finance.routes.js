@@ -5,6 +5,7 @@
  *
  * /my/ledger             → the student views their own ledger (STUDENT).
  * /fees, /fees/:id…      → student debts + payments (management).
+ * /payments/:id/receipt  → PDF receipt of a payment (management + its student).
  * /students/:id/ledger   → a student's ledger (management).
  * /summary               → income vs expense summary (management).
  * /expense-categories…   → expense category CRUD (management).
@@ -21,7 +22,7 @@ const ctrl        = require('./controllers/finance.controller');
 const expenseCtrl = require('./controllers/expense.controller');
 const incomeCtrl  = require('./controllers/income.controller');
 const { authenticate, authorize } = require('../../shared/middleware/auth');
-const { apiLimiter } = require('../../shared/middleware/rate-limiter');
+const { apiLimiter, pdfLimiter } = require('../../shared/middleware/rate-limiter');
 
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 
@@ -77,6 +78,14 @@ router.post('/fees/:id/remind', authorize(MGMT_ROLES), apiLimiter, ctrl.remindBa
  * @access ADMIN | DIRECTOR | CAMPUS_MANAGER
  */
 router.delete('/fees/:id', authorize(MGMT_ROLES), apiLimiter, ctrl.deleteFee);
+
+/**
+ * @route GET /api/finance/payments/:id/receipt
+ * @desc  PDF receipt of a payment — campus-scoped, and restricted to their own
+ *        payments for a STUDENT. Responds with application/pdf, or 404.
+ * @access ADMIN | DIRECTOR | CAMPUS_MANAGER | STUDENT (own payments)
+ */
+router.get('/payments/:id/receipt', authorize([...MGMT_ROLES, 'STUDENT']), pdfLimiter, ctrl.getPaymentReceipt);
 
 /**
  * @route GET /api/finance/students/:studentId/ledger

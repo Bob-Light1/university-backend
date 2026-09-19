@@ -241,13 +241,8 @@ const resolveDocumentAssets = async (doc) => {
  * @param {*} value
  * @returns {string}
  */
-const escapeHtml = (value) =>
-  String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+// One definition for the whole platform — see `shared/utils/html.js`.
+const { escapeHtml } = require('../../../shared/utils/html');
 
 /**
  * Converts a PARAGRAPH block content object to sanitized HTML.

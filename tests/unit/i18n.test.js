@@ -42,6 +42,41 @@ describe('pick / interpolate', () => {
   });
 });
 
+describe('localeContext', () => {
+  // Extracted from academic-pdf.service.js when the fee receipt became the
+  // second server-rendered document (design note §9④): two documents issued by
+  // the same campus must not write a date two different ways.
+  test('résout les quatre attributs d\'un document rendu', () => {
+    expect(i18n.localeContext('fr')).toEqual({
+      lang: 'fr', htmlLang: 'fr', dateLocale: 'fr-FR', dir: 'ltr',
+    });
+  });
+
+  test('l\'arabe est la seule langue rtl du socle', () => {
+    expect(i18n.localeContext('ar').dir).toBe('rtl');
+    for (const lang of i18n.SUPPORTED_LANGUAGES.filter((l) => l !== 'ar')) {
+      expect(i18n.localeContext(lang).dir).toBe('ltr');
+    }
+  });
+
+  test('une locale inconnue, absente ou régionale retombe sur une langue supportée', () => {
+    expect(i18n.localeContext('fr-CA').lang).toBe('fr');
+    expect(i18n.localeContext('xx').lang).toBe(i18n.DEFAULT_LOCALE);
+    expect(i18n.localeContext(undefined).lang).toBe(i18n.DEFAULT_LOCALE);
+    expect(i18n.localeContext(null).lang).toBe(i18n.DEFAULT_LOCALE);
+  });
+
+  test('chaque langue supportée a une table de dates et un attribut lang', () => {
+    for (const lang of i18n.SUPPORTED_LANGUAGES) {
+      const ctx = i18n.localeContext(lang);
+      expect(typeof ctx.dateLocale).toBe('string');
+      expect(ctx.dateLocale.length).toBeGreaterThan(0);
+      expect(typeof ctx.htmlLang).toBe('string');
+      expect(ctx.htmlLang.length).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('couverture du catalogue notifications', () => {
   // Collects all leaves (dicts { lang: text }) of the catalog.
   const leaves = [];

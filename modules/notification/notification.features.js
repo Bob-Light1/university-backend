@@ -43,6 +43,13 @@ const TEMPLATE_FEATURES = Object.freeze({
   'exam.graded':      'exam',
   'fraud.alert':      'partner',
   'payment.reminder': 'finance',
+  // The pre-due cadence (J-7 / J-3 / due day). Declared one by one rather than
+  // derived from `fee-reminder-kind.js`: this foundation must not import a
+  // module it serves (facade §3), and the coverage suite already fails on a
+  // catalog template that nobody attributed.
+  'payment.due_in_7d': 'finance',
+  'payment.due_in_3d': 'finance',
+  'payment.due_today': 'finance',
 });
 
 /**

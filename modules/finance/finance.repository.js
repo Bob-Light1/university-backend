@@ -11,6 +11,8 @@
 
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
 const { notDeletedFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
+// The past-due boundary comes from the rule that owns it — never restated here.
+const { startOfUtcDay } = require('./fee-status');
 
 const Income          = require('./models/income.model');
 const Expense         = require('./models/expense.model');
@@ -240,8 +242,14 @@ const softDeleteFee = (id, extra = {}) =>
 /**
  * Bulk-transitions every past-due unpaid debt (`pending`/`partial`) to `overdue`
  * in a single atomic write — no per-document save, no arbitrary cap, so a spike of
- * newly-overdue debts is never silently dropped. Mirrors `computeStatus` (a past-due
- * debt with a remaining balance is `overdue`).
+ * newly-overdue debts is never silently dropped. Mirrors `computeStatus` (a debt
+ * with a remaining balance is `overdue` once its due DAY is over), and mirrors it
+ * through `startOfUtcDay` rather than by restating the boundary: the two ran on
+ * different definitions once, and the cost was a third of the pre-due cadence
+ * (design note §9⑰).
+ *
+ * The bound is midnight of the run's own day, so a debt due today survives this
+ * sweep and is still `pending` when the 07:00 pre-due sweep looks for it.
  * @param {Date} now
  * @returns {Promise<{ modifiedCount: number }>}
  */
@@ -249,7 +257,7 @@ const markPastDueOverdue = (now) =>
   StudentFee.updateMany(
     {
       ...FEE_LIVE,
-      dueDate: { $ne: null, $lt: now },
+      dueDate: { $ne: null, $lt: new Date(startOfUtcDay(now)) },
       status: { $in: ['pending', 'partial'] },
       $expr: { $lt: ['$amountPaid', '$amountDue'] }, // remaining balance > 0
     },
@@ -301,6 +309,72 @@ const claimFeeForReminder = (feeId, cutoff, now) =>
       $or: [{ lastRemindedAt: null }, { lastRemindedAt: { $lt: cutoff } }],
     },
     { $set: { lastRemindedAt: now }, $inc: { reminderCount: 1 } },
+    { new: true }
+  ).lean({ virtuals: true });
+
+/**
+ * Debts whose due date falls inside the pre-due window, page by page.
+ *
+ * Paged on `_id` rather than on `skip`, and for a reason specific to this sweep:
+ * unlike the overdue cadence, claiming a debt here does NOT remove it from the
+ * candidate set — a debt reminded at J-7 stays in the window until it falls due.
+ * A `skip`-based loop would therefore never terminate on its own, and a
+ * shrinking-set assumption (the one `findRemindableOverdueFees` may safely make)
+ * would be wrong here.
+ *
+ * @param {Object} params
+ * @param {Date}   params.from  start of the window (inclusive) — midnight UTC today
+ * @param {Date}   params.to    end of the window (exclusive)   — midnight UTC in 8 days
+ * @param {ObjectId|string|null} [params.afterId] last id of the previous page
+ * @param {number} [params.limit]
+ * @param {Array}  [params.excludeCampusIds] campuses whose Finance module is not active
+ * @returns {Promise<Array<{_id: ObjectId, dueDate: Date}>>}
+ */
+const findFeesDueSoon = ({ from, to, afterId = null, limit = 200, excludeCampusIds = [] }) =>
+  StudentFee.find({
+    ...FEE_LIVE,
+    status: { $in: ['pending', 'partial'] },
+    dueDate: { $gte: from, $lt: to },
+    $expr: { $lt: ['$amountPaid', '$amountDue'] }, // remaining balance > 0
+    // Same rule, and the same reason, as the overdue sweep: excluded in the
+    // QUERY, because the claim stamps the marker on pickup and a debt dropped
+    // after the claim would burn its one notice of that kind for good.
+    ...(excludeCampusIds.length ? { schoolCampus: { $nin: excludeCampusIds } } : {}),
+    ...(afterId ? { _id: { $gt: afterId } } : {}),
+  })
+    .sort({ _id: 1 })
+    .limit(limit)
+    .select('_id dueDate')
+    .lean();
+
+/**
+ * Atomically claims ONE pre-due notice of a given kind for a debt: pushes
+ * `{ kind, sentAt }` only if that kind is not already recorded. Returns the
+ * claimed debt (lean, with virtual `balance`) or null when another instance —
+ * or an earlier run — already sent that notice.
+ *
+ * The guard is `remindersSent.kind $ne kind`, which also matches a document
+ * written before the field existed (an absent path is `$ne` anything), so no
+ * migration was needed to bring legacy debts into the cadence.
+ *
+ * `lastRemindedAt` / `reminderCount` are deliberately NOT touched: they belong to
+ * the overdue cadence, and stamping them here would drop the debt out of
+ * `claimFeeForReminder`'s window on the very day it falls past due
+ * (`fee-reminder-kind.js`).
+ *
+ * @param {string|ObjectId} feeId
+ * @param {string} kind  one of REMINDER_KINDS
+ * @param {Date} now
+ * @returns {Promise<Object|null>}
+ */
+const claimFeeForPreDueReminder = (feeId, kind, now) =>
+  StudentFee.findOneAndUpdate(
+    {
+      _id: feeId,
+      status: { $in: ['pending', 'partial'] },
+      'remindersSent.kind': { $ne: kind },
+    },
+    { $push: { remindersSent: { kind, sentAt: now } } },
     { new: true }
   ).lean({ virtuals: true });
 
@@ -383,6 +457,20 @@ const createPayment = (doc) => FeePayment.create(doc);
 const findPaymentsByFee = (feeId) =>
   FeePayment.find({ fee: feeId }).sort({ paidAt: -1 }).lean();
 
+/**
+ * One payment line with everything its receipt prints: the debt it settles and
+ * the student's display identity. Campus scoping is the caller's `extra` — the
+ * receipt route passes both the campus AND, for a student, their own id.
+ * @param {string|ObjectId} id
+ * @param {Object} [extra] additional scope filter
+ * @returns {Promise<Object|null>}
+ */
+const findPaymentById = (id, extra = {}) =>
+  FeePayment.findOne({ _id: id, ...extra })
+    .populate('student', STUDENT_FIELDS)
+    .populate('fee', 'label academicYear amountDue amountPaid currency schoolCampus')
+    .lean();
+
 /** A student's payments (ledger), optionally campus-scoped. */
 const findPaymentsByStudent = (studentId, extra = {}) =>
   FeePayment.find({ student: studentId, ...extra }).sort({ paidAt: -1 }).lean();
@@ -423,6 +511,8 @@ module.exports = {
   markPastDueOverdue,
   findRemindableOverdueFees,
   claimFeeForReminder,
+  findFeesDueSoon,
+  claimFeeForPreDueReminder,
   touchReminded,
   // AI advisor aggregates (M5b)
   aggregateOverdueAging,
@@ -430,6 +520,7 @@ module.exports = {
   monthlyExpenseTotals,
   // payments
   createPayment,
+  findPaymentById,
   findPaymentsByFee,
   findPaymentsByStudent,
 };

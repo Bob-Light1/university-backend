@@ -26,7 +26,8 @@ const path      = require('path');
 const fs        = require('fs').promises;
 
 const { generateQrCodeDataUrl } = require('../document').service;
-const { pick, interpolate, normalize, RTL_LANGUAGES } = require('../../shared/i18n');
+const { pick, interpolate, localeContext } = require('../../shared/i18n');
+const { escapeHtml } = require('../../shared/utils/html');
 const catalog = require('../../shared/i18n/catalogs/academic-print');
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -48,54 +49,27 @@ const IMAGE_FETCH_TIMEOUT_MS = parseInt(process.env.PRINT_IMAGE_TIMEOUT_MS || '8
 
 // ── i18n helpers ──────────────────────────────────────────────────────────────
 
-// Maps our locale codes to BCP-47 tags accepted by Intl / Date#toLocaleDateString.
-const DATE_LOCALE_MAP = {
-  en:      'en-GB',
-  fr:      'fr-FR',
-  es:      'es-ES',
-  ar:      'ar-SA',
-  'zh-CN': 'zh-CN',
-  de:      'de-DE',
-  pt:      'pt-BR',
-  it:      'it-IT',
-  ru:      'ru-RU',
-  ja:      'ja-JP',
-};
-
-// Maps our locale codes to the HTML `lang` attribute value.
-const HTML_LANG_MAP = {
-  en: 'en', fr: 'fr', es: 'es', ar: 'ar', 'zh-CN': 'zh',
-  de: 'de', pt: 'pt', it: 'it', ru: 'ru', ja: 'ja',
-};
-
 /**
- * Build the i18n context used by all template builders.
+ * Build the i18n context used by all template builders: this module's own
+ * labels, plus the language/direction/formatting triple every renderer of the
+ * platform shares (`shared/i18n/languages.js`).
  * @param {string} locale  Supported language code (e.g. 'fr', 'ar'). Defaults to 'en'.
  * @returns {{ labels: Object, dateLocale: string, dir: string, htmlLang: string }}
  */
 const buildI18n = (locale = 'en') => {
-  const lang = normalize(locale) || 'en';
+  const { lang, htmlLang, dateLocale, dir } = localeContext(locale);
   const labels = {};
   for (const [key, dict] of Object.entries(catalog)) {
     labels[key] = pick(dict, lang);
   }
-  return {
-    labels,
-    htmlLang:   HTML_LANG_MAP[lang]   || 'en',
-    dateLocale: DATE_LOCALE_MAP[lang] || 'en-GB',
-    dir:        RTL_LANGUAGES.includes(lang) ? 'rtl' : 'ltr',
-  };
+  return { labels, htmlLang, dateLocale, dir };
 };
 
 // ── XSS-safe HTML escape ──────────────────────────────────────────────────────
+// One definition for the whole platform (`shared/utils/html.js`); kept under the
+// short local name the ~40 call sites below already use.
 
-const esc = (str) =>
-  String(str ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+const esc = escapeHtml;
 
 // ── Image inlining ─────────────────────────────────────────────────────────────
 // Resolve an image reference to a self-contained data: URL so PDF rendering never
@@ -1000,6 +974,8 @@ const cleanupExpiredPrintFiles = async (ttlDays = 30) => {
 
 module.exports = {
   generateAcademicPdf,
+  renderPdf,
+  getCampusBranding,
   savePrintPdf,
   readPrintPdf,
   cleanupExpiredPrintFiles,
