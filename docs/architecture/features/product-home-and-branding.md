@@ -170,8 +170,12 @@ existing notification sender configuration, real Excel metadata, unchanged campu
 identity and the unchanged `/register?ref=...&src=...` redirect/portal attribution.
 No API, schema, persistence, deletion or entitlement declaration changed.
 
-The test review executes the actual frontend resolver in a VM and reopens a real
-Excel workbook; it does not duplicate their implementation in an expectation.
+The original test review executed the actual frontend resolver in a VM and reopened
+a real Excel workbook; it did not duplicate their implementation in an expectation.
+On 2026-09-19, the backend unit suite stopped loading the sibling frontend resolver
+so it can run from a backend-only checkout. It tests the backend brand configuration
+and real workbook metadata directly. Frontend URL validation is no longer covered
+by this backend unit suite.
 Negative controls replaced product-name resolution, bypassed URL validation,
 removed the sender guard and removed brand HTML escaping in compiled test inputs.
 All five tests rejected those faults. The course classifier was corrected after

@@ -1,50 +1,50 @@
 # Current task and handoff
 
 Last updated: 2026-09-19.
-Status: COMPLETED — sibling context documentation and reference corrections.
+Status: COMPLETED — backend-only branding CI fix; targeted validation passed.
 Branch observed: `feat/fee-receipts-and-reminders`.
 
-## Objective and completed work
+## Objective and changes
 
-The user requested compact session context for the ERP frontend, AI service and
-public pre-registration portal, consistent with their existing engineering references.
-Created `AGENTS.md`, `docs/context.md` and `docs/current_task.md` in each repository.
-Updated this backend's context map with links to their startup protocols.
+Fix the GitHub CI failure caused by `tests/unit/product-brand.test.js` loading
+`../frontend/src/config/brand.js`, which is absent from a backend-only checkout.
+Removed the filesystem/VM loader and the frontend-specific assertion. The suite
+now tests the real backend brand configuration, including blank/unset product
+names and whitespace-only establishment overrides, and retains the real XLSX test.
+No resolver was copied into the tests, no production behavior changed, and no
+second repository checkout or token was added to the workflow.
 
-Read local CLAUDE/README files, portal contract/deployment documentation, relevant
-AI design sections, code/configuration and Git state. A user-approved follow-up corrected the references themselves: AI README status
-and prompt inventory, portal README/API/deployment guides and backend paths,
-and frontend namespace/SSE rules and historical lint/CI claims. Context maps
-now remove resolved drift notices. Fourteen sibling documentation files were updated.
-The AI protocol preserves the README's full-design reading requirement before code.
-No application code, dependency, product decision or deployment was changed.
+Affected files:
+- `tests/unit/product-brand.test.js`: backend-owned behavior only.
+- `docs/architecture/features/product-home-and-branding.md`: clarify that frontend
+  URL validation is no longer covered by this backend unit suite.
+- `docs/current_task.md`: current objective and verification evidence.
 
 ## Verification
 
-Checked the nine new context documents and subsequent corrections for local link
-targets, whitespace, Git visibility and documentation diffs. Existing unrelated
-working-tree changes were preserved. Application tests/builds were
-not run for this documentation-only task. New files remain uncommitted.
-Sibling writes required and received filesystem escalation because only the backend
-and temporary directory were initially writable.
+Exported tracked HEAD into `/tmp/backend-brand-ci-check`, without a sibling
+frontend; only installed backend dependencies are linked from the working tree.
+The original targeted suite reproduced the exact ENOENT for
+`/tmp/frontend/src/config/brand.js` (one failure, two passes).
+Copied the corrected test into that isolated checkout: all six targeted tests
+passed without a frontend checkout.
+Backend lint passed with zero errors and 42 existing warnings.
+The sandbox blocked a full-suite HTTP listener with EPERM. The full-suite retry
+outside the sandbox was manually interrupted after about ten minutes without a
+summary (exit 130); the full suite is not claimed as passing. Targeted validation
+completed independently. Whitespace, tracked-file and handoff-link checks passed.
 
-## Preserved work and unresolved release gates
+## Preserved release gates and scope
 
-The previous product-home/branding implementation is complete; its owning
-[design and release gates](architecture/features/product-home-and-branding.md#remaining-release-gates)
-retain the delivery evidence. Historical backend/browser/course/build results are
-not checks from this session. Existing backend dependency-audit failures and ERP
-lint errors still prevent claiming full release readiness; this task did not
-retest or remediate them. No CH-* work item was closed or phase reordered.
-
-The backend was clean at this task's start. Frontend and portal had existing
-uncommitted branding changes, including frontend entitlement/dashboard work;
-all were preserved. AI was clean. The course remains a separate nested repository.
-The former handoff mentioned a frontend dev server on port 5173; its current state
-was not checked. No commit or deployment was made.
+The working tree was clean at the start. No frontend, portal, AI, dependency,
+workflow or production-code changes were needed. No commit or push was made.
+The existing dependency-audit and frontend-lint release gates remain documented in
+[the branding design](architecture/features/product-home-and-branding.md#remaining-release-gates);
+they were not retested or remediated here. No CH-* item or product phase changed.
 
 ## Next action
 
-Use the local startup protocol for the next user-requested task, verify the branch
-and working tree, and read its required detailed references. This completed task
-does not authorize dependency remediation or other historical follow-ups.
+The patch is ready for review and commit; GitHub CI has not been rerun remotely.
+A complete-suite result remains unverified locally. Frontend resolver coverage
+belongs in the frontend repository; introducing its test infrastructure is outside
+this targeted backend CI repair.
