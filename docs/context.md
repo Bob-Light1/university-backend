@@ -1,6 +1,6 @@
 # Project context
 
-Last documentation review: 2026-09-18.
+Last documentation review: 2026-09-19.
 This map helps with navigation; the code describes the implemented behavior.
 It does not certify a deployment or passing tests.
 
@@ -21,6 +21,11 @@ Paths are relative to the backend root; verify their availability on another mac
 | ERP frontend | `../frontend` | Authenticated workspaces, React / Vite / MUI |
 | AI service | `../ai-service` | Python / FastAPI / PostgreSQL with pgvector; called by the backend |
 | Public portal | `../../partner` | Next.js; programs, pre-registration, quizzes and referrals |
+
+Each sibling repository now has an `AGENTS.md` startup protocol, `docs/context.md`
+navigation map and `docs/current_task.md` handoff:
+[frontend](../../frontend/AGENTS.md), [AI service](../../ai-service/AGENTS.md),
+[public portal](../../../partner/AGENTS.md). Read the local protocol when working there.
 
 The public portal is not inside the `university` directory.
 API contracts, statuses and error codes are defined by the backend.

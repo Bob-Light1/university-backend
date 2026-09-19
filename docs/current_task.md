@@ -1,72 +1,50 @@
 # Current task and handoff
 
 Last updated: 2026-09-19.
-Status: IMPLEMENTATION COMPLETE — release validation blocked by existing gates.
-Branch: `feat/fee-receipts-and-reminders`.
+Status: COMPLETED — sibling context documentation and reference corrections.
+Branch observed: `feat/fee-receipts-and-reminders`.
 
-## Objective and approved decisions
+## Objective and completed work
 
-Implement the owner-approved [design](architecture/features/product-home-and-branding.md).
-The ERP home is a professional software showcase, separate from applicant intake:
-light institutional design, three local synthetic preview tabs, ten locales,
-external configurable sales contact and deployment branding. Wewigo is the default.
-Preserve establishment/campus identity and the legacy registration referral redirect.
+The user requested compact session context for the ERP frontend, AI service and
+public pre-registration portal, consistent with their existing engineering references.
+Created `AGENTS.md`, `docs/context.md` and `docs/current_task.md` in each repository.
+Updated this backend's context map with links to their startup protocols.
 
-## Completed work
-
-- ERP: new home/public shell, preview, FAQ, role benefits, one footer, ten home
-  catalogs, local anonymous language persistence, shared name/logo fallback,
-  browser/build metadata, login/activation/workspace identity and environment sample.
-- Backend: configurable Excel creator and notification brand, explicit sender,
-  HTML escaping, two regression suites and browser checks in the existing harness.
-- Portal: shared identity, optional logo/icon, metadata/manifest and deployment
-  sample; existing institutional overrides and all intake flows remain intact.
-- AI: inspected; no user-facing commercial identity, so no code change required.
-- Engineering map, feature note, roadmap presentation follow-up, deployment
-  examples and affected course measurements updated. No phases reordered.
+Read local CLAUDE/README files, portal contract/deployment documentation, relevant
+AI design sections, code/configuration and Git state. A user-approved follow-up corrected the references themselves: AI README status
+and prompt inventory, portal README/API/deployment guides and backend paths,
+and frontend namespace/SSE rules and historical lint/CI claims. Context maps
+now remove resolved drift notices. Fourteen sibling documentation files were updated.
+The AI protocol preserves the README's full-design reading requirement before code.
+No application code, dependency, product decision or deployment was changed.
 
 ## Verification
 
-Full backend: 73 suites / 1571 tests passed. Backend lint: 0 errors, 42 existing
-warnings. ERP and portal production builds passed in the previous turn; no runtime
-source changed since those builds. Portal lint and all 190 ERP locale/namespace
-checks passed. New ERP components lint clean; nine errors in touched legacy files
-were reproduced against HEAD.
+Checked the nine new context documents and subsequent corrections for local link
+targets, whitespace, Git visibility and documentation diffs. Existing unrelated
+working-tree changes were preserved. Application tests/builds were
+not run for this documentation-only task. New files remain uncommitted.
+Sibling writes required and received filesystem escalation because only the backend
+and temporary directory were initially writable.
 
-Final browser QA: 90/90 passed, including 32 home checks, multiple roles, light/dark
-themes, enabled/read-only/hidden modules and actual PDF downloads. The packaged
-Chromium failed to start during the first run; using the existing supported
-PUPPETEER_EXECUTABLE_PATH=/usr/bin/google-chrome setting resolved that environment
-failure. Custom brand, missing logo, sales URL, login and activation passed.
-Portal default/custom/establishment precedence passed. Screenshots visually reviewed.
+## Preserved work and unresolved release gates
 
-All five new unit tests were deliberately made red with compiled-input mutations,
-then passed against the original sources. Course: 67/67 executable solutions pass,
-14 illustrative snippets skipped, all references resolve. No CH-* item is closed.
+The previous product-home/branding implementation is complete; its owning
+[design and release gates](architecture/features/product-home-and-branding.md#remaining-release-gates)
+retain the delivery evidence. Historical backend/browser/course/build results are
+not checks from this session. Existing backend dependency-audit failures and ERP
+lint errors still prevent claiming full release readiness; this task did not
+retest or remediate them. No CH-* work item was closed or phase reordered.
 
-Evidence: ignored logs in `tests/fixtures/.generated/product-home-validation/` and
-screenshots in `tests/fixtures/.generated/visual/`. Do not publish generated fixture
-credentials. Temporary QA processes were stopped after their reports.
+The backend was clean at this task's start. Frontend and portal had existing
+uncommitted branding changes, including frontend entitlement/dashboard work;
+all were preserved. AI was clean. The course remains a separate nested repository.
+The former handoff mentioned a frontend dev server on port 5173; its current state
+was not checked. No commit or deployment was made.
 
-## Remaining limitations and next action
+## Next action
 
-The required dependency audit fails on seven unaccepted advisories in existing
-extract-zip, js-yaml, nodemailer and sharp dependencies (0 critical, 6 high and 5
-moderate reported overall). Dependencies/lockfiles were not changed or exceptions
-weakened. Existing ERP lint errors remain. Details and advisory IDs are in the
-[feature note](architecture/features/product-home-and-branding.md#remaining-release-gates).
-These gates prevent declaring full release readiness; the homepage implementation
-and its functional QA are complete. Treat any dependency-remediation work as a
-separate scoped change, not an already approved roadmap decision.
-
-The normal ERP dev server was started on http://127.0.0.1:5173/ for review. Check
-that it is still running after a new session. No deployment or commit was made.
-
-## Existing changes preserved
-
-Backend `.gitignore`, `CLAUDE.md`, `tests/fixtures/visual.js` and untracked context
-files/AGENTS.md predate this task. Frontend EntitlementDialog.jsx,
-useEntitlementPilot.js and ParentDashboard.jsx also predate this task. The visual
-harness has substantial user changes; only the home hook and reliable Chrome launch
-were added by this task. Course is its own nested Git repository. Preserve all
-these unrelated changes; no commit was requested.
+Use the local startup protocol for the next user-requested task, verify the branch
+and working tree, and read its required detailed references. This completed task
+does not authorize dependency remediation or other historical follow-ups.
