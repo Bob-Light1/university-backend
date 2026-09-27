@@ -1,61 +1,67 @@
 # Current task and handoff
 
-Last updated: 2026-09-19.
-Status: COMPLETED — dependency audit remediation and validation.
-Branch observed: `feat/fee-receipts-and-reminders`.
+Last updated: 2026-09-27.
+Status: AUDIT PASS RECORDED — full administrator acceptance incomplete; defects remain.
+Backend branch: `feat/fee-receipts-and-reminders`; frontend branch: `main`.
 
-## Objective and changes
+## Objective and authorization
 
-Fix the next GitHub CI failure, now in the security audit after the branding tests
-passed. The initial audit reproduced seven blocking root advisories, not only sharp.
+Test administrator usage starting at the real login form. The owner selected a
+local environment with fictional data and subsequently asked to continue.
+Application fixes, commits, publication and deployment have not been performed.
 
-- `package.json` / `package-lock.json`: sharp 0.35.3 → 0.35.4 (libheif 1.23.2),
-  nodemailer 9.0.5 → 9.1.1, transitive js-yaml 3.15.1 → 3.15.2 and 4.3.1 → 4.3.2.
-  Existing overrides and dependency major versions are preserved.
-- `scripts/audit-gate.js`: retain the original extract-zip exception unchanged and
-  add a separate exact-ID exception for GHSA-7pqw-9j4j-h8q3, which has no patched
-  release. The installed Puppeteer archive extractor is only called by its browser
-  installer; both backend PDF services launch an explicit existing binary. No
-  backend script or workflow invokes that downloader. Removal conditions are recorded.
-- `tests/unit/audit-gate.test.js`: verify both named exceptions, rejection of sharp
-  and unknown extract-zip advisories, and removal of stale exceptions.
-- `CLAUDE.md` §8.1: update the count and rationale of named exceptions.
-- `docs/architecture/features/product-home-and-branding.md`: record the resolved
-  audit gate while preserving the remaining frontend lint release debt.
+Canonical scope, findings, checks and limitations:
+[administrator browser audit](architecture/ADMIN_PORTAL_BROWSER_AUDIT.md).
 
-## Verification
+## Current evidence
 
-- Initial `npm run audit:ci`: reproduced seven unaccepted root advisories.
-- Updated `npm run audit:ci`: PASS, zero unaccepted advisories, two named exceptions.
-  Raw totals remain 0 critical, 3 high, 5 moderate; this is not a zero-findings audit.
-- Backend lint: zero errors, 42 existing warnings.
-- Real runtime checks: passed PNG/JPEG uploads through GED storage, with 3200×1600
-  images actually resized to 3000×1500 (detecting silent optimizer fallback), and
-  Nodemailer MIME generation with a synthetic attachment using an offline transport.
-- Isolated `npm ci --no-audit --no-fund`: PASS, 774 packages installed from the
-  corrected lockfile in `/tmp/backend-security-clean-ci`.
-- `npm ls sharp nodemailer js-yaml extract-zip --all`: PASS, resolved versions
-  match the intended updates.
-- Full Jest suite: PASS, 74 suites / 1579 tests, including five new audit-gate
-  regression checks (296.852 seconds).
-- Clean-install native versions: sharp 0.35.4, libheif 1.23.2, nodemailer 9.1.1.
-- Final diff whitespace and local documentation references: PASS. The new test
-  is visible as an untracked file and must be included in the eventual commit.
+- Actual form login, API and ephemeral replica set; current frontend build passed.
+- 13 administrator routes and 22 campus routes rendered under ADMIN. Substantive
+  workflows and exact remaining coverage are listed in the canonical report.
+- Accounts, profile/security, campus archive/restore, Premium offer, Finance
+  freeze/reactivation, public content, global announcements, application review
+  and competition lifecycle were exercised.
+- Class, subject, student, teacher, parent and course creation persisted; course
+  submission/approval and staff-role creation/edit/deactivation were tested.
+- Fee/payment arithmetic and receipt, income, expense approval/payment, document
+  workflow with valid reasons, and all six academic PDF preview types passed.
+- Nine defect groups recorded. AP-01 is highest priority: a semester closure
+  triggered from campus A locked 18 A results and 10 B results. Read-only
+  aggregation proved the before/after change in the owned disposable database.
+- Other findings: campus context lost in announcements/exams/documents; mentor,
+  staff and partner creation missing campus; mentor/staff queries ignore campus;
+  empty optional finance dates silently prevent submission; null-plan translation
+  key; document lock labels a required reason optional. No product fixes applied.
 
-Logs and temporary checks are in `/tmp/backend-security-*`. Initial direct JSON
-registry requests failed (DNS in the sandbox and a separate endpoint error outside);
-the final audit gate fetched and evaluated a valid report successfully.
+## Runtime, artifacts and next action
 
-## Scope and remaining work
+The audit-owned browser, API/static servers and disposable database were stopped
+cleanly. No production data was used. Synthetic changes were confined to that
+runtime; the Finance usage state was restored to active before cleanup.
 
-The working tree was clean at the start. No product/API contract, frontend, portal,
-AI service or runtime major-version migration was changed. No commit or push made.
-The earlier backend-only branding test repair is already in HEAD; the user reports
-GitHub tests passed. Existing frontend lint debt remains in the branding design.
+Evidence: `tests/fixtures/.generated/admin-portal-audit-2026-09-27/` contains
+`audit-summary.json`, raw `results.json`, DOM/PNG captures, seven PDF files and
+archived exploratory scripts under `harness/`. Runtime log:
+`tests/fixtures/.generated/admin-portal-runtime.log`. Fixture account exports
+remain private generated artifacts; never paste their credentials into reports.
 
-## Next action
+The audit pass is recorded; **full administrator acceptance remains incomplete**.
+The report identifies defects, blocked AI/image/delivery integrations and the
+unexecuted workflow combinations. Raw results contain superseded harness failures
+and missing transcript prerequisites; they must not be counted as product bugs.
+The exploratory stages depend on prior state and are not a new CI suite.
 
-Changes are ready for review and commit, including both package manifests and the
-new regression test. No commit or push was requested or performed. GitHub CI has
-not been rerun remotely. The two accepted extract-zip advisories and remaining
-moderate findings are not fixed; their tracking and removal conditions remain.
+Next action: address AP-01 campus-scoped reads and writes, then the other confirmed
+findings, add meaningful regression coverage, and rerun affected browser journeys.
+This is a follow-up recommendation, not an implementation started by this audit.
+Do not mark CH-2/CH-4/CH-5 or product phases complete from these ad hoc results.
+
+## Preserved prior work and limitations
+
+The September 25 Home/Login presentation audit remains completed and is documented
+in [the frontend public-entry audit](../../frontend/docs/architecture/features/public-entry-audit.md).
+Its previous handoff was preserved in the generated evidence directory. Existing
+uncommitted frontend presentation/theme/catalog work and backend branding-note
+changes were preserved. Earlier frontend full-tree lint debt and historical
+course-check failures remain open. No full Jest, dependency audit, course suite
+or cross-platform journey suite has been rerun during this browser audit.

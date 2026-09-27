@@ -1,6 +1,6 @@
 # Product home and deployment branding
 
-Status: implementation complete; release validation blocked by existing dependency and frontend lint debt.
+Status: implementation complete; platform release remains subject to the recorded validation limits and frontend lint debt.
 Approved by the owner on 2026-09-18. Verification updated on 2026-09-19.
 
 ## Problem and scope
@@ -22,8 +22,10 @@ live customer data, lead collection or business workflow changes.
 
 Light institutional presentation, navy typography, restrained orange actions.
 One footer. Hero, six capability groups, three-tab synthetic preview, role benefits,
-product FAQ and closing action. Public content remains light independently of the
-authenticated theme. Keyboard navigation, RTL and reduced motion are required.
+product FAQ and closing action. The initial light-only public presentation was superseded by the owner's
+2026-09-19/20 theme requests: Home and Login now follow the shared light/dark
+preference. See the [public entry audit](../../../../frontend/docs/architecture/features/public-entry-audit.md).
+Keyboard navigation, RTL and reduced motion remain required.
 
 The preview is illustrative, entirely local and explicitly labelled; it must not
 fetch business data or imply that the preview is a publicly accessible real account.
@@ -184,3 +186,24 @@ removed the sender guard and removed brand HTML escaping in compiled test inputs
 All five tests rejected those faults. The course classifier was corrected after
 it incorrectly treated VM execution as a static source-text assertion (51/51
 checks after the fix). The final course run also verifies the updated source counts.
+
+## Public entry refinement — 2026-09-20
+
+The owner requested navbar placement, sign-in visibility and theme corrections on
+Home/Login. The [frontend audit](../../../../frontend/docs/architecture/features/public-entry-audit.md)
+records the implementation, pre-fix regressions, 516 browser assertions, visual
+review and scope limits. No new feature phase or QA work item changes status.
+LoginPage touched-source lint now passes; other historical frontend lint debt is
+not closed. Course checks currently pass 65/67, with pre-existing F2.4/F2.5 count
+failures reproduced before integrating the UI changes.
+
+## Theme audit follow-up — 2026-09-25
+
+The owner requested a complete Home/Login light/dark presentation audit on phone
+and desktop. The [frontend audit](../../../../frontend/docs/architecture/features/public-entry-audit.md)
+records four reproduced findings and their corrections: secondary text contrast,
+partner branding copy, invalid-field border states and theme synchronization
+between tabs. Production browser validation passes 1,360 assertions plus a
+164-assertion supplemental run; build, scoped lint, store checks and locale parity
+pass. Existing working-tree presentation changes were preserved. No business/API,
+dependency, environment or roadmap/QA work-item status change is involved.
