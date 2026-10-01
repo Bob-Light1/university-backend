@@ -32,7 +32,8 @@
 
 const { randomUUID } = require('crypto');
 
-const { RESULT_STATUS } = require('../models/result.model');
+const { Result, RESULT_STATUS } = require('../models/result.model');
+const { notDeletedFilter } = require('../../../shared/utils/soft-delete');
 const resultRepo = require('../result.repository');
 const notification = require('../../notification').service;
 
@@ -91,7 +92,9 @@ const submitResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  const result = await resultRepo.findResultForWrite(id);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
+  const result = await resultRepo.findResultForWrite(id, campusFilter);
   if (!result) return sendNotFound(res, 'Result');
 
   if (result.status !== RESULT_STATUS.DRAFT)
@@ -138,7 +141,7 @@ const submitBatch = asyncHandler(async (req, res) => {
     academicYear,
     semester,
     status:          RESULT_STATUS.DRAFT,
-    isDeleted:       false,
+    ...notDeletedFilter(Result),
     ...campusFilter,
   };
 
@@ -175,7 +178,9 @@ const publishResult = asyncHandler(async (req, res) => {
   if (!isManagerRole(req.user.role))
     return sendForbidden(res, 'Only Campus Managers or Admins can publish results.');
 
-  const resultDoc = await resultRepo.findResultForWrite(id);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
+  const resultDoc = await resultRepo.findResultForWrite(id, campusFilter);
   if (!resultDoc) return sendNotFound(res, 'Result');
 
   if (!isGlobalRole(req.user.role) &&
@@ -260,7 +265,7 @@ const publishBatch = asyncHandler(async (req, res) => {
     academicYear,
     semester,
     status:          RESULT_STATUS.SUBMITTED,
-    isDeleted:       false,
+    ...notDeletedFilter(Result),
     ...campusFilter,
   };
 
@@ -306,7 +311,9 @@ const archiveResult = asyncHandler(async (req, res) => {
   if (!isManagerRole(req.user.role))
     return sendForbidden(res, 'Only managers can archive results.');
 
-  const result = await resultRepo.findResultForWrite(id);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
+  const result = await resultRepo.findResultForWrite(id, campusFilter);
   if (!result) return sendNotFound(res, 'Result');
 
   if (!isGlobalRole(req.user.role) &&
@@ -341,14 +348,21 @@ const lockSemester = asyncHandler(async (req, res) => {
   if (!academicYear || !semester)
     return sendError(res, 400, 'academicYear and semester are required.');
 
-  const campusFilter = getCampusFilter(req, res);
-  if (!campusFilter) return; // 403 already sent
+  if (isGlobalRole(req.user.role) && req.query.campusId && req.body.schoolCampus &&
+      req.query.campusId !== req.body.schoolCampus) {
+    return sendError(res, 400, 'Conflicting campus context.');
+  }
+  const campusFilter = getCampusFilter(req, res, req.query.campusId || req.body.schoolCampus);
+  if (!campusFilter) return;
+  if (!campusFilter.schoolCampus) {
+    return sendError(res, 400, 'A campus is required to lock a semester.');
+  }
 
   const lockMatch = {
     academicYear,
     semester,
     status:    { $in: [RESULT_STATUS.PUBLISHED, RESULT_STATUS.ARCHIVED] },
-    isDeleted: false,
+    ...notDeletedFilter(Result),
     ...campusFilter,
   };
 
@@ -473,7 +487,9 @@ const auditCorrection = asyncHandler(async (req, res) => {
   if (!reason || reason.trim().length < 10)
     return sendError(res, 400, 'A reason of at least 10 characters is required for any audit correction.');
 
-  const result = await resultRepo.findResultForWrite(id);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
+  const result = await resultRepo.findResultForWrite(id, campusFilter);
   if (!result) return sendNotFound(res, 'Result');
 
   if (result.status === RESULT_STATUS.DRAFT)

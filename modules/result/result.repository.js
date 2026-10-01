@@ -101,11 +101,11 @@ const paginateResults = async (filter, { skip, limit }) => {
 };
 
 /** Full detail of a non-deleted result (lean, populate DETAIL). */
-const findResultByIdPopulated = (id) =>
-  applyPopulate(Result.findOne({ _id: id, ...RESULT_LIVE }), RESULT_DETAIL_POPULATE).lean();
+const findResultByIdPopulated = (id, campusFilter = {}) =>
+  applyPopulate(Result.findOne({ ...campusFilter, _id: id, ...RESULT_LIVE }), RESULT_DETAIL_POPULATE).lean();
 
 /** Non-deleted result doc for writing (update / delete / workflow). */
-const findResultForWrite = (id) => Result.findOne({ _id: id, ...RESULT_LIVE });
+const findResultForWrite = (id, campusFilter = {}) => Result.findOne({ ...campusFilter, _id: id, ...RESULT_LIVE });
 
 /** Result doc by id, session-aware (original grade of a RETAKE in transaction). */
 const findResultById = (id, { session } = {}) =>

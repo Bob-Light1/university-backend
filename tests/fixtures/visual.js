@@ -3,7 +3,7 @@
 /**
  * @file visual.js
  * @description The browser half of the QA — what only a rendered page can
- * answer. Two acts, one process:
+ * answer. Shared fixture acts, one process:
  *
  *   1. entitlement — which entries a campus actually DRAWS
  *      (`docs/architecture/CAMPUS_ENTITLEMENT_DESIGN.md` §15, DoD);
@@ -12,7 +12,8 @@
  *      (`docs/architecture/features/fee-receipts-and-reminders.md` §8, the
  *      browser-QA step of the §12 pattern).
  *
- * Both acts are here rather than in a second harness because they need the same
+ * The administrator AP-01–AP-09 regression act follows the existing checks.
+ * These acts are here rather than in a second harness because they need the same
  * expensive scaffolding — a replica set, the fixture, the real API and a built
  * SPA — and because a screen is where their two failure modes meet: a module
  * that is drawn but dead, and a download that arrives under the wrong name.
@@ -53,6 +54,24 @@
  *     measurement closes what the first opened. Every measurement resets it.
  */
 const fs = require('fs'); const path = require('path'); const http = require('http');
+// This harness creates accounts and publishes documents. Keep dotenv and external
+// integrations outside the owned fixture, including when launched with npm run test:visual.
+if (process.env.NODE_ENV === 'production') throw new Error('Visual fixture refuses production mode.');
+const callerDirectory = process.cwd();
+const runtimeDirectory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'erp-visual-'));
+if (process.env.SPA_DIST) process.env.SPA_DIST = path.resolve(process.env.SPA_DIST);
+if (process.argv[2]) process.argv[2] = path.resolve(process.argv[2]);
+process.chdir(runtimeDirectory);
+process.env.NODE_ENV = 'test';
+process.env.JWT_SECRET = require('node:crypto').randomBytes(48).toString('hex');
+process.env.AI_SERVICE_URL = ''; process.env.AI_SERVICE_SECRET = ''; process.env.REDIS_URL = '';
+for (const key of Object.keys(process.env)) {
+  if (/SMTP|CLOUDINARY|MAIL_|SENDGRID|TWILIO|WHATSAPP|RESEND|AT_API_KEY|AT_USERNAME/.test(key)) process.env[key] = '';
+}
+process.on('exit', () => {
+  process.chdir(callerDirectory);
+  fs.rmSync(runtimeDirectory, { recursive: true, force: true });
+});
 const mongoose = require('mongoose'); const puppeteer = require('puppeteer-core');
 const { seed, startEphemeralDatabase } = require('./seed');
 const { loadAllModels } = require('./models');
@@ -930,8 +949,21 @@ const api = async (method, p, token, body) => {
       estateBody.replace(/\s+/g, ' ').slice(0, 130) || `écran vide — ${whyBlank(estate) || 'aucune erreur signalée'}`);
   await estate.browserContext().close();
 
+  await require('./admin-portal.visual').checkAdminPortal({
+    browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
+  });
+
   closing = true;
   await browser.close(); backend.close(); spa.close();
+  // PDF generation owns additional Chromium instances; close application resources
+  // through the same facades as server shutdown before stopping the database.
+  await Promise.all([
+    require('../../modules/document').service.shutdownPool(),
+    require('../../modules/academic-print').service.shutdownAcademicPool(),
+    require('../../modules/gaet').service.shutdownQueue(),
+    require('../../modules/public-portal').service.shutdownIngestionQueue(),
+    require('../../shared/middleware/rate-limiter').shutdownRateLimiter(),
+  ]);
   await mongoose.disconnect(); await handle.stop();
 
   const bad = results.filter((r) => !r.ok);

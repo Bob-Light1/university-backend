@@ -1,5 +1,29 @@
 # Administrator portal browser audit
 
+Correction follow-up (2026-10-01): **AP-01 through AP-09 are corrected and verified**.
+The canonical browser harness passes 114/114 checks and exits with code 0; the
+backend suite passes 1,610 tests across 76 suites. Implementation, regression
+proofs and coverage boundaries are recorded in
+[the correction note](features/admin-portal-audit-corrections.md).
+
+| Finding | Verified correction |
+| --- | --- |
+| AP-01 | Result reads and writes preserve campus context. Closing A locks 18 results and generates six transcripts; all B results and transcripts remain unchanged. Campus-less global closure is rejected. |
+| AP-02 | Campus announcement lists are scoped and creation persists on the selected campus. |
+| AP-03 | An unconfigured plan displays the translated label. |
+| AP-04 | Mentor, staff and partner creation persists with the selected campus. |
+| AP-05 | Examination lists and totals match the selected campus. |
+| AP-06 | Blank optional fee/payment dates submit; a 10,000 fee and 2,500 payment leave 7,500 outstanding. |
+| AP-07 | Document list queries and server filtering preserve campus context. |
+| AP-08 | Mentor/staff lists honor global actors' selected campus and retain identity scope for campus actors. |
+| AP-09 | Lock, unlock and restore require ten trimmed reason characters; labels and errors are translated in all ten locales. |
+
+The September 27 observations and coverage matrix below are historical evidence,
+including their references to then-open AP findings. This table supersedes those
+defect statuses. Unexecuted combinations and external integrations remain outside
+this bounded correction pass; full administrator acceptance is incomplete.
+
+
 Date: 2026-09-27. Status: audit pass recorded with defects; full administrator acceptance remains incomplete.
 
 ## Scope and method
@@ -219,7 +243,8 @@ and unavailable integrations prevent an all-green administrator acceptance verdi
 Screenshots were captured as artifacts; their pixels have not been independently
 reviewed because the image-view tool was blocked by the local sandbox failure.
 
-No application fix has been implemented for AP-01 through AP-09. This audit does
+At the end of the September 27 audit, no application fix had been implemented
+for AP-01 through AP-09. See the September 30 correction follow-up above. This audit does
 not complete CH-2, CH-4 or CH-5 in [the QA strategy](QA_TEST_STRATEGY.md), change
 product delivery status, or replace its acceptance process. Existing frontend
 lint debt and historical course-check failures remain outside this work.

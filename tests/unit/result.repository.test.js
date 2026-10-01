@@ -394,3 +394,9 @@ describe('gradingScale', () => {
     expect(save).toHaveBeenCalled();
   });
 });
+
+
+test.each(['findResultByIdPopulated', 'findResultForWrite'])('%s applies explicit campus and derived deletion filters', async lookup => {
+  await repo[lookup]('result-id', { schoolCampus: 'campus-a' });
+  expect(Result.findOne).toHaveBeenLastCalledWith({ _id: 'result-id', schoolCampus: 'campus-a', isDeleted: false });
+});

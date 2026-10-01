@@ -43,14 +43,22 @@ const isManagerRole = (role) => isGlobalRole(role) || role === 'CAMPUS_MANAGER';
  *
  * @param {Object} req - Express request (req.user must be populated by authenticate)
  * @param {Object} res - Express response (used only when an error must be sent)
- * @returns {Object|null} MongoDB filter, or null when a 403 has been sent
+ * @param {string} [requestedCampusId] Requested campus, defaulting to the query.
+ * @returns {Object|null} Filter with an ObjectId campus, or null after a 400/403 response
  */
-const getCampusFilter = (req, res) => {
+const getCampusFilter = (req, res, requestedCampusId = req.query.campusId) => {
+  if (isGlobalRole(req.user.role) && requestedCampusId && !isValidObjectId(requestedCampusId)) {
+    sendError(res, 400, 'Invalid campusId.');
+    return null;
+  }
   try {
     // Only ADMIN/DIRECTOR may pass an explicit campusId override via query param.
     // For all other roles buildCampusFilter ignores the second argument and uses
     // req.user.campusId exclusively — preventing cross-campus query injection.
-    return buildCampusFilter(req.user, req.query.campusId || null);
+    const filter = buildCampusFilter(req.user, requestedCampusId || null);
+    return filter.schoolCampus
+      ? { ...filter, schoolCampus: new mongoose.Types.ObjectId(String(filter.schoolCampus)) }
+      : filter;
   } catch (err) {
     // buildCampusFilter throws when a non-global role has no valid campusId.
     // Log the anomaly and return a 403 instead of leaking all campus data.

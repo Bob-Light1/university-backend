@@ -1,67 +1,59 @@
 # Current task and handoff
 
-Last updated: 2026-09-27.
-Status: AUDIT PASS RECORDED — full administrator acceptance incomplete; defects remain.
+Last updated: 2026-10-01.
+Status: COMPLETED — AP-01 through AP-09 corrections and bounded verification.
 Backend branch: `feat/fee-receipts-and-reminders`; frontend branch: `main`.
 
-## Objective and authorization
+## Authorization and outcome
 
-Test administrator usage starting at the real login form. The owner selected a
-local environment with fictional data and subsequently asked to continue.
-Application fixes, commits, publication and deployment have not been performed.
+The owner authorized correction and verification of the nine confirmed findings in
+[the administrator audit](architecture/ADMIN_PORTAL_BROWSER_AUDIT.md), then asked
+to resume. All nine are corrected; implementation, registry reviews, regression
+proofs and remaining coverage boundaries are in
+[the correction note](architecture/features/admin-portal-audit-corrections.md).
 
-Canonical scope, findings, checks and limitations:
-[administrator browser audit](architecture/ADMIN_PORTAL_BROWSER_AUDIT.md).
+Selected campus propagates through results, announcements, exams, GED and account
+creation. The backend honors GED/mentor/staff list context and scopes result reads
+and writes, including semester closure and ObjectId aggregation. Optional finance
+dates submit, document reasons match server validation, and unconfigured offers
+show a translated label. Required frontend consumers and all ten document catalogs
+were updated. No schema migration is required.
 
-## Current evidence
+## Checks and evidence
 
-- Actual form login, API and ephemeral replica set; current frontend build passed.
-- 13 administrator routes and 22 campus routes rendered under ADMIN. Substantive
-  workflows and exact remaining coverage are listed in the canonical report.
-- Accounts, profile/security, campus archive/restore, Premium offer, Finance
-  freeze/reactivation, public content, global announcements, application review
-  and competition lifecycle were exercised.
-- Class, subject, student, teacher, parent and course creation persisted; course
-  submission/approval and staff-role creation/edit/deactivation were tested.
-- Fee/payment arithmetic and receipt, income, expense approval/payment, document
-  workflow with valid reasons, and all six academic PDF preview types passed.
-- Nine defect groups recorded. AP-01 is highest priority: a semester closure
-  triggered from campus A locked 18 A results and 10 B results. Read-only
-  aggregation proved the before/after change in the owned disposable database.
-- Other findings: campus context lost in announcements/exams/documents; mentor,
-  staff and partner creation missing campus; mentor/staff queries ignore campus;
-  empty optional finance dates silently prevent submission; null-plan translation
-  key; document lock labels a required reason optional. No product fixes applied.
+- Full Jest: 76 suites / 1,610 tests PASS; final focused API/repository: 66 PASS.
+  Real loopback SMTP: 2 PASS after compatible dependency upgrades.
+- Backend lint: 0 errors, 40 existing warnings. Dependency gate PASS with the
+  two preexisting named extract-zip exceptions; no new exception.
+- Frontend build and touched-file lint PASS; finance schema 11/11 and locale
+  parity 190/190 PASS. Red-regression evidence is preserved in private logs.
+- Disposable fixture self-check 16/16 and API/data journey 21/21 PASS.
+- Canonical `npm run test:visual`: 114/114 PASS and normal exit code 0. The runner
+  now closes PDF pools and other application resources through exported facades.
+  Administrator/manager logins, both themes and entitlement/receipt checks pass;
+  screenshots reviewed. Closing A locks 18 results and generates six transcripts
+  with zero errors; all B results and transcripts remain unchanged.
 
-## Runtime, artifacts and next action
+Private, ignored evidence: `tests/fixtures/.generated/admin-corrections/evidence/`;
+screenshots: `tests/fixtures/.generated/visual/`. Never commit fixture credentials.
 
-The audit-owned browser, API/static servers and disposable database were stopped
-cleanly. No production data was used. Synthetic changes were confined to that
-runtime; the Finance usage state was restored to active before cleanup.
+## Preserved work and boundaries
 
-Evidence: `tests/fixtures/.generated/admin-portal-audit-2026-09-27/` contains
-`audit-summary.json`, raw `results.json`, DOM/PNG captures, seven PDF files and
-archived exploratory scripts under `harness/`. Runtime log:
-`tests/fixtures/.generated/admin-portal-runtime.log`. Fixture account exports
-remain private generated artifacts; never paste their credentials into reports.
+Existing frontend Home/Login changes were preserved. Its old light-only shared
+browser assertion now matches the already-approved theme switch. The visual
+runner isolates dotenv/external channels and refuses production mode.
 
-The audit pass is recorded; **full administrator acceptance remains incomplete**.
-The report identifies defects, blocked AI/image/delivery integrations and the
-unexecuted workflow combinations. Raw results contain superseded harness failures
-and missing transcript prerequisites; they must not be counted as product bugs.
-The exploratory stages depend on prior state and are not a new CI suite.
+Supplemental course checks: 63/67. Track 18 lesson 1 and F2 lessons 2, 4, 5 have
+count-snapshot failures; no referenced path changed. This separate-repository debt
+remains explicit. Full administrator acceptance, external AI/image/delivery gaps
+and CH-2/4/5 are not closed. Phase 1-B retains its ordering and 30–44 day estimate.
 
-Next action: address AP-01 campus-scoped reads and writes, then the other confirmed
-findings, add meaningful regression coverage, and rerun affected browser journeys.
-This is a follow-up recommendation, not an implementation started by this audit.
-Do not mark CH-2/CH-4/CH-5 or product phases complete from these ad hoc results.
+The identified old visual fixture and its PDF child were stopped. An older
+Chromium process (PID 78347, September 30 21:36 local time, parent user systemd)
+was left untouched because its original ownership is uncertain; it predates the
+successful October 1 run. No machine-wide process cleanup is claimed.
 
-## Preserved prior work and limitations
-
-The September 25 Home/Login presentation audit remains completed and is documented
-in [the frontend public-entry audit](../../frontend/docs/architecture/features/public-entry-audit.md).
-Its previous handoff was preserved in the generated evidence directory. Existing
-uncommitted frontend presentation/theme/catalog work and backend branding-note
-changes were preserved. Earlier frontend full-tree lint debt and historical
-course-check failures remain open. No full Jest, dependency audit, course suite
-or cross-platform journey suite has been rerun during this browser audit.
+All changes remain uncommitted; no commit, push or deployment was requested.
+The sandbox has a bubblewrap mount error; approved escalated commands were used.
+No implementation step remains for AP-01–AP-09. Further roadmap work requires
+a new owner instruction; this handoff does not authorize a new phase.

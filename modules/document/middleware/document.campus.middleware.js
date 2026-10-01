@@ -162,15 +162,16 @@ const enforceCampusStorageQuota = async (req, res, next) => {
  * Returns a MongoDB filter object scoped to the request's campus.
  * Applied in ALL document DB queries to enforce Layer 2 isolation.
  *
- * Global roles receive an empty filter (all campuses).
+ * Global roles may select a validated campus; otherwise they see all campuses.
  * All other roles receive { campusId: req.campusId, deletedAt: null }.
  *
  * @param {import('express').Request} req
+ * @param {string|null} requestedCampusId Validated optional campus for global roles.
  * @returns {object} MongoDB filter
  */
-const buildCampusFilter = (req) => {
+const buildCampusFilter = (req, requestedCampusId = null) => {
   if (req.isGlobalRole) {
-    return { deletedAt: null };
+    return { ...(requestedCampusId ? { campusId: requestedCampusId } : {}), deletedAt: null };
   }
   return {
     campusId:  req.campusId,

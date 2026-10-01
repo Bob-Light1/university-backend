@@ -86,6 +86,13 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-01 regression maintenance: AP-01–AP-09 corrections are verified by the
+permanent browser act and focused route/isolation checks. The complete visual
+harness passes 114/114 checks (exit 0); the backend suite passes 1,610 tests.
+[Evidence and limitations](features/admin-portal-audit-corrections.md) are tracked
+with phase 1-B row 16. This bounded regression pass does not deliver
+CH-2, CH-4 or CH-5; their statuses and second-person acceptance remain unchanged.
+
 > **Source de vérité de l'avancement.** À mettre à jour à chaque commit touchant un chantier.
 
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
