@@ -94,6 +94,8 @@ module.exports = [
     ignores: [
       'node_modules/**',
       'coverage/**',
+      // Disposable QA artifacts may contain copied frontend sources.
+      'tests/fixtures/.generated/**',
       'uploads/**',
       'logs/**',
       // `docs/` est ignoré par git (.gitignore ligne 7) et `docs/cours/` est un
@@ -161,7 +163,7 @@ module.exports = [
   // navigateur, pas dans Node : `document`, `window` et `MouseEvent` y sont
   // légitimes. Portée volontairement réduite à ce seul fichier.
   {
-    files: ['tests/fixtures/visual.js'],
+    files: ['tests/fixtures/visual.js', 'tests/fixtures/admin-portal.visual.js'],
     languageOptions: {
       globals: {
         ...globals.browser,

@@ -426,10 +426,16 @@ still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
   methods (`uploader.upload_stream`, `uploader.destroy`), both unchanged in v2. **Without this
   override a clean `npm install` stops on `ERESOLVE`.**
 
-Unit tests mock `cloudinary`, `nodemailer`, `sharp` and `puppeteer-core`, so they stay green through
+Most unit tests mock `cloudinary`, `nodemailer`, `sharp` and `puppeteer-core`, so they stay green through
 a broken upgrade of any of them. `optimizeImage()` is the sharpest case: it ends in
 `catch { return buffer; }`, so a broken image pipeline returns the input and reports success. Verify
-those four against real inputs, not against the suite.
+those four against real inputs, not only against mocked tests.
+
+The 2026-09-30 administrator correction pass updates Nodemailer to 10.0.13
+(Node >=20; CommonJS supported) and brace-expansion within its existing 1.x,
+2.x and 5.x dependency ranges. `tests/integration/notification-smtp.test.js`
+exercises actual SMTP success and recipient rejection on loopback. The two
+existing extract-zip exceptions remain unchanged.
 
 ---
 
@@ -466,9 +472,11 @@ No API, persistence, scope or entitlement contract is added by this presentation
 
 **GAET** (`/api/gaet`) — Automatic Timetable Generation. `GaetConstraint` with 7-state machine (`DRAFT → GENERATING → GENERATED → PUBLISHED → …`); CPU-bound worker on an isolated thread; conflict service; zombie recovery at boot (`GENERATING` > 15 min → `FAILED`).
 
+**Result** (`/api/results`) — selected `campusId` scopes global-actor reads and writes; scoped roles keep their JWT campus. Semester closure requires an effective campus (`campusId` query or global `schoolCampus` body), rejects conflicting context, and uses ObjectId filters for locking, transcript aggregation and ranking. See `docs/architecture/features/admin-portal-audit-corrections.md`.
+
 **Exam** (`/api/examination`) — sessions, enrollments, grading, submissions, appeals, question-bank, certificates, analytics; analytics worker; nightly anti-cheat cron.
 
-**Document** (`/api/documents`) — GED with versioning; PDF via Puppeteer pool; QR codes, templates, sharing, audit trail; weekly retention cron.
+**Document** (`/api/documents`) — GED with versioning; PDF via Puppeteer pool; QR codes, templates, sharing, audit trail; weekly retention cron. Lists honor a validated optional `campusId` query for global actors; scoped identities always retain their authenticated campus.
 
 **Academic-print** (`/api/print`) — print jobs persisted in MongoDB (`PrintJob` model); atomic worker claim + cron sweep of pending/stale jobs.
 

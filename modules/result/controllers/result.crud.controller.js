@@ -74,8 +74,13 @@ const createResult = asyncHandler(async (req, res) => {
     gradingScale, schoolCampus: campusFromBody,
   } = req.body;
 
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
   const resolvedCampus = resolveCampusId(req, campusFromBody);
-  if (!resolvedCampus) return sendError(res, 400, 'schoolCampus is required.');
+  if (!resolvedCampus || !isValidObjectId(resolvedCampus)) return sendError(res, 400, 'A valid schoolCampus is required.');
+  if (campusFilter.schoolCampus && String(campusFilter.schoolCampus) !== String(resolvedCampus)) {
+    return sendError(res, 400, 'Conflicting campus context.');
+  }
 
   // A teacher may only attribute a result to themselves — the body teacher is
   // ignored for TEACHER role (managers/admins may grade on behalf of any teacher).
@@ -94,10 +99,8 @@ const createResult = asyncHandler(async (req, res) => {
   if (!evaluationTitle?.trim()) return sendError(res, 400, 'evaluationTitle is required.');
 
   // Campus isolation : does the student belong to the campus ?
-  if (!isGlobalRole(req.user.role)) {
-    const belongs = await validateStudentBelongsToCampus(student, resolvedCampus);
-    if (!belongs) return sendForbidden(res, 'Student does not belong to your campus.');
-  }
+  const belongs = await validateStudentBelongsToCampus(student, resolvedCampus);
+  if (!belongs) return sendForbidden(res, 'Student does not belong to the selected campus.');
 
   // Pedagogical integrity — the attributed teacher must teach this subject AND be
   // assigned to this class (mirrors bulkCreateResults; subject↔class is not modelled
@@ -163,8 +166,13 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
     schoolCampus: campusFromBody,
   } = req.body;
 
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
   const resolvedCampus = resolveCampusId(req, campusFromBody);
-  if (!resolvedCampus) return sendError(res, 400, 'schoolCampus is required.');
+  if (!resolvedCampus || !isValidObjectId(resolvedCampus)) return sendError(res, 400, 'A valid schoolCampus is required.');
+  if (campusFilter.schoolCampus && String(campusFilter.schoolCampus) !== String(resolvedCampus)) {
+    return sendError(res, 400, 'Conflicting campus context.');
+  }
 
   // A teacher may only attribute results to themselves — the body teacherId is
   // ignored for TEACHER role (managers/admins may grade on behalf of any teacher).
@@ -189,7 +197,7 @@ const bulkCreateResults = asyncHandler(async (req, res) => {
   // Verify the class belongs to the campus
   const classDoc = await getClassCampusRef(classId);
   if (!classDoc) return sendNotFound(res, 'Class');
-  if (!isGlobalRole(req.user.role) && classDoc.schoolCampus.toString() !== resolvedCampus.toString())
+  if (classDoc.schoolCampus.toString() !== resolvedCampus.toString())
     return sendForbidden(res, 'Class does not belong to your campus.');
 
   // Pedagogical integrity — the teacher the grades are attributed to must teach
@@ -408,7 +416,9 @@ const getResultById = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  const result = await resultRepo.findResultByIdPopulated(id);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
+  const result = await resultRepo.findResultByIdPopulated(id, campusFilter);
 
   if (!result) return sendNotFound(res, 'Result');
 
@@ -451,7 +461,9 @@ const updateResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  const result = await resultRepo.findResultForWrite(id);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
+  const result = await resultRepo.findResultForWrite(id, campusFilter);
   if (!result) return sendNotFound(res, 'Result');
 
   // Rights check via canModify [S3-1]
@@ -516,7 +528,9 @@ const deleteResult = asyncHandler(async (req, res) => {
   const { id } = req.params;
   if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid result ID.');
 
-  const result = await resultRepo.findResultForWrite(id);
+  const campusFilter = getCampusFilter(req, res);
+  if (!campusFilter) return;
+  const result = await resultRepo.findResultForWrite(id, campusFilter);
   if (!result) return sendNotFound(res, 'Result');
 
   if (!isGlobalRole(req.user.role) &&

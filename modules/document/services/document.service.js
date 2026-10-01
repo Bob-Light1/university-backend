@@ -22,7 +22,7 @@ const repo = require('../document.repository');
 // Lazy require: document is in the static closure of campus (via staff).
 const getCampusName = (...args) => require('../../campus').service.getCampusName(...args);
 
-const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
+const { invalidateStorageCache, buildCampusFilter } = require('../middleware/document.campus.middleware');
 const { validateContentBlocks }  = require('./document.validation.service');
 const storageService             = require('./document.storage.service');
 
@@ -34,7 +34,7 @@ const {
 
 const { AUDIT_ACTION } = require('../models/document.audit.model');
 const Document = require('../models/document.model');
-const { deletedOnlyFilter } = require('../../../shared/utils/soft-delete');
+const { deletedOnlyFilter, notDeletedFilter } = require('../../../shared/utils/soft-delete');
 
 /**
  * Deleted-only fragment for the trash view — derived from the model rather than hand-written,
@@ -319,12 +319,10 @@ const listDocuments = async (req, queryParams) => {
   // other role rather than silently returning live documents instead.
   const deletionFragment = deleted === 'true' && req.isGlobalRole
     ? { ...DELETED_ONLY }
-    : { deletedAt: null };
+    : notDeletedFilter(Document);
 
-  // Start with campus-scoped base filter (Layer 2 isolation)
-  const filter = req.isGlobalRole
-    ? { ...deletionFragment }
-    : { campusId: req.campusId, ...deletionFragment };
+  // The authenticated campus always wins for scoped roles.
+  const filter = { ...buildCampusFilter(req, queryParams.campusId), ...deletionFragment };
 
   if (type)     filter.type     = type;
   if (category) filter.category = category;

@@ -83,7 +83,7 @@ const buildUserResponse = (staff, permissions = []) => ({
 });
 
 const getCampusFilter = (req) => {
-  try { return buildCampusFilter(req.user); }
+  try { return buildCampusFilter(req.user, req.query.campusId); }
   catch (err) { err.statusCode = 403; throw err; }
 };
 

@@ -25,7 +25,12 @@ async function checkProductHome({ browser, baseUrl, dist, shots, record }) {
     await page.waitForSelector('[data-testid="product-home"]');
     const en = JSON.parse(fs.readFileSync(path.join(dist, 'locales/en/home.json')));
     record('home: product positioning and single footer', await page.evaluate(title => document.querySelectorAll('footer').length === 1 && document.querySelector('h1').textContent.includes(title), en.heroTitle));
-    record('home: remains light with dark workspace preference', await page.$eval('.product-home', element => getComputedStyle(element).backgroundColor === 'rgb(255, 255, 255)'));
+    // The approved public theme switch supersedes the former light-only home.
+    const darkBackground = await page.$eval('.product-home', element => getComputedStyle(element).backgroundColor);
+    record('home: honors the dark preference', await page.evaluate(() => document.documentElement.dataset.theme === 'dark') && darkBackground !== 'rgb(255, 255, 255)');
+    await page.click('[data-testid="home-theme"]');
+    await page.waitForFunction(() => document.documentElement.dataset.theme === 'light');
+    record('home: switches to light through the public control', await page.$eval('.product-home', element => getComputedStyle(element).backgroundColor === 'rgb(255, 255, 255)'));
     await page.click('[data-testid="preview-tab-finance"]');
     record('home: finance preview shows the configured illustration', await page.$eval('[data-testid="preview-panel"]', (element, title) => element.textContent.includes(title), en.previewTitles.finance));
     await page.focus('[data-testid="preview-tab-finance"]');

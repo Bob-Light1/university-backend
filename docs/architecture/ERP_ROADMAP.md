@@ -100,13 +100,19 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-10-01: the authorized AP-01–AP-09 correction pass is completed and verified
+(114/114 browser checks, 1,610 backend tests). It is tracked in phase 1-B,
+supplemental row 16 and [the correction note](features/admin-portal-audit-corrections.md).
+Phase 1-B remains in progress; phase order and the remaining 30–44 day estimate
+are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
+
 > **Source de vérité de l'avancement produit.** À mettre à jour à chaque commit
 > qui termine ou démarre un chantier de ce document.
 
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-09-02 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-01 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -341,6 +347,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | 13 | Portail public — intégration continue et socle de test | `B4` | Application Next.js 15 livrée : 3 989 lignes, 8 locales, tunnel de préinscription, anti-fraude, liens courts, agent de service et manifeste | **Aucun test et aucune chaîne d'intégration** — seule brique dans ce cas, et **seule brique exposée à un public non authentifié**. Vitest et un socle minimal sur le tunnel et l'anti-fraude, plus un `ci.yml` aligné sur les trois autres. Sans quoi B4 n'est couvert qu'à la phase 3, par CH-4 | 2–3 j | `À FAIRE` |
 | 14 | GED — l'expiration TTL contourne la danger zone | `B1` | Suppression définitive harmonisée (`shared/lib/hard-delete/`) ; teardown complet du GED dans `document.service.hardDeleteDocument` — fichier importé, instantané PDF, QR, instantanés de **chaque** version, liens de partage, ré-ingestion ai-service | `document.model.js` déclare `index({ expiresAt: 1 }, { expireAfterSeconds: 0 })`. **Aucun code n'écrit ce champ aujourd'hui : le piège est armé, pas déclenché.** Le jour où il l'est, Mongo retire la ligne **hors** du seul chemin de suppression autorisé (§5.2 de `CLAUDE.md`) : rien ne nettoie les fichiers, rien ne purge les liens de partage, rien ne ré-ingère côté IA, et **aucune ligne n'arrive au registre de suppression**. Soit le champ est retiré, soit son expiration passe par le service | 1–2 j | `À FAIRE` |
 | 15 | Quotas dérivés du palier | `B1·B2` | `Campus.quotas` réellement appliqué par `canAddStudent` / `canAddTeacher` / `canAddClass` / `canAddDocumentStorage` | **La grille du §10 vend au-dessus de ce que le code applique** : elle facture « par campus de **2 000 élèves** » et « hébergement **≤ 20 Go** » quand `DEFAULT_QUOTAS` vaut **1 000 élèves et 5 Go** — le 1 001ᵉ élève et le 5,1ᵉ Go sont refusés à un client qui a payé pour le double et le quadruple. Les quotas sont aujourd'hui une dérogation par campus, jamais une propriété du palier : les dériver de `PLAN_PRESETS`, ou aligner la grille (D-R10) | 1–2 j | `À FAIRE` |
+| 16 | Administrator audit corrections AP-01–AP-09 | `B1·B2` | Campus context, result closure, account creation, optional dates, document reasons and null-plan label corrected | None within AP-01–AP-09: 114/114 browser checks and 1,610 backend tests pass; see [correction note](features/admin-portal-audit-corrections.md) for retained acceptance boundaries | Bounded corrective work; not re-estimated | `DELIVERED` |
 
 Presentation follow-up (2026-09-18): the owner approved the
 [product home and deployment branding](features/product-home-and-branding.md)
@@ -887,6 +894,7 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R16** | 2026-08-22 | **La contradiction de prix n'est pas tranchée ici, elle devient un arbitrage ouvert** (§12, D-R8). Trois documents portent deux grilles sous les mêmes trois noms `free`/`standard`/`premium` | Ce n'est pas une coquille à corriger d'un côté : c'est une **collision de vocabulaire** entre les paliers de modules et les plans du module IA, que `CAMPUS_ENTITLEMENT_DESIGN.md` D-D a fusionnés en croyant unifier. Trancher unilatéralement reviendrait à fixer un prix dans un document de planning — précisément ce que D-R5 refuse |
 | **D-R17** | 2026-08-27 | **La ligne 6 tient les étapes 1 à 9 du patron §12 et s'arrête à deux cases**, énoncées plutôt que contournées : la garde du cours est rouge et la QA navigateur n'est pas jouée. Trois constats d'audit fermés en chemin, chacun par un test rouge avant correction — `{name}` jamais interpolé dans **toutes** les relances de frais (« Bonjour , » depuis l'origine du gabarit d'impayé), date d'échéance en ISO quelle que soit la langue, et le reçu — seul rendu PDF de la plateforme atteignable par un `STUDENT` — laissé derrière le quota générique par IP au lieu du budget par utilisateur que la GED applique déjà. Ce dernier devient `pdfLimiter` dans `shared/middleware/rate-limiter.js`, la copie locale du GED est supprimée, et la règle entre au §7 de `CLAUDE.md`. Effet de bord enregistré : le socle de test passe de 1 426 à **1 546 tests / 71 suites** (D-R7 en notait 1 407 / 68) | La règle de maintenance de ce document dit d'écrire ce qui reste, pas d'arrondir. Les deux cases ouvertes ne sont pas du même genre : la QA navigateur est du temps d'opérateur, la garde du cours est un **arbitrage de contenu** — la piste 09 s'intitule *Seven Jobs, Four Postures* et compte sept jobs sur toute sa narration, or il y en a huit depuis ce chantier. Substituer le chiffre partout ou assumer la date de gel de la leçon est une décision d'auteur, prise dans le dépôt du cours et pas ici |
 | **D-R18** | 2026-09-02 | **La ligne 6 de la phase 1-B est livrée**, et son étape 10 — la QA navigateur — est **écrite dans le harnais** (`npm run test:visual`, 16 → **36 contrôles**) plutôt que jouée à la main. Le portail étudiant y est rendu pour la première fois, ce qui entame la ligne 2. Restant 1-B : **32–47 → 30–44 j** ; total **212–275 → 210–272 j**, tableaux monétaires du §9 recomposés | La QA manuelle prouve l'état d'un jour ; le harnais le prouve à chaque exécution, et c'est le précédent posé par D-R7. Le bénéfice est immédiat et vérifie la règle : elle a trouvé ce qu'aucun test existant ne pouvait voir — `exposedHeaders` n'exposait pas `Content-Disposition`, donc **tout téléchargement binaire arrivait sous un nom de repli** dès lors que le SPA et l'API ne partagent pas une origine, c'est-à-dire toujours. Le reçu perdait son numéro, l'export GED son nom de fichier ; supertest, same-origin, lisait l'en-tête et ne voyait rien. Corrigé en une ligne d'`app.js`, fermé par un test vu rouge |
+| **D-R19** | 2026-09-30 | The owner authorizes AP-01–AP-09 correction and verification before further roadmap implementation; track this bounded work in phase 1-B row 16 | Preserve phase ordering, existing estimates and CH-2/CH-4/CH-5 acceptance boundaries; [measured evidence](features/admin-portal-audit-corrections.md) owns the correction status |
 
 ---
 

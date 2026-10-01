@@ -20,6 +20,8 @@ const {
   sendPaginated, asyncHandler,
 } = require('../../../shared/utils/response-helpers');
 
+const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
+
 const documentService = require('../services/document.service');
 const storageService  = require('../services/document.storage.service');
 const { invalidateStorageCache } = require('../middleware/document.campus.middleware');
@@ -85,6 +87,10 @@ const createDocument = asyncHandler(async (req, res) => {
  * only, since they are the only roles that may permanently delete one.
  */
 const listDocuments = asyncHandler(async (req, res) => {
+  if (req.isGlobalRole && req.query.campusId && !isValidObjectId(req.query.campusId)) {
+    return sendError(res, 400, 'Invalid campusId');
+  }
+
   // The trash view exposes records an operator already removed from sight, and only ADMIN /
   // DIRECTOR can do anything with one. Refuse the flag outright rather than quietly answering
   // with the live list, which would read as "the trash is empty".
