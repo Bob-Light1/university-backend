@@ -11,7 +11,8 @@
  *   1. a seed on a blank database completes inside the 60 s budget;
  *   2. two consecutive seeds produce a byte-identical database — same ObjectIds,
  *      same timestamps, same password hashes;
- *   3. `verify.js` FAILS loudly when a single expected row is missing (a verifier
+ *   3. `verify.js` FAILS loudly when an expected row is missing or a supporting
+ *      record has a foreign-campus reference (a verifier
  *      that cannot fail proves nothing about the fixture it blesses);
  *   4. `.generated/accounts.json` covers the nine signed-in roles, with two
  *      PARTNER accounts per campus;
@@ -31,6 +32,7 @@ const { verify } = require('./verify');
 const { loadAllModels, model } = require('./models');
 const { readAccounts } = require('./exports');
 const { COUNTS, CAMPUS_KEYS } = require('./seed.config');
+const { oid } = require('./ids');
 
 /** Budget of §4.7, in milliseconds. */
 const SEED_BUDGET_MS = 60000;
@@ -85,6 +87,28 @@ const main = async () => {
   loadAllModels();
 
   try {
+    console.log('\n› 0. seed guards run before any purge');
+    const probe = mongoose.connection.db.collection('fixture_guard_probe');
+    await probe.insertOne({ _id: 'must-survive-refusal' });
+    await mongoose.connection.db.admin().command({ setParameter: 1, ttlMonitorEnabled: true });
+    let refusedTtl = false;
+    try { await seed({}); } catch (error) {
+      refusedTtl = /ttlMonitorEnabled=false/.test(error.message);
+    } finally {
+      await mongoose.connection.db.admin().command({ setParameter: 1, ttlMonitorEnabled: false });
+    }
+    record('TTL-enabled server is refused before purge', refusedTtl && await probe.countDocuments({}) === 1);
+    const previousMode = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    let refusedProduction = false;
+    try { await seed({}); } catch (error) {
+      refusedProduction = /Refusing to seed/.test(error.message);
+    } finally {
+      if (previousMode === undefined) delete process.env.NODE_ENV;
+      else process.env.NODE_ENV = previousMode;
+    }
+    record('programmatic seed refuses production before purge', refusedProduction && await probe.countDocuments({}) === 1);
+
     console.log('\n› 1. first seed on a blank database');
     const first = await seed({});
     record(
@@ -118,6 +142,44 @@ const main = async () => {
     record('verify() rejects a database missing one student', threw);
 
     await Student.collection.insertOne(victim);
+
+    console.log('\n› 3b. added collections and ownership checks fail on corruption');
+    for (const name of [
+      'GaetConstraint', 'Notification', 'UserPreferences', 'PrintJob',
+      'FinalTranscript', 'DocumentVersion', 'DocumentShare', 'DocumentTemplate',
+    ]) {
+      const Model = model(name);
+      const original = await Model.findOne({}).lean();
+      await Model.collection.deleteOne({ _id: original._id });
+      let rejected = false;
+      try { await verify({ silent: true }); } catch (error) {
+        rejected = /verification failed/i.test(error.message);
+      } finally { await Model.collection.insertOne(original); }
+      record(`verify() rejects a missing ${name}`, rejected);
+    }
+    const corruptions = [
+      ['GaetConstraint', 'gaet:A:001', 'courseRequirements.0.teacherId', oid('teacher:B:001'), 'GAET references'],
+      ['Notification', 'notification:A:001', 'recipientId', oid('student:B:001'), 'Notifications belong'],
+      ['UserPreferences', 'preferences:A:001', 'userId', oid('student:B:002'), 'Preferences belong'],
+      ['PrintJob', 'print-job:A:001', 'targets.0.id', String(oid('student:B:001')), 'Print targets'],
+      ['FinalTranscript', 'transcript:A:001', 'class', oid('class:B:001'), 'Transcripts belong'],
+      ['DocumentVersion', 'document-version:A:001', 'documentId', oid('document:B:001'), 'Versions belong'],
+      ['DocumentShare', 'document-share:A:001', 'documentId', oid('document:B:001'), 'Shares belong'],
+      ['DocumentTemplate', 'document-template:A:001', 'isGlobal', true, 'Templates remain'],
+      ['Notification', 'notification:A:001', 'channel', 'email', 'external delivery'],
+      ['PrintJob', 'print-job:A:001', 'status', 'PENDING', 'claimed by workers'],
+    ];
+    for (const [name, key, field, value, expectedFailure] of corruptions) {
+      const Model = model(name);
+      const original = await Model.findById(oid(key)).lean();
+      await Model.collection.updateOne({ _id: original._id }, { $set: { [field]: value } });
+      let rejected = false;
+      try { await verify({ silent: true }); } catch (error) {
+        rejected = error.message.includes(expectedFailure);
+      } finally { await Model.collection.replaceOne({ _id: original._id }, original); }
+      record(`verify() rejects ${name}.${field} corruption`, rejected);
+    }
+    await verify({ silent: true });
 
     console.log('\n› 4. exported account catalogue');
     const catalogue = readAccounts();

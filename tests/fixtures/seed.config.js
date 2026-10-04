@@ -89,6 +89,14 @@ const COUNTS = Object.freeze({
     examGradings: 3,
     scheduleSlots: 5,       // one teaching week
     scheduleSlotsDeleted: 1,
+    gaetConstraints: 2,
+    notifications: 2,
+    userPreferences: 2,
+    printJobs: 2,
+    finalTranscripts: 2,
+    documentVersions: 2,
+    documentShares: 2,
+    documentTemplates: 2,
   }),
   B: Object.freeze({
     teachers: 2,
@@ -132,6 +140,14 @@ const COUNTS = Object.freeze({
     examGradings: 3,
     scheduleSlots: 5,
     scheduleSlotsDeleted: 1,
+    gaetConstraints: 1,
+    notifications: 1,
+    userPreferences: 1,
+    printJobs: 1,
+    finalTranscripts: 1,
+    documentVersions: 1,
+    documentShares: 1,
+    documentTemplates: 1,
   }),
   /**
    * Collections with no campus field at all. `Level` sits here against the

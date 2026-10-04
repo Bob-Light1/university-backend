@@ -41,6 +41,8 @@ const actorsBuilder = require('./builders/actors.builder');
 const recordsBuilder = require('./builders/records.builder');
 const financeBuilder = require('./builders/finance.builder');
 const contentBuilder = require('./builders/content.builder');
+const supportingBuilder = require('./builders/supporting.builder');
+const documentHistoryBuilder = require('./builders/document-history.builder');
 
 /**
  * Builds the context every builder shares: the frozen clock, the single password
@@ -164,6 +166,8 @@ const buildAll = (ctx) => [
   ...recordsBuilder.build(ctx),
   ...financeBuilder.build(ctx),
   ...contentBuilder.build(ctx),
+  ...supportingBuilder.build(ctx),
+  ...documentHistoryBuilder.build(ctx),
 ];
 
 /**
@@ -174,6 +178,14 @@ const buildAll = (ctx) => [
 const seed = async ({ print = false } = {}) => {
   const startedAt = Date.now();
   const connection = mongoose.connection;
+
+  // Programmatic callers must satisfy the same guard as the CLI before purge.
+  const hosts = connection.getClient().options.hosts.map(String).join(',');
+  assertTestDatabaseUri(`mongodb://${hosts}/${connection.name}`);
+  const { ttlMonitorEnabled } = await connection.db.admin().command({ getParameter: 1, ttlMonitorEnabled: 1 });
+  if (ttlMonitorEnabled !== false) {
+    throw new Error('Frozen fixture requires ttlMonitorEnabled=false. Use --ephemeral or a dedicated test server configured with --setParameter ttlMonitorEnabled=false.');
+  }
 
   loadAllModels();
 
@@ -249,7 +261,11 @@ const startEphemeralDatabase = async () => {
   const { dbPath, cleanup } = createEphemeralDataDir();
   const replSet = await MongoMemoryReplSet.create({
     replSet: { count: 1, storageEngine: 'wiredTiger' },
-    instanceOpts: [{ launchTimeout: 60000, ...(dbPath ? { dbPath } : {}) }],
+    instanceOpts: [{
+      launchTimeout: 60000,
+      args: ['--setParameter', 'ttlMonitorEnabled=false'],
+      ...(dbPath ? { dbPath } : {}),
+    }],
   });
 
   return {

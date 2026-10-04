@@ -62,6 +62,9 @@
   "overrides": {
     "uuid": "^11.1.1",
     "browserslist": "^4.28.8",
+    "get-uri": {
+      "basic-ftp": "^6.2.1"
+    },
     "multer-storage-cloudinary": {
       "cloudinary": "$cloudinary"
     }

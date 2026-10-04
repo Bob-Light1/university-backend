@@ -49,6 +49,14 @@ const CAMPUS_PATH = Object.freeze({
   ExamGrading: 'schoolCampus',
   StudentSchedule: 'schoolCampus',
   TeacherSchedule: 'schoolCampus',
+  GaetConstraint: 'schoolCampus',
+  Notification: 'schoolCampus',
+  UserPreferences: 'campusId',
+  PrintJob: 'campusId',
+  FinalTranscript: 'schoolCampus',
+  DocumentVersion: 'campusId',
+  DocumentShare: 'campusId',
+  DocumentTemplate: 'campusId',
 });
 
 /** Per-campus totals, keyed by the count declared in `seed.config.js`. */
@@ -76,6 +84,14 @@ const CAMPUS_TOTALS = Object.freeze({
   ExamEnrollment: 'examEnrollments',
   ExamSubmission: 'examSubmissions',
   ExamGrading: 'examGradings',
+  GaetConstraint: 'gaetConstraints',
+  Notification: 'notifications',
+  UserPreferences: 'userPreferences',
+  PrintJob: 'printJobs',
+  FinalTranscript: 'finalTranscripts',
+  DocumentVersion: 'documentVersions',
+  DocumentShare: 'documentShares',
+  DocumentTemplate: 'documentTemplates',
 });
 
 /**
@@ -109,6 +125,43 @@ class Report {
  * @returns {Object} Campus-scoped filter for that model.
  */
 const scope = (name, campusKey, campusIds) => ({ [CAMPUS_PATH[name]]: campusIds[campusKey] });
+
+/** Check ownership and real references, not just the added collection totals. */
+const verifySupportingRecords = async (report, campusKey, campusIds) => {
+  const names = [
+    'Student', 'Class', 'Teacher', 'Subject', 'Document', 'GaetConstraint',
+    'Notification', 'UserPreferences', 'PrintJob', 'FinalTranscript',
+    'DocumentVersion', 'DocumentShare', 'DocumentTemplate',
+  ];
+  const rows = Object.fromEntries(await Promise.all(names.map(async name => [
+    name, await model(name).find(scope(name, campusKey, campusIds)).lean(),
+  ])));
+  const maps = Object.fromEntries(names.map(name => [
+    name, new Map(rows[name].map(row => [String(row._id), row])),
+  ]));
+  const has = (name, id) => maps[name].has(String(id));
+  const check = (label, ok) => report.expect(`${label} — campus ${campusKey}`, ok, true);
+  check('GAET references stay in campus', rows.GaetConstraint.every(row =>
+    row.courseRequirements.length > 0 && row.courseRequirements.every(course =>
+      has('Class', course.classId) && has('Subject', course.subjectId) && has('Teacher', course.teacherId))
+    && row.teacherPreferences.every(preference => has('Teacher', preference.teacherId))));
+  check('Notifications belong to campus students', rows.Notification.every(row =>
+    row.recipientModel === 'Student' && has('Student', row.recipientId)));
+  check('Notifications cannot trigger external delivery', rows.Notification.every(row => row.channel === 'inapp'));
+  check('Preferences belong to campus students', rows.UserPreferences.every(row =>
+    row.userModel === 'Student' && has('Student', row.userId)));
+  check('Print targets belong to campus students', rows.PrintJob.every(row =>
+    row.targets.length > 0 && row.targets.every(target => has('Student', target.id))));
+  check('Print jobs cannot be claimed by workers', rows.PrintJob.every(row => row.status === 'CANCELLED'));
+  check('Transcripts belong to the student class', rows.FinalTranscript.every(row =>
+    has('Student', row.student) && has('Class', row.class)
+    && String(maps.Student.get(String(row.student)).studentClass) === String(row.class)));
+  check('Versions belong to campus documents', rows.DocumentVersion.every(row =>
+    has('Document', row.documentId)
+    && row.version <= maps.Document.get(String(row.documentId)).currentVersion));
+  check('Shares belong to campus documents', rows.DocumentShare.every(row => has('Document', row.documentId)));
+  check('Templates remain campus-specific', rows.DocumentTemplate.every(row => row.isGlobal === false));
+};
 
 /**
  * Runs every assertion against the seeded database.
@@ -162,6 +215,8 @@ const verify = async ({ silent = false } = {}) => {
   }
 
   // ── Deletion conventions, derived from the models ──────────────────────────
+  for (const campusKey of CAMPUS_KEYS) await verifySupportingRecords(report, campusKey, campusIds);
+
   const deletionChecks = [
     ['Teacher', 'teachers', 'teachersArchived'],
     ['Student', 'students', 'studentsArchived'],

@@ -100,6 +100,17 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-10-04: phase 1-B row 1 implementation is complete and locally validated:
+307 documents / 39 collections, 36 fixture checks, 1,620 backend tests,
+21 API journey checks, 114 browser checks and 67 course exercises pass.
+CH-0 remains `EN COURS` pending independent acceptance (QA D-14).
+[Evidence and execution prerequisites](features/ch0-fixture-completion.md).
+
+2026-10-02: phase 1-B row 1 (CH-0) resumes with the eight missing fixture
+collections and executable ownership/determinism checks. Implementation and
+validation are tracked in [the CH-0 note](features/ch0-fixture-completion.md).
+Second-person acceptance remains pending; phase ordering and estimates are unchanged.
+
 2026-10-01: the authorized AP-01–AP-09 correction pass is completed and verified
 (114/114 browser checks, 1,610 backend tests). It is tracked in phase 1-B,
 supplemental row 16 and [the correction note](features/admin-portal-audit-corrections.md).
@@ -112,7 +123,7 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-01 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-04 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -313,8 +324,8 @@ produirait un chiffre invérifiable.
 | Module IA — chat, RAG, analytics narrés | `B1·B3·B2` | Passerelle inerte sans configuration, jeton S2S à courte durée, ingestion de la GED, recherche hybride RRF, chat SSE, budget consolidé et alerte à 80 %, métriques Prometheus, purge de rétention |
 | Portail public & parrainage | `B4·B1` | Préinscription, programmes, quiz et classement, concours avec clôture mensuelle, liens courts `/r/{code}`, QR à la volée, anti-fraude unifiée, analytics QR contre lien |
 | Thème clair / sombre & 10 locales | `B2·B4` | Fabrique de thème, jetons de statut comme source unique des surfaces, RTL, 10 locales × 18 espaces de noms |
-| Socle de test — CH-0 & CH-1 | `B1` | **1 407 tests / 68 suites** — **instable au 2026-08-22** : deux exécutions complètes donnent 3 rouges chacune, mais **pas les mêmes** (pool Puppeteer du GED, service de stockage), voir §15. Un socle dont CH-2 à CH-6 dépendent se tient vert **et reproductible** ; celui-ci n'est ni l'un ni l'autre aujourd'hui ; fixture déterministe de 2 campus, 283 documents, 31 collections, 127 assertions, 18 comptes couvrant les 9 rôles, base éphémère sans MongoDB installé |
-| Deux harnais hors Jest | `B1·B2` | `npm run test:journey` (21 contrôles, vraie base, replica set jetable, l'app réelle) et `npm run test:visual` (16 contrôles, SPA **buildée** servie en statique, Chrome sans tête via `puppeteer-core`) — ce dernier couvre **2 portails sur 8**, campus et enseignant. Nés du chantier entitlement, ils sont le premier précédent E2E du dépôt |
+| Test foundation — CH-0 & CH-1 | `B1` | 1,620 tests / 78 suites PASS on 2026-10-02. Deterministic fixture: two campuses, 307 documents, 39 collections, nine authenticated roles; 36 self-checks PASS. Historical 2026-08-22 instability remains documented in §15; this measured pass does not close CH-1 maintenance or independent CH-0 acceptance |
+| Two harnesses outside Jest | `B1·B2` | Real API journey: 21/21 PASS; complete browser harness: 114/114 PASS on 2026-10-04 with a fresh SPA build and local Chrome. Covers campus, teacher, student, parent, mentor, staff and administrator surfaces. Canonical CH-4 remains a separate work item |
 
 ---
 
@@ -332,7 +343,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 
 | # | Chantier | Briques | Ce qui existe déjà | Ce qui manque | Charge | État |
 |---|---|---|---|---|---|---|
-| 1 | Fixture déterministe (CH-0) | `B1` | Seed reproductible, empreinte SHA-256 identique d'une exécution à l'autre, 9 rôles qui se connectent réellement | Recette par une seconde personne ; arbitrage mémoire contre conteneur en CI ; 8 collections non seedées — GAET, notifications, préférences, file d'impression, transcripts finaux, pièces jointes GED — que les parcours E2E réclameront | 2–3 j | `À FAIRE` |
+| 1 | Deterministic fixture (CH-0) | `B1` | Reproducible seed, nine authenticated roles; eight supporting collections added with ownership checks; see [implementation note](features/ch0-fixture-completion.md) | Local validation complete; second-person acceptance pending. Fixture CI uses the existing disposable replica set; CH-2 database decision D-06 stays open until CH-2 starts | 2–3 j | `EN COURS` |
 | 2 | Entitlement par campus | `B1·B2` | Six phases livrées. **Migration faite le 2026-08-20** (constatée le 21 : `--dry-run` rapporte 3 skip, audit `actorRole: SYSTEM`, même horodatage à la milliseconde sur les trois campus). **QA visuelle faite le 2026-08-22, 16/16** (`npm run test:visual`), et promue en harnais permanent | Dans cet ordre : (1) étendre `test:visual` aux portails non rendus — **le portail étudiant l'est depuis le 2026-09-02** (D-R18), restent **parent, mentor, staff** — seul contrôle capable de fermer la case §4.1.2 de la DoD, et le seul qui épingle la correspondance route ↔ garde, silencieuse dans les deux sens ; (2) **ensuite seulement**, retrait de `features` / `aiEntitlement` du schéma et de la route `ai-entitlement`, qui n'a plus de client depuis la phase 4 | 1 j | `À FAIRE` |
 | 3 | Authentification — durcissement | `B1·B2` | JWT sur 9 rôles, bcrypt 12 tours, limiteur de débit sur les points de connexion, flux d'activation par jeton | Jetons de rafraîchissement, **révocation côté serveur** — aucun mécanisme n'existe aujourd'hui, un jeton volé vaut 7 jours — et verrouillage temporaire de compte après échecs répétés | 3–4 j | `À FAIRE` |
 | 4 | Module IA — sortie de conception | `B1·B3` | M0 à M6 livrés, tests verts des deux côtés, charge mesurée sous SLO en local | QA visuelle réelle de l'UI, SLO du chat mesuré sur l'infrastructure cible, benchmark d'embedding hors ligne avant de figer l'index de production | 2–3 j | `À FAIRE` |
@@ -895,6 +906,7 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R17** | 2026-08-27 | **La ligne 6 tient les étapes 1 à 9 du patron §12 et s'arrête à deux cases**, énoncées plutôt que contournées : la garde du cours est rouge et la QA navigateur n'est pas jouée. Trois constats d'audit fermés en chemin, chacun par un test rouge avant correction — `{name}` jamais interpolé dans **toutes** les relances de frais (« Bonjour , » depuis l'origine du gabarit d'impayé), date d'échéance en ISO quelle que soit la langue, et le reçu — seul rendu PDF de la plateforme atteignable par un `STUDENT` — laissé derrière le quota générique par IP au lieu du budget par utilisateur que la GED applique déjà. Ce dernier devient `pdfLimiter` dans `shared/middleware/rate-limiter.js`, la copie locale du GED est supprimée, et la règle entre au §7 de `CLAUDE.md`. Effet de bord enregistré : le socle de test passe de 1 426 à **1 546 tests / 71 suites** (D-R7 en notait 1 407 / 68) | La règle de maintenance de ce document dit d'écrire ce qui reste, pas d'arrondir. Les deux cases ouvertes ne sont pas du même genre : la QA navigateur est du temps d'opérateur, la garde du cours est un **arbitrage de contenu** — la piste 09 s'intitule *Seven Jobs, Four Postures* et compte sept jobs sur toute sa narration, or il y en a huit depuis ce chantier. Substituer le chiffre partout ou assumer la date de gel de la leçon est une décision d'auteur, prise dans le dépôt du cours et pas ici |
 | **D-R18** | 2026-09-02 | **La ligne 6 de la phase 1-B est livrée**, et son étape 10 — la QA navigateur — est **écrite dans le harnais** (`npm run test:visual`, 16 → **36 contrôles**) plutôt que jouée à la main. Le portail étudiant y est rendu pour la première fois, ce qui entame la ligne 2. Restant 1-B : **32–47 → 30–44 j** ; total **212–275 → 210–272 j**, tableaux monétaires du §9 recomposés | La QA manuelle prouve l'état d'un jour ; le harnais le prouve à chaque exécution, et c'est le précédent posé par D-R7. Le bénéfice est immédiat et vérifie la règle : elle a trouvé ce qu'aucun test existant ne pouvait voir — `exposedHeaders` n'exposait pas `Content-Disposition`, donc **tout téléchargement binaire arrivait sous un nom de repli** dès lors que le SPA et l'API ne partagent pas une origine, c'est-à-dire toujours. Le reçu perdait son numéro, l'export GED son nom de fichier ; supertest, same-origin, lisait l'en-tête et ne voyait rien. Corrigé en une ligne d'`app.js`, fermé par un test vu rouge |
 | **D-R19** | 2026-09-30 | The owner authorizes AP-01–AP-09 correction and verification before further roadmap implementation; track this bounded work in phase 1-B row 16 | Preserve phase ordering, existing estimates and CH-2/CH-4/CH-5 acceptance boundaries; [measured evidence](features/admin-portal-audit-corrections.md) owns the correction status |
+| **D-R20** | 2026-10-02 | Resume phase 1-B with row 1 (CH-0): add the eight missing fixture collections, ownership verification and a disposable-database CI check | The owner requested continuation under this roadmap. Independent QA acceptance remains mandatory; estimates and phase ordering do not change. [Evidence](features/ch0-fixture-completion.md) |
 
 ---
 

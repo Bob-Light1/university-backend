@@ -1,4 +1,4 @@
-# Project context
+P# Project context
 
 Last documentation review: 2026-09-19.
 This map helps with navigation; the code describes the implemented behavior.

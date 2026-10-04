@@ -412,7 +412,7 @@ installer. Keep both exceptions keyed by their exact GHSA IDs; a new advisory
 still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
 `tests/unit/audit-gate.test.js` verifies unknown findings and stale exceptions fail.
 
-**`package.json` carries three `overrides`, all load-bearing** — none is cosmetic:
+**`package.json` carries four `overrides`, all load-bearing** — none is cosmetic:
 - `uuid: ^11.1.1` — `exceljs` 4.4.0 (latest) pins the vulnerable `uuid@^8`. It calls only `v4`,
   which uuid 11 still exports from its CommonJS build.
 - `browserslist: ^4.28.8` — two high advisories (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g) against
@@ -425,6 +425,10 @@ still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
   `peerDependencies` still pin `cloudinary@^1.21.0`, the vulnerable line. It touches exactly two
   methods (`uploader.upload_stream`, `uploader.destroy`), both unchanged in v2. **Without this
   override a clean `npm install` stops on `ERESOLVE`.**
+- `get-uri → basic-ftp: ^6.2.1` — fixes GHSA-c475-qrg2-pj4r in the transitive
+  Puppeteer proxy chain. Node 20/CommonJS remain supported. The real loopback
+  `tests/integration/ftp-dependency.test.js` covers get-uri's listing-metadata
+  fallback and download; no new advisory exception is added.
 
 Most unit tests mock `cloudinary`, `nodemailer`, `sharp` and `puppeteer-core`, so they stay green through
 a broken upgrade of any of them. `optimizeImage()` is the sharpest case: it ends in
@@ -547,10 +551,10 @@ The synthetic dataset every test layer builds on (CH-0 of
 ```bash
 npm run seed:test -- --ephemeral   # throwaway in-memory database: no MongoDB required
 npm run seed:test -- --print       # table of the 18 accounts (9 roles × 2 campuses)
-npm run seed:test:self-check       # 16 checks: budget, idempotence, verify, real login
+npm run seed:test:self-check       # guards, budget, idempotence, corruption, real login
 ```
 
-- **Two campuses, nine signed-in roles, 283 documents, frozen credentials.** `ObjectId`s are
+- **Two campuses, nine signed-in roles, 307 documents, frozen credentials.** `ObjectId`s are
   derived from a business key (`student:A:001`), dates from a fixed **anchor**, and the bcrypt
   salt from the seed — two runs produce a byte-identical database.
 - **The seed refuses any database that is not local and named like a test database**
@@ -563,6 +567,15 @@ npm run seed:test:self-check       # 16 checks: budget, idempotence, verify, rea
   `Result`, a **live** (expired) `archived` `Announcement`, and a deleted `Document` that
   **keeps** `status: PUBLISHED`.
 - `tests/fixtures/.generated/` is gitignored: it holds the test password in clear text.
+- **Eight supporting collections** now cover GAET, inbox, preferences, print history,
+  draft transcripts and GED versions/shares/templates. The verifier checks their
+  counts and campus/owner references; self-check corrupts each to prove rejection.
+- **Frozen time needs a frozen TTL monitor.** The owned ephemeral replica set starts
+  with `ttlMonitorEnabled=false`, preserving the TTL indexes themselves. A caller-owned
+  database must already disable TTL monitoring; the seed refuses before purging if it
+  does not. Production and loopback/test-name guards also apply to programmatic callers.
+  No production schema or expiry policy changes. See
+  [CH-0 completion](docs/architecture/features/ch0-fixture-completion.md) for acceptance.
 
 ---
 

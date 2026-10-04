@@ -12,9 +12,10 @@
 > Rédigé le **2026-08-20**. Périmètre : les **quatre briques** (`backend/`,
 > `frontend/`, `ai-service/`, `partner/`).
 >
-> **Statut global** : cadrage approuvé ; **CH-0 livré le 2026-08-21**, les autres chantiers non démarrés.
-> Le prérequis absolu de tout le reste — **CH-0** — est donc levé : CH-2, CH-4, CH-5 et CH-6
-> peuvent démarrer.
+> **Current status (2026-10-04)**: CH-0 implementation has been expanded;
+> independent acceptance remains pending under §4.11 and D-14. The original
+> 2026-08-21 implementation record does not establish that acceptance.
+> CH-2, CH-4, CH-5 and CH-6 remain unstarted; see the authoritative §0 dashboard.
 >
 > **Retour de `ERP_ROADMAP.md` (audit v4, 2026-08-22)** — deux faits mesurés là-bas appartiennent
 > à ce document, et sa règle de cohérence joue **dans les deux sens** :
@@ -86,6 +87,18 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-04: CH-0 implementation is complete and locally validated. The fixture
+self-check passes 36/36; backend Jest 1,620 tests / 78 suites; API journey 21/21;
+browser 114/114 (exit 0, local Chrome configuration); course 67/67. Independent
+acceptance remains pending under §12.3 / D-14. The
+[implementation note](features/ch0-fixture-completion.md) records prerequisites,
+failed checks and their resolution; other CH-* items retain their scope and status.
+
+2026-10-02: CH-0 resumes for the eight additional collections and their
+verification. Its previous `EN PLACE` label did not establish the independent
+acceptance still pending in §4.11. Per §12.3 / D-14, status is now `EN COURS`;
+see [the implementation and acceptance note](features/ch0-fixture-completion.md).
+
 2026-10-01 regression maintenance: AP-01–AP-09 corrections are verified by the
 permanent browser act and focused route/isolation checks. The complete visual
 harness passes 114/114 checks (exit 0); the backend suite passes 1,610 tests.
@@ -97,7 +110,7 @@ CH-2, CH-4 or CH-5; their statuses and second-person acceptance remain unchanged
 
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
 |---|---|---|---|---|---|---|---|
-| **CH-0** | Fixture déterministe multi-campus | 0 | `EN PLACE` | — | 1 sem. | Claude (session Bob Light) | 2026-08-21 |
+| **CH-0** | Deterministic multi-campus fixture | 0 | `EN COURS` — independent acceptance pending | — | 1 sem. | Codex | 2026-10-04 |
 | **CH-1** | Socle unitaire backend | 1 | `EN PLACE` — à maintenir | — | continu | — | 2026-08-20 |
 | **CH-2** | Matrice API : auth · rôle · isolation campus | 2 | `À FAIRE` | CH-0 | 1–2 sem. | — | 2026-08-20 |
 | **CH-3** | Tests composant frontend | 3 | `À FAIRE` | — *(CH-2 pour les handlers MSW, §7.2)* | 2–3 sem. | — | 2026-08-20 |
@@ -348,9 +361,9 @@ scénario d'échec classique de ce type de projet, et il s'évite par l'ordre de
 | | |
 |---|---|
 | **Couche** | 0 |
-| **État** | `EN PLACE` — livré le 2026-08-21 |
+| **État** | `EN COURS` — implementation validated; independent acceptance pending (2026-10-04) |
 | **Dépend de** | — |
-| **Bloque** | CH-2, CH-4, CH-5, CH-6 — **débloqués** |
+| **Bloque** | CH-2, CH-4, CH-5, CH-6 — fixture implementation available; independent acceptance pending |
 | **Effort** | 1 semaine-développeur |
 | **Brique** | `backend/` |
 
@@ -413,6 +426,25 @@ historique des bugs les plus coûteux du projet :
 
 Un test qui passe sur une fixture ne contenant pas ces trois cas ne prouve rien sur la
 correction des filtres de suppression.
+
+2026-10-02 expansion: the following rows supplement §4.3. Each has two records
+on campus A and one on campus B, bringing the fixture to 307 documents across
+39 seeded collections, plus the counter collection.
+
+| Model | Fixture purpose |
+|---|---|
+| `GaetConstraint` | Draft scheduling constraints with campus-local academic references |
+| `Notification` | Student-owned, in-app sent/read messages |
+| `UserPreferences` | Student-owned language, timezone and theme defaults |
+| `PrintJob` | Cancelled jobs with campus-local student targets |
+| `FinalTranscript` | Draft transcripts linked to each student's class |
+| `DocumentVersion` | Snapshots of existing campus documents |
+| `DocumentShare` | Hashed synthetic shares with explicit frozen expiries |
+| `DocumentTemplate` | Campus-specific synthetic templates |
+
+Frozen TTL records require TTL monitoring to be disabled on a dedicated test
+server; the seed refuses any other configuration before purge. The owned
+ephemeral helper supplies it. Production schemas and TTL behavior are unchanged.
 
 ### 4.4 Contraintes techniques
 
@@ -638,10 +670,10 @@ passé vert sur tous les autres critères.
 - [ ] Le portail public (`QuizQuestion`, `Testimonial`, `FaqEntry`, `CoursePreview`,
       `CompetitionPrize`) n'est **pas** seedé — hors périmètre déclaré au §4.2, à reprendre par
       CH-6 s'il en a besoin.
-- [ ] `GaetConstraint`, `Notification`, `UserPreferences`, `PrintJob`, `FinalTranscript` et les
-      pièces jointes GED (`DocumentVersion`, `DocumentShare`, `DocumentTemplate`) ne sont pas
-      seedés non plus : aucune couche supérieure ne les réclame aujourd'hui, mais CH-4 en aura
-      besoin dès qu'un parcours GAET ou une notification entrera dans les parcours canoniques.
+- [ ] Independent acceptance of the eight additional collections: implementation
+      and local validation are complete in [the CH-0 note](features/ch0-fixture-completion.md).
+      Acceptance covers both the original dataset and this expansion.
+
 
 ---
 
@@ -1749,6 +1781,7 @@ ces soustractions est exactement le périmètre de CH-5.
 | **D-24** | 2026-08-21 | Le mot de passe de fixture est haché avec un **sel dérivé de la graine**, non tiré au hasard | bcrypt tire un sel par appel : le même mot de passe produit une empreinte différente à chaque exécution, et deux seeds consécutifs divergeaient alors sur **chaque document de compte**, en violation directe de l'idempotence du §4.4. Acceptable ici et seulement ici : ces identifiants sont publiés en clair dans `.generated/accounts.json`, et le garde-fou interdit au seed d'atteindre autre chose qu'une base de test locale | Tranché |
 | **D-25** | 2026-08-21 | La base éphémère de `--ephemeral` (et, plus tard, du `globalSetup` de CH-2) stocke ses données sur **`/dev/shm`**, pas sur le disque | `mongodb-memory-server` écrit sur le système de fichiers ordinaire malgré son nom. Sur cette machine, la construction des index déclarés coûte **250 s depuis le disque et moins de 3 s depuis un tmpfs** : le budget de 60 s du §4.7 est inatteignable sur disque et confortable en mémoire. À reprendre dans **D-06** — un conteneur en CI doit monter son `dbPath` en tmpfs pour la même raison | Tranché — mesuré |
 | **D-26** | 2026-08-21 | Le seed pilote lui-même la création des collections et des index (`autoIndex` et `autoCreate` désactivés) | Laissés actifs, Mongoose crée une collection par modèle compilé dès la connexion : la purge court alors contre ce que Mongoose construit, et la base finit un run avec ~25 collections vides qu'un second run ne recrée pas. Deux seeds, deux bases différentes — l'idempotence tombait sur un détail invisible depuis les données | Tranché |
+| **D-27** | 2026-10-02 | Expand CH-0 by eight collections on both campuses; disable TTL monitoring only on its owned disposable replica set and reject TTL-enabled caller databases before purge. Add a fixture CI check using the existing replica-set helper | Frozen PrintJob and DocumentShare dates would otherwise expire under the host clock. Production TTL behavior is unchanged. D-06 stays open for CH-2; D-14 independent acceptance remains pending | Implemented; acceptance pending |
 
 ---
 

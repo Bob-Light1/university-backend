@@ -941,7 +941,10 @@ const api = async (method, p, token, body) => {
   const estate = await portalPage();
   await signIn(estate, admin, 'admin');
   await estate.goto('http://localhost:5173/admin/entitlement', { waitUntil: 'networkidle2' });
-  await new Promise((r) => setTimeout(r, 3500));
+  // networkidle2 permits in-flight API requests; wait for the estate data itself.
+  await estate.waitForFunction(() => document.body.innerText.includes('Fixture Campus A'), {
+    timeout: 20000,
+  });
   await estate.screenshot({ path: `${SHOTS}/17-vue-parc-admin.png` });
   const estateBody = await estate.evaluate(() => document.body.innerText);
   rec('la vue parc montre à l’ADMIN le campus et son module coupé',

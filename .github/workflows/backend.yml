@@ -32,8 +32,7 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      # 68 suites, 1408 tests, no database: app.js builds the Express app and
-      # server.js is what connects Mongo, so the whole suite runs offline.
+      # The Jest suite does not connect to MongoDB; the fixture job below does.
       - name: Test
         run: npm test
 
@@ -46,3 +45,28 @@ jobs:
       # fails the build, which a blanket `--audit-level=high` could no longer do.
       - name: Security audit
         run: npm run audit:ci
+
+  fixture:
+    name: Deterministic fixture acceptance checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NODE_ENV: test
+      MONGOMS_DOWNLOAD_DIR: ${{ github.workspace }}/.cache/mongodb-binaries
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - name: Cache disposable MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: .cache/mongodb-binaries
+          key: mongodb-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('package-lock.json') }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Verify fixture and mutation checks on a disposable replica set
+        run: npm run seed:test:self-check
