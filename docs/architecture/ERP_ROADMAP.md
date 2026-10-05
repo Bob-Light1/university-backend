@@ -100,6 +100,16 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-10-05: phase 1-B row 2 is delivered. Writable legacy entitlement fields
+and unused AI administration routes are retired; raw compatibility and both audit
+ledgers remain. Mentor workspace and dashboard shortcut guards are corrected.
+Validation: 1,634 Jest tests / 80 suites, 36 fixture checks, 25 API/data checks,
+67 course exercises and 134 browser checks pass; screenshots inspected in both
+themes. [Contract and evidence](features/entitlement-legacy-retirement.md).
+CH-0 independent acceptance remains pending. Phase ordering is unchanged;
+effort and commercial tables retain their existing dated planning baseline,
+without a new forecast or pricing decision in this task.
+
 2026-10-04: phase 1-B row 1 implementation is complete and locally validated:
 307 documents / 39 collections, 36 fixture checks, 1,620 backend tests,
 21 API journey checks, 114 browser checks and 67 course exercises pass.
@@ -123,7 +133,7 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-04 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-05 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -344,7 +354,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | # | Chantier | Briques | Ce qui existe déjà | Ce qui manque | Charge | État |
 |---|---|---|---|---|---|---|
 | 1 | Deterministic fixture (CH-0) | `B1` | Reproducible seed, nine authenticated roles; eight supporting collections added with ownership checks; see [implementation note](features/ch0-fixture-completion.md) | Local validation complete; second-person acceptance pending. Fixture CI uses the existing disposable replica set; CH-2 database decision D-06 stays open until CH-2 starts | 2–3 j | `EN COURS` |
-| 2 | Entitlement par campus | `B1·B2` | Six phases livrées. **Migration faite le 2026-08-20** (constatée le 21 : `--dry-run` rapporte 3 skip, audit `actorRole: SYSTEM`, même horodatage à la milliseconde sur les trois campus). **QA visuelle faite le 2026-08-22, 16/16** (`npm run test:visual`), et promue en harnais permanent | Dans cet ordre : (1) étendre `test:visual` aux portails non rendus — **le portail étudiant l'est depuis le 2026-09-02** (D-R18), restent **parent, mentor, staff** — seul contrôle capable de fermer la case §4.1.2 de la DoD, et le seul qui épingle la correspondance route ↔ garde, silencieuse dans les deux sens ; (2) **ensuite seulement**, retrait de `features` / `aiEntitlement` du schéma et de la route `ai-entitlement`, qui n'a plus de client depuis la phase 4 | 1 j | `À FAIRE` |
+| 2 | Campus entitlement | `B1·B2` | Unified configuration; legacy schema paths and AI-only routes retired; raw legacy reads and both audit ledgers preserved; workspace/shortcut guards verified in both themes. [Delivery evidence](features/entitlement-legacy-retirement.md) | Complete: pre-retirement browser 126/126, final browser 134/134 and all applicable §12 checks pass | 1 j | `LIVRÉ` |
 | 3 | Authentification — durcissement | `B1·B2` | JWT sur 9 rôles, bcrypt 12 tours, limiteur de débit sur les points de connexion, flux d'activation par jeton | Jetons de rafraîchissement, **révocation côté serveur** — aucun mécanisme n'existe aujourd'hui, un jeton volé vaut 7 jours — et verrouillage temporaire de compte après échecs répétés | 3–4 j | `À FAIRE` |
 | 4 | Module IA — sortie de conception | `B1·B3` | M0 à M6 livrés, tests verts des deux côtés, charge mesurée sous SLO en local | QA visuelle réelle de l'UI, SLO du chat mesuré sur l'infrastructure cible, benchmark d'embedding hors ligne avant de figer l'index de production | 2–3 j | `À FAIRE` |
 | 5 | Portail d'inscription en ligne | `B1·B4` | Pipeline de prospects en 7 statuts jusqu'à `enrolled`, anti-fraude, lien court et QR | Pièces jointes au dossier, workflow de validation directeur, **création effective de l'étudiant** au passage à `enrolled` — aujourd'hui seule la commission partenaire se déclenche — et notification du candidat | 3–4 j | `À FAIRE` |
@@ -907,6 +917,7 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R18** | 2026-09-02 | **La ligne 6 de la phase 1-B est livrée**, et son étape 10 — la QA navigateur — est **écrite dans le harnais** (`npm run test:visual`, 16 → **36 contrôles**) plutôt que jouée à la main. Le portail étudiant y est rendu pour la première fois, ce qui entame la ligne 2. Restant 1-B : **32–47 → 30–44 j** ; total **212–275 → 210–272 j**, tableaux monétaires du §9 recomposés | La QA manuelle prouve l'état d'un jour ; le harnais le prouve à chaque exécution, et c'est le précédent posé par D-R7. Le bénéfice est immédiat et vérifie la règle : elle a trouvé ce qu'aucun test existant ne pouvait voir — `exposedHeaders` n'exposait pas `Content-Disposition`, donc **tout téléchargement binaire arrivait sous un nom de repli** dès lors que le SPA et l'API ne partagent pas une origine, c'est-à-dire toujours. Le reçu perdait son numéro, l'export GED son nom de fichier ; supertest, same-origin, lisait l'en-tête et ne voyait rien. Corrigé en une ligne d'`app.js`, fermé par un test vu rouge |
 | **D-R19** | 2026-09-30 | The owner authorizes AP-01–AP-09 correction and verification before further roadmap implementation; track this bounded work in phase 1-B row 16 | Preserve phase ordering, existing estimates and CH-2/CH-4/CH-5 acceptance boundaries; [measured evidence](features/admin-portal-audit-corrections.md) owns the correction status |
 | **D-R20** | 2026-10-02 | Resume phase 1-B with row 1 (CH-0): add the eight missing fixture collections, ownership verification and a disposable-database CI check | The owner requested continuation under this roadmap. Independent QA acceptance remains mandatory; estimates and phase ordering do not change. [Evidence](features/ch0-fixture-completion.md) |
+| **D-R21** | 2026-10-05 | Phase 1-B row 2 is delivered after pre-retirement browser verification, schema/route retirement and final 134/134 replay. Preserve raw compatibility and historical audit; correct mentor workspace and shortcut guards. | The owner requested continued phase 1-B work. No production migration, deployment, pricing revision or phase 2 work. CH-0 independent acceptance remains pending; planning tables retain their dated baseline. [Evidence](features/entitlement-legacy-retirement.md) |
 
 ---
 

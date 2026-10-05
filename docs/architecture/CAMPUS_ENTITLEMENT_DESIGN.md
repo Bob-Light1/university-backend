@@ -18,11 +18,12 @@
 > public, quotas, notifications), et les deux couches de décision — l'offre
 > ADMIN et l'usage CAMPUS_MANAGER — se pilotent depuis l'interface.
 >
-> Reste **hors code** : lancer `scripts/migrate-entitlement.js` sur la base
-> réelle (§10, phase 1.2), puis la **QA visuelle** sur un campus migré, qui est
-> le seul contrôle capable de fermer les deux derniers points de la DoD (§15).
-> Le retrait de `features` / `aiEntitlement` du schéma (§3.2) vient après cette
-> validation, pas avant.
+> **2026-10-05 retirement update:** phase 1-B row 2 removes writable legacy
+> configuration and the unused AI administration endpoint after the pre-retirement
+> browser replay (126/126). Historical audit and older-database reads are retained.
+> Final validation passes 134/134 browser checks and all applicable delivery checks; evidence is in [the retirement note](features/entitlement-legacy-retirement.md).
+> The real-database migration reported on 2026-08-21 remains historical evidence;
+> this task does not run a production migration or deployment.
 >
 > **Révisions** : **v1.8 (2026-08-20)** — phase 4 livrée, chantier clos ;
 > §8.5 (nouveau — ce que la phase 4 a tranché), §10 phase 4, §11 et §15 mis à
@@ -219,9 +220,17 @@ cache (§7.2).
 
 ### 3.2 Rétrocompatibilité
 
-`features` et `aiEntitlement` sont **conservés dans le schéma** jusqu'à
-validation en production de la migration (§10, phases 1.2 et 2). Le retrait est
-une opération distincte, postérieure, et réversible jusque-là.
+As of 2026-10-05, `features` and `aiEntitlement` are retired writable schema
+paths. The unused `GET|PUT /api/admin/campuses/:id/ai-entitlement` endpoint and
+its write/audit-only facade helpers are removed. The unified GET/PATCH endpoint
+is the administration contract. Historical `aiEntitlementAudit` remains private
+by default and joins the unified admin response, sorted newest first (latest 20).
+
+Schema retirement does not purge raw stored fields. Explicit lean projections,
+the raw-driver migration and the first-write fold remain compatible with an older
+database. Hydrated capacity checks pass `toObject()` to the shared resolver so
+stored legacy quotas remain readable without Mongoose schema accessors. Unified
+entitlements take precedence. [Scope and evidence](features/entitlement-legacy-retirement.md).
 
 **Un campus est soit migré, soit pas — jamais moitié-moitié** (tranché en
 phase 2). Tant qu'il ne porte pas d'objet unifié, c'est l'objet legacy qui fait
@@ -916,7 +925,7 @@ part ici, il veut dire « personne ne peut plus rien créer ». Et un nom de quo
 inconnu **lève** au lieu de résoudre vers `undefined` — `n < undefined` est
 `false`, donc une faute de frappe refuserait toute création sans rien dire.
 
-Ancien `features` retiré après validation prod, avec `aiEntitlement` (§3.2).
+Writable legacy quota and AI paths are retired; raw compatibility reads remain (§3.2).
 
 ### 9.4 Notifications
 
@@ -1026,11 +1035,9 @@ partout ailleurs : il est refusé (409) s'il enterrait des enregistrements d'un
 autre module (§6.3.4). Le mappage refus → HTTP est factorisé
 (`sendRefusal`), donc les deux surfaces refusent dans les mêmes termes.
 
-**Reliquat assumé** : `aiEntitlement` reste dans le schéma (§3.2) et
-`setCampusAiEntitlement` n'a plus d'appelant — les deux partent ensemble au
-retrait post-validation prod, pas avant.
-
----
+**2026-10-05 follow-up:** the former schema and AI-only administration route
+are retired under roadmap phase 1-B row 2. Raw compatibility branches and both
+audit ledgers remain (§3.2); the AI gate and S2S payload are unchanged.
 
 ### Phase 3 — Front, consommation · 2 j — ✅ **livrée le 2026-08-20**
 
@@ -1249,17 +1256,12 @@ serait vendu inutilisable.
       dans la réponse au lieu d'être recopié)*
 - [x] Les 7 crons filtrent sur l'entitlement *(phase 5 — 3 gardés, 4 d'hygiène
       délibérément non gardés, la carte épinglée contre le registre)*
-- [x] Un module `hidden` est indiscernable d'un module inexistant pour un
-      utilisateur final — *QA visuelle faite le 2026-08-22 sur le **portail
-      campus** et le **portail enseignant** (`npm run test:visual`, 16/16) :
-      entrées retirées du tiroir **et** de la grille du tableau de bord, aucun
-      en-tête de section orphelin, accès direct par URL renvoyé sur un écran
-      explicite, et un enseignant qui ne voit aucune trace du module coupé.
-      **Un défaut trouvé là et corrigé** : la grille « Campus Modules » n'était
-      gardée par rien. Les **six autres portails** (étudiant · parent · mentor ·
-      staff · admin · director) ne sont pas passés au navigateur — les deux
-      globaux sont hors entitlement par le §5.2, les quatre autres déclarent
-      leurs clés et sont couverts par le contrôle statique, mais pas rendus*
+- [x] Hidden modules remove their navigation entry and refuse direct access.
+      The pre-retirement replay covers campus, teacher, student, parent, mentor
+      and staff plus global administrator guarantees (126/126, 2026-10-05).
+      The mentor workspace now renders the shared translated refusal before its
+      layout mounts. Final theme and regression evidence belongs to the
+      [retirement note](features/entitlement-legacy-retirement.md).
 - [x] Un module `read_only` conserve tout son historique consultable *(gate §7.1 +
       bandeau phase 3 + §9.1 : la transition d'impayé continue pour ne pas rendre
       un grand-livre gelé faux)*
@@ -1268,10 +1270,9 @@ serait vendu inutilisable.
       liste, jamais un item à la fois)*
 - [x] Les crons d'hygiène tournent même module coupé ; les crons d'émission se
       taisent (§9.1) *(phase 5)*
-- [ ] Audit, export ADMIN et droits des personnes concernées survivent à
-      `hidden` (§4.1.2) — *mécanique en place (§5.2 : les rôles globaux ne sont
-      bornés par aucun entitlement, et la vue parc de la phase 4 le montre) ;
-      **reste la vérification de bout en bout à la QA visuelle***
+- [x] Audit, ADMIN export and rectification survive `hidden` (§4.1.2).
+      Verified by the 2026-10-05 final browser replay (134/134) and global-role
+      HTTP regressions; historical AI decisions remain in unified administration.
 - [x] Aucun appel Mongoose introduit hors `campus.repository.js` ; le resolver
       ne reçoit que des données brutes (§15bis.3) *(la vue parc de la phase 4
       lit par `listCampusesForEstate()` dans le repository campus, `.lean()`,
@@ -1287,9 +1288,11 @@ serait vendu inutilisable.
       comme non décidé par l'acteur dont le nom figure sur la ligne)*
 - [x] La suite de tests IA existante passe sans modification *(critère
       d'acceptation de la phase 2, toujours vrai après les phases 3, 4 et 5)*
-- [ ] `features` et `aiEntitlement` retirés du schéma après validation prod
-      — *opération distincte et postérieure (§3.2). Depuis la phase 4 plus
-      aucun écran ne les lit : la route `ai-entitlement` n'a plus de client*
+- [x] Writable `features` / `aiEntitlement` schema paths and unused AI-only
+      routes are retired (§3.2). The production migration was observed historically
+      on 2026-08-21; pre-retirement QA passes on a migrated disposable campus.
+      No production migration or deployment is performed in this task. Stored
+      configuration, historical audit and raw compatibility are retained.
 - [x] i18n des libellés dans les 10 locales *(phase 4 — 26 libellés de modules
       + 85 chaînes de pilotage ; `useModuleLabel()` retombe sur le libellé
       anglais du registre, donc un module ajouté au backend n'exige toujours
@@ -1416,7 +1419,7 @@ croyant à une barrière.
 | 2026-08-21 | **QA — parcours §13.2 joué de bout en bout, 22/22 vert ; UN DÉFAUT TROUVÉ ET CORRIGÉ.** Joué sur la **fixture déterministe** (§11ter), pas sur Atlas : un seul processus monte le replica set éphémère, sème les 283 documents, charge `app.js` et pilote l'API avec les vrais comptes de la fixture (ADMIN, CAMPUS_MANAGER des deux campus). **Vérifié** : vente d'un palier · refus d'élargissement par la couche usage (403 `FEATURE_NOT_IN_OFFER`) · refus d'auto-verrouillage sur un module core (**409** `FEATURE_CORE`) · gel d'Annonces (GET servi, POST 403 `FEATURE_READ_ONLY`) · **le plancher §4.1.1 sur données réelles** — masquer Finance est refusé 409 `FEATURE_HAS_RECORDS`, le refus arrive **avec sa liste de bloqueurs** et **nomme son remède**, et le remède appliqué (gel) laisse le grand-livre lisible en refusant l'écriture · upsell premium ouvrant GAET à la couche usage · **isolation** : le campus B n'a subi aucun effet de bord · vue parc servie. **Deux statuts que le doc ne fixait pas sont désormais constatés : le refus de gouvernance est un 409, pas un 403.**<br>**DÉFAUT — `level` et `department` n'avaient aucune consommation frontend.** Tous deux **non-core** et présents dans **les trois paliers**, donc basculables par l'ADMIN comme par le manager ; mais sans route, sans entrée de menu, sans `FeatureGate`. Leur unique point d'entrée est un dialogue ouvert depuis `Classes.jsx` (gardé par `class`, **core**) et `Teachers.jsx` (gardé par `teacher`, **core**) : l'écran hôte ne disparaît jamais, donc un `department` masqué laissait **un bouton vivant dont chaque appel répondait 403** — le « bouton mort » que la phase 3 interdit et l'« onglet vide » du §4.1.2. **Corrigé** : les deux raccourcis passent par `FeatureGate` (mode `read` — `read_only` garde son entrée, §6.2), et le bandeau de gel est **extrait** de `FeatureGuard` vers `components/shared/FeatureFrozenNotice.jsx`, désormais partagé par la garde de route et les deux dialogues, pour que les trois annonces ne dérivent pas. `npm run build` vert.<br>**Contrôle statique livré avec** : chaque clé `feature` de la SPA (les deux formes — propriété de table de nav **et** attribut JSX) comparée au registre. **Aucune clé inconnue** (une clé inconnue est fail-open : une entrée qu'on ne peut plus jamais masquer). Les 5 clés qu'aucun écran n'annote sont correctes : 4 `core` (rien à dessiner) et `public-portal`, dont les écrans d'admin éditorial sont sous `src/admin/` — rôles globaux, hors entitlement (§5.2). |
 | 2026-08-21 | **LES DEUX CONTRÔLES DE LA QA PROMUS EN PERMANENT.** Ce que la QA a vérifié une fois ne vaut que si la prochaine régression le retrouve. Deux ajouts, dans les deux formes que le harnais autorise (§11) : `tests/unit/entitlement.frontend-keys.test.js` (4 tests, dans Jest — pur, aucune base) et **`npm run test:journey`** (`tests/fixtures/journey.js`, 21 contrôles, **hors** Jest — il faut une vraie base, et `jest.config.js` déclare que la suite n'en ouvre aucune ; bâti sur le patron de `seed:test:self-check`). **Le test de clés a été renforcé après avoir été pris en défaut** : sa première version prouvait qu'une clé était *mentionnée*, pas *gardée* — retirer le `FeatureGate` de `level` la laissait verte, parce que `FeatureFrozenNotice` mentionne la même clé. Il sépare désormais les deux, et **échoue vérifié dans les deux sens** (clé inconnue du registre · garde retirée). Suite complète **1407 tests / 68 suites** verte, parcours **21/21**, lint sans erreur ni avertissement nouveau. |
 | 2026-08-22 | **QA VISUELLE FAITE — 16/16 — ET UN SECOND DÉFAUT DE MÊME NATURE TROUVÉ.** Chrome pilotée par `puppeteer-core` (présent : le backend l'utilise déjà pour la GED), SPA **buildée** servie en statique, backend et fixture dans le même processus. **Défaut** : le tableau de bord campus rend une grille « Campus Modules » — une **seconde surface de navigation** à côté du tiroir — construite depuis une liste en dur, **sans aucune garde**. Masquer un module le retirait du tiroir et laissait sa carte sur la page d'accueil du manager, ouvrant une route qui répondait ensuite « non activé ». Cas confirmé : `course`, gardé dans `CampusRoutes` **et** dans le tiroir, à un clic du tableau de bord. **Le contrôle statique ne pouvait pas l'attraper** — il prouve qu'une clé est gardée *quelque part*, pas que *toute* surface qui liste un module la garde. **Corrigé** : chaque carte déclare sa clé, la grille est filtrée par la même règle que le tiroir, et cette règle est extraite en `isVisibleState()` (`useFeature.js`) — elle allait exister en trois copies. **Mesures** : tiroir 23 → 18 après masquage de cinq modules (exactement cinq), grille 9 → 8, module gelé qui garde son entrée avec son bandeau (variable résolue), enseignant sans aucune trace du module coupé. **Deux pièges de mesure payés au passage**, tous deux faisaient passer ou échouer un contrôle pour une mauvaise raison : le tiroir est un **rail d'icônes à groupes repliés** (mesuré fermé il annonce 6 entrées et en rate 17), et `AppShell` **persiste** l'état des groupes alors que l'ouverture est une **bascule** — la seconde mesure refermait ce que la première avait ouvert, et le compte était un tirage au sort (23 → 6 puis 23 → 18 d'un run à l'autre). Le harnais réinitialise désormais l'état avant chaque mesure et **assert le delta exact**, pas « plus petit ». Promu en `npm run test:visual`. |
-| — | ***Il ne reste aucune phase de code.***<br>***Action porteur : ~~lancer la migration~~ FAITE le 2026-08-20, constatée le 2026-08-21 — voir la ligne du journal.*** Le paragraphe qui suivait ici décrivait le parc avant migration (fail-open partout, campus « non configuré », IA sur son drapeau historique) ; **il ne décrit plus cette base**. Il reste vrai pour toute base neuve, et c'est à ce titre qu'il est conservé au §4.3.<br>***Reste, dans cet ordre*** : (1) **QA visuelle sur un campus migré** — c'est le seul contrôle capable de fermer les deux derniers points de la DoD (§15), et notamment de vérifier la correspondance entrée de menu ↔ clé et route ↔ garde, que rien n'épingle et dont la divergence est silencieuse dans les deux sens ; (2) retrait de `features` / `aiEntitlement` du schéma et de la route `ai-entitlement` (§3.2), **après** validation prod, pas avant.<br>***Suivi inter-briques connu, non bloquant*** : le portail Next.js (brique 4) relaie la réponse de l'ERP telle quelle et affiche un message générique sur tout non-2xx. Un 403 `FEATURE_READ_ONLY` sur une soumission s'y affiche donc correctement mais sans texte dédié. Aucun contrat n'a changé (ni route, ni forme de réponse, ni champ lu) ; le message spécifique est un ajout d'i18n côté portail, désormais utile puisque l'état `read_only` est réellement posable.* **Fait le 2026-08-21 — voir la ligne suivante.**
+| 2026-10-05 | Phase 1-B row 2 replaces the old follow-up list: pre-retirement browser QA passed 126/126; writable legacy schema and unused administration routes are retired. Older-database compatibility and historical AI audit are preserved. Final validation passes 1,634 Jest tests, 36 fixture checks, 25 API/data checks, 67 course exercises and 134 browser checks. Both themes and mentor shortcuts/refusal are inspected. Delivery evidence is owned by [the retirement note](features/entitlement-legacy-retirement.md) and ERP_ROADMAP §0/§5. No production migration or deployment is performed. |
 
 *(Tenir cette section à jour à chaque phase close — c'est le point d'entrée d'une
 reprise du chantier par un tiers.)*

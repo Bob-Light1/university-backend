@@ -14,8 +14,6 @@
  *  PATCH  /api/admin/me/notifications    → updateMyNotifications (ADMIN | DIRECTOR)
  *  GET    /api/admin/all                 → listAdmins            (ADMIN only)
  *  PATCH  /api/admin/:id/status          → updateAdminStatus     (ADMIN only)
- *  GET    /api/admin/campuses/:id/ai-entitlement → getCampusAiEntitlement    (ADMIN | DIRECTOR)
- *  PUT    /api/admin/campuses/:id/ai-entitlement → updateCampusAiEntitlement (ADMIN | DIRECTOR)
  *  GET    /api/admin/entitlement/overview        → getEntitlementOverview   (ADMIN | DIRECTOR)
  *  GET    /api/admin/campuses/:id/entitlement    → getCampusEntitlement      (ADMIN | DIRECTOR)
  *  PATCH  /api/admin/campuses/:id/entitlement    → updateCampusEntitlement   (ADMIN | DIRECTOR)
@@ -35,11 +33,6 @@ const {
   listAdmins,
   updateAdminStatus,
 } = require('./controllers/admin.controller');
-
-const {
-  getCampusAiEntitlement,
-  updateCampusAiEntitlement,
-} = require('./controllers/admin.ai-entitlement.controller');
 
 const {
   getCampusEntitlement,
@@ -155,30 +148,6 @@ router.get(
   authenticate,
   authorize(['ADMIN']),
   listAdmins,
-);
-
-/**
- * GET /api/admin/campuses/:id/ai-entitlement
- * Current AI entitlement of a campus + recent audit entries (Phase 3, §11.3).
- */
-router.get(
-  '/campuses/:id/ai-entitlement',
-  authenticate,
-  authorize(['ADMIN', 'DIRECTOR']),
-  getCampusAiEntitlement,
-);
-
-/**
- * PUT /api/admin/campuses/:id/ai-entitlement
- * Activate / update the AI entitlement of a campus (plan, budget, features,
- * LLM profile). Body: { enabled?, plan?, llmProfile?, monthlyTokenBudget?, features? }.
- * Appends an audit entry on every mutation (append-only).
- */
-router.put(
-  '/campuses/:id/ai-entitlement',
-  authenticate,
-  authorize(['ADMIN', 'DIRECTOR']),
-  updateCampusAiEntitlement,
 );
 
 /**

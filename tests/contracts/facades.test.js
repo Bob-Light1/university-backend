@@ -32,7 +32,7 @@ describe('Forme de façade { routes, service } pour chaque module', () => {
 describe('API inter-modules — fonctions de service attendues', () => {
   // [module, [functions exposed and consumed elsewhere]]
   const CONTRACTS = [
-    ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusNotificationContact', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses', 'getCampusAiEntitlement', 'getCampusAiEntitlementWithAudit', 'setCampusAiEntitlement']],
+    ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusNotificationContact', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses', 'getCampusAiEntitlement']],
     ['class',   ['countClassesOnCampus', 'resolveClassesForSchedule', 'getClassCampusRef', 'findClassForBulk', 'addTeacherToClasses', 'setClassManager']],
     ['subject', ['countSubjectsOnCampus', 'listCampusSubjects', 'getSubjectCampusRef', 'resolveSubjectForSchedule']],
     ['teacher', ['validateTeacherBelongsToCampus', 'countTeachersOnCampus', 'resolveTeacherForSchedule', 'syncTeacherScheduleMirror', 'detectTeacherConflicts']],

@@ -18,6 +18,7 @@ const { notDeletedFilter, deletedOnlyFilter } = require('../../shared/utils/soft
 const { preDueWindow, dueReminderKind, REMINDER_KIND_VALUES } = require('../../modules/finance/fee-reminder-kind');
 const { computeStatus } = require('../../modules/finance/fee-status');
 const { model } = require('./models');
+const { resolveAiEntitlement } = require('../../shared/lib/entitlement/entitlement.ai');
 const { oid } = require('./ids');
 const { COUNTS, CAMPUS_KEYS, ACADEMIC_YEAR, ANCHOR_DATE } = require('./seed.config');
 
@@ -441,7 +442,7 @@ const verify = async ({ silent = false } = {}) => {
 
   // AI surface: `/api/ai` answers uniformly on a campus without an entitlement.
   const campusADoc = await model('Campus').findById(campusA).lean();
-  report.expect('Campus A carries an AI entitlement', campusADoc?.aiEntitlement?.enabled, true);
+  report.expect('Campus A carries an AI entitlement', resolveAiEntitlement(campusADoc).enabled, true);
 
   // Counters: matricule and reference generation must continue past the fixture.
   const resultCounter = await model('Counter').findById(`result_${ANCHOR_DATE.getUTCFullYear()}`).lean();

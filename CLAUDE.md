@@ -441,6 +441,11 @@ The 2026-09-30 administrator correction pass updates Nodemailer to 10.0.13
 exercises actual SMTP success and recipient rejection on loopback. The two
 existing extract-zip exceptions remain unchanged.
 
+Development uses Node 20's native `--watch --watch-preserve-output`, replacing
+nodemon's unpatched `braces` dependency path (GHSA-vfj7-8cjw-p6xm, 2026-10-05).
+`tests/integration/dev-watch.test.js` checks actual imported-file restart and
+SIGTERM cleanup. The production startup command is unaffected.
+
 ---
 
 ## 9. Registered routes (mounted in `app.js`)
@@ -498,7 +503,14 @@ graceful shutdown. The PDF is never stored — see `docs/architecture/features/f
 
 **Public-portal** (`/api`) — public-facing: pre-registration, programs, quiz/leaderboard, recruitment competitions; monthly competition-closing cron. Its client is brick 4, the Next.js portal at `/home/adminsecu/Projects/partner` — changing anything here means changing it there too.
 
-**AI** (`/api/ai` + `/internal/ai`) — Phase 3 gateway to the Python `ai-service` (brick 3 — `/home/adminsecu/Projects/university/ai-service`). No Mongoose model; per-campus entitlement lives on `Campus.aiEntitlement` (plans/features/budget, `shared/constants/ai.constants.js`). Scope travels in a short-lived S2S JWT (HS256, TTL ≤ 300 s), never in the body. Inert without `AI_SERVICE_URL` (503). Design doc: `docs/architecture/PHASE3_AI_DESIGN.md`.
+**AI** (`/api/ai` + `/internal/ai`) — Phase 3 gateway to the Python `ai-service` (brick 3 — `/home/adminsecu/Projects/university/ai-service`). No Mongoose model; per-campus activation, tier, budget and AI deviations come from `Campus.entitlement`. Explicit legacy reads remain for databases awaiting migration. Scope travels in a short-lived S2S JWT (HS256, TTL ≤ 300 s), never in the body. Inert without `AI_SERVICE_URL` (503). Design doc: `docs/architecture/PHASE3_AI_DESIGN.md`.
+
+**Campus entitlement administration** — unified GET/PATCH
+`/api/admin/campuses/:id/entitlement` is the only offer configuration endpoint.
+The former AI-only GET/PUT endpoint and writable `features` / `aiEntitlement`
+schema paths are retired. Explicit raw compatibility reads and historical
+`aiEntitlementAudit` remain; the unified admin response merges both ledgers,
+newest first (latest 20). See `docs/architecture/features/entitlement-legacy-retirement.md`.
 
 **Locale** — `shared/middleware/locale.middleware.js` applied globally.
 

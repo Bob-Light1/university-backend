@@ -13,6 +13,7 @@
 
 const { oid, stamps } = require('../ids');
 const { COUNTS } = require('../seed.config');
+const { foldLegacyEntitlement } = require('../../../shared/lib/entitlement/entitlement.legacy');
 
 /** Campus A runs on the paid AI tier: `/api/ai` is untestable on a campus without one. */
 const AI_ENTITLEMENT = Object.freeze({
@@ -95,6 +96,14 @@ const build = (ctx) => {
       ...stamps(390),
     },
   ];
+
+  // Use the deployed migration fold with the fixture clock, preserving the
+  // effective offer while persisting only the current configuration schema.
+  for (const campus of campuses) {
+    campus.entitlement = foldLegacyEntitlement(campus, { now: ctx.at(0) });
+    delete campus.features;
+    delete campus.aiEntitlement;
+  }
 
   const admins = [
     {

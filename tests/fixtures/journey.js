@@ -30,6 +30,8 @@
 
 const mongoose = require('mongoose');
 const request = require('supertest');
+const { oid } = require('./ids');
+const { AI_PLANS } = require('../../shared/constants/ai.constants');
 
 const { seed, startEphemeralDatabase } = require('./seed');
 const { loadAllModels } = require('./models');
@@ -174,6 +176,44 @@ const main = async () => {
     console.log('\n› the estate view answers');
     res = await request(app).get('/api/admin/entitlement/overview').set('Authorization', `Bearer ${admin}`);
     record('GET /admin/entitlement/overview → 200', res.status === 200, brief(res));
+
+    // Old databases must remain migratable after the writable schema is retired.
+    // This owned fixture writes raw legacy data just as it would exist on disk;
+    // normal model writes must no longer be able to create that configuration.
+    const Campus = mongoose.model('Campus');
+    const campusB = new mongoose.Types.ObjectId(accounts.campuses.B.id);
+    const legacy = {
+      features: { maxStudents: 1, maxDocumentStorageMB: 900 },
+      aiEntitlement: { enabled: true, plan: AI_PLANS.PREMIUM, monthlyTokenBudget: 12345, llmProfile: 'premium' },
+    };
+    await Campus.collection.updateOne({ _id: campusB }, {
+      $unset: { entitlement: 1 },
+      $set: legacy,
+      $push: { aiEntitlementAudit: {
+        at: new Date('2026-01-01T00:00:00Z'), actorRole: 'ADMIN',
+        actorId: oid('admin:global:admin'),
+        changes: { monthlyTokenBudget: 12345 },
+      } },
+    });
+    const campusService = require('../../modules/campus').service;
+    const { resolveAiEntitlement } = require('../../shared/lib/entitlement/entitlement.ai');
+    const oldCampus = await campusService.getCampusDocById(campusB);
+    record('hydrated legacy campus still enforces its negotiated student quota',
+      await oldCampus.canAddStudent() === false);
+    const oldAi = resolveAiEntitlement(await campusService.getCampusAiEntitlement(campusB));
+    record('lean legacy AI read preserves activation and token budget',
+      oldAi.enabled && oldAi.monthlyTokenBudget === 12345);
+    res = await request(app).patch(`/api/admin/campuses/${campusB}/entitlement`)
+      .set('Authorization', `Bearer ${admin}`)
+      .send({ ai: { llmProfile: 'legacy-migration-check' } });
+    const migrated = await campusService.getCampusEntitlement(campusB);
+    record('first unified write still folds stored legacy quotas',
+      res.status === 200 && migrated.entitlement.quotas.maxStudents === 1
+      && migrated.entitlement.quotas.aiMonthlyTokens === 12345);
+    res = await request(app).get(`/api/admin/campuses/${campusB}/entitlement`)
+      .set('Authorization', `Bearer ${admin}`);
+    record('unified endpoint retains historical AI decisions from the real database',
+      res.status === 200 && res.body.data.audit.some(row => row.changes.ai?.monthlyTokenBudget === 12345));
   } finally {
     await mongoose.disconnect();
     await handle.stop();

@@ -1,11 +1,15 @@
+'use strict';
+
+/**
+ * @file campus.model.js
+ * @description Campus identity, unified entitlement and tenant capacity checks.
+ */
 const mongoose = require('mongoose');
 const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
-const { AI_PLANS, AI_PLAN_PRESETS } = require('../../shared/constants/ai.constants');
 const {
   FEATURE_PLANS,
   FEATURE_STATES,
   FEATURE_KEYS,
-  DEFAULT_QUOTAS,
 } = require('../../shared/constants/features.constants');
 const { notDeletedFilter } = require('../../shared/utils/soft-delete');
 const { resolveQuota } = require('../../shared/utils/entitlement');
@@ -67,9 +71,9 @@ const entitlementOverrideSchema = new mongoose.Schema(
  * default would switch every campus to the `free` tier the moment this schema
  * ships, silently hiding paid modules on live tenants.
  *
- * `features` (quotas) and `aiEntitlement` below stay in place until the
- * migration is validated in production (§3.2) — removal is a later, separate,
- * reversible step.
+ * Legacy configuration paths are no longer writable. Explicit compatibility
+ * readers and the raw migration still read stored values; schema retirement
+ * never deletes those values or their audit history.
  */
 const entitlementSchema = new mongoose.Schema(
   {
@@ -86,7 +90,7 @@ const entitlementSchema = new mongoose.Schema(
       maxTeachers:          { type: Number, min: [1, 'maxTeachers must be at least 1'] },
       maxClasses:           { type: Number, min: [1, 'maxClasses must be at least 1'] },
       maxDocumentStorageMB: { type: Number, min: [100, 'Storage quota must be at least 100 MB'] },
-      /** 0 = unlimited, same convention as aiEntitlement.monthlyTokenBudget. */
+      /** 0 = unlimited, matching the AI token-budget convention. */
       aiMonthlyTokens:      { type: Number, min: [0, 'aiMonthlyTokens cannot be negative'] },
     },
     /**
@@ -317,44 +321,6 @@ const campusSchema = new mongoose.Schema(
       default: 'FRACTION',
     },
 
-    // AI "Premium" entitlement — per-tenant activation of the Phase 3 AI module
-    // (PHASE3_AI_DESIGN.md §11.3). Enforced by modules/ai middleware; the
-    // { plan, llmProfile } pair travels in the S2S JWT, never in a request body.
-    aiEntitlement: {
-      enabled: {
-        type:    Boolean,
-        default: false,
-      },
-      plan: {
-        type:    String,
-        enum:    Object.values(AI_PLANS),
-        default: AI_PLANS.FREE,
-      },
-      // Named LLM provider profile resolved by ai-service (ADR-5, §6.4bis).
-      // Free-form on purpose: profiles are declared in ai-service env only.
-      llmProfile: {
-        type:    String,
-        trim:    true,
-        default: 'free',
-      },
-      // 0 = unlimited (ADMIN only, §11.3).
-      monthlyTokenBudget: {
-        type:    Number,
-        default: AI_PLAN_PRESETS[AI_PLANS.FREE].monthlyTokenBudget,
-        min:     [0, 'monthlyTokenBudget cannot be negative'],
-      },
-      features: {
-        chat:      { type: Boolean, default: true },
-        search:    { type: Boolean, default: true },
-        analytics: { type: Boolean, default: false },
-        advisors:  { type: Boolean, default: false },
-      },
-      activatedAt: {
-        type:    Date,
-        default: null,
-      },
-    },
-
     // Append-only audit trail of aiEntitlement mutations (CLAUDE.md §8).
     // Excluded from standard reads; the admin endpoint selects it explicitly.
     aiEntitlementAudit: {
@@ -401,33 +367,6 @@ const campusSchema = new mongoose.Schema(
       select:  false,
     },
 
-    // Legacy quota configuration. Superseded by `entitlement.quotas` and read
-    // through `resolveQuota()`, which falls back here for every campus the
-    // migration has not covered yet (§3.2). Removed after prod validation.
-    // Defaults come from DEFAULT_QUOTAS so the numbers exist once (§0.1).
-    features: {
-      maxStudents: {
-        type: Number,
-        default: DEFAULT_QUOTAS.maxStudents,
-        min: [1, 'Max students must be at least 1']
-      },
-      maxTeachers: {
-        type: Number,
-        default: DEFAULT_QUOTAS.maxTeachers,
-        min: [1, 'Max teachers must be at least 1']
-      },
-      maxClasses: {
-        type: Number,
-        default: DEFAULT_QUOTAS.maxClasses,
-        min: [1, 'Max classes must be at least 1']
-      },
-      maxDocumentStorageMB: {
-        type:    Number,
-        default: DEFAULT_QUOTAS.maxDocumentStorageMB,
-        min:     [100, 'Storage quota must be at least 100 MB'],
-        max:     [102400, 'Storage quota cannot exceed 100 GB'],
-    },
-    }
   },
   {
     timestamps: true, // Adds createdAt and updatedAt
@@ -468,6 +407,8 @@ campusSchema.pre('save', function (next) {
 // **METHODS**
 // Check if campus has reached capacity limits.
 //
+// Convert hydrated documents to raw objects so stored legacy fields remain
+// readable after their writable schema accessors have been retired.
 // The ceiling comes from `resolveQuota()`, never from `this.features` directly:
 // `entitlement.quotas` is what the campus was sold (§9.3), `features` is only
 // its pre-unification form and is still the sole source on an unmigrated
@@ -479,7 +420,7 @@ campusSchema.methods.canAddStudent = async function () {
     schoolCampus: this._id,
     ...notDeletedFilter(Student),
   });
-  return currentCount < resolveQuota(this, 'maxStudents');
+  return currentCount < resolveQuota(this.toObject(), 'maxStudents');
 };
 
 campusSchema.methods.canAddTeacher = async function () {
@@ -488,7 +429,7 @@ campusSchema.methods.canAddTeacher = async function () {
     schoolCampus: this._id,
     ...notDeletedFilter(Teacher),
   });
-  return currentCount < resolveQuota(this, 'maxTeachers');
+  return currentCount < resolveQuota(this.toObject(), 'maxTeachers');
 };
 
 campusSchema.methods.canAddClass = async function () {
@@ -497,7 +438,7 @@ campusSchema.methods.canAddClass = async function () {
     campus: this._id,
     ...notDeletedFilter(Class),
   });
-  return currentCount < resolveQuota(this, 'maxClasses');
+  return currentCount < resolveQuota(this.toObject(), 'maxClasses');
 };
 campusSchema.methods.canAddDocumentStorage = async function(additionalBytes) {
   const Document = mongoose.model('Document');
@@ -512,7 +453,7 @@ campusSchema.methods.canAddDocumentStorage = async function(additionalBytes) {
     { $group: { _id: null, total: { $sum: '$importedFile.sizeBytes' } } }
   ]);
   const usedBytes = result[0]?.total || 0;
-  const maxBytes  = resolveQuota(this, 'maxDocumentStorageMB') * 1024 * 1024;
+  const maxBytes  = resolveQuota(this.toObject(), 'maxDocumentStorageMB') * 1024 * 1024;
   
   return (usedBytes + additionalBytes) <= maxBytes;
 };

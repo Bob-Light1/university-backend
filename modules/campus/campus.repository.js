@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * @file campus.repository.js — couche de persistance du domaine campus.
+ * @file campus.repository.js — persistence for the campus domain.
  *
  * Only file in the module allowed to query the Campus model directly
  * (controller + inter-module service). Step 0 of the Postgres migration preparation — see
@@ -23,7 +23,7 @@ const create = (data) => Campus.create(data);
 /** Looks up by email (uniqueness check at creation). */
 const findByEmail = (email) => Campus.findOne({ email }).lean();
 
-/** Recherche par email AVEC le hash (login). */
+/** Lookup by email with the password hash (login). */
 const findByEmailWithPassword = (email) =>
   Campus.findOne({ email }).select('+password').lean();
 
@@ -32,7 +32,7 @@ const touchLastLogin = (id) =>
   Campus.updateOne({ _id: id }, { $set: { lastLogin: new Date() } });
 
 // Public-safe projection: never exposes PII (manager email/phone), business
-// config (commissionConfig), quotas (features) or auth metadata (lastLogin)
+// config (commissionConfig), entitlement configuration or auth metadata (lastLogin)
 // to unauthenticated / non-privileged callers of GET /campus/all.
 const PUBLIC_FIELDS =
   'campus_name campus_number campus_image manager_name ' +
@@ -62,10 +62,10 @@ const paginate = async ({ status, city, search, skip, limit, publicView = false 
   return { data, total };
 };
 
-/** Lecture sans mot de passe (getById / dashboard). */
+/** Read without the password hash (getById / dashboard). */
 const findByIdSafe = (id) => Campus.findById(id).select('-password').lean();
 
-/** Lecture avec le hash (changement de mot de passe). */
+/** Read the password hash for password changes. */
 const findByIdWithPassword = (id) => Campus.findById(id).select('+password').lean();
 
 /** Updates the password (already hashed). */
@@ -77,7 +77,7 @@ const updateDefaults = (id, update) =>
   Campus.findByIdAndUpdate(id, { $set: update }, { new: true, runValidators: true })
     .select('defaultLanguage defaultTimezone defaultGradeFormat campus_name').lean();
 
-// ── Service inter-modules (ancien campus.service) ─────────────────────────────
+// ── Cross-module service reads (formerly campus.service) ─────────────────────────────
 
 const getCampusName = (campusId) =>
   Campus.findById(campusId).select('campus_name').lean();
@@ -113,7 +113,7 @@ const getCampusDocById = (campusId) => Campus.findById(campusId);
 const getCampusCommissionConfig = (campusId) =>
   Campus.findById(campusId).select('commissionConfig').lean();
 
-/** Config de commission + nom du campus (back-office partner.commission). */
+/** Commission config and campus name (back-office partner.commission). */
 const getCampusCommissionConfigWithName = (campusId) =>
   Campus.findById(campusId).select('commissionConfig campus_name').lean();
 
@@ -147,28 +147,6 @@ const getCampusAiEntitlement = (campusId) =>
   Campus.findById(campusId).select('aiEntitlement entitlement campus_name status').lean();
 
 /**
- * AI entitlement + audit trail (admin console only — audit is select:false
- * elsewhere). Both ledgers travel for the same reason as above: AI mutations
- * are appended to `entitlementAudit` since phase 2, while everything written
- * before that date still sits in `aiEntitlementAudit`.
- */
-const getCampusAiEntitlementWithAudit = (campusId) =>
-  Campus.findById(campusId)
-    .select('aiEntitlement entitlement campus_name status +aiEntitlementAudit +entitlementAudit').lean();
-
-/**
- * Replaces the embedded AI entitlement and appends an audit entry (append-only,
- * CLAUDE.md §8). `entitlement` is the FULL next config (merge done by the caller).
- * @param {Object} auditEntry — { actorId, actorRole, changes }
- */
-const setCampusAiEntitlement = (campusId, entitlement, auditEntry) =>
-  Campus.findByIdAndUpdate(
-    campusId,
-    { $set: { aiEntitlement: entitlement }, $push: { aiEntitlementAudit: auditEntry } },
-    { new: true, runValidators: true }
-  ).select('aiEntitlement campus_name').lean();
-
-/**
  * Unified entitlement (CAMPUS_ENTITLEMENT_DESIGN.md). `.lean()` matters here:
  * the resolver must only ever see RAW DATA, never a Mongoose document, so the
  * whole entitlement chain survives the PostgreSQL migration untouched (§15bis.3).
@@ -177,8 +155,8 @@ const getCampusEntitlement = (campusId) =>
   Campus.findById(campusId)
     // The legacy pair travels too: a campus the migration has not reached yet
     // is folded from it on its FIRST entitlement write, so the tier never lands
-    // without its grandfathering (`entitlement.legacy.js`). Dropped from this
-    // selector the day §3.2 removes the fields.
+    // without its grandfathering (`entitlement.legacy.js`). Writable schema
+    // paths are retired, but explicit lean reads retain stored legacy values.
     .select('entitlement features aiEntitlement campus_name status').lean();
 
 /**
@@ -222,7 +200,7 @@ const listCampusesForEstate = () =>
  */
 const getCampusEntitlementWithAudit = (campusId) =>
   Campus.findById(campusId)
-    .select('entitlement aiEntitlement campus_name status +entitlementAudit').lean();
+    .select('entitlement aiEntitlement campus_name status +entitlementAudit +aiEntitlementAudit').lean();
 
 /**
  * Replaces the entitlement object and appends an audit entry in the same write
@@ -270,8 +248,6 @@ module.exports = {
   getCampusCommissionConfigWithName,
   setCampusCommissionConfig,
   getCampusAiEntitlement,
-  getCampusAiEntitlementWithAudit,
-  setCampusAiEntitlement,
   getCampusEntitlement,
   getCampusEntitlementWithAudit,
   setCampusEntitlement,

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * @file campus.service.js — API inter-modules du domaine campus.
+ * @file campus.service.js — public service for the campus domain.
  *
  * Exposed:
  *   - getCampusName             : campus name (document headers).
@@ -13,7 +13,6 @@
  *   - getCampusCommissionConfigWithName : config + campus name (partner.commission).
  *   - setCampusCommissionConfig : updates the config (partner.commission).
  *   - getCampusAiEntitlement    : AI entitlement config (ai gate middleware, admin read).
- *   - setCampusAiEntitlement    : replaces the AI entitlement + audit entry (admin).
  *   - getCampusEntitlement      : unified entitlement (gate middleware, admin/campus read).
  *   - getCampusEntitlementWithAudit : entitlement + audit trail (admin console).
  *   - listCampusEntitlements    : every configured entitlement (background jobs, §9.1).
@@ -43,9 +42,6 @@ const getCampusCommissionConfig = (campusId) => campusRepo.getCampusCommissionCo
 const getCampusCommissionConfigWithName = (campusId) => campusRepo.getCampusCommissionConfigWithName(campusId);
 const setCampusCommissionConfig = (campusId, cfg) => campusRepo.setCampusCommissionConfig(campusId, cfg);
 const getCampusAiEntitlement    = (campusId) => campusRepo.getCampusAiEntitlement(campusId);
-const getCampusAiEntitlementWithAudit = (campusId) => campusRepo.getCampusAiEntitlementWithAudit(campusId);
-const setCampusAiEntitlement    = (campusId, entitlement, auditEntry) =>
-  campusRepo.setCampusAiEntitlement(campusId, entitlement, auditEntry);
 const getCampusEntitlement      = (campusId) => campusRepo.getCampusEntitlement(campusId);
 const getCampusEntitlementWithAudit = (campusId) => campusRepo.getCampusEntitlementWithAudit(campusId);
 const listCampusEntitlements    = () => campusRepo.listCampusEntitlements();
@@ -68,8 +64,6 @@ module.exports = {
   getCampusCommissionConfigWithName,
   setCampusCommissionConfig,
   getCampusAiEntitlement,
-  getCampusAiEntitlementWithAudit,
-  setCampusAiEntitlement,
   getCampusEntitlement,
   getCampusEntitlementWithAudit,
   setCampusEntitlement,

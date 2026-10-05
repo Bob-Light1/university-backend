@@ -32,12 +32,10 @@
  *    `aiEntitlement.enabled` — which defaults to `false`. Absence of data can
  *    switch a module ON; it can never switch SPEND on.
  *
- * 2. **The legacy object is read, not guessed.** `features`/`aiEntitlement` stay
- *    in the schema until the migration is validated in production (§3.2), so a
- *    campus is either migrated (the unified object is the only truth) or not
- *    (the legacy object is). Never a mix: reading half of each would let a
- *    stale field outlive the decision that replaced it. The day §3.2 lands,
- *    every `legacy` branch below disappears and nothing else moves.
+ * 2. **The legacy object is read, not guessed.** Writable legacy schema paths
+ *    are retired, but explicit lean reads retain compatibility with older
+ *    databases and the raw migration. A migrated campus uses only the unified
+ *    object; stored legacy values never override it.
  */
 
 const { FEATURE_STATES } = require('../../constants/features.constants');

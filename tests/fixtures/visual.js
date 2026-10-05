@@ -101,6 +101,23 @@ const staticServer = () => http.createServer((req, res) => {
   fs.createReadStream(file).pipe(res);
 });
 
+/**
+ * Compare the mentor dashboard shortcuts with the offer used by its drawer.
+ * @param {Object} target - Puppeteer page for the signed-in mentor.
+ * @param {Object} states - Server-owned effective feature states.
+ * @param {Object[]} entries - Portal navigation entries and their rendered labels.
+ * @returns {Promise<{ok: boolean, detail: string}>} Rendered shortcut comparison.
+ */
+const mentorQuickLinkCheck = async (target, states, entries) => {
+  const cards = await target.evaluate(() =>
+    [...document.querySelectorAll('.MuiCardActionArea-root')].map((card) => card.innerText.trim()));
+  const wrong = entries.filter((entry) => ['result', 'course'].includes(entry.key))
+    .filter((entry) => entry.labels.some((label) => cards.includes(label))
+      !== (states[entry.key] !== FEATURE_STATES.HIDDEN));
+  return { ok: cards.length > 0 && wrong.length === 0,
+    detail: wrong.length ? wrong.map((entry) => entry.key).join(', ') : cards.join(', ') };
+};
+
 const api = async (method, p, token, body) => {
   const r = await fetch(`http://localhost:5000${p}`, {
     method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
@@ -795,61 +812,77 @@ const api = async (method, p, token, body) => {
   ];
 
   const states = await statesOf(A, mgr.token);
-  console.log(`\n› les trois portails jamais rendus — offre du campus : ${
+  console.log(`\n› parent, mentor and staff portals — campus offer : ${
     ['result', 'course', 'announcement', 'document', 'exam', 'academic-print']
       .map((k) => `${k}=${states[k]}`).join(' ')}`);
 
   for (const portal of PORTALS) {
     await resetApiBudget();
     const session = await lg(portal.endpoint, { username: portal.username, password: acc.password });
-    if (!session?.token) { rec(`${portal.name} — connexion`, false, 'aucun jeton'); continue; }
-    const target = await portalPage();
-    await signIn(target, session, portal.userType);
-    await target.goto(`http://localhost:5173${portal.home}`, { waitUntil: 'networkidle2' });
-    await new Promise((r) => setTimeout(r, 3000));
-    await target.screenshot({ path: `${SHOTS}/${portal.shot}.png` });
-
-    const lines = await drawerLines(target);
-    const has = (labels) => labels.some((l) => lines.includes(l));
-    rec(`${portal.name} — le tiroir est rendu`, lines.length > 2,
-        lines.join(', ').slice(0, 130) || `écran vide — ${whyBlank(target) || 'aucune erreur signalée'}`);
-
-    // Direction 1 — the MENU against the server's own answer. `hidden` removes
-    // the entry; `read_only` keeps it, because the history stays reachable.
-    const entries = portal.entries(session);
-    const drawn = entries.filter((e) => has(e.labels));
-    const wrong = entries.filter((e) => has(e.labels) !== (states[e.key] !== FEATURE_STATES.HIDDEN));
-    rec(`${portal.name} — le tiroir dessine exactement ce que l’offre autorise`,
-        wrong.length === 0,
-        wrong.map((e) => `${e.key} est ${states[e.key]} et l’entrée est ${has(e.labels) ? 'dessinée' : 'absente'}`).join(' | ')
-          || `${drawn.length}/${entries.length} dessinée(s) : ${entries.map((e) => `${e.key}=${states[e.key]}`).join(' ')}`);
-
-    const stray = portal.free.filter((labels) => !has(labels));
-    rec(`${portal.name} — les entrées SANS clé restent, quoi qu’il arrive`,
-        stray.length === 0,
-        stray.map((l) => l[0]).join(', ') || `${portal.free.length} entrée(s) libre(s)`);
-
-    // Direction 2 — the ROUTES. An entry removed from the drawer whose URL still
-    // renders its page is the leak the static check cannot see; an entry drawn
-    // whose URL answers "not activated" is the dead button.
-    const mismatched = [];
-    for (const e of entries) {
-      await target.goto(`http://localhost:5173${e.url}`, { waitUntil: 'networkidle2' });
-      await new Promise((r) => setTimeout(r, 2200));
-      const text = await target.evaluate(() => document.body.innerText);
-      const refused = says(text, NOT_ACTIVATED);
-      if (refused !== (states[e.key] === FEATURE_STATES.HIDDEN)) {
-        mismatched.push(`${e.url} (${states[e.key]}) → ${refused ? 'refusée' : 'rendue'}`);
+    if (!session?.token) { rec(`${portal.name} — sign-in`, false, 'no token'); continue; }
+    for (const theme of ['light', 'dark']) {
+      await resetApiBudget();
+      const preference = await setTheme(session.token, theme);
+      if (preference.status !== 200) {
+        throw new Error(`${portal.name}: theme preference failed (${preference.status})`);
       }
-      // `ProtectedRoute` answers this to the wrong ROLE, not to a switched-off
-      // module: seeing it here means the act signed in as somebody else.
-      if (/Access Denied/i.test(text)) mismatched.push(`${e.url} → Access Denied`);
-    }
-    rec(`${portal.name} — chaque route répond comme son entrée de menu`,
-        mismatched.length === 0,
-        mismatched.join(' | ') || `${entries.length} route(s) confrontées à leur garde`);
+      const target = await portalPage();
+      await signIn(target, session, portal.userType, theme);
+      await target.goto(`http://localhost:5173${portal.home}`, { waitUntil: 'networkidle2' });
+      await new Promise((r) => setTimeout(r, 3000));
+      await target.screenshot({ path: `${SHOTS}/${portal.shot}-${theme}.png` });
+      const luminance = await bodyLuma(target);
+      rec(`${portal.name} (${theme}) — rendered color mode matches the saved preference`,
+          theme === 'dark' ? luminance < 90 : luminance > 200,
+          `luminance ${luminance}`);
 
-    await target.browserContext().close();
+      if (portal.name === 'mentor') {
+        const quickLinks = await mentorQuickLinkCheck(target, states, portal.entries(session));
+        rec(`mentor (${theme}) — dashboard shortcuts match the offer`, quickLinks.ok, quickLinks.detail);
+      }
+
+      const lines = await drawerLines(target);
+      const has = (labels) => labels.some((l) => lines.includes(l));
+      rec(`${portal.name} (${theme}) — navigation drawer renders`, lines.length > 2,
+          lines.join(', ').slice(0, 130) || `empty screen — ${whyBlank(target) || 'no reported error'}`);
+
+      // Direction 1 — the MENU against the server's own answer. `hidden` removes
+      // the entry; `read_only` keeps it, because the history stays reachable.
+      const entries = portal.entries(session);
+      const drawn = entries.filter((e) => has(e.labels));
+      const wrong = entries.filter((e) => has(e.labels) !== (states[e.key] !== FEATURE_STATES.HIDDEN));
+      rec(`${portal.name} (${theme}) — navigation matches the campus offer`,
+          wrong.length === 0,
+          wrong.map((e) => `${e.key} is ${states[e.key]} and the entry is ${has(e.labels) ? 'visible' : 'absent'}`).join(' | ')
+            || `${drawn.length}/${entries.length} visible : ${entries.map((e) => `${e.key}=${states[e.key]}`).join(' ')}`);
+
+      const stray = portal.free.filter((labels) => !has(labels));
+      rec(`${portal.name} (${theme}) — entries without a feature key remain visible`,
+          stray.length === 0,
+          stray.map((l) => l[0]).join(', ') || `${portal.free.length} unrestricted entries`);
+
+      // Direction 2 — the ROUTES. An entry removed from the drawer whose URL still
+      // renders its page is the leak the static check cannot see; an entry drawn
+      // whose URL answers "not activated" is the dead button.
+      const mismatched = [];
+      for (const e of entries) {
+        await target.goto(`http://localhost:5173${e.url}`, { waitUntil: 'networkidle2' });
+        await new Promise((r) => setTimeout(r, 2200));
+        const text = await target.evaluate(() => document.body.innerText);
+        const refused = says(text, NOT_ACTIVATED);
+        if (refused !== (states[e.key] === FEATURE_STATES.HIDDEN)) {
+          mismatched.push(`${e.url} (${states[e.key]}) → ${refused ? 'refused' : 'rendered'}`);
+        }
+        // `ProtectedRoute` answers this to the wrong ROLE, not to a switched-off
+        // module: seeing it here means the act signed in as somebody else.
+        if (/Access Denied/i.test(text)) mismatched.push(`${e.url} → Access Denied`);
+      }
+      rec(`${portal.name} (${theme}) — routes agree with their navigation entries`,
+          mismatched.length === 0,
+          mismatched.join(' | ') || `${entries.length} routes checked against their guards`);
+
+      await target.browserContext().close();
+    }
   }
 
   // The parent portal deserves its own line, because its result is a property of
@@ -883,8 +916,8 @@ const api = async (method, p, token, body) => {
   await new Promise((r) => setTimeout(r, 3500));
   await mentorPage.screenshot({ path: `${SHOTS}/16-mentor-module-coupe.png` });
   const lockedBody = await mentorPage.evaluate(() => document.body.innerText);
-  rec('son écran ne se remplit pas d’erreurs brutes',
-      !/\b403\b|forbidden|not enabled for this campus/i.test(lockedBody),
+  rec('hidden mentor portal renders the translated entitlement refusal',
+      says(lockedBody, NOT_ACTIVATED),
       lockedBody.replace(/\s+/g, ' ').slice(0, 140));
   await mentorPage.browserContext().close();
 
@@ -949,7 +982,7 @@ const api = async (method, p, token, body) => {
   const estateBody = await estate.evaluate(() => document.body.innerText);
   rec('la vue parc montre à l’ADMIN le campus et son module coupé',
       estateBody.includes('Fixture Campus A') && !says(estateBody, NOT_ACTIVATED),
-      estateBody.replace(/\s+/g, ' ').slice(0, 130) || `écran vide — ${whyBlank(estate) || 'aucune erreur signalée'}`);
+      estateBody.replace(/\s+/g, ' ').slice(0, 130) || `empty screen — ${whyBlank(estate) || 'no reported error'}`);
   await estate.browserContext().close();
 
   await require('./admin-portal.visual').checkAdminPortal({

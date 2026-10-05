@@ -21,6 +21,25 @@ const {
 } = require('../fixtures/seed.config');
 const { oid, oids, token, at, stamps, bcryptSalt } = require('../fixtures/ids');
 const { ANCHOR_DATE } = require('../fixtures/seed.config');
+const { build } = require('../fixtures/builders/campus.builder');
+const { resolveAiEntitlement, AI_FEATURE_KEY } = require('../../shared/lib/entitlement/entitlement.ai');
+const { resolveQuota, resolveEntitlement } = require('../../shared/utils/entitlement');
+const { FEATURE_KEYS, FEATURE_STATES } = require('../../shared/constants/features.constants');
+
+test('fixture campuses persist unified configuration without changing their effective offer', () => {
+  const campuses = build({ passwordHash: 'synthetic', at })[0].docs;
+  for (const campus of campuses) {
+    expect(campus.entitlement).toBeDefined();
+    expect(campus).not.toHaveProperty('features');
+    expect(campus).not.toHaveProperty('aiEntitlement');
+    expect(resolveQuota(campus, 'maxStudents')).toBe(5000);
+    expect(FEATURE_KEYS.filter((key) => key !== AI_FEATURE_KEY).every((key) =>
+      resolveEntitlement(campus.entitlement).features[key] === FEATURE_STATES.ENABLED)).toBe(true);
+  }
+  expect(resolveAiEntitlement(campuses[0])).toMatchObject({ enabled: true, monthlyTokenBudget: 5000000 });
+  expect(resolveAiEntitlement(campuses[1]).enabled).toBe(false);
+  expect(build({ passwordHash: 'synthetic', at })[0].docs).toEqual(campuses);
+});
 
 describe('fixture destruction guard', () => {
   const accepted = [

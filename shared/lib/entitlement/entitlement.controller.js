@@ -161,9 +161,7 @@ const parsePayload = (body = {}, allowPlan = false) => {
  * one at a time, the way the hard-delete impact report does it. An operator who
  * discovers a refusal item by item is an operator who will work around it.
  *
- * Extracted so the AI console (`admin.ai-entitlement.controller.js`), which
- * reaches the same door with a different payload since phase 2, refuses in
- * exactly the same words as the entitlement routes.
+ * Shared by the offer and usage routes so refusals carry the same contract.
  *
  * @param {Object} res
  * @param {Object} result - A non-ok `applyChanges()` result.

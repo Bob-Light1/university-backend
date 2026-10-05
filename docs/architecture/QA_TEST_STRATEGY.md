@@ -87,6 +87,14 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-05: phase 1-B row 2 preserves the fixture's 307 documents / 39 collections
+while seeding unified entitlement configuration. Current checks pass 36/36 fixture,
+25/25 API/data journey, 1,634 Jest tests / 80 suites and 67/67 course exercises.
+The final browser replay passes 134/134; screenshots are inspected in both themes. Evidence is tracked in [the retirement note](features/entitlement-legacy-retirement.md).
+This regression maintenance does not close CH-0 independent acceptance or start
+CH-2, CH-4 or CH-5.
+
+
 2026-10-04: CH-0 implementation is complete and locally validated. The fixture
 self-check passes 36/36; backend Jest 1,620 tests / 78 suites; API journey 21/21;
 browser 114/114 (exit 0, local Chrome configuration); course 67/67. Independent

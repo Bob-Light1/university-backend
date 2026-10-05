@@ -12,9 +12,9 @@
  * The `plan` written here is the pivot a billing module will consume — single
  * source of truth, deliberately the same tier vocabulary as the AI grid (D-D).
  *
- * Generalises `admin.ai-entitlement.controller.js`, which stays in place until
- * the AI module is absorbed in phase 2. Campus data is reached through the
- * campus facade and the entitlement service; no model is touched here.
+ * Campus data is reached through the campus facade and the entitlement
+ * service; no model is touched here. The unified response retains AI decisions
+ * recorded before the ledgers were unified.
  */
 
 const {
@@ -66,7 +66,14 @@ const getCampusEntitlement = asyncHandler(async (req, res) => {
     // constraints from the server instead of mirroring literals that would
     // drift the day one of them changes.
     requirements: PILOT_REQUIREMENTS,
-    audit: (campus?.entitlementAudit || []).slice(-20).reverse(),
+    // Adapt the historical AI-only payload for the existing audit renderer.
+    // Stored entries remain untouched; the entire original change is retained.
+    audit: [
+      ...(campus?.aiEntitlementAudit || []).map((row) => ({
+        ...row, changes: { ai: row.changes },
+      })),
+      ...(campus?.entitlementAudit || []),
+    ].sort((a, b) => new Date(b.at) - new Date(a.at)).slice(0, 20),
   });
 });
 
