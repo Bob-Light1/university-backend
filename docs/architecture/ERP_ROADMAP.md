@@ -100,6 +100,15 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-10-09: phase 1-B row 3 is delivered. All nine roles use short access tokens,
+rotating HttpOnly refresh credentials, live revocation and account-wide lockout.
+[Contract, audits and evidence](features/auth-session-hardening.md): 1,673 Jest
+checks; 78 authentication journey, 36 fixture and 25 existing journey checks;
+146 complete browser checks plus 12 final authentication checks, both themes.
+Course, dependency gate, build and localization pass. Old tokens require a fresh
+login on release; deployment is not part of this task. Phase 1-B remains in
+progress; phase 2 and independent CH-0 acceptance are unchanged.
+
 2026-10-05: phase 1-B row 2 is delivered. Writable legacy entitlement fields
 and unused AI administration routes are retired; raw compatibility and both audit
 ledgers remain. Mentor workspace and dashboard shortcut guards are corrected.
@@ -133,7 +142,7 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-05 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-09 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -355,7 +364,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 |---|---|---|---|---|---|---|
 | 1 | Deterministic fixture (CH-0) | `B1` | Reproducible seed, nine authenticated roles; eight supporting collections added with ownership checks; see [implementation note](features/ch0-fixture-completion.md) | Local validation complete; second-person acceptance pending. Fixture CI uses the existing disposable replica set; CH-2 database decision D-06 stays open until CH-2 starts | 2–3 j | `EN COURS` |
 | 2 | Campus entitlement | `B1·B2` | Unified configuration; legacy schema paths and AI-only routes retired; raw legacy reads and both audit ledgers preserved; workspace/shortcut guards verified in both themes. [Delivery evidence](features/entitlement-legacy-retirement.md) | Complete: pre-retirement browser 126/126, final browser 134/134 and all applicable §12 checks pass | 1 j | `LIVRÉ` |
-| 3 | Authentification — durcissement | `B1·B2` | JWT sur 9 rôles, bcrypt 12 tours, limiteur de débit sur les points de connexion, flux d'activation par jeton | Jetons de rafraîchissement, **révocation côté serveur** — aucun mécanisme n'existe aujourd'hui, un jeton volé vaut 7 jours — et verrouillage temporaire de compte après échecs répétés | 3–4 j | `À FAIRE` |
+| 3 | Authentication hardening | `B1·B2` | All nine roles: 15-minute live access JWTs, rotating seven-day HttpOnly refresh sessions, current/all-device revocation and account-wide temporary lockout; existing activation, roles, campus/ownership guards and login rate limits retained | Backend and ERP consumer delivered; disposable MongoDB, browser and regression evidence in [the session note](features/auth-session-hardening.md). Legacy tokens require fresh login on deployment | 3–4 d | `LIVRÉ` |
 | 4 | Module IA — sortie de conception | `B1·B3` | M0 à M6 livrés, tests verts des deux côtés, charge mesurée sous SLO en local | QA visuelle réelle de l'UI, SLO du chat mesuré sur l'infrastructure cible, benchmark d'embedding hors ligne avant de figer l'index de production | 2–3 j | `À FAIRE` |
 | 5 | Portail d'inscription en ligne | `B1·B4` | Pipeline de prospects en 7 statuts jusqu'à `enrolled`, anti-fraude, lien court et QR | Pièces jointes au dossier, workflow de validation directeur, **création effective de l'étudiant** au passage à `enrolled` — aujourd'hui seule la commission partenaire se déclenche — et notification du candidat | 3–4 j | `À FAIRE` |
 | 6 | Frais — reçus et échéancier | `B1·B2` | Reçu PDF rendu à la demande (`GET /finance/payments/:id/receipt`, langue de l'**étudiant**, pool Puppeteer partagé) ; cadence avant échéance J-7 / J-3 / Jour J sur son propre marqueur `remindersSent[]` ; les deux briques câblées, i18n × 10 | **Rien — les dix étapes du §12 sont tenues.** L'étape 10 a été jouée le 2026-09-02 et **écrite dans `npm run test:visual`** plutôt que passée à la main (précédent D-R7) : le harnais passe de 16 à **36 contrôles**, tous verts — deux thèmes par la *préférence* de l'utilisateur, `CAMPUS_MANAGER` + `STUDENT`, et les trois états d'entitlement dont `hidden`, refusé tant que le module porte des écritures et donc **vu** sur un campus vidé des siennes. Elle a trouvé un défaut que rien d'autre ne pouvait voir : le nom du reçu ne survivait pas au cross-origin (§9⑲ de la note), corrigé et fermé par un test vu rouge. 1 566 tests verts. Détail : `docs/architecture/features/fee-receipts-and-reminders.md` §9⑲ | 2–3 j | `LIVRÉ` |

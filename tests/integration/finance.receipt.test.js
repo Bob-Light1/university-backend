@@ -33,7 +33,8 @@ jest.mock('../../shared/lib/entitlement/entitlement.service', () => {
 });
 
 const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
+jest.mock('../../modules/account/session.repository', () => require('../helpers/session-token').repository);
+const jwt = require('../helpers/session-token');
 const request = require('supertest');
 
 const {

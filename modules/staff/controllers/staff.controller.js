@@ -21,8 +21,6 @@
  */
 
 const crypto   = require('crypto');
-const bcrypt   = require('bcrypt');
-const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
 const staffRepo     = require('../staff.repository');
@@ -118,7 +116,7 @@ const loginStaff = async (req, res) => {
 
     if (!staff) return sendError(res, 401, 'Invalid credentials.');
 
-    const isValid = await bcrypt.compare(password, staff.password);
+    const isValid = await require('../../account').sessions.verifyPassword('Staff', staff, password);
     if (!isValid) return sendError(res, 401, 'Invalid credentials.');
 
     if (campusId && staff.schoolCampus.toString() !== campusId.toString()) {
@@ -132,10 +130,7 @@ const loginStaff = async (req, res) => {
     // Extract permissions from assigned subRole (empty array if none)
     const permissions = staff.subRole?.isActive ? (staff.subRole.permissions ?? []) : [];
 
-    const token = jwt.sign(buildTokenPayload(staff, permissions), JWT_SECRET, {
-      expiresIn: '7d',
-      issuer:    'school-management-app',
-    });
+    const token = await require('../../account').sessions.issue(res, buildTokenPayload(staff, permissions), staff.password);
 
     staffRepo.touchLastLogin(staff._id).catch(() => {});
 

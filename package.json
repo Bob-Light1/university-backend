@@ -10,6 +10,7 @@
     "seed:test": "node tests/fixtures/seed.js",
     "seed:test:self-check": "node tests/fixtures/self-check.js",
     "test:journey": "node tests/fixtures/journey.js",
+    "test:auth-session": "node tests/fixtures/auth-session.journey.js",
     "test:visual": "node tests/fixtures/visual.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -47,7 +48,7 @@
     "qrcode": "^1.5.4",
     "rate-limit-redis": "^4.3.1",
     "sanitize-html": "^2.17.1",
-    "sharp": "^0.35.4",
+    "sharp": "^0.35.5",
     "slugify": "^1.6.6"
   },
   "devDependencies": {
@@ -59,6 +60,8 @@
     "supertest": "^7.2.2"
   },
   "overrides": {
+    "proxy-addr": "^2.0.8",
+    "source-map-js": "^1.2.2",
     "uuid": "^11.1.1",
     "browserslist": "^4.28.8",
     "get-uri": {

@@ -159,11 +159,10 @@ module.exports = [
     },
   },
 
-  // Harnais visuel — le corps des `page.evaluate()` s'exécute DANS le
-  // navigateur, pas dans Node : `document`, `window` et `MouseEvent` y sont
-  // légitimes. Portée volontairement réduite à ce seul fichier.
+  // Browser callbacks execute inside Chrome; keep browser globals limited to
+  // the three visual harness files that actually evaluate page code.
   {
-    files: ['tests/fixtures/visual.js', 'tests/fixtures/admin-portal.visual.js'],
+    files: ['tests/fixtures/visual.js', 'tests/fixtures/admin-portal.visual.js', 'tests/fixtures/auth-session.visual.js'],
     languageOptions: {
       globals: {
         ...globals.browser,

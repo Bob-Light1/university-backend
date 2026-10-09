@@ -60,7 +60,7 @@ Code is organized as **self-contained modules** under `modules/<domain>/`. Migra
 Typical module layout:
 ```
 modules/<domain>/
-  index.js                 # public surface: exports { router, service }
+  index.js                 # public surface: exports { routes, service }
   <domain>.routes.js       # Express router
   controllers/             # split by concern (see §3)
   <domain>.service.js      # business logic, cross-document validation
@@ -68,6 +68,8 @@ modules/<domain>/
   models/                  # Mongoose schemas
   *.cron.js / *.worker.js  # background jobs (scheduled from server.js)
 ```
+
+The account facade also exports `sessions` and frozen `sessionConstants`; middleware and login controllers access these through the facade. Authentication persistence belongs to its session repository.
 
 Modules: `admin · campus · student · teacher · parent · mentor · staff · class · level · subject · department · course · result · document · exam · academic-print · partner · announcement · gaet · settings · notification · finance · public-portal · account · ai`.
 
@@ -124,7 +126,7 @@ Response shape: `{ success, message, data, meta }`.
 
 ## 5. Models
 
-- **The scoped field is `schoolCampus`, not `campusId`** — 41 models against 8, and it is what
+- **The scoped field is `schoolCampus`, not `campusId`** — 43 models against 8, and it is what
   `buildCampusFilter()` emits (`shared/utils/validation-helpers.js`: `{ schoolCampus: user.campusId }`).
   A new campus-scoped model declares
   `schoolCampus: { type: ObjectId, ref: 'Campus', required: true, index: true }`.
@@ -317,15 +319,15 @@ Both refuse the flag rather than silently returning the live list, which would r
 The dialog can always go back to step 1 (`rerunPreview`): a ticket lives 5 minutes and reading a long impact report outlasts it easily, and a `409` on execute means the ticket is spent — the report is dropped so the operator re-reads an impact that may have changed, instead of resubmitting a token the server has already refused. `minReasonLength` / `maxReasonLength` travel on `report.requirements` rather than being mirrored as frontend literals; the local constant is a fallback only.
 
 **Outside this system**, only three exceptions — none of them business data:
-- `ActivationToken` cleanup (`account.service.js`) and the **four** TTL indexes that are genuinely
-  ephemeral: `ActivationToken.expiresAt`, `DocumentShare.expiresAt`, `PrintJob.createdAt`
+- `ActivationToken` cleanup (`account.service.js`) and the **six** TTL indexes that are genuinely
+  ephemeral: `ActivationToken.expiresAt`, `AuthSession.expiresAt`, `LoginState.expiresAt`, `DocumentShare.expiresAt`, `PrintJob.createdAt`
   (30 d, `PRINT_JOB_TTL_DAYS` — job metadata, and §5.1 already records that deletion is not a
   concept for it) and `QuizSession.expiresAt`, which is set only on an abandoned `pending` session
   and `null` on a completed one — the model declares that invariant in its own header;
 - the GED teardown reached *through* the gate (`document.service.hardDeleteDocument`);
 - **public-portal marketing content** — `portal-admin.factory.js` `remove()` hard-deletes `Testimonial` / `FaqEntry` / `QuizQuestion` / `CoursePreview` / `CompetitionPrize` / `ContactMessage` with a plain campus-scoped `findOneAndDelete`. Deliberate: this is editorial content with no academic, financial or personal record attached, and it is authored and discarded in the same screen. It is CASCADEd when its campus goes.
 
-⚠️ **A fifth TTL index is not an exception, it is a hole.** `Document` declares `expiresAt`
+⚠️ **The Document TTL index is not an exception, it is a hole.** `Document` declares `expiresAt`
 (`document.model.js:223`, documented "for temporary generated documents") **and a TTL index on it**
 (`:305`) — business data, carrying an append-only ledger, registered as a deletable entity with a
 `customExecutor` and four controls in front of it. Nothing in the module ever writes that path, so
@@ -385,7 +387,7 @@ whitelist must contain, so it is a §12 work item and not a one-line patch.
   cannot see this: assert it with an `Origin` header, as `tests/integration/finance.receipt.test.js`
   does. Adding a route that streams a file means checking this list, not only the route.
 - `campusId` never from `req.body` for scoped roles.
-- Passwords: bcrypt rounds = 12. JWT payload minimal `{ id, role, campusId }`, expiry 7d.
+- Passwords: bcrypt rounds = 12. Access JWTs use HS256 and issuer pinning, `{ id, role, campusId?, sid }`, and a 15-minute expiry. Live sessions and current account snapshots are mandatory; seven-day refresh credentials rotate in HttpOnly cookies. Five failed password checks lock the model/account for 15 minutes.
 - Append-only audit log entry on every post-publication mutation.
 
 ### 8.1 Dependency audit — a gate with a named exception, not a switch
@@ -412,7 +414,9 @@ installer. Keep both exceptions keyed by their exact GHSA IDs; a new advisory
 still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
 `tests/unit/audit-gate.test.js` verifies unknown findings and stale exceptions fail.
 
-**`package.json` carries four `overrides`, all load-bearing** — none is cosmetic:
+**`package.json` carries six `overrides`, all load-bearing** — none is cosmetic:
+- `proxy-addr: ^2.0.8` — patches GHSA-jqcg-44mw-7w3h in Express proxy trust; preserves normal loopback trust and rejects spoofing through incorrectly mapped IPv6 subnets.
+- `source-map-js: ^1.2.2` — patches GHSA-68fv-2mgg-jv7q on the sanitize-html/PostCSS path.
 - `uuid: ^11.1.1` — `exceljs` 4.4.0 (latest) pins the vulnerable `uuid@^8`. It calls only `v4`,
   which uuid 11 still exports from its CommonJS build.
 - `browserslist: ^4.28.8` — two high advisories (GHSA-c83g-rgw3-j3cx, GHSA-73wf-gq98-2v4g) against
@@ -441,6 +445,11 @@ The 2026-09-30 administrator correction pass updates Nodemailer to 10.0.13
 exercises actual SMTP success and recipient rejection on loopback. The two
 existing extract-zip exceptions remain unchanged.
 
+The 2026-10-09 session hardening pass also updates Sharp to 0.35.5 (patched
+librsvg, GHSA-wq5f-xc86-pv6w), with a real production resize/storage check.
+The audit gate was red on all three new advisories before these patch upgrades;
+no additional exception was introduced. See the session feature evidence.
+
 Development uses Node 20's native `--watch --watch-preserve-output`, replacing
 nodemon's unpatched `braces` dependency path (GHSA-vfj7-8cjw-p6xm, 2026-10-05).
 `tests/integration/dev-watch.test.js` checks actual imported-file restart and
@@ -457,6 +466,7 @@ SIGTERM cleanup. The production startup command is unaffected.
 /api/results        /api/courses        /api/documents      /api/examination
 /api/print          /api/partners       /api/announcements  /api/gaet
 /api/settings       /api/notifications  /api/finance        /api/account
+/api/account/session  (GET inspect; POST refresh, logout, revoke, logout-all)
 /api/danger-zone  (harmonized permanent deletion — see §5.2)
 /api/ai  (Phase 3 gateway — inert without AI_SERVICE_URL)
 /internal/ai  (S2S read API for ai-service — never published by the reverse proxy)
@@ -478,6 +488,8 @@ institutional notifications. Sender addresses remain explicit configuration.
 No API, persistence, scope or entitlement contract is added by this presentation work.
 
 ## 10. Special modules
+
+**Account sessions** (`/api/account/session`) — revocable short access tokens and rotating refresh cookies for all nine roles. `AuthSession` / `LoginState` are nullable `schoolCampus` operational records; no business soft-delete convention. Account/campus danger-zone cascades cover both. Expiry and account changes are enforced synchronously, independent of TTL cleanup. The expand-only `scripts/prepare-auth-sessions.js` prepares collections and indexes (`--apply`, dry-run by default); existing accounts need no rewrite. Release requires a fresh login for old tokens. See [contract and evidence](docs/architecture/features/auth-session-hardening.md). No new cron or entitlement key.
 
 **GAET** (`/api/gaet`) — Automatic Timetable Generation. `GaetConstraint` with 7-state machine (`DRAFT → GENERATING → GENERATED → PUBLISHED → …`); CPU-bound worker on an isolated thread; conflict service; zombie recovery at boot (`GENERATING` > 15 min → `FAILED`).
 
@@ -564,6 +576,7 @@ The synthetic dataset every test layer builds on (CH-0 of
 npm run seed:test -- --ephemeral   # throwaway in-memory database: no MongoDB required
 npm run seed:test -- --print       # table of the 18 accounts (9 roles × 2 campuses)
 npm run seed:test:self-check       # guards, budget, idempotence, corruption, real login
+npm run test:auth-session          # real rotation, revocation, lockout and auth scope
 ```
 
 - **Two campuses, nine signed-in roles, 307 documents, frozen credentials.** `ObjectId`s are

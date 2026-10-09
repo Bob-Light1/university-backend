@@ -19,8 +19,6 @@
  */
 
 const crypto   = require('crypto');
-const bcrypt   = require('bcrypt');
-const jwt      = require('jsonwebtoken');
 const mongoose = require('mongoose');
 
 const mentorRepo = require('../mentor.repository');
@@ -108,7 +106,7 @@ const loginMentor = async (req, res) => {
 
     if (!mentor) return sendError(res, 401, 'Invalid credentials.');
 
-    const isValid = await bcrypt.compare(password, mentor.password);
+    const isValid = await require('../../account').sessions.verifyPassword('Mentor', mentor, password);
     if (!isValid) return sendError(res, 401, 'Invalid credentials.');
 
     if (campusId && mentor.schoolCampus.toString() !== campusId.toString()) {
@@ -119,10 +117,7 @@ const loginMentor = async (req, res) => {
       return sendError(res, 403, 'Your account is not active. Please contact support.');
     }
 
-    const token = jwt.sign(buildTokenPayload(mentor), JWT_SECRET, {
-      expiresIn: '7d',
-      issuer:    'school-management-app',
-    });
+    const token = await require('../../account').sessions.issue(res, buildTokenPayload(mentor), mentor.password);
 
     mentorRepo.touchLastLogin(mentor._id).catch(() => {});
 

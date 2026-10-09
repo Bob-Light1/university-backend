@@ -219,18 +219,14 @@ const login = async (req, res) => {
     const partner = await partnerRepo.findPartnerByEmailWithPassword(email.toLowerCase().trim());
     if (!partner) return sendError(res, 401, 'Invalid credentials.');
 
-    const isMatch = await partner.comparePassword(password);
+    const isMatch = await require('../../account').sessions.verifyPassword('Partner', partner, password);
     if (!isMatch) return sendError(res, 401, 'Invalid credentials.');
 
     if (partner.status === 'archived' || partner.status === 'suspended') {
       return sendError(res, 403, 'Your account is not active. Please contact support.');
     }
 
-    const token = jwt.sign(
-      buildTokenPayload(partner),
-      JWT_SECRET,
-      { expiresIn: '7d', issuer: 'school-management-app' }
-    );
+    const token = await require('../../account').sessions.issue(res, buildTokenPayload(partner), partner.password);
 
     // Fire-and-forget: lastLoginAt + lastActivityAt
     partnerRepo.touchLoginActivity(partner._id).catch(() => {});
@@ -278,8 +274,8 @@ const forgotPassword = async (req, res) => {
 
     const resetLink = `${FRONTEND_URL}/partner/reset-password?token=${resetToken}`;
 
-    // TODO P2: Send resetLink via WhatsApp Business API (provider to be selected)
-    console.info(`[PARTNER RESET] Reset link for ${partner.email}: ${resetLink}`);
+    // TODO P2: Send resetLink via WhatsApp Business API (provider to be selected).
+    // Never write the reset credential or recipient identity to application logs.
 
     return sendSuccess(res, 200, 'If this email is registered, a reset link has been sent.', {
       // Exposed only in development

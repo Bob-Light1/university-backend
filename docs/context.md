@@ -75,6 +75,7 @@ Invariants and commands are in [AGENTS.md](../AGENTS.md).
 - [Product home and deployment branding](architecture/features/product-home-and-branding.md): public product presentation, identity precedence and deployment variables; applicant intake remains in the separate portal.
 - [Feature notes](architecture/features/): contracts and acceptance criteria for individual work items.
 - [AI design](architecture/PHASE3_AI_DESIGN.md): service contracts and decisions; §18 is its handoff. Its historical "Phase 3" label is not the current roadmap's phase 3.
+- [Authentication sessions](architecture/features/auth-session-hardening.md): short access tokens, rotating refresh cookies, live revocation and account-wide lockout.
 - [Account activation](architecture/ACCOUNT_ACTIVATION_CHANTIER.md): locked onboarding decisions and verification procedure.
 - [Licensed feature delivery](architecture/FEATURE_DELIVERY_DESIGN.md): source-license packaging design, not an implemented delivery system; the roadmap also describes a hosted SaaS offering.
 - [Modular migration](architecture/MODULAR_MONOLITH_MIGRATION.md) and [PostgreSQL assessment](architecture/POSTGRES_MIGRATION_ASSESSMENT.md): migration history, repository-layer work and prerequisites; neither authorizes a new database migration.

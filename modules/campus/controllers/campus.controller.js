@@ -1,7 +1,7 @@
+/** @file Authentication and account operations. */
 require('dotenv').config();
 
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 
@@ -245,7 +245,7 @@ class CampusController extends GenericEntityController {
       }
 
       // Verify password
-      const isPasswordValid = await bcrypt.compare(password, campus.password);
+      const isPasswordValid = await require('../../account').sessions.verifyPassword('Campus', campus, password);
 
       if (!isPasswordValid) {
         return sendError(res, 401, 'Invalid email or password');
@@ -257,21 +257,14 @@ class CampusController extends GenericEntityController {
       }
 
       // Generate token
-      const token = jwt.sign(
-        {
+      const token = await require('../../account').sessions.issue(res, {
           id: campus._id,
           campusId: campus._id,
           manager_name: campus.manager_name,
           campus_name: campus.campus_name,
           image_url: campus.campus_image || campus.profileImage,
           role: 'CAMPUS_MANAGER'
-        },
-        JWT_SECRET,
-        {
-          expiresIn: '7d',
-          issuer: 'school-management-app'
-        }
-      );
+        }, campus.password);
 
       // Update last login
       campusRepo.touchLastLogin(campus._id)

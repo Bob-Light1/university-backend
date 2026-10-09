@@ -58,6 +58,8 @@ const M = {
   UserNotification:  () => require('../../../modules/announcement/models/user-notification.model'),
   Notification:      () => require('../../../modules/notification/models/notification.model'),
   UserPreferences:   () => require('../../../modules/settings/models/userPreferences.model'),
+  AuthSession:       () => require('../../../modules/account/session.model'),
+  LoginState:        () => require('../../../modules/account/login-state.model'),
   ActivationToken:   () => require('../../../modules/account/account.activation.model'),
   Result:            () => require('../../../modules/result/models/result.model').Result,
   FinalTranscript:   () => require('../../../modules/result/models/final-transcript.model').FinalTranscript,
@@ -148,6 +150,8 @@ const retain = (model, label, filter) => ({ model, label, filter, mode: RELATION
  * @returns {Array<Object>} Relation declarations.
  */
 const accountSideCars = (userModel) => [
+  cascade('AuthSession', 'Authentication sessions', (id) => ({ userId: id, userModel })),
+  cascade('LoginState', 'Login lock state', (id) => ({ userId: id, userModel })),
   cascade('Notification',     'Notification history',  (id) => ({ recipientId: id, recipientModel: userModel })),
   cascade('UserNotification', 'Announcement read receipts', (id) => ({ userId: id })),
   cascade('UserPreferences',  'User preferences',      (id) => ({ userId: id, userModel })),
@@ -533,6 +537,8 @@ const REGISTRY = Object.freeze({
       cascade('UserNotification', 'Announcement read receipts',  (id) => ({ schoolCampus: id })),
       cascade('UserPreferences',  'User preferences',            (id) => ({ campusId: id })),
       cascade('ActivationToken',  'Pending activation tokens',   (id) => ({ campusId: id })),
+      cascade('AuthSession', 'Authentication sessions', (id) => ({ schoolCampus: id })),
+      cascade('LoginState', 'Login lock state', (id) => ({ schoolCampus: id })),
       cascade('PrintJob',         'Print queue',                 (id) => ({ campusId: id })),
       cascade('GaetConstraint',   'Timetable generation runs',   (id) => ({ schoolCampus: id })),
       cascade('ExamAnalyticsSnapshot', 'Exam analytics snapshots', (id) => ({ schoolCampus: id })),

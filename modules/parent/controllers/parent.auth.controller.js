@@ -14,7 +14,6 @@
  */
 
 const bcrypt = require('bcrypt');
-const jwt    = require('jsonwebtoken');
 
 const parentRepo = require('../parent.repository');
 const {
@@ -116,7 +115,7 @@ const loginParent = async (req, res) => {
     }
 
     // Verify password
-    const isPasswordValid = await bcrypt.compare(password, parent.password);
+    const isPasswordValid = await require('../../account').sessions.verifyPassword('Parent', parent, password);
     if (!isPasswordValid) {
       return sendError(res, 401, 'Invalid credentials.');
     }
@@ -132,11 +131,7 @@ const loginParent = async (req, res) => {
     }
 
     // Build JWT
-    const token = jwt.sign(
-      buildTokenPayload(parent),
-      JWT_SECRET,
-      { expiresIn: '7d', issuer: 'school-management-app' }
-    );
+    const token = await require('../../account').sessions.issue(res, buildTokenPayload(parent), parent.password);
 
     // Update lastLogin — fire-and-forget (must not block the response)
     parentRepo.touchLastLogin(parent._id).catch(() => {});

@@ -28,7 +28,8 @@ jest.mock('../../modules/document/document.repository', () => ({
 }));
 const documents = require('../../modules/document/document.repository');
 const request = require('supertest');
-const jwt = require('jsonwebtoken');
+jest.mock('../../modules/account/session.repository', () => require('../helpers/session-token').repository);
+const jwt = require('../helpers/session-token');
 const app = require('../../app');
 const results = require('../../modules/result/result.repository');
 const mentors = require('../../modules/mentor/mentor.repository');

@@ -6,7 +6,8 @@
  * retains historical decisions behind the existing global-role authorization.
  */
 const request = require('supertest');
-const jwt = require('jsonwebtoken');
+jest.mock('../../modules/account/session.repository', () => require('../helpers/session-token').repository);
+const jwt = require('../helpers/session-token');
 const express = require('express');
 
 jest.mock('../../modules/campus', () => ({ service: {

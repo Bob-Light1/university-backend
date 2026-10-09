@@ -989,6 +989,10 @@ const api = async (method, p, token, body) => {
     browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
   });
 
+  await require('./auth-session.visual').checkAuthSessions({
+    browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
+  });
+
   closing = true;
   await browser.close(); backend.close(); spa.close();
   // PDF generation owns additional Chromium instances; close application resources

@@ -28,7 +28,6 @@
 require('dotenv').config();
 
 const bcrypt  = require('bcrypt');
-const jwt     = require('jsonwebtoken');
 
 const Admin      = require('../admin.model'); // passed to the shared profileSvc (outside repo)
 const adminRepo  = require('../admin.repository');
@@ -52,8 +51,6 @@ const { getLoginPrefs } = require('../../settings').service;
 
 const JWT_SECRET   = process.env.JWT_SECRET;
 const SALT_ROUNDS  = 12; // Increased from 10 for better security
-const TOKEN_EXPIRY = '7d';
-const JWT_ISSUER   = 'school-management-app';
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
 
@@ -127,7 +124,7 @@ const loginAdmin = asyncHandler(async (req, res) => {
   }
 
   // ── Password check ──────────────────────────────────────────────────────────
-  const isPasswordValid = await bcrypt.compare(password, admin.password);
+  const isPasswordValid = await require('../../account').sessions.verifyPassword('Admin', admin, password);
   if (!isPasswordValid) {
     return sendError(res, 401, 'Invalid email or password.');
   }
@@ -142,11 +139,7 @@ const loginAdmin = asyncHandler(async (req, res) => {
   }
 
   // ── Issue JWT ───────────────────────────────────────────────────────────────
-  const token = jwt.sign(
-    buildTokenPayload(admin),
-    JWT_SECRET,
-    { expiresIn: TOKEN_EXPIRY, issuer: JWT_ISSUER },
-  );
+  const token = await require('../../account').sessions.issue(res, buildTokenPayload(admin), admin.password);
 
   // ── Update lastLogin (fire-and-forget — does not block the response) ────────
   adminRepo.touchLastLogin(admin._id)
@@ -188,7 +181,7 @@ const createAdmin = asyncHandler(async (req, res) => {
     }
     let payload;
     try {
-      payload = jwt.verify(authHeader.slice(7), JWT_SECRET, { issuer: JWT_ISSUER });
+      payload = await require('../../account').sessions.authenticateToken(authHeader.slice(7));
     } catch {
       return sendError(res, 401, 'Invalid or expired token.');
     }

@@ -16,4 +16,6 @@ const service = require('./account.service');
 module.exports = {
   routes,
   service,
+  sessions: require('./session.service'),
+  sessionConstants: require('./session.constants'),
 };

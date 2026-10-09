@@ -1,5 +1,5 @@
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+'use strict';
+/** @file Authentication and account operations. */
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
 const Teacher = require('../models/teacher.model'); // accepted exception: Model of the GenericBulkController
@@ -142,7 +142,7 @@ const loginTeacher = async (req, res) => {
     }
 
     // Compare password
-    const isPasswordValid = await bcrypt.compare(password, teacher.password);
+    const isPasswordValid = await require('../../account').sessions.verifyPassword('Teacher', teacher, password);
     if (!isPasswordValid) {
       return sendError(res, 401, 'Invalid credentials');
     }
@@ -155,17 +155,13 @@ const loginTeacher = async (req, res) => {
     
 
     // Generate JWT token — issuer must match auth.js verification options
-    const token = jwt.sign(
-      { 
+    const token = await require('../../account').sessions.issue(res, {
         id: teacher._id,
         campusId: teacher.schoolCampus._id,
         role: 'TEACHER',
         name: `${teacher.firstName} ${teacher.lastName}`,
         departmentId: teacher.department?._id
-      },
-      JWT_SECRET,
-      { expiresIn: '7d', issuer: 'school-management-app' }
-    );
+      }, teacher.password);
 
     // Update last login
     await teacherRepo.touchLastLogin(teacher._id);

@@ -70,3 +70,5 @@ jobs:
         run: npm ci
       - name: Verify fixture and mutation checks on a disposable replica set
         run: npm run seed:test:self-check
+      - name: Verify session rotation, revocation and account locks on disposable data
+        run: npm run test:auth-session

@@ -114,12 +114,20 @@ harness passes 114/114 checks (exit 0); the backend suite passes 1,610 tests.
 with phase 1-B row 16. This bounded regression pass does not deliver
 CH-2, CH-4 or CH-5; their statuses and second-person acceptance remain unchanged.
 
+2026-10-09 regression maintenance: phase 1-B row 3 adds revocable sessions,
+account-wide lockout and permanent authentication browser regressions. Full Jest
+passes 1,673 tests; the disposable authentication journey passes 78/78, fixture
+self-check 36/36 and existing journey 25/25. Browser QA passes 146/146; final
+request-identity refinement is covered by its targeted transport replay.
+[Evidence and limitations](features/auth-session-hardening.md) remain separate
+from CH-0 second-person acceptance and unstarted CH-2/CH-4/CH-6 work.
+
 > **Source de vérité de l'avancement.** À mettre à jour à chaque commit touchant un chantier.
 
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
 |---|---|---|---|---|---|---|---|
 | **CH-0** | Deterministic multi-campus fixture | 0 | `EN COURS` — independent acceptance pending | — | 1 sem. | Codex | 2026-10-04 |
-| **CH-1** | Socle unitaire backend | 1 | `EN PLACE` — à maintenir | — | continu | — | 2026-08-20 |
+| **CH-1** | Backend unit foundation | 1 | `EN PLACE` — maintained | — | ongoing | Codex | 2026-10-09 |
 | **CH-2** | Matrice API : auth · rôle · isolation campus | 2 | `À FAIRE` | CH-0 | 1–2 sem. | — | 2026-08-20 |
 | **CH-3** | Tests composant frontend | 3 | `À FAIRE` | — *(CH-2 pour les handlers MSW, §7.2)* | 2–3 sem. | — | 2026-08-20 |
 | **CH-4** | E2E déterministe (Playwright) | 4 | `À FAIRE` | CH-0 | 2–3 sem. | — | 2026-08-20 |

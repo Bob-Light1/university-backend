@@ -1,101 +1,25 @@
-const jwt = require("jsonwebtoken");
+'use strict';
+/** @file auth.js
+ * @description Server-session authentication, role and ownership guards.
+ */
+const { sendError } = require('../utils/response-helpers');
 
 /**
  * Enhanced JWT authentication middleware
  * Verifies the token and attaches user info to req.user
  * Implements additional security checks
  */
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
+  const match = /^Bearer ([^ ]+)$/.exec(req.header('Authorization') || '');
+  if (!match) return sendError(res, 401, 'A Bearer token is required.');
+  if (!process.env.JWT_SECRET) return sendError(res, 500, 'Server configuration error.');
   try {
-    // Extract the Authorization header
-    const authHeader = req.header("Authorization");
-    
-    if (!authHeader) {
-      return res.status(401).json({
-        success: false,
-        message: "No token provided. Authorization denied."
-      });
-    }
-
-    // Parse Bearer token format
-    const parts = authHeader.split(' ');
-    
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      return res.status(401).json({ 
-        success: false,
-        message: "Invalid token format. Use: Bearer <token>" 
-      });
-    }
-
-    const token = parts[1];
-    
-    if (!token) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token format. Authorization denied."
-      });
-    }
-
-    // Verify JWT_SECRET exists
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      console.error("❌ JWT_SECRET is not defined in environment variables");
-      return res.status(500).json({
-        success: false,
-        message: "Server configuration error"
-      });
-    }
-
-    // Verify and decode the token
-    const decoded = jwt.verify(token, jwtSecret, {
-      algorithms: ['HS256'], // Specify allowed algorithms for security
-      issuer: 'school-management-app' // Verify issuer if set during signing
-    });
-    
-    // Attach user information to the request
-    req.user = decoded;
-
-    // Additional security: Check if user has required fields
-    if (!decoded.id || !decoded.role) {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token payload. Please login again."
-      });
-    }
-
-    // Proceed to the next middleware
-    next();
-
+    req.user = await require('../../modules/account').sessions.authenticateToken(match[1]);
+    return next();
   } catch (error) {
-    console.error("❌ Auth middleware error:", error.message);
-
-    // Handle specific JWT errors
-    if (error.name === "JsonWebTokenError") {
-      return res.status(401).json({
-        success: false,
-        message: "Invalid token. Authorization denied."
-      });
-    }
-
-    if (error.name === "TokenExpiredError") {
-      return res.status(401).json({
-        success: false,
-        message: "Token expired. Please login again."
-      });
-    }
-
-    if (error.name === "NotBeforeError") {
-      return res.status(401).json({
-        success: false,
-        message: "Token not active yet"
-      });
-    }
-
-    // Generic error
-    return res.status(500).json({
-      success: false,
-      message: "Authentication error occurred"
-    });
+    return sendError(res, error.statusCode || 503,
+      error.statusCode ? error.message : 'Authentication is temporarily unavailable.',
+      error.code ? { code: error.code } : null);
   }
 };
 
@@ -182,51 +106,17 @@ const authMiddleware = (roles = []) => {
  * Attaches user info if token is valid, but doesn't require it
  * Useful for endpoints that work differently for authenticated users
  */
-const optionalAuth = (req, _res, next) => {
-  try {
-    const authHeader = req.header("Authorization");
-    
-    if (!authHeader) {
-      return next(); // No token, continue without user
+const optionalAuth = async (req, _res, next) => {
+  delete req.user;
+  const match = /^Bearer ([^ ]+)$/.exec(req.header('Authorization') || '');
+  if (match) {
+    try {
+      req.user = await require('../../modules/account').sessions.authenticateToken(match[1]);
+    } catch {
+      // An unavailable or invalid session never receives authenticated privileges.
     }
-
-    const parts = authHeader.split(' ');
-    if (parts.length !== 2 || parts[0] !== 'Bearer') {
-      return next(); // Invalid format, continue without user
-    }
-
-    const token = parts[1];
-    
-    if (!token) {
-      return next(); // No token, continue without user
-    }
-
-    const jwtSecret = process.env.JWT_SECRET;
-    if (!jwtSecret) {
-      console.error("❌ JWT_SECRET is not defined");
-      return next(); // Config error, continue without user
-    }
-
-    // Pin algorithm + issuer to match authenticate() — prevents algorithm
-    // confusion and rejects tokens issued for a different audience.
-    const decoded = jwt.verify(token, jwtSecret, {
-      algorithms: ['HS256'],
-      issuer: 'school-management-app'
-    });
-
-    // Ignore tokens with an incomplete payload rather than trusting them.
-    if (!decoded.id || !decoded.role) {
-      return next();
-    }
-
-    req.user = decoded;
-
-    next();
-
-  } catch (error) {
-    console.log("ℹ️ Optional auth failed (continuing anyway):", error.message);
-    next(); // Continue without user on any error
   }
+  return next();
 };
 
 /**

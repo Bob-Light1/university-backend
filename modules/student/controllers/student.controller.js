@@ -1,5 +1,5 @@
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
+'use strict';
+/** @file Authentication and account operations. */
 const GenericEntityController = require('../../../shared/lib/generic-entity.controller');
 const GenericBulkController = require('../../../shared/lib/generic-bulk.controller');
 const Student = require('../models/student.model'); // deliberate exception: Model for GenericBulkController
@@ -152,7 +152,7 @@ const loginStudent = async (req, res) => {
     }
 
     // Compare password
-    const isPasswordValid = await bcrypt.compare(password, student.password);
+    const isPasswordValid = await require('../../account').sessions.verifyPassword('Student', student, password);
     if (!isPasswordValid) {
       return sendError(res, 401, 'Invalid credentials');
     }
@@ -170,17 +170,13 @@ const loginStudent = async (req, res) => {
     const campusId = student.schoolCampus?._id ?? student.schoolCampus;
 
     // Generate JWT token — issuer must match auth.js verification options
-    const token = jwt.sign(
-      {
+    const token = await require('../../account').sessions.issue(res, {
         id:       student._id,
         campusId, // plain ObjectId string — required by buildCampusFilter
         classId:  student.studentClass ?? null, // useful for attendance scoping
         role:     'STUDENT',
         name:     `${student.firstName} ${student.lastName}`,
-      },
-      JWT_SECRET,
-      { expiresIn: '7d', issuer: 'school-management-app' }
-    );
+      }, student.password);
 
     // Update last login (atomic: does not trigger save hooks)
     await studentRepo.touchLastLogin(student._id);
