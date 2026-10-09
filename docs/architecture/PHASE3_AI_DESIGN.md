@@ -1,5 +1,16 @@
 # Phase 3 — Conception des fonctionnalités IA (« Premium »)
 
+Current-state correction (2026-10-09): the ERP already consumes `aiService.js`
+through `components/ai/AiWorkspace.jsx` (administrator/director) and
+`AiAssistant.jsx` (campus manager), including chat, search, analytics, advisors
+and usage. Older journal entries describing an absent UI are historical.
+The D2 benchmark and owner decision of 2026-07-07 remain completed; current
+browser acceptance and deployed-target SLO measurements are still outstanding.
+The authentication gateway now requires live revocable sessions; writable
+AI-only entitlement paths/routes were retired in favour of unified entitlement.
+See the owning [roadmap row 4](ERP_ROADMAP.md). No current application check is
+claimed by this documentation correction.
+
 > Rédigé le 2026-06-18. Document de **conception et de cadrage** : il décrit
 > *quoi* construire, *comment*, et *dans quel ordre*, pour que la Phase 3 soit
 > bâtie professionnellement **sans casser l'existant** et **dans la trajectoire
