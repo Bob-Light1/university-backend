@@ -134,7 +134,10 @@ const chat = asyncHandler(async (req, res) => {
   res.flushHeaders();
   req.socket.setTimeout(0);
 
-  req.on('close', abort);
+  // The POST body can finish before the SSE connection opens. Its request
+  // close event then cannot observe a later client cancellation; the response
+  // connection owns that lifecycle, including the browser's Stop action.
+  res.on('close', abort);
 
   // A mid-stream upstream failure (ai-service crash, network drop) OR a client
   // disconnect — which aborts the fetch and cancels the web stream — surfaces

@@ -124,6 +124,20 @@ from CH-0 second-person acceptance and unstarted CH-2/CH-4/CH-6 work.
 
 > **Source de vérité de l'avancement.** À mettre à jour à chaque commit touchant un chantier.
 
+2026-10-09 regression maintenance: phase 1-B row 4 adds permanent AI browser
+acceptance and gateway/SPA stream lifecycle regressions. Full Jest passes 1,681
+tests / 84 suites; Python passes 173 cases with its 15 real-pgvector integration
+checks executed. Provider performance remains unmeasured because no deployed
+target exists. [Evidence](features/ai-operational-acceptance.md) does not close
+CH-0 second-person acceptance or start CH-2/CH-4/CH-6.
+
+2026-10-16 completion maintenance: row 4 passes the complete 174-check browser
+harness, including 28 AI cases, and eight stream/enum regressions. Build, lint,
+locales, audit gate and all 67 course exercises pass; screenshots inspected.
+Default Python executes 158 passing cases with 15 database skips. The actual
+pgvector pass remains dated October 9. These maintenance checks do not close
+CH-0 independent acceptance or deliver CH-2/CH-4/CH-6.
+
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
 |---|---|---|---|---|---|---|---|
 | **CH-0** | Deterministic multi-campus fixture | 0 | `EN COURS` — independent acceptance pending | — | 1 sem. | Codex | 2026-10-04 |

@@ -64,7 +64,13 @@ if (process.argv[2]) process.argv[2] = path.resolve(process.argv[2]);
 process.chdir(runtimeDirectory);
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = require('node:crypto').randomBytes(48).toString('hex');
+const CHROME_EXECUTABLE = '/usr/bin/google-chrome';
+// The backend PDF pools must use the same installed browser as the UI harness.
+process.env.PUPPETEER_EXECUTABLE_PATH = CHROME_EXECUTABLE;
 process.env.AI_SERVICE_URL = ''; process.env.AI_SERVICE_SECRET = ''; process.env.REDIS_URL = '';
+// Synthetic browser actions must not exhaust the provider-cost budget between
+// themes; the real rate limiter remains installed with a fixture-only ceiling.
+process.env.AI_RATE_LIMIT_PER_MIN = '200';
 for (const key of Object.keys(process.env)) {
   if (/SMTP|CLOUDINARY|MAIL_|SENDGRID|TWILIO|WHATSAPP|RESEND|AT_API_KEY|AT_USERNAME/.test(key)) process.env[key] = '';
 }
@@ -118,7 +124,18 @@ const mentorQuickLinkCheck = async (target, states, entries) => {
     detail: wrong.length ? wrong.map((entry) => entry.key).join(', ') : cards.join(', ') };
 };
 
+/**
+ * A full browser pass exceeds the generic 100-request loopback budget.
+ * Reset only this owned fixture's API budget before control calls and phases;
+ * login and per-user PDF limiters remain installed and unchanged.
+ */
+const resetApiBudget = async () => {
+  await Promise.all(['::/56', '127.0.0.1', '::ffff:127.0.0.1']
+    .map(key => apiLimiter.resetKey(key)));
+};
+
 const api = async (method, p, token, body) => {
+  await resetApiBudget();
   const r = await fetch(`http://localhost:5000${p}`, {
     method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
     body: body ? JSON.stringify(body) : undefined,
@@ -146,7 +163,7 @@ const api = async (method, p, token, body) => {
     { plan: 'premium', reason: 'visual QA — everything in the offer' });
 
   const browser = await puppeteer.launch({
-    executablePath: '/usr/bin/google-chrome', headless: 'new',
+    executablePath: CHROME_EXECUTABLE, headless: 'new',
     pipe: true, timeout: 90000,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1440,1000'],
   });
@@ -218,24 +235,6 @@ const api = async (method, p, token, body) => {
 
   /** The first thing the page complained about, if anything. */
   const whyBlank = (target) => (target.__oops || [])[0] || '';
-
-  /**
-   * Gives the run its per-IP request budget back.
-   *
-   * `app.js` meters every `/api/` route at 100 requests per 15 minutes and per
-   * ADDRESS (`apiLimiter`), and one browser pass spends that on page loads
-   * alone: a dashboard fans out into a dozen calls, and this harness renders a
-   * dozen dashboards. Past the budget the API answers 429 to everything, the
-   * sign-ins included, and the act that follows fails for a reason it is not
-   * about. Reset between acts rather than metered away: the per-user budget
-   * that actually protects the PDF pool is asserted where it belongs, in
-   * `tests/integration/finance.receipt.test.js`.
-   */
-  const resetApiBudget = async () => {
-    // Loopback reaches the server as either form depending on how the client
-    // resolved `localhost`; resetting an unknown key is a no-op.
-    await Promise.all(['::/56', '127.0.0.1'].map((key) => apiLimiter.resetKey(key)));
-  };
 
   /**
    * The dashboard's "Campus Modules" card grid — the SECOND nav surface.
@@ -514,8 +513,9 @@ const api = async (method, p, token, body) => {
     await session.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: DL });
   };
 
-  /** The finished file name, or null. `.crdownload` is Chrome still writing. */
-  const waitForDownload = async (ms = 20000) => {
+  /** Match the SPA's 90-second binary request budget, including cold PDF launch.
+   *  `.crdownload` means Chrome is still writing; only a finished file passes. */
+  const waitForDownload = async (ms = 90000) => {
     const deadline = Date.now() + ms;
     while (Date.now() < deadline) {
       const done = fs.readdirSync(DL).filter((f) => !f.endsWith('.crdownload'));
@@ -540,15 +540,19 @@ const api = async (method, p, token, body) => {
       .map((n) => n.closest('button'))
       .filter(Boolean))].length, RECEIPT_LABEL);
 
-  const clickReceipt = async (target) => target.evaluate((labels) => {
-    const button = [...document.querySelectorAll('[aria-label]')]
+  const clickReceipt = async (target) => {
+    const handle = await target.evaluateHandle((labels) => [...document.querySelectorAll('[aria-label]')]
       .filter((n) => labels.includes(n.getAttribute('aria-label')))
       .map((n) => n.closest('button'))
-      .find(Boolean);
-    if (!button) return false;
-    button.click();
-    return true;
-  }, RECEIPT_LABEL);
+      .find(Boolean), RECEIPT_LABEL);
+    try {
+      const button = handle.asElement();
+      if (!button) return false;
+      // A real pointer click supplies user activation for consecutive downloads.
+      await button.click();
+      return true;
+    } finally { await handle.dispose(); }
+  };
 
   /** Perceived brightness of the page's own ground — a screen that ignores the
    *  colour mode renders light whatever the preference says. */
@@ -590,6 +594,7 @@ const api = async (method, p, token, body) => {
 
   const studentPage = await portalPage();
   await signIn(studentPage, student, 'student');
+  await resetApiBudget();
   await studentPage.goto('http://localhost:5173/student/finance', { waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 3000));
   await studentPage.screenshot({ path: `${SHOTS}/6-etudiant-frais-clair.png` });
@@ -654,17 +659,26 @@ const api = async (method, p, token, body) => {
   rec('le bandeau de gel est affiché sur finance',
       /read-only|lecture seule|frozen|gelé/i.test(frozenBody), frozenBody.replace(/\s+/g, ' ').slice(0, 120));
 
+  await resetApiBudget();
   await studentPage.goto('http://localhost:5173/student/finance', { waitUntil: 'networkidle2' });
   await new Promise((r) => setTimeout(r, 3000));
   await studentPage.screenshot({ path: `${SHOTS}/10-etudiant-frais-geles.png` });
   const frozenStudent = await studentPage.evaluate(() => document.body.innerText);
-  rec('un module gelé laisse le relevé de l’étudiant lisible', says(frozenStudent, LEDGER_TITLE),
+  rec('un module gelé laisse le relevé de l’étudiant lisible',
+      says(frozenStudent, LEDGER_TITLE) && await receiptButtons(studentPage) === payments.length && payments.length > 0,
       frozenStudent.replace(/\s+/g, ' ').slice(0, 110));
+  await armDownloads(studentPage);
   clearDownloads();
+  const frozenResponse = studentPage.waitForResponse(r => r.request().method() === 'GET'
+    && r.url().endsWith(`/finance/payments/${paymentId}/receipt`), { timeout: 90000 })
+    .then(r => r.status()).catch(() => null);
   const clickedFrozen = await clickReceipt(studentPage);
-  const frozenFile = clickedFrozen ? await waitForDownload() : null;
-  rec('le reçu reste téléchargeable sous gel — c’est une lecture', !!frozenFile,
-      frozenFile || 'aucun fichier reçu');
+  const frozenStatus = clickedFrozen ? await frozenResponse : null;
+  const frozenFile = frozenStatus === 200 ? await waitForDownload() : null;
+  const frozenBytes = frozenFile ? fs.readFileSync(path.join(DL, frozenFile)) : null;
+  rec('le reçu reste téléchargeable sous gel — c’est une lecture',
+      !!frozenBytes && frozenBytes.subarray(0, 5).toString() === '%PDF-' && frozenBytes.length > 1000,
+      frozenFile || `HTTP ${frozenStatus ?? 'no receipt response'}`);
 
   console.log('\n› frais masqués — les trois états, dont celui que la donnée refuse');
   await resetApiBudget();
@@ -990,6 +1004,10 @@ const api = async (method, p, token, body) => {
   });
 
   await require('./auth-session.visual').checkAuthSessions({
+    browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
+  });
+
+  await require('./ai.visual').checkAiWorkspace({
     browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
   });
 

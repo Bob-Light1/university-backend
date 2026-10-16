@@ -517,6 +517,16 @@ graceful shutdown. The PDF is never stored — see `docs/architecture/features/f
 
 **AI** (`/api/ai` + `/internal/ai`) — Phase 3 gateway to the Python `ai-service` (brick 3 — `/home/adminsecu/Projects/university/ai-service`). No Mongoose model; per-campus activation, tier, budget and AI deviations come from `Campus.entitlement`. Explicit legacy reads remain for databases awaiting migration. Scope travels in a short-lived S2S JWT (HS256, TTL ≤ 300 s), never in the body. Inert without `AI_SERVICE_URL` (503). Design doc: `docs/architecture/PHASE3_AI_DESIGN.md`.
 
+Phase 1-B row 4 local acceptance uses `tests/fixtures/ai.visual.js` inside
+`test:visual`: real sessions, signed campus identity, both themes, authorized GED
+citations, ERP figures and scoped module states. Its loopback AI peer is synthetic;
+real Python/pgvector integration is checked separately. Browser Stop cancels the
+upstream through the response connection; the SPA reports an unfinished SSE EOF.
+The Python load harness measures generated-text TTFT and completed turns, accepts
+synthetic actor/profile context and has a readiness-checked `--target` mode.
+Deployed-provider SLO evidence remains required. See
+[scope, audits and evidence](docs/architecture/features/ai-operational-acceptance.md).
+
 **Campus entitlement administration** — unified GET/PATCH
 `/api/admin/campuses/:id/entitlement` is the only offer configuration endpoint.
 The former AI-only GET/PUT endpoint and writable `features` / `aiEntitlement`

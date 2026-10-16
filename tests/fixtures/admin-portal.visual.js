@@ -39,8 +39,9 @@ async function checkAdminPortal({ browser, accounts, dist, shots, record }) {
     await page.keyboard.press('Backspace'); await element.type(String(value)); await page.keyboard.press('Tab');
   };
   const button = async (label, scope = '') => {
-    const element = await page.evaluateHandle((text, parent) => [...document.querySelectorAll(`${parent} button`)]
-      .find(e => e.getBoundingClientRect().width && (e.textContent.trim() === text || e.getAttribute('aria-label') === text)), label, scope);
+    // Network quiet alone does not prove that a translated lazy screen rendered.
+    const element = await page.waitForFunction((text, parent) => [...document.querySelectorAll(`${parent} button`)]
+      .find(e => e.getBoundingClientRect().width && (e.textContent.trim() === text || e.getAttribute('aria-label') === text)), {}, label, scope);
     assert(element.asElement(), `Button missing: ${label}`);
     await element.asElement().click(); await element.dispose();
   };
