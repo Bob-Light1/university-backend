@@ -217,11 +217,6 @@ const DocumentSchema = new mongoose.Schema({
   archivedAt:  { type: Date, default: null },
   lockedAt:    { type: Date, default: null },
   /**
-   * TTL field — MongoDB auto-expires and removes the document after this date.
-   * Used for temporary generated documents (e.g., one-time exports).
-   */
-  expiresAt:   { type: Date, default: null },
-  /**
    * Official documents auto-lock on first external share.
    * Once locked, modifications require ADMIN/DIRECTOR unlock + audit reason.
    */
@@ -301,8 +296,8 @@ DocumentSchema.index({ campusId: 1, createdAt: -1 });
 DocumentSchema.index({ ref: 1 }, { unique: true });
 DocumentSchema.index({ slug: 1, campusId: 1 }, { unique: true, sparse: true });
 
-// TTL auto-expiry for temporary documents
-DocumentSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
+// Business records must never use TTL deletion. Existing installations must run
+// scripts/retire-document-expiry.js; removing a schema index does not drop it in MongoDB.
 
 // Soft-delete filter
 DocumentSchema.index({ deletedAt: 1 });

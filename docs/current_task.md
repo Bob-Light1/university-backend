@@ -1,55 +1,64 @@
 # Current task and handoff
 
 Last updated: 2026-10-16.
-Status: LOCAL WORK COMPLETED — phase 1-B row 4; target acceptance remains open.
-Branch: main; started clean at 1eedf6f. Fact correction: 5338343.
+Status: COMPLETED LOCALLY — phase 1-B row 14; existing-database rollout remains.
+Branch: main; started clean at 402eac0.
 
 ## Objective and approved scope
 
-Continue phase 1-B after authentication. The owner confirms no target infrastructure
-exists and requests all possible local preparation and validation. The
-[acceptance note](architecture/features/ai-operational-acceptance.md) owns scope,
-three audits, eleven registries, evidence and the target measurement protocol.
-D2 remains closed with bge-m3/1024d. No deployment, provider call or later phase.
+The owner requests the next logical phase 1-B work. Row 4 local acceptance is
+complete and target infrastructure remains unavailable. Roadmap §3 permits
+risk-reducing work to precede another row: retire business-document TTL before
+admission attachments and HR expiry metadata. The
+[design and evidence](architecture/features/ged-expiry-safety.md) own the contract,
+three audits, eleven registries, acceptance and release procedure.
+
+No deployment, production migration, provider call, pricing change or later phase.
 
 ## Completed changes
 
-- ERP generation controls honor shared read-only state while preserving history.
-  Verified GED citations open the selected campus document drawer; another campus
-  is refused. Source types mirror backend constants.
-- Node response close aborts upstream chat; the consumer reports unfinished SSE.
-- Python load acceptance measures generated-text TTFT and completed turns, mints
-  configured synthetic claims at dispatch and checks target readiness.
-- The permanent browser act covers real sessions, scope, history, citations,
-  actual ERP figures and all AI module/service states in both themes.
-- Browser fixture fixes configure installed Chrome for PDF pools, align the
-  export wait with the existing 90-second client budget, reset only its generic
-  loopback quota and assert actual ledger rows, receipt GET and PDF bytes.
+- Remove unused Document.expiresAt and the business TTL declaration. Strict model
+  creates/updates discard the retired field; historical raw values stay on disk.
+- Add scripts/retire-document-expiry.js: inspect by default; --apply drops only
+  legacy single-field expiry TTL indexes, including custom names. Refuse unexpected
+  TTL patterns; verify completion; preserve records and unrelated indexes.
+- Add two Jest suites and a dedicated owned-database check, independently of the
+  frozen seed. Business documents survive actual TTL passes; expired shares still
+  disappear. Actual CLI dry-run/apply, replay and byte-for-byte preservation pass.
+- Update CLAUDE, roadmap §0/row 14/D-R23 and the QA maintenance dashboard. Update
+  course lesson 14.4 and F2 live-source counts. No consumer source, API route,
+  dependency, fixture COUNTS or environment contract changed.
 
-## Verification
+## Verification on 2026-10-16
 
-2026-10-16: complete browser 174/174 (28 AI), natural exit 0 confirmed by a second
-complete replay with temporary exit diagnostics; screenshots inspected. Eight focused
-AI regressions, backend lint (no errors, 40 existing warnings), dependency gate,
-67 course guards and their Python default run (158 PASS / 15 skips) pass. Full
-Python ruff and mypy app/workers pass (54 files). ERP final build, touched lint and
-190 locale combinations pass on unchanged consumer source. Logs: /tmp/row4-checks.
+- Full Jest: 86 suites / 1,696 tests PASS, exit 0. All 14 new cases have negative
+  evidence; migration/share perturbations were detected and restored. Reintroducing
+  the old index only in memory makes the real check fail on missing business rows.
+- Dedicated real-TTL/CLI acceptance: 12/12 PASS, exit 0; at least two actual TTL passes.
+- Backend lint: no errors, 40 existing warnings; final touched-code lint clean.
+- Dependency gate PASS; two existing named exceptions unchanged.
+- Fixture self-check 36/36; full course 67/67, 14 declared skips; references PASS.
+- Fresh ERP build and 190 locale combinations PASS. Built in an owned /tmp
+  directory with loopback API wiring; existing bundle-size warning remains.
+- Complete browser: 174/174 PASS, natural exit 0; screenshots inspected across
+  both themes and administrator/campus-manager roles, plus scoped read-only AI.
+  Existing GED campus lists, reasons and citation drawers pass.
 
-Historical 2026-10-09: full Jest 84 suites / 1,681 cases, Python 173 cases including
-15 real pgvector integrations, migrations and real Node/Python stack smoke pass.
-Fresh pgvector replay is unavailable because the local Docker engine times out;
-no engine or existing container was restarted. Every new regression has recorded
-negative evidence; no dependency, fixture COUNTS, model or public portal change.
-
-Coordinated local consumer commits: frontend 0bd2511, AI-service fdbc228,
-course 3b1ff69. Backend implementation: f1639f1; final process-exit evidence is
-recorded in the documentation follow-up.
+Logs: /tmp/ged-expiry-*.log; screenshots: /tmp/ged-expiry-visual.
+Coordinated course commit: 955b796, local only.
+Sandbox socket/subprocess restrictions were resolved through authorized validation
+replays. No application/container already running was restarted. The general API
+journey and provider integration are unchanged and were not separately rerun.
 
 ## Remaining work and next action
 
-Roadmap row 4 stays IN PROGRESS until deployed real-provider SLOs are measured.
-Use the acceptance protocol when a synthetic-data target exists and workload/cost
-are agreed. Recheck Git at resume; coordinated conventional commits are local only.
-CH-0 independent acceptance, administrator acceptance and the separate GED TTL
-item remain with their owning notes. Row 3 stays delivered; no later row starts
-automatically. No push or deployment is authorized.
+For every existing database, quiesce old schema instances, inspect/apply this
+release's index migration, start the retired schema and recheck. A schema-only
+release leaves installed TTL indexes active; restarting the old schema can recreate
+one. No production DDL has run. Already deleted records are not recovered.
+
+General GED raw DTO/campus reassignment remains an existing separate defect,
+recorded in CLAUDE §5.2 and the row-14 note; TTL retirement does not close it.
+Row 4 real-provider SLOs, CH-0 independent acceptance and administrator acceptance
+remain with their owning notes. Recheck Git before the next authorized phase 1-B
+item; no push, deployment or later phase is authorized.

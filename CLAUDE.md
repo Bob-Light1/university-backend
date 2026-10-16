@@ -327,21 +327,22 @@ The dialog can always go back to step 1 (`rerunPreview`): a ticket lives 5 minut
 - the GED teardown reached *through* the gate (`document.service.hardDeleteDocument`);
 - **public-portal marketing content** — `portal-admin.factory.js` `remove()` hard-deletes `Testimonial` / `FaqEntry` / `QuizQuestion` / `CoursePreview` / `CompetitionPrize` / `ContactMessage` with a plain campus-scoped `findOneAndDelete`. Deliberate: this is editorial content with no academic, financial or personal record attached, and it is authored and discarded in the same screen. It is CASCADEd when its campus goes.
 
-⚠️ **The Document TTL index is not an exception, it is a hole.** `Document` declares `expiresAt`
-(`document.model.js:223`, documented "for temporary generated documents") **and a TTL index on it**
-(`:305`) — business data, carrying an append-only ledger, registered as a deletable entity with a
-`customExecutor` and four controls in front of it. Nothing in the module ever writes that path, so
-it is reachable by exactly one route: `PATCH /api/documents/:id` `$set`s the request body verbatim
-(`document.service.js:446-454`; the `createDocument.schema.js` its JSDoc credits does not exist, and
-there is no `modules/document/validations/`). One field assignment therefore has MongoDB hard-delete
-a document within the minute — no `deletedAt`, no `DocumentAudit` row, no `DeletionAudit` row, no
-file cleanup, no ai-service prune, and none of the four controls above. The same unfiltered `$set`
-also reaches `campusId`, a declared non-`immutable` path: a scoped role moves a row to another
-tenant past all three isolation layers, each of which passed on the *read*.
+**Document TTL retirement (phase 1-B row 14).** Business documents no longer declare
+`expiresAt` or any TTL index. Existing databases still require
+`scripts/retire-document-expiry.js`: inspect by default, remove only the legacy
+single-field expiry TTL with `--apply`, preserve all rows and unrelated indexes,
+and refuse unexpected TTL key patterns. Quiesce old schema instances before
+applying; they can otherwise recreate the index. Removing the schema declaration
+alone does not neutralize an installed TTL index. No production migration is run
+by this change. [Scope and evidence](docs/architecture/features/ged-expiry-safety.md).
 
-Taught with a runnable check in the course (lesson 14.4, finding ㊷) and **not fixed**. The fix is a
-field whitelist on that one `$set` — a cross-brick change, since the GED form decides what the
-whitelist must contain, so it is a §12 work item and not a one-line patch.
+**Existing assignment defect remains open.** `PATCH /api/documents/:id` still
+`$set`s the request DTO without an editable-field allowlist. In particular,
+`campusId` remains mutable after read-time isolation has passed. The schema named
+by the create service's JSDoc does not exist. Lesson 14.4 finding ㊷ records this
+remaining defect separately from the retired TTL path. An allowlist requires
+checking the GED form contract across both bricks; TTL retirement does not claim
+to close it.
 
 ---
 
@@ -498,6 +499,12 @@ No API, persistence, scope or entitlement contract is added by this presentation
 **Exam** (`/api/examination`) — sessions, enrollments, grading, submissions, appeals, question-bank, certificates, analytics; analytics worker; nightly anti-cheat cron.
 
 **Document** (`/api/documents`) — GED with versioning; PDF via Puppeteer pool; QR codes, templates, sharing, audit trail; weekly retention cron. Lists honor a validated optional `campusId` query for global actors; scoped identities always retain their authenticated campus.
+
+Business-document expiry is retired; the explicit dry-run-first
+`scripts/retire-document-expiry.js` removes installed legacy TTL indexes without
+rewriting records. `node tests/fixtures/document-expiry.check.js` verifies real
+TTL passes on an owned disposable database, independently of the frozen fixture.
+Operational share expiry and weekly retention soft deletion retain their policies.
 
 **Academic-print** (`/api/print`) — print jobs persisted in MongoDB (`PrintJob` model); atomic worker claim + cron sweep of pending/stale jobs.
 

@@ -87,6 +87,15 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-16 regression maintenance: phase 1-B row 14 retires business-document
+TTL. Full Jest passes 86 suites / 1,696 tests; 12 dedicated real-TTL/CLI checks
+prove dry-run safety, targeted removal and preservation during active TTL passes.
+Fixture self-check passes 36/36, course 67/67 and browser 174/174 with inspected
+screenshots. [Evidence and rollout](features/ged-expiry-safety.md). The dedicated
+check uses only its owned disposable server, independently of the frozen seed;
+this does not settle CH-2's database decision or CH-0 independent acceptance,
+or start CH-2/CH-4/CH-6.
+
 2026-10-05: phase 1-B row 2 preserves the fixture's 307 documents / 39 collections
 while seeding unified entitlement configuration. Current checks pass 36/36 fixture,
 25/25 API/data journey, 1,634 Jest tests / 80 suites and 67/67 course exercises.
@@ -141,7 +150,7 @@ CH-0 independent acceptance or deliver CH-2/CH-4/CH-6.
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
 |---|---|---|---|---|---|---|---|
 | **CH-0** | Deterministic multi-campus fixture | 0 | `EN COURS` — independent acceptance pending | — | 1 sem. | Codex | 2026-10-04 |
-| **CH-1** | Backend unit foundation | 1 | `EN PLACE` — maintained | — | ongoing | Codex | 2026-10-09 |
+| **CH-1** | Backend unit foundation | 1 | `EN PLACE` — maintained | — | ongoing | Codex | 2026-10-16 |
 | **CH-2** | Matrice API : auth · rôle · isolation campus | 2 | `À FAIRE` | CH-0 | 1–2 sem. | — | 2026-08-20 |
 | **CH-3** | Tests composant frontend | 3 | `À FAIRE` | — *(CH-2 pour les handlers MSW, §7.2)* | 2–3 sem. | — | 2026-08-20 |
 | **CH-4** | E2E déterministe (Playwright) | 4 | `À FAIRE` | CH-0 | 2–3 sem. | — | 2026-08-20 |
