@@ -167,10 +167,16 @@ loopback reset now runs before fixture control calls and finance navigation;
 production limits and per-user PDF limits are unchanged. Frozen-ledger assertions
 require the actual payment buttons rather than only a page heading.
 The corrected full replay passes 174/174, including both real receipt downloads.
+A second complete replay with temporary exit diagnostics also passes 174/174 and
+exits naturally with code 0 (`beforeExit` and `exit` both report 0). This confirms
+process completion independently of the earlier execution session, which reported
+SIGTERM (143) after printing its passing summary. The earlier signal's origin was
+not established; no shutdown code changed. Diagnostics remain outside the tracked
+source. Final log: `/tmp/row4-checks/visual-clean-exit.log`.
 
 | Completion check | Result |
 |---|---|
-| Complete browser harness | 174/174 PASS; 28 AI cases; screenshots inspected |
+| Complete browser harness | 174/174 PASS; 28 AI cases; natural exit 0 confirmed; screenshots inspected |
 | AI gateway/consumer regressions | 8/8 PASS |
 | Backend lint | No errors; 40 pre-existing warnings |
 | Dependency audit gate | PASS; two documented exceptions unchanged |

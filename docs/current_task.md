@@ -28,7 +28,8 @@ D2 remains closed with bge-m3/1024d. No deployment, provider call or later phase
 
 ## Verification
 
-2026-10-16: complete browser 174/174 (28 AI), screenshots inspected; eight focused
+2026-10-16: complete browser 174/174 (28 AI), natural exit 0 confirmed by a second
+complete replay with temporary exit diagnostics; screenshots inspected. Eight focused
 AI regressions, backend lint (no errors, 40 existing warnings), dependency gate,
 67 course guards and their Python default run (158 PASS / 15 skips) pass. Full
 Python ruff and mypy app/workers pass (54 files). ERP final build, touched lint and
@@ -41,7 +42,8 @@ no engine or existing container was restarted. Every new regression has recorded
 negative evidence; no dependency, fixture COUNTS, model or public portal change.
 
 Coordinated local consumer commits: frontend 0bd2511, AI-service fdbc228,
-course 3b1ff69. The backend implementation and this handoff share one commit.
+course 3b1ff69. Backend implementation: f1639f1; final process-exit evidence is
+recorded in the documentation follow-up.
 
 ## Remaining work and next action
 
