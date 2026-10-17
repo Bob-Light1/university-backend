@@ -522,6 +522,15 @@ graceful shutdown. The PDF is never stored — see `docs/architecture/features/f
 
 **Public-portal** (`/api`) — public-facing: pre-registration, programs, quiz/leaderboard, recruitment competitions; monthly competition-closing cron. Its client is brick 4, the Next.js portal at `/home/adminsecu/Projects/partner` — changing anything here means changing it there too.
 
+The separate portal owns a Vitest handler/helper foundation and a blocking root
+CI workflow (phase 1-B row 13). Backend pre-registration antifraud regressions
+remain in `tests/unit/public-registration.test.js`; the portal tests transport,
+attribution and refusal handling. `npm run test:portal` runs the built portal
+against owned loopback mocks; build it first or set `PORTAL_ROOT` to a built
+isolated copy. No database/provider is used. This foundation does not implement the later
+cross-brick CH-4 browser project. See
+[scope and evidence](docs/architecture/features/public-portal-test-foundation.md).
+
 **AI** (`/api/ai` + `/internal/ai`) — Phase 3 gateway to the Python `ai-service` (brick 3 — `/home/adminsecu/Projects/university/ai-service`). No Mongoose model; per-campus activation, tier, budget and AI deviations come from `Campus.entitlement`. Explicit legacy reads remain for databases awaiting migration. Scope travels in a short-lived S2S JWT (HS256, TTL ≤ 300 s), never in the body. Inert without `AI_SERVICE_URL` (503). Design doc: `docs/architecture/PHASE3_AI_DESIGN.md`.
 
 Phase 1-B row 4 local acceptance uses `tests/fixtures/ai.visual.js` inside

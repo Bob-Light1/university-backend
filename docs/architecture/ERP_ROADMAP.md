@@ -100,6 +100,17 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-10-17: phase 1-B row 13 source delivery/local acceptance are complete.
+The separate portal gains six Vitest suites (39 cases), blocking root CI and
+patched dependencies; backend gains twelve antifraud cases and reusable portal
+browser QA. Validation: 1,708 Jest, 18 portal browser, 174 ERP browser and 67
+course checks pass, with inspected screenshots and negative evidence. Both audit
+gates pass with documented exceptions. [Evidence](features/public-portal-test-foundation.md).
+Under §3 this foundation precedes row 5; the owner confirms director/admin
+admission only and no automatic payment prerequisite for that version (D-R24).
+No hosted CI run, deployment, pricing change or later phase. Other acceptance
+boundaries and the dated effort baseline remain unchanged.
+
 2026-10-16: phase 1-B row 14 source delivery and local acceptance are complete.
 The unused Document expiry field and business TTL declaration are retired; a
 read-only-by-default migration removes installed legacy TTL indexes explicitly.
@@ -171,7 +182,7 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-16 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-17 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -403,7 +414,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | 10 | Orientation & suivi scolaire | `B1·B2` | Détection précoce déjà calculée par les analytics d'examen et le service de résultats | Notes de suivi par élève, signalement explicite, recommandations d'orientation, restitution dans les portails parent et mentor | 2–3 j | `À FAIRE` |
 | 11 | Catalogue de langues — **et sa réconciliation entre briques** | `B2·B4` | B2 : 10 locales × 18 espaces de noms, RTL fonctionnel, sélecteur et préférence utilisateur. B4 : **8 locales**, dont **le latin déjà livré et complet** (`partner/src/messages/la.json`, 288 lignes comme toutes les autres) | **Les deux catalogues divergent, et personne ne l'avait relevé** : 5 codes strictement communs, `zh-CN` sur B2 contre `zh` sur B4, `el` livré sur B4 et vendu nulle part, `es`/`ja`/`pt`/`ru` absents de B4. Manquent sur B2 : lingala, haoussa **et latin** (36 + 18 fichiers, ce dernier traduisible depuis B4) ; sur B4 : lingala et haoussa. Plus l'arbitrage du catalogue canonique et l'alignement des codes de locale entre les deux briques. **Traite l'écart 2 du §11** (D-R9) | 5–7 j | `À FAIRE` |
 | 12 | Import / export — volet tableur | `B1·B2` | CSV en lecture et en écriture partout : étudiants, enseignants, résultats, prospects | Lecture et écriture XLSX. La v2 inclut « migration depuis CSV/Excel » dans chaque palier et annonce un export Excel du tableau de bord financier ; aucune dépendance tableur n'est installée | 1–2 j | `À FAIRE` |
-| 13 | Portail public — intégration continue et socle de test | `B4` | Application Next.js 15 livrée : 3 989 lignes, 8 locales, tunnel de préinscription, anti-fraude, liens courts, agent de service et manifeste | **Aucun test et aucune chaîne d'intégration** — seule brique dans ce cas, et **seule brique exposée à un public non authentifié**. Vitest et un socle minimal sur le tunnel et l'anti-fraude, plus un `ci.yml` aligné sur les trois autres. Sans quoi B4 n'est couvert qu'à la phase 3, par CH-4 | 2–3 j | `À FAIRE` |
+| 13 | Public portal — CI and test foundation | `B4·B1` | Six Vitest suites / 39 cases, blocking root CI, patched dependencies, twelve backend antifraud cases and reusable loopback browser QA | Source/local acceptance complete: 1,708 Jest, 18 portal browser, 174 ERP browser and 67 course checks pass. [Evidence and exceptions](features/public-portal-test-foundation.md). First hosted CI run awaits an authorized push | 2–3 d | `LIVRÉ` |
 | 14 | GED — business-document TTL retirement | `B1` | Unused expiry field and business TTL retired; explicit installed-index migration; existing danger-zone teardown retained | Source/local acceptance complete: 1,696 Jest, 12 real-TTL/CLI and 174 browser checks pass. [Scope and rollout](features/ged-expiry-safety.md). Existing databases require migration on release; general DTO assignment remains a separate defect | 1–2 d | `LIVRÉ` |
 | 15 | Quotas dérivés du palier | `B1·B2` | `Campus.quotas` réellement appliqué par `canAddStudent` / `canAddTeacher` / `canAddClass` / `canAddDocumentStorage` | **La grille du §10 vend au-dessus de ce que le code applique** : elle facture « par campus de **2 000 élèves** » et « hébergement **≤ 20 Go** » quand `DEFAULT_QUOTAS` vaut **1 000 élèves et 5 Go** — le 1 001ᵉ élève et le 5,1ᵉ Go sont refusés à un client qui a payé pour le double et le quadruple. Les quotas sont aujourd'hui une dérogation par campus, jamais une propriété du palier : les dériver de `PLAN_PRESETS`, ou aligner la grille (D-R10) | 1–2 j | `À FAIRE` |
 | 16 | Administrator audit corrections AP-01–AP-09 | `B1·B2` | Campus context, result closure, account creation, optional dates, document reasons and null-plan label corrected | None within AP-01–AP-09: 114/114 browser checks and 1,610 backend tests pass; see [correction note](features/admin-portal-audit-corrections.md) for retained acceptance boundaries | Bounded corrective work; not re-estimated | `DELIVERED` |
@@ -958,6 +969,7 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R21** | 2026-10-05 | Phase 1-B row 2 is delivered after pre-retirement browser verification, schema/route retirement and final 134/134 replay. Preserve raw compatibility and historical audit; correct mentor workspace and shortcut guards. | The owner requested continued phase 1-B work. No production migration, deployment, pricing revision or phase 2 work. CH-0 independent acceptance remains pending; planning tables retain their dated baseline. [Evidence](features/entitlement-legacy-retirement.md) |
 | **D-R22** | 2026-10-09 | Continue phase 1-B row 4 with all local AI corrections and acceptance. The owner confirms no target infrastructure exists and requests local preparation and validation. | Keep the row in progress pending deployed real-provider SLOs. Preserve D2, phase order, CH-* acceptance boundaries and commercial decisions. [Scope and protocol](features/ai-operational-acceptance.md) |
 | **D-R23** | 2026-10-16 | Continue phase 1-B by retiring business-document TTL (row 14), a risk-reducing prerequisite before admission attachments and HR expiry metadata under §3 | Owner requested continuation; row 4 local work is complete and target infrastructure is unavailable. Retire the unused field and provide targeted index DDL without record deletion, new expiry policy or deployment. [Delivery evidence](features/ged-expiry-safety.md); existing databases need explicit release migration. Preserve other acceptance boundaries, phase order and dated estimates |
+| **D-R24** | 2026-10-16 | Protect the public admission funnel with row-13 tests and CI before extending row 5, under §3. For row 5, the owner confirms admission by DIRECTOR / ADMIN only, campus-manager dossier preparation, and no automatic payment prerequisite in this version | Owner requested continued phase 1-B work and answered the admission questions explicitly. [Foundation scope/evidence](features/public-portal-test-foundation.md). These choices do not implement student conversion, authorize deployment or close other acceptance boundaries |
 
 ---
 

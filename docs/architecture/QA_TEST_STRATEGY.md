@@ -87,6 +87,15 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-17 regression maintenance: phase 1-B row 13 adds the public portal's
+six Vitest files (39 cases), twelve backend antifraud cases and a reusable
+owned-loopback browser smoke. Full Jest passes 87 suites / 1,708 tests; portal
+browser 18/18, complete ERP browser 174/174 and course 67/67 pass, with current
+references and inspected screenshots. All 51 new unit cases and 18 portal browser
+checks have negative evidence. [Scope, audits and exceptions](features/public-portal-test-foundation.md).
+This does not close CH-0 independent acceptance or start CH-2/CH-3/CH-4/CH-6.
+The CI workflow is locally validated; its first hosted run awaits an authorized push.
+
 2026-10-16 regression maintenance: phase 1-B row 14 retires business-document
 TTL. Full Jest passes 86 suites / 1,696 tests; 12 dedicated real-TTL/CLI checks
 prove dry-run safety, targeted removal and preservation during active TTL passes.
@@ -150,7 +159,7 @@ CH-0 independent acceptance or deliver CH-2/CH-4/CH-6.
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
 |---|---|---|---|---|---|---|---|
 | **CH-0** | Deterministic multi-campus fixture | 0 | `EN COURS` — independent acceptance pending | — | 1 sem. | Codex | 2026-10-04 |
-| **CH-1** | Backend unit foundation | 1 | `EN PLACE` — maintained | — | ongoing | Codex | 2026-10-16 |
+| **CH-1** | Backend unit foundation | 1 | `EN PLACE` — maintained | — | ongoing | Codex | 2026-10-17 |
 | **CH-2** | Matrice API : auth · rôle · isolation campus | 2 | `À FAIRE` | CH-0 | 1–2 sem. | — | 2026-08-20 |
 | **CH-3** | Tests composant frontend | 3 | `À FAIRE` | — *(CH-2 pour les handlers MSW, §7.2)* | 2–3 sem. | — | 2026-08-20 |
 | **CH-4** | E2E déterministe (Playwright) | 4 | `À FAIRE` | CH-0 | 2–3 sem. | — | 2026-08-20 |

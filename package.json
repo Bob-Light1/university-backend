@@ -15,7 +15,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "audit:ci": "node scripts/audit-gate.js",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "test:portal": "node tests/integration/portal-browser.js"
   },
   "engines": {
     "node": "20.x"
