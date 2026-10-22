@@ -92,3 +92,12 @@ Findings from the 2026-09-18 exploration, to recheck before making changes: the
 lead to `enrolled` can create a commission but does not automatically create a student.
 The exploration did not run the application or its tests. Historical results in
 documentation must not be presented as checks performed during the current session.
+
+## Manual QA Workbench
+
+[QA Workbench](../../../qa-workbench/README.md) is the independent manual-test workspace. Its source
+lives in `/home/adminsecu/Projects/qa-workbench`; it has its own design, roadmap
+and agent handoff. Consult its README for verified hosting status and setup.
+Each product change must reference affected manual case IDs or explain its lack
+of manual-QA impact. This support does not replace automated checks, CH-* acceptance
+or the product-roadmap phase order. Initial campaigns target local synthetic ERP data.

@@ -100,6 +100,13 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-10-22: the owner authorizes the independent custom manual-QA Workbench and
+its first online phase. [Integration and update protocol](MANUAL_QA_WORKBENCH.md)
+require each product task to identify affected case IDs or justify no manual-QA
+impact. Phase 1 is delivered from a separate repository at https://qa-workbench.pages.dev;
+its handoff records hosted acceptance. Product phase order, admission decisions and CH-* acceptance
+boundaries remain unchanged.
+
 2026-10-17: phase 1-B row 5 design has started following the owner's request
 to continue. [Online admission](features/online-admission.md) records the verified
 workflow, required ERP consumer and implementation/acceptance plan. D-R24 remains

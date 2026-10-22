@@ -84,3 +84,13 @@
 - Update `docs/context.md` only when stable architecture or navigation changes.
 - Put lasting decisions and delivery status in the existing design note/roadmap; link rather than duplicate them. Preserve `CLAUDE.md` §12.4 updates to the engineering map, phase rows and applicable QA dashboard alongside the code.
 - Keep documentation changes alongside the work they describe. Do not create commits merely to update the handoff.
+
+## Manual QA Workbench
+
+[QA Workbench](../../qa-workbench/README.md) is the independent manual-test workspace. Its source
+lives in `/home/adminsecu/Projects/qa-workbench`; it has its own design, roadmap
+and agent handoff. Consult its README for verified hosting status and setup.
+For every product-roadmap task, identify the manual case IDs to add, revise or
+archive, or record why no manual-QA update is required. Update cases through the
+Workbench UI/API/CLI while preserving historical campaign snapshots and results.
+Do not store fixture passwords, invitation links or real personal data in cases.

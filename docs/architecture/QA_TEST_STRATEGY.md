@@ -87,6 +87,13 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-22: the independent manual-QA Workbench phase 1 is delivered at
+https://qa-workbench.pages.dev, at the owner's request. [Workbench integration](MANUAL_QA_WORKBENCH.md) records its
+location and the required case updates for product changes. Its own roadmap tracks
+delivery, including online access and restoration acceptance. This supplementary
+human recipe does not close or start any CH-* work item; existing acceptance rules
+and automated regression obligations continue to apply.
+
 2026-10-17 regression maintenance: phase 1-B row 13 adds the public portal's
 six Vitest files (39 cases), twelve backend antifraud cases and a reusable
 owned-loopback browser smoke. Full Jest passes 87 suites / 1,708 tests; portal

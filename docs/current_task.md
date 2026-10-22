@@ -1,11 +1,27 @@
 # Current task and handoff
 
 Last updated: 2026-10-22.
-Status: DESIGN IN PROGRESS — phase 1-B row 5; owner choices pending.
-Backend: main; documentation reviewed against 5d3a2af for a local commit.
-The earlier investigation started with clean backend, ERP and portal trees.
+Status: COMPLETED — external manual-QA Workbench phase 1; admission design retained below.
+Backend: main; documentation changes reviewed against 5d3a2af for local commits.
+The earlier admission investigation started with clean backend, ERP and portal trees.
 
-## Objective and approved decisions
+## Current priority — external manual QA
+
+The owner approved implementation of the standalone Workbench at
+`/home/adminsecu/Projects/qa-workbench`, with three-phase design/documentation and
+a first online release. [Integration protocol](architecture/MANUAL_QA_WORKBENCH.md)
+owns the ERP-side rule: every product task updates affected manual case IDs or
+records why no update is needed. All four AGENTS/context documents now link to it.
+The Workbench's own handoff owns application implementation and acceptance evidence.
+Phase 1 is available at https://qa-workbench.pages.dev, release 891d37a. Hosted
+two-account workflows, 11 API denial/access checks and a hosted-export restoration
+into an empty local installation passed. The Workbench handoff owns detailed evidence.
+No phase-2 work is started.
+
+Preserve the unrelated admission draft and the pending choices below. No ERP
+application/consumer/fixture code is changed by this documentation integration.
+
+## Retained admission objective and approved decisions
 
 The owner requests the logical next phase 1-B work and invites questions where
 their intervention is needed. Row 13 is locally delivered; continue with row 5.
@@ -34,9 +50,12 @@ No push, deployment, historical automatic conversion or phase 2 work.
 
 ## Validation
 
-Documentation-only target/anchor, whitespace and Git visibility checks pass.
-No application suite or browser acceptance has been rerun for this design.
-Historical row-13 results remain in
+Commit preparation on 2026-10-22: 43 local Markdown targets/anchors pass, including
+both new roadmap references. Workbench release claims match its README and handoff;
+all four repositories contain the AGENTS/context references. Whitespace and Git
+visibility checks pass. Changes are grouped into admission-design and Workbench
+integration commits. These documentation changes require no manual-case update.
+Application suites and browser QA have not been rerun; historical row-13 results are recorded in
 [the foundation evidence](architecture/features/public-portal-test-foundation.md).
 
 ## Remaining work and next action
