@@ -451,6 +451,14 @@ librsvg, GHSA-wq5f-xc86-pv6w), with a real production resize/storage check.
 The audit gate was red on all three new advisories before these patch upgrades;
 no additional exception was introduced. See the session feature evidence.
 
+The 2026-10-23 admission validation updates the transitive `follow-redirects`
+lock from 1.16.0 to 1.16.1 within its existing range. This fixes
+[GHSA-q3jh-wrc6-jgq8](https://github.com/advisories/GHSA-q3jh-wrc6-jgq8) and
+[GHSA-8r9p-f939-6h3c](https://github.com/advisories/GHSA-8r9p-f939-6h3c).
+`tests/integration/redirect-dependency.test.js` exercises array-form credentials
+and custom sensitive header names across real loopback redirects; both tests
+fail on 1.16.0 and pass on 1.16.1. The existing audit exceptions are unchanged.
+
 Development uses Node 20's native `--watch --watch-preserve-output`, replacing
 nodemon's unpatched `braces` dependency path (GHSA-vfj7-8cjw-p6xm, 2026-10-05).
 `tests/integration/dev-watch.test.js` checks actual imported-file restart and
