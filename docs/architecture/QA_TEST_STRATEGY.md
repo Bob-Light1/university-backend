@@ -87,6 +87,17 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-23 admission regression maintenance (phase 1-B row 5, in progress):
+the owned admission journey passes 40 checks; full Jest passes 92 suites /
+1,756 tests before the final contract/dependency additions, whose targeted runs
+separately pass 12 cases. Portal tests pass 52 cases. Mutation audits, privacy,
+scope, quota/import races and rollback evidence are recorded in the
+[admission note](features/online-admission.md). Consumer sources are synchronized; the current targeted replay passes 44 backend
+cases, 52 portal cases and 67 course exercises. Browser acceptance, final full
+regression replay and Workbench registration remain pending. The owner requests checkpoint commits
+without changing delivery status. This is
+regression maintenance, not independent CH-0 acceptance or CH-2/CH-4 delivery.
+
 2026-10-22: the independent manual-QA Workbench phase 1 is delivered at
 https://qa-workbench.pages.dev, at the owner's request. [Workbench integration](MANUAL_QA_WORKBENCH.md) records its
 location and the required case updates for product changes. Its own roadmap tracks

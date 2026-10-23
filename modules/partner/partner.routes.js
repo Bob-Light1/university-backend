@@ -21,6 +21,9 @@ const authCtrl       = require('./controllers/partner.auth.controller');
 const crudCtrl       = require('./controllers/partner.crud.controller');
 const leadCtrl       = require('./controllers/partner.lead.controller');
 const commissionCtrl = require('./controllers/partner.commission.controller');
+const admissionCtrl = require('./controllers/partner.admission.controller');
+const dossierUpload = require('../../shared/middleware/admission-upload');
+const { apiLimiter, uploadLimiter } = require('../../shared/middleware/rate-limiter');
 
 const router = express.Router();
 
@@ -146,6 +149,25 @@ router.get(
 
 // ── CAMPUS MANAGER — LEADS ────────────────────────────────────────────────────
 // Declared BEFORE /:id to prevent Express from matching /leads against /:id.
+
+/** @route GET /api/partners/admission/config @desc Campus dossier requirements @access MANAGEMENT */
+router.get('/admission/config', authenticate, authorize(MGR_ROLES), apiLimiter, admissionCtrl.getConfig);
+/** @route PUT /api/partners/admission/config @desc Configure required dossier categories @access MANAGEMENT */
+router.put('/admission/config', authenticate, authorize(MGR_ROLES), apiLimiter, admissionCtrl.updateConfig);
+
+router.use('/leads/:id/dossier', authenticate, authorize(MGR_ROLES), apiLimiter, admissionCtrl.authorizeDossier);
+/** @route GET /api/partners/leads/:id/dossier @desc Private management dossier @access MANAGEMENT */
+router.get('/leads/:id/dossier', admissionCtrl.getDossier);
+/** @route POST /api/partners/leads/:id/dossier/files @desc Upload draft applicant file @access MANAGEMENT */
+router.post('/leads/:id/dossier/files', uploadLimiter, dossierUpload, admissionCtrl.uploadFile);
+/** @route GET /api/partners/leads/:id/dossier/files/:fileId @desc Private applicant-file download @access MANAGEMENT */
+router.get('/leads/:id/dossier/files/:fileId', admissionCtrl.downloadFile);
+/** @route DELETE /api/partners/leads/:id/dossier/files/:fileId @desc Archive draft applicant file @access MANAGEMENT */
+router.delete('/leads/:id/dossier/files/:fileId', admissionCtrl.archiveFile);
+/** @route POST /api/partners/leads/:id/dossier/access @desc Issue candidate access by email @access MANAGEMENT */
+router.post('/leads/:id/dossier/access', admissionCtrl.issueAccess);
+/** @route DELETE /api/partners/leads/:id/dossier/access @desc Revoke candidate access @access MANAGEMENT */
+router.delete('/leads/:id/dossier/access', admissionCtrl.revokeAccess);
 
 router.get(
   '/leads/export',

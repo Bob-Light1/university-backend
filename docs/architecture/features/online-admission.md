@@ -1,7 +1,7 @@
 # Online admission — phase 1-B row 5
 
-Date: 2026-10-17.
-Status: DESIGN IN PROGRESS — owner choices pending; no application changes.
+Date: 2026-10-23.
+Status: IMPLEMENTATION IN PROGRESS — backend and staged consumers; acceptance incomplete.
 
 ## Problem and scope
 
@@ -23,21 +23,20 @@ historical leads, WhatsApp integration, new commercial plan or phase 2 work is
 included. Existing GED index rollout remains a release prerequisite under
 [GED expiry safety](ged-expiry-safety.md).
 
-## Owner choices required before implementation
+## Approved owner choices — 2026-10-23
 
-These questions have been submitted to the owner. Recommendations below are
-proposals, not approved product decisions. Do not implement a default merely
-because no answer has arrived.
+The owner explicitly answered all three questions while requesting continued
+roadmap implementation. These choices supersede the earlier pending proposals.
 
-| ID | Question | Proposed choice | Alternatives |
-|---|---|---|---|
-| OA-1 | Who uploads dossier attachments? | Candidate through a private emailed link; campus manager can complete the dossier | Manager-only upload after receiving files outside the platform |
-| OA-2 | Which attachments block dossier submission? | Campus-configurable requirements, with none required by default | Common identity/birth-document, diploma and transcript requirements; or manager verification without automatic requirements |
-| OA-3 | Who finalizes enrollment after admission? | Campus manager, director or administrator | Director/administrator only |
+| ID | Question | Approved choice |
+|---|---|---|
+| OA-1 | Who uploads dossier attachments? | Candidate through a private emailed link; campus manager can complete the dossier |
+| OA-2 | Which attachments block dossier submission? | Campus-configurable requirements, with none required by default |
+| OA-3 | Who finalizes enrollment after admission? | Campus manager, director or administrator |
 
 The choices determine the public authentication surface, campus configuration
-screen, validation gates and enrollment authorization. Implementation depending
-on them waits for the answers.
+screen, validation gates and enrollment authorization. D-R24 still reserves
+admission decisions to directors/administrators and adds no payment prerequisite.
 
 ## Bricks touched
 
@@ -45,7 +44,7 @@ on them waits for the answers.
 |---|---|
 | Backend | Lead workflow, dossier authorization and persistence, private file access, student creation, commission transaction, notifications and tests |
 | ERP frontend | Existing lead pipeline and detail drawer, dossier preparation/review, enrollment form, role/feature controls, ten locale catalogs |
-| Public portal | Candidate notification/intake contract; private dossier pages and server proxies if OA-1 includes candidate uploads; all eight existing locale catalogs for changed UI |
+| Public portal | Candidate notification/intake contract; private dossier pages and server proxies for approved candidate uploads; all eight existing locale catalogs for changed UI |
 | AI service | No change; applicant identity documents must not become ingestable content |
 
 The roadmap's existing `B1·B4` row omits the current ERP workflow consumer.
@@ -91,7 +90,58 @@ Repository inspection on 2026-10-17, without running the applications:
 These observations define implementation obligations below, not a completed
 feature audit. The three ordered audits still follow implementation and tests.
 
-## Contract to finalize after OA-1–OA-3
+## Implementation contract — 2026-10-23
+
+The following technical choices implement the approved OA decisions:
+
+- Preserve seven lead statuses. Submitting a complete dossier may advance either
+  `new` or `contacted` to `dossier_submitted`. Admission remains director/admin-only;
+  enrollment remains manager/director/admin-only. Every mutation checks the current
+  status and expected dossier revision atomically. Terminal historical `enrolled`
+  leads without a student are explicitly reported, never automatically reconciled.
+- Store student linkage, dossier revision/submission snapshot and capability hashes
+  on `PartnerLead`. Store immutable private file references in `AdmissionAttachment`
+  (`schoolCampus`, `lead`, category, uploader, byte count, `deletedAt`). Categories
+  are `identity`, `diploma`, `transcript`, `other`; campus requirements select from
+  these values and default to an empty list. Draft files can be archived; physical
+  removal requires the existing danger zone. Retained archived bytes remain charged.
+- Management prepares student information, assigns a live same-campus class and
+  chooses a username. Candidate access permits only their own dossier/files and
+  submission, never student assignment, admission, enrollment or internal notes.
+  Submission snapshots campus requirements; later configuration does not silently
+  invalidate an already submitted dossier. Freeze draft edits after submission.
+- A 256-bit random capability lasts 72 hours, is revocable/reissuable and stores
+  only its SHA-256 hash on the lead. Email links carry it in the URL fragment,
+  never in a query string. The portal exchanges it into a secure HttpOnly,
+  SameSite cookie; backend requests carry it in an authorization header. Treat
+  bearer replay within its lifetime as possession of the same limited capability;
+  it is never an ERP authentication token. Never return it from public intake or
+  management/partner lead reads. Resend requests always answer uniformly and send
+  only to the stored email of an existing lead after queue persistence.
+- Authorize the capability and resolve portal entitlement before multipart parsing.
+  Accept passive PDF, PNG and JPEG only, at most 5 MiB/file and ten live files per
+  dossier. Reject unreadable/encrypted/active PDFs and failed image normalization;
+  never retain the original as a sanitizer fallback. Force private downloads.
+- Use the document facade for storage. Serialize campus quota checks with database
+  writes and include retained admission files in storage usage. Add attachment and
+  lead/student references to the danger-zone registry; add no business-record TTL.
+- In one MongoDB transaction, create a pending student, advance the admitted lead,
+  create/link the optional commission, issue activation and persist notification
+  intent. No provider call occurs in the transaction. The existing delivery worker
+  sends after commit; an idempotent enrollment retry returns the same student.
+  Direct leads create no commission. Activation credentials are returned once to
+  management, with delivery/reissue status, and never enter lead projections.
+- Notification bearer links use authenticated encryption at rest, with redacted
+  ordinary log snapshots. Only the delivery path and the recipient's own inbox
+  decrypt them. This also applies to `account.activate`, whose existing plaintext
+  notification snapshot must not be reused for new admission links. Reuse the
+  existing notification retry worker and record SMTP absence as `skipped`.
+
+The exact endpoint list and response/error constants are recorded alongside the
+implementation below before consumers are wired. No new commercial key or
+deployment is introduced.
+
+## Existing management surface to complete
 
 Retain the existing seven status values and normal response envelope. Freeze
 statuses, valid transitions, roles, dossier categories, limits and error codes
@@ -182,7 +232,8 @@ own explicit selection and validation.
    from `admitted`, record history/student linkage, and create/link any commission.
    Roll back all business changes together. Test concurrent/retried requests and
    quota races against a disposable replica set.
-4. After commit, issue activation through the existing account facade. Enrollment
+4. Within the transaction, persist activation through the session-aware account
+   facade and enqueue encrypted delivery intents; send only after commit. Enrollment
    is distinct from activation: a created student remains `pending` until they
    choose their password. Return delivery/reissue information without exposing
    a student's password or credentials in lead reads or partner responses.
@@ -213,13 +264,13 @@ This records intended work; each row must be checked against the final build.
 
 ## Definition of done and validation plan
 
-- [ ] OA-1–OA-3 answered and exact contract frozen before dependent code.
-- [ ] Design updated from implemented behavior; expand-only migration has dry-run
+- [x] OA-1–OA-3 answered and exact contract frozen before dependent code.
+- [x] Design updated from implemented behavior; expand-only migration has dry-run
       and disposable-database evidence, with no historical automatic conversion.
 - [ ] Complete backend and every affected consumer, environment wiring included
       (`FRONTEND_URL`, `PORTAL_URL`, `VITE_API_BASE_URL`, `ERP_API_URL` and mail/
       storage settings). No secrets or generated credentials in documentation.
-- [ ] Campus/ownership/deletion/entitlement rules and all eleven registries reviewed.
+- [x] Campus/ownership/deletion/entitlement rules and all eleven registries reviewed.
 - [ ] Repository, service, facade and route tests; role denial, cross-campus and
       same-campus partner isolation; incomplete data/files; direct/referred leads;
       concurrent requests, conflicts, rollback, quota and notification failure.
@@ -237,18 +288,147 @@ This records intended work; each row must be checked against the final build.
 - [ ] Engineering map, roadmap dashboard/phase row, applicable QA dashboard and
       repository handoffs updated; mark delivered only after all required checks.
 
-## Current progress and next action
+## Current implementation and acceptance — 2026-10-23
 
-Only read-only repository inspection and this design draft are complete. Local
-Markdown target/anchor checks and `git diff --check` pass. The design, roadmap
-and handoff are included in the admission-design commit. No
-application, fixture, migration, API or consumer code has changed; no application
-suite or browser acceptance has run in this session. The roadmap row remains
-`À FAIRE` until implementation starts, as required by `CLAUDE.md` §12.1.
+Status: implementation in progress, **not delivered**. Backend, ERP and portal sources are synchronized in their own repositories.
+The owner requests repository-specific checkpoint commits while the feature
+remains in progress; this does not establish final delivery acceptance. No push,
+deployment, production DDL or historical student conversion has run.
 
-Next: record the owner's OA-1–OA-3 answers here, finalize the conditional contract,
-then implement bottom-up and follow the full delivery workflow. Sibling source
-directories are outside this session's writable roots; if edits are needed,
-prepare reviewable changes in a writable copy and use the normal scoped write
-approval mechanism to synchronize them. This is not a pending owner product
-decision or a reason to request blanket permissions now.
+### Implemented HTTP contract
+
+All paths below are relative to `/api`. Standard response envelopes and typed
+`ADMISSION_ERRORS` live in `shared/constants/admission.constants.js`. Mutations
+require the current non-negative `revision`; stale requests return 409. Enrollment
+retries return the linked student without reissuing activation credentials.
+
+| Surface | Method and route | Authorization / response |
+|---|---|---|
+| Management requirements | GET/PUT `partners/admission/config?campusId=…` | Management roles; scoped identity wins; globals must select a campus. PUT `{ requirements: [] }` accepts unique supported categories. |
+| Management dossier | GET `partners/leads/:id/dossier` | Management campus scope; live and archived metadata, configuration/snapshot, historical-enrollment indicator. |
+| Management files | POST/GET/DELETE `partners/leads/:id/dossier/files[/:fileId]` | Authorized before multipart; upload `{ file, category, revision }`, archive `{ revision }`; GET is a private forced download. |
+| Management candidate access | POST/DELETE `partners/leads/:id/dossier/access` | Rotate/send only to stored email or revoke; response contains delivery summaries, never the candidate capability. |
+| Business transitions | PATCH `partners/leads/:id/status` | `{ status, revision, note?, student?, tuitionFee? }`; admission only director/admin; finalization by management. |
+| Public recovery | POST `public/admission/request-access` | Portal key, campus state and dedicated limiter; `{ email, campusSlug }`; uniform 202 for existing/unknown contacts, no provider call in the request. |
+| Candidate dossier | GET `public/admission/dossier` | Portal key plus `Authorization: Dossier <capability>`; lead/campus derived exclusively from the capability; private projection. |
+| Candidate files | POST/GET/DELETE `public/admission/dossier/files[/:fileId]` | Same capability, campus state and bounded upload; writes only while draft; metadata responses reload the full candidate dossier. |
+| Candidate submission | POST `public/admission/dossier/submit` | `{ revision }`; target status is server-owned; atomically snapshots requirements/file IDs. |
+
+`ADMISSION_INVALID_ACCESS` returns 410. `ADMISSION_NOT_FOUND` returns 404;
+role denials return 403. Conflict, required-category, quota, duplicate-student and
+historical-enrollment errors return 409. Invalid file content returns 422 and
+oversized input returns 413. Validation errors use the common admission adapter.
+The existing legacy status/archive paths delegate to the same transition service.
+
+Browser transport: `/{locale}/admission#access=…` immediately removes the fragment
+from history and exchanges it via same-origin POST for an HttpOnly/SameSite-Strict
+cookie scoped to `/api/admission` (Secure in production). Local handlers forward
+only an explicit candidate allowlist with the server-only portal key. Private
+navigation/API responses bypass the service worker and use `private, no-store`;
+metadata requests are never cached. The URL capability does not enter localStorage
+or sessionStorage. Candidate mutations refresh after conflict/read-only refusals
+and clear previously displayed data after 404/410. The eight portal locales and
+ten ERP locales retain their own inventories; roadmap locale reconciliation is
+still a separate item.
+
+### Ordered feature and platform audits
+
+The following findings were reproduced before correction; paths are permanent
+regressions, while execution logs are temporary acceptance artifacts.
+
+| Finding | Correction and red/green evidence |
+|---|---|
+| F1 — partner self-service inherited dossier/student fields | Explicit partner list/detail projection; real admission journey failed then passed. |
+| F2 — Unicode download returned HTTP 500, then used inherited `no-cache` | RFC 5987 filename plus private `no-store`; both failures observed separately; real HTTP/unit replay passed. |
+| F3 — multipart filename decoding corrupted non-Latin names | Recover valid UTF-8 decoded as Latin-1 without corrupting native names; `admission-files.test.js` failed then passed. |
+| F4 — candidate retained stale revision/data after conflict/revocation | Actual component-handler tests failed for conflict and 404/410, then passed after refresh/clear; permanent browser scenario still awaits replay. |
+| P1 — queued mail ignored revocation or a module frozen after enqueue | Recheck capability and emission state at delivery; two `notification-private` regressions failed then passed. |
+| P2 — damaged ciphertext broke the entire recipient inbox | Per-row redacted fallback; regression failed then passed. |
+| P3 — ordinary student imports bypassed new shared capacity/class rules | Shared pending creation callbacks and validated import mapping; real import/last-place race failed then passed. |
+| P4 — guarded file removal left shared GED usage cached | Invalidate usage after provider cleanup; real archive/preview/delete/cache regression failed then passed. |
+| P5 — locale `constructor` crashed intake normalization | Replace prototype-sensitive map lookup; real intake regression failed then passed. |
+| P6 — recovery could expose contact existence through provider latency | Enqueue only; initial intake creates lead and durable encrypted invitation atomically. Access-service regression failed then passed. |
+| P7 — encrypted mail could be redirected by editing stored destination | Authenticated encryption binds recipient, destination, campus, channel and template; regression failed then passed. |
+| P8 — new upstream redirect advisories blocked dependency gate | Existing-range lock update 1.16.0 → 1.16.1; two real loopback tests fail on old version and pass on patched version; no new exception. |
+
+Platform boundaries: admission charges retained archived bytes alongside GED
+imports; it does not claim to redesign all pre-existing GED write races or its
+known general DTO issue. No new cron or sellable feature key is introduced.
+`partner.usesWhenAvailable` documents the new technical collaboration; the later
+complete entitlement dependency-graph work remains separate. No provider is called
+inside a transaction that MongoDB may retry.
+
+### Test audit and current evidence
+
+Seven targeted backend mutants (scope/revision, decision preconditions, positive
+authority, plaintext snapshots, missing private rendering, unknown recovery and
+permissive file fallback), nine portal transport mutants (origin, cookie, path,
+validation, limit, binary, multipart, recovery credential and HttpOnly), and both
+consumer vocabulary mirrors were deliberately broken and detected. Sources were
+restored in `finally` blocks. Three component-state cases have observed red/green
+evidence. Audit-finding regressions above have their own pre-fix evidence.
+
+Actual current runs:
+
+- Full Jest: 92 suites / 1,756 tests passed before adding the final ten consumer
+  contract cases and two redirect cases. Their targeted suites separately pass
+  10/10 and 2/2; final combined full replay remains required.
+- Admission real-data journey: 40/40, on its owned disposable replica set; includes
+  expand-only preparation twice, optimistic upload race, idempotent enrollment,
+  direct/referred commission rules and rollback, quota/import races, ownership,
+  snapshots, archive/guarded purge/cache and revocation. Base fixture remains
+  307 documents / 39 collections; independent CH-0 acceptance is unchanged.
+- Backend lint passes with 39 existing warnings; audit gate passes with its two
+  existing named extract-zip exceptions. No additional exception is introduced.
+- Clean backend mutation replay: five suites / 38 cases, including both consumer mirrors. File normalization and
+  HTTP tests passed after their fixes; final all-suite replay remains required.
+- ERP build passes with explicit loopback API configuration; earlier touched lint
+  and 190 locale/namespace combinations passed. Final replay follows final source.
+- Portal: 8 files / 52 tests pass after mutations are restored; lint/typecheck
+  pass. Earlier production build passed against an owned loopback public API;
+  the latest component changes still need a fresh production build.
+- Current pre-commit replay against synchronized sources: seven backend suites /
+  44 tests; portal 52 tests plus lint/TypeScript; ERP touched lint and all 190
+  locale/namespace combinations pass. These supplement the dated full runs above.
+- Complete course guard passes 67/67 executable solutions, with 14 documented
+  snippets skipped and cited references resolved. The first replay failed on
+  route/capability-router classification and the newly introduced gender mirror;
+  exact inventories and the declared live-schema mapping were corrected and
+  replayed without weakening assertions. Course author review remains pending.
+- Browser diagnostics did not establish acceptance. The first staged SPA lacked
+  API configuration; its corrected build is ready. Both-role/theme/state replay
+  and screenshot inspection remain mandatory.
+
+### Eleven-registry implementation review
+
+| # | Result |
+|---|---|
+| 1 | Existing `app.js` partner/public mounts retained; named config routes precede lead IDs, candidate router mounted under public admission. |
+| 2 | Partner admission/access, student pending creation and document storage/usage exposed through existing facade services; notification session API reused. No cross-module internal imports. |
+| 3 | Existing partner/public-portal keys retained; partner technical collaborators recorded; frontend navigation keeps its existing partner guard. |
+| 4 | New attachment accessor/entity, campus blocker, submitted-file blocker and student lead blocker; provider cleanup goes through document facade and audit. |
+| 5 | No override added: Attachment has only deletedAt/deletedBy; related model filters derive their actual conventions. |
+| 6 | No job added; notification retry owns deferred external sends. |
+| 7 | No base seed document/count change; admission constructs its scenario only inside the seeded disposable journey/browser database. |
+| 8 | Notification templates in ten backend locales, changed ERP text in ten catalogs, candidate text/navigation in eight portal catalogs. |
+| 9 | ERP service/hook/drawer/forms, portal proxy/session/page, and environment wiring prepared; actual consumer synchronization completed with checksum guards. |
+| 10 | Structural figures/prose, review indices and generated hooks updated; complete course guard passes 67/67. No existing source path moved. |
+| 11 | Backend engineering map updated; consumer map/contract/handoffs prepared with their sources. |
+
+### Remaining delivery gates
+
+Automatic approval review rejected the next local browser command because its
+review quota was exhausted; it was not executed, and the reason was not an unsafe
+action determination. Do not bypass this control. Approved source synchronization and pre-commit checks resumed after the owner
+requested commits. The earlier rejected browser action did not run; browser, latest production build, final full regression replay and manual
+acceptance remain delivery gates.
+
+Manual cases **ERP-ADM-001–005 are proposed, not registered**. The owner says the
+validation account will receive ERP-project editor access. Verify membership and
+upsert through the Workbench CLI, preserving historical campaigns/results; never
+use the service key to elevate access. Prepared payload:
+`/tmp/admission/manual-cases.json`. The cases cover manager/candidate files and
+requirements, decision authority, enrollment/activation/idempotence, scope/states,
+and archive/permanent-delete safeguards. No fixture password or access link is
+stored in their bodies. Registration is a closure requirement, not waived by the
+execution blocker. Keep roadmap row 5 in progress until all gates pass.

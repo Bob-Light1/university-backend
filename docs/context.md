@@ -50,6 +50,12 @@ Invariants and commands are in [AGENTS.md](../AGENTS.md).
 
 ## Domains to consult by task
 
+Online admission: [contract and acceptance](architecture/features/online-admission.md),
+partner facade `service.admission` / `admissionAccess`, student pending creation,
+document private storage and notification transactional private-link delivery.
+The ERP lead drawer and separate portal candidate page consume this workflow;
+the roadmap owns its delivery status.
+
 - Organization: `campus`, `department`, `level`, `class`, `subject`, `course`.
 - People and accounts: `admin`, `student`, `teacher`, `parent`, `mentor`, `staff`, `account`.
 - Academic activities: `result`, `exam`, `academic-print`, `gaet`; attendance and schedules in `student` / `teacher`.

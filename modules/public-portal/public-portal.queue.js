@@ -61,10 +61,11 @@ async function processIngestionJob({ type, payload }) {
       // partnerId travels as a primitive; the partner service only reads
       // partner._id, so a minimal stand-in object is sufficient.
       const { partnerId, ...rest } = payload;
-      return partnerService().upsertPreRegistrationLead({
-        ...rest,
+      const result = await partnerService().upsertPreRegistrationLead({
+        ...rest, sendDossierAccess: true,
         partner: partnerId ? { _id: partnerId } : null,
       });
+      return result;
     }
     case 'alert':
       return partnerService().registerSessionAlert(payload);

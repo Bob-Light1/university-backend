@@ -30,9 +30,6 @@ const QRCode   = require('qrcode');
 const partnerRepo = require('../partner.repository');
 const partnerService = require('../partner.service');
 const { buildReferralUrl } = require('../../../shared/utils/referral');
-// Lazy require toward the campus facade (hub) — see MODULAR_MONOLITH_MIGRATION.md
-const getCampusCommissionConfig = (...args) => require('../../campus').service.getCampusCommissionConfig(...args);
-
 const {
   asyncHandler,
   sendSuccess,
@@ -40,26 +37,19 @@ const {
   sendCreated,
   sendPaginated,
   sendNotFound,
-  sendForbidden,
 } = require('../../../shared/utils/response-helpers');
-const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
+const { isValidObjectId, buildCampusFilter: deriveCampusFilter } = require('../../../shared/utils/validation-helpers');
+const { admissionHandler } = require('../../../shared/utils/admission-response');
+const admission = require('../admission.service');
+const admissionAccess = require('../admission.access.service');
 const { csvField } = require('../../../shared/utils/csv');
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
 
 const isGlobalRole   = (role) => role === 'ADMIN' || role === 'DIRECTOR';
-const isManagerRole  = (role) => isGlobalRole(role) || role === 'CAMPUS_MANAGER';
 const isPartnerRole  = (role) => role === 'PARTNER';
 
-const buildCampusFilter = (req) => {
-  if (isGlobalRole(req.user.role)) return {};
-  if (!req.user.campusId) {
-    const err = new Error('Campus information not found in your account.');
-    err.statusCode = 403;
-    throw err;
-  }
-  return { schoolCampus: new mongoose.Types.ObjectId(req.user.campusId) };
-};
+const buildCampusFilter = (req) => deriveCampusFilter(req.user, req.query.campusId);
 
 const hashIp = (ip) => crypto.createHash('sha256').update(ip || '').digest('hex');
 
@@ -67,91 +57,6 @@ const hashIp = (ip) => crypto.createHash('sha256').update(ip || '').digest('hex'
 const phoneDigits = (p) => String(p || '').replace(/\D/g, '');
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-// Transitions de statut valides dans le pipeline
-const VALID_TRANSITIONS = {
-  new:               ['contacted', 'rejected', 'abandoned'],
-  contacted:         ['dossier_submitted', 'rejected', 'abandoned'],
-  dossier_submitted: ['admitted', 'rejected', 'abandoned'],
-  admitted:          ['enrolled', 'rejected', 'abandoned'],
-  enrolled:          [],   // statut terminal
-  rejected:          [],   // statut terminal
-  abandoned:         [],   // statut terminal
-};
-
-/**
- * Calcule et crée la commission lors du passage au statut 'enrolled'.
- * Lit commissionConfig du partenaire (override) ou du campus (défaut).
- */
-const triggerCommissionEngine = async (lead, partner, tuitionFee = null) => {
-  // Check that no commission already exists for this lead
-  const existing = await partnerRepo.findCommissionByLead(lead._id);
-  if (existing) return existing;
-
-  // Commission config: partner override takes priority → campus config
-  let config = partner.commissionConfig?.ruleType
-    ? partner.commissionConfig
-    : null;
-
-  if (!config) {
-    const campus = await getCampusCommissionConfig(lead.schoolCampus);
-    if (campus?.commissionConfig?.ruleType) {
-      config = campus.commissionConfig;
-    }
-  }
-
-  if (!config || !config.ruleType) {
-    // No config — create a commission at 0 in pending for manual review
-    return partnerRepo.createCommission({
-      schoolCampus:  lead.schoolCampus,
-      partner:       partner._id,
-      lead:          lead._id,
-      amount:        0,
-      currency:      'XAF',
-      ruleSnapshot:  { ruleType: 'FIXED', fixedAmount: 0, currency: 'XAF' },
-      status:        'pending',
-      notes:         'No commission config found — amount set to 0 for manual review.',
-    });
-  }
-
-  let amount = 0;
-  // Partner-level override uses `currency`; campus-level config uses `defaultCurrency`.
-  const currency = config.currency || config.defaultCurrency || 'XAF';
-
-  if (config.ruleType === 'FIXED') {
-    amount = config.fixedAmount || 0;
-  } else if (config.ruleType === 'PERCENTAGE') {
-    if (!tuitionFee || tuitionFee <= 0) {
-      amount = 0;
-    } else {
-      amount = Math.round((config.percentage / 100) * tuitionFee);
-    }
-  }
-
-  const ruleSnapshot = {
-    ruleType:    config.ruleType,
-    fixedAmount: config.fixedAmount || null,
-    percentage:  config.percentage  || null,
-    currency,
-    tier:        partner.tier || null,
-  };
-
-  const commission = await partnerRepo.createCommission({
-    schoolCampus: lead.schoolCampus,
-    partner:      partner._id,
-    lead:         lead._id,
-    amount,
-    currency,
-    ruleSnapshot,
-    status:       'pending',
-    fraudFlags:   lead.fraudFlags || [],
-  });
-
-  // Lier la commission au lead
-  await partnerRepo.setLeadCommission(lead._id, commission._id);
-
-  return commission;
-};
 
 // ── PUBLIC : RESOLVE CODE ─────────────────────────────────────────────────────
 
@@ -313,7 +218,7 @@ const publicPreRegister = asyncHandler(async (req, res) => {
     source:          source || 'referral_link',
     utmParams,
     ipAddressHash:   hashIp(req.ip || req.connection?.remoteAddress || ''),
-    notifyNextBatch: false,
+    notifyNextBatch: false, sendDossierAccess: true,
   });
 
   return sendCreated(res, 'Pre-registration received successfully.', {
@@ -376,7 +281,7 @@ const listLeads = asyncHandler(async (req, res) => {
   delete summaryFilter.status;
 
   const [{ data: leads, total }, statusStats] = await Promise.all([
-    partnerRepo.paginateLeads(filter, { skip: (pageNum - 1) * limitNum, limit: limitNum }),
+    partnerRepo.paginateLeads(filter, { skip: (pageNum - 1) * limitNum, limit: limitNum, partnerView: isPartnerRole(req.user.role) }),
     partnerRepo.aggregateLeadStatusStats(summaryFilter),
   ]);
 
@@ -410,78 +315,26 @@ const getLead = asyncHandler(async (req, res) => {
 
 // ── UPDATE LEAD STATUS ────────────────────────────────────────────────────────
 
-const updateLeadStatus = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { status: newStatus, note, tuitionFee } = req.body;
-
-  if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid lead ID.');
-  if (!newStatus)           return sendError(res, 400, 'status is required.');
-
-  const campusFilter = buildCampusFilter(req);
-  const leadId = new mongoose.Types.ObjectId(id);
-  const lead = await partnerRepo.findLeadForWrite(leadId, campusFilter);
-
-  if (!lead) return sendNotFound(res, 'Lead');
-
-  const currentStatus = lead.status;
-
-  // Verify valid transition
-  const allowed = VALID_TRANSITIONS[currentStatus];
-  if (!allowed) return sendError(res, 400, `Status '${currentStatus}' is terminal.`);
-  if (!allowed.includes(newStatus)) {
-    return sendError(res, 400, `Invalid transition: '${currentStatus}' → '${newStatus}'. Allowed: [${allowed.join(', ')}].`);
-  }
-
-  // Status update + history recording
-  const updatedLead = await partnerRepo.applyLeadStatus(leadId, campusFilter, newStatus, {
-    status:    newStatus,
-    changedBy: req.user.id,
-    changedAt: new Date(),
-    note:      note?.trim() || null,
+const updateLeadStatus = admissionHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid lead ID.');
+  const result = await admission.transition({
+    id: req.params.id, campusFilter: buildCampusFilter(req), actor: req.user,
+    status: req.body.status, revision: req.body.revision, student: req.body.student,
+    tuitionFee: req.body.tuitionFee, note: req.body.note,
   });
-
-  // If enrolled → trigger the commission engine
-  let commission = null;
-  if (newStatus === 'enrolled') {
-    const partner = await partnerRepo.findPartnerForCommission(updatedLead.partner);
-    if (partner) {
-      commission = await triggerCommissionEngine(updatedLead, partner, tuitionFee || null);
-    }
-    // TODO P2: Notifier Partner (WhatsApp + in-app) — lead converti, commission pending
-  } else {
-    // TODO P2: Notify Partner (WhatsApp + in-app) — status advanced
-  }
-
-  return sendSuccess(res, 200, `Lead status updated to '${newStatus}'.`, {
-    lead: updatedLead,
-    ...(commission && { commission }),
-  });
+  result.delivery = await admissionAccess.flush(result.delivery);
+  return sendSuccess(res, 200, 'Lead status updated.', result);
 });
 
 // ── DELETE LEAD (soft delete → abandoned) ────────────────────────────────────
 
-const deleteLead = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  if (!isValidObjectId(id)) return sendError(res, 400, 'Invalid lead ID.');
-
-  const campusFilter = buildCampusFilter(req);
-  const lead = await partnerRepo.findLeadForWrite(new mongoose.Types.ObjectId(id), campusFilter);
-
-  if (!lead) return sendNotFound(res, 'Lead');
-
-  // Blocked if a commission is linked
-  if (lead.commissionId) {
-    return sendForbidden(res, 'Cannot delete a lead with an associated commission.');
-  }
-
-  await partnerRepo.softAbandonLead(lead._id, {
-    status:    'abandoned',
-    changedBy: req.user.id,
-    changedAt: new Date(),
-    note:      'Soft-deleted by manager.',
+const deleteLead = admissionHandler(async (req, res) => {
+  if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid lead ID.');
+  const result = await admission.transition({
+    id: req.params.id, campusFilter: buildCampusFilter(req), actor: req.user,
+    status: 'abandoned', revision: req.body.revision, note: 'Archived by management.',
   });
-
-  return sendSuccess(res, 200, 'Lead marked as abandoned.');
+  return sendSuccess(res, 200, 'Lead marked as abandoned.', result);
 });
 
 // ── EXPORT LEADS ──────────────────────────────────────────────────────────────

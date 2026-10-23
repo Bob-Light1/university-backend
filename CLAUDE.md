@@ -71,6 +71,11 @@ modules/<domain>/
 
 The account facade also exports `sessions` and frozen `sessionConstants`; middleware and login controllers access these through the facade. Authentication persistence belongs to its session repository.
 
+Admission orchestration is exposed by `partner.service.admission` and
+`admissionAccess`; pending-student creation by the student facade; private file
+normalization/storage by the document facade. See the
+[admission contract](docs/architecture/features/online-admission.md).
+
 Modules: `admin · campus · student · teacher · parent · mentor · staff · class · level · subject · department · course · result · document · exam · academic-print · partner · announcement · gaet · settings · notification · finance · public-portal · account · ai`.
 
 ---
@@ -216,6 +221,13 @@ A model with no convention **throws** rather than returning `{}` — an empty fi
 Mocked models must carry `modelName` + a schema stub — `tests/helpers/soft-delete-stub.js`. A bare bag of `jest.fn()` no longer stands in for a model, and the stub states in each repository's own test which convention that repository assumes.
 
 ### 5.2 Hard delete — ONE harmonized system, `shared/lib/hard-delete/`
+
+`AdmissionAttachment` uses `schoolCampus` with `deletedAt`/`deletedBy`; archive
+retains its private bytes in the shared campus storage budget. The
+`admission-attachment` danger-zone entry removes archived draft files through
+the document facade and invalidates the GED usage cache. Submitted dossier
+snapshots block removal, as do campus attachment references and student links
+from enrolled leads. There is no business-record TTL or new soft-delete override.
 
 Soft delete is the default everywhere. **Permanent deletion has exactly one implementation** — no module reaches around it, and an entity that is not declared in the registry simply cannot be hard-deleted. The danger zone is an allowlist, never a fallback.
 
@@ -476,6 +488,9 @@ SIGTERM cleanup. The production startup command is unaffected.
 /api/print          /api/partners       /api/announcements  /api/gaet
 /api/settings       /api/notifications  /api/finance        /api/account
 /api/account/session  (GET inspect; POST refresh, logout, revoke, logout-all)
+/api/partners/admission/config  (GET/PUT campus requirements)
+/api/partners/leads/:id/dossier  (management metadata, files, access rotation/revocation)
+/api/public/admission  (private candidate dossier/files/submit, uniform request-access)
 /api/danger-zone  (harmonized permanent deletion — see §5.2)
 /api/ai  (Phase 3 gateway — inert without AI_SERVICE_URL)
 /internal/ai  (S2S read API for ai-service — never published by the reverse proxy)
@@ -517,6 +532,23 @@ Operational share expiry and weekly retention soft deletion retain their policie
 **Academic-print** (`/api/print`) — print jobs persisted in MongoDB (`PrintJob` model); atomic worker claim + cron sweep of pending/stale jobs.
 
 **Notification** (`/api/notifications`) — multi-channel (in-app + email) with templates; recipient-language i18n via `UserPreferences`; retry cron flushing external sends.
+
+Activation and candidate-access links are encrypted in `privatePayload` using a
+domain-separated key derived from `JWT_SECRET`. Ordinary snapshots and API logs
+are redacted; delivery and the authenticated recipient inbox decrypt privately.
+Transactional enqueue defers provider calls until commit. Delivery rechecks
+campus emission state and candidate-link validity. Rotating `JWT_SECRET` makes
+older encrypted links unreadable; reissue access/activation rather than exposing
+the original bearer. Legacy plaintext rows retain their historical behavior.
+
+**Admission** — the existing lead transition route now enforces director/admin
+admission and management finalization. Enrollment atomically creates one pending
+student, any applicable commission, activation token and notification intents.
+Student CRUD/import share live-class validation, campus capacity locking and
+the atomic `student-creation` sequence. Historical enrolled leads without student
+links require explicit reconciliation. `scripts/prepare-admission.js` is read-only
+by default; `--apply` prepares collections/indexes and a technical counter without
+rewriting historical business data. No production migration has run here.
 
 **Finance** (`/api/finance`) — fees, expenses, income; nightly overdue-fee detection + reminders,
 plus a **pre-due cadence** (J-7 / J-3 / due day) that fires from its own marker,
@@ -563,6 +595,9 @@ newest first (latest 20). See `docs/architecture/features/entitlement-legacy-ret
 ---
 
 ## 11. Active crons (scheduled in `server.js`)
+
+Admission adds no cron: its encrypted durable mail uses the existing notification
+retry job. Capability expiry is enforced at access and delivery time.
 
 | Schedule | Job |
 |---|---|

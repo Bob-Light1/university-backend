@@ -61,11 +61,11 @@ describe('danger zone — coarse role gate', () => {
 });
 
 describe('danger zone — per-entity role gate (registry)', () => {
-  test('a CAMPUS_MANAGER sees only the entity it owns', async () => {
+  test('a CAMPUS_MANAGER sees only its staff-role and applicant-attachment entities', async () => {
     const res = await auth(request(app).get('/api/danger-zone/entities'), 'CAMPUS_MANAGER', { campusId: CAMPUS_ID });
 
     expect(res.status).toBe(200);
-    expect(res.body.data.entities.map((e) => e.key)).toEqual(['staff-role']);
+    expect(res.body.data.entities.map((e) => e.key)).toEqual(['staff-role', 'admission-attachment']);
   });
 
   test('a CAMPUS_MANAGER is refused on an entity it does not own → 403', async () => {

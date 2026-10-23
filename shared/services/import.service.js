@@ -218,7 +218,7 @@ class ImportService {
       // Activation onboarding: no default password — the user sets their own
       // via the activation link/code. Store an unusable random placeholder.
       data.status   = 'pending';
-      data.password = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
+      if (!this.entityConfig.createEntity) data.password = await bcrypt.hash(crypto.randomBytes(24).toString('hex'), 12);
     } else {
       const password = row.password || this.entityConfig.defaultPassword || 'Default@123';
       data.password = await bcrypt.hash(password, 12);
@@ -312,10 +312,13 @@ class ImportService {
 
           // Prepare data
           const entityData = await this.prepareEntityData(row, campusId);
+          if (this.entityConfig.validateEntity) await this.entityConfig.validateEntity(entityData, campusId);
 
           // Create entity (if not dry-run)
           if (!dryRun) {
-            const created = await this.Model.create(entityData);
+            const created = this.entityConfig.createEntity
+              ? await this.entityConfig.createEntity(entityData, campusId)
+              : await this.Model.create(entityData);
 
             // Activation onboarding: issue a token per row. The activation email
             // is sent when present; the offline code is collected so the admin

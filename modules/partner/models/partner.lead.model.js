@@ -13,6 +13,7 @@
  */
 
 const mongoose = require('mongoose');
+const { LEAD_STATUS, ATTACHMENT_CATEGORIES } = require('../../../shared/constants/admission.constants');
 
 // ── SUB-SCHEMAS ───────────────────────────────────────────────────────────────
 
@@ -122,15 +123,7 @@ const partnerLeadSchema = new mongoose.Schema(
     status: {
       type:    String,
       enum:    {
-        values: [
-          'new',
-          'contacted',
-          'dossier_submitted',
-          'admitted',
-          'enrolled',
-          'rejected',
-          'abandoned',
-        ],
+        values: Object.values(LEAD_STATUS),
         message: '{VALUE} is not a valid status',
       },
       default: 'new',
@@ -141,6 +134,17 @@ const partnerLeadSchema = new mongoose.Schema(
       type:    [StatusEventSchema],
       default: [],
     },
+
+    student: { type: mongoose.Schema.Types.ObjectId, ref: 'Student', default: null },
+    dossier: {
+      revision: { type: Number, default: 0, min: 0 },
+      submittedAt: { type: Date, default: null },
+      requiredCategories: { type: [String], enum: ATTACHMENT_CATEGORIES, default: [] },
+      attachmentIds: { type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'AdmissionAttachment' }], default: [] },
+    },
+    dossierAccessHash: { type: String, select: false, default: undefined },
+    dossierAccessExpiresAt: { type: Date, select: false, default: undefined },
+    preferredLanguage: { type: String, default: 'en', maxlength: 12 },
 
     // ── UTM & TRACKING ────────────────────────────────────────────────────
     utmParams: {
@@ -209,6 +213,7 @@ partnerLeadSchema.index({ phone: 1, schoolCampus: 1 });
 // Pipeline queries
 partnerLeadSchema.index({ schoolCampus: 1, status: 1, partner: 1 });
 partnerLeadSchema.index({ partner: 1, status: 1 });
+partnerLeadSchema.index({ dossierAccessHash: 1 }, { sparse: true });
 
 // IP_BURST detection
 partnerLeadSchema.index({ ipAddressHash: 1, createdAt: 1 });

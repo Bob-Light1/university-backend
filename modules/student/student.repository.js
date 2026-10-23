@@ -31,6 +31,7 @@ const StudentSchedule   = require('./models/student.schedule.model');
 const StudentAttendance = require('./models/student.attend.model');
 
 const SAFE = '-password -__v';
+const { notDeletedFilter } = require('../../shared/utils/soft-delete');
 const toOid = (id) => new mongoose.Types.ObjectId(String(id));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -713,6 +714,18 @@ const attendanceCampusOverview = async (filter, summaryFilter, { skip, limit }) 
 };
 
 module.exports = {
+  /** Validate an import preview with the actual Student schema and no writes. */
+  validatePendingStudent: (data) => new Student(data).validate(),
+  /** Count capacity-consuming students in the current transactional snapshot. */
+  countLiveStudents: (campusId, { session } = {}) => Student.countDocuments({
+    schoolCampus: campusId, ...notDeletedFilter(Student),
+  }).session(session ?? null),
+  /** Create a pending student, enforcing the real schema and unique indexes. */
+  createPendingStudent: async (data, session) => {
+    const [doc] = await Student.create([data], { session });
+    const { password: _password, ...safe } = doc.toObject();
+    return safe;
+  },
   // Student — refs & lectures
   findStudentCampusRef,
   countStudents,

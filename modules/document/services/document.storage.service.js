@@ -373,13 +373,13 @@ const streamFile = async (campusId, category, fileName, res, options = {}) => {
   const safeName = String(rawName).replace(/[\r\n"\\]/g, '').slice(0, 255) || 'download';
   // SVG is served as a download (never inline) to avoid stored-XSS via embedded scripts.
   const forceDownload = options.download || contentType === 'image/svg+xml';
-  const disposition   = forceDownload
-    ? `attachment; filename="${safeName}"`
-    : `inline; filename="${safeName}"`;
+  const asciiName = safeName.replace(/[^\x20-\x7e]/g, '_');
+  const encodedName = encodeURIComponent(safeName).replace(/['()*]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+  const disposition = `${forceDownload ? 'attachment' : 'inline'}; filename="${asciiName}"; filename*=UTF-8''${encodedName}`;
 
   res.setHeader('Content-Type', contentType);
   res.setHeader('Content-Disposition', disposition);
-  res.setHeader('Cache-Control', 'private, no-cache');
+  res.setHeader('Cache-Control', options.cacheControl || 'private, no-cache');
   // Prevent MIME sniffing — the declared Content-Type is authoritative.
   res.setHeader('X-Content-Type-Options', 'nosniff');
 

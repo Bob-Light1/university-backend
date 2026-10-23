@@ -14,6 +14,7 @@
 
 const Class = require('./class.model');
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
+const { notDeletedFilter } = require('../../shared/utils/soft-delete');
 
 // Populate presets (exact fields preserved by handler).
 const POP_FULL = (q) => q
@@ -165,7 +166,7 @@ const findForDocumentList = (classId, campusId) =>
 const getCampusRef = (classId) => Class.findById(classId).select('schoolCampus').lean();
 
 const getCampusRefForValidation = (classId, { session } = {}) =>
-  Class.findById(classId).select('schoolCampus className').session(session).lean();
+  Class.findOne({ _id: classId, ...notDeletedFilter(Class) }).select('schoolCampus className').session(session ?? null).lean();
 
 /** Campus refs for a batch of classes (batch validation classes∈campus — teacher.config). */
 const getCampusRefsByIds = (classIds, { session } = {}) =>

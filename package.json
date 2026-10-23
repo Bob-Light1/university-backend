@@ -11,6 +11,7 @@
     "seed:test:self-check": "node tests/fixtures/self-check.js",
     "test:journey": "node tests/fixtures/journey.js",
     "test:auth-session": "node tests/fixtures/auth-session.journey.js",
+    "test:admission": "node tests/fixtures/admission.journey.js",
     "test:visual": "node tests/fixtures/visual.js",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",

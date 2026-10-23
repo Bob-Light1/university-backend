@@ -12,6 +12,8 @@
  *   - staff : listPublishedForCampus (published documents visible to staff)
  *   - ai : listAiIngestables (ingestion feed §6.3.1) and
  *          authorizeAiCitations (answer-time re-authorization §4.5)
+ *   - partner : normalize/save/stream/discardAdmissionFile (private dossier objects),
+ *               getImportedStorageBytes and invalidateStorageCache (shared quota).
  */
 
 const { runRetentionJob }       = require('./document.retention.cron');
@@ -19,6 +21,8 @@ const { shutdownPool }          = require('./services/document.pdf.service');
 const { generateQrCodeDataUrl } = require('./services/document.qr.service');
 const repo                      = require('./document.repository');
 const { DOCUMENT_TYPE, DOCUMENT_STATUS } = require('./models/document.model');
+const mongoose = require('mongoose');
+const { notDeletedFilter } = require('../../shared/utils/soft-delete');
 
 // Lazy facades (both are require()d lazily everywhere in this module — course
 // is already lazy in the access middleware, parent avoids any load-order cycle).
@@ -231,6 +235,17 @@ const authorizeAiCitations = async ({ userId, role, campusId }, sourceIds) => {
 };
 
 module.exports = {
+  ...require('./services/admission-storage.service'),
+  /** Transaction-aware GED bytes for a combined campus storage decision. */
+  getImportedStorageBytes: async (campusId, options) => {
+    const Document = require('./models/document.model');
+    const rows = await repo.aggregateImportedStorageBytes({
+      campusId: new mongoose.Types.ObjectId(String(campusId)), ...notDeletedFilter(Document),
+    }, options);
+    return rows[0]?.totalBytes || 0;
+  },
+  /** Applicant uploads share the campus storage budget with GED uploads. */
+  invalidateStorageCache: (...args) => require('./middleware/document.campus.middleware').invalidateStorageCache(...args),
   runRetentionJob,
   shutdownPool,
   generateQrCodeDataUrl,

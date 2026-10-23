@@ -1,9 +1,8 @@
 const Student = require('./models/student.model'); // intentional exception: Model from the GenericEntityController
 const studentRepo = require('./student.repository');
 const { getClassCampusRefForValidation } = require('../class').service; // class module facade (§3)
-// campus.service via LAZY require (campus is a hub that requires student → cycle)
-const campusService = () => require('../campus').service;
 const mongoose = require('mongoose');
+const creation = require('./student.creation.service');
 
 /**
  * STUDENT CONFIGURATION FOR GENERIC ENTITY CONTROLLER
@@ -46,65 +45,7 @@ const studentConfig = {
   /**
    * Custom validation before creation
    */
-  customValidation: async (fields, campusId, session) => {
-   
-    try {
-    
-      if (!fields.studentClass) {
-        return { 
-          valid: false, 
-          error: 'Student class is required' 
-        };
-      }
-  
-      if (!mongoose.Types.ObjectId.isValid(fields.studentClass)) {
-        return { 
-          valid: false, 
-          error: 'Invalid class ID format( ObjectId format expected)' 
-        };
-      }
-
-      const selectedClass = await getClassCampusRefForValidation(fields.studentClass, { session });
-  
-      if (!selectedClass) {
-        return { 
-          valid: false, 
-          error: 'Selected class does not exist' 
-        };
-      }
-  
-      if (selectedClass.schoolCampus.toString() !== campusId.toString()) {
-        return {
-          valid: false,
-          error: `The selected class "${selectedClass.className || 'unknown'}" does not belong to this campus`
-        };
-      }
-
-       // Validate matricule uniqueness within campus
-       if (fields.matricule) {
-        const existingStudent = await studentRepo.findStudentByMatriculeInCampus(
-          fields.matricule, campusId, { session }
-        );
-
-        if (existingStudent) {
-          return {
-            valid: false,
-            error: `Matricule "${fields.matricule}" is already in use in this campus`
-          };
-        }
-      }
-  
-      return { valid: true };
-
-    } catch (error) {
-      console.error('Custom validation error:', error);
-
-      return { 
-        valid: false, 
-        error: 'Error validating class-campus relation' 
-      };
-    }
-  },
+  customValidation: creation.validateAssignment,
 
   /**
    * Custom statistics facets for students
@@ -139,28 +80,14 @@ const studentConfig = {
     /**
    * Before create hook - Student-specific pre-processing
    */
-    beforeCreate: async (fields, campusId, session) => {
-      try {
-        // Auto-generate matricule if not provided
-        if (!fields.matricule) {
-          const studentCount = await studentRepo.countStudentsInCampus(campusId, { session });
+  beforeCreate: async (fields, campusId, session) => {
+    try {
+      return await creation.prepare(fields, campusId, session);
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  },
 
-          const campus = await campusService().getCampusNumber(campusId, { session });
-          const campusPrefix = campus?.campus_number || 'CAM';
-          
-          fields.matricule = `${campusPrefix}-STD-${String(studentCount + 1).padStart(4, '0')}`;
-        }
-  
-        return { success: true };
-      } catch (error) {
-        console.error('Student beforeCreate error:', error);
-        return { 
-          success: false, 
-          error: 'Failed to prepare student data' 
-        };
-      }
-    },
-  
   /**
    * Before update hook - Validate updates
    */

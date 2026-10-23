@@ -21,6 +21,9 @@
  *   - getActiveCampusBySlug     : public portal resolution by slug (active status).
  *   - getActiveCampusById       : public portal resolution by _id (active status).
  *   - listActivePublicCampuses  : list of public campuses (portal selector).
+ *   - lockAdmissionCampus      : transactional capacity serialization (admission/student).
+ *   - getAdmissionConfig       : campus dossier requirement categories.
+ *   - setAdmissionConfig       : update requirement categories for future submissions.
  *
  * NB: consumers require this facade via LAZY require
  * (`require('../../campus').service` at call time) because the campus module is a hub
@@ -53,6 +56,11 @@ const getActiveCampusById       = (campusId, select) => campusRepo.getActiveCamp
 const listActivePublicCampuses  = (select) => campusRepo.listActivePublicCampuses(select);
 
 module.exports = {
+  /** Serialize transactional student/file capacity decisions. */
+  lockAdmissionCampus: (id, session) => campusRepo.lockAdmissionCampus(id, session),
+  /** Read or change the campus's dossier submission requirements. */
+  getAdmissionConfig: (id) => campusRepo.getAdmissionConfig(id),
+  setAdmissionConfig: (id, requirements) => campusRepo.setAdmissionConfig(id, requirements),
   getCampusName,
   getCampusForPdf,
   getCampusStorageInfo,

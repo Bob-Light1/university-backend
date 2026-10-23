@@ -5,6 +5,7 @@
  * @description Campus identity, unified entitlement and tenant capacity checks.
  */
 const mongoose = require('mongoose');
+const { ATTACHMENT_CATEGORIES } = require('../../shared/constants/admission.constants');
 const { SUPPORTED_LANGUAGES } = require('../../shared/i18n/languages');
 const {
   FEATURE_PLANS,
@@ -414,6 +415,11 @@ campusSchema.pre('save', function (next) {
 // its pre-unification form and is still the sole source on an unmigrated
 // campus. Reading one of the two here would either ignore every quota decided
 // since the migration, or reset every quota negotiated before it.
+campusSchema.add({
+  admissionRequirements: { type: [String], enum: ATTACHMENT_CATEGORIES, default: [] },
+  admissionWriteVersion: { type: Number, default: 0, select: false },
+});
+
 campusSchema.methods.canAddStudent = async function () {
   const Student = mongoose.model('Student');
   const currentCount = await Student.countDocuments({
@@ -452,7 +458,8 @@ campusSchema.methods.canAddDocumentStorage = async function(additionalBytes) {
     },
     { $group: { _id: null, total: { $sum: '$importedFile.sizeBytes' } } }
   ]);
-  const usedBytes = result[0]?.total || 0;
+  const admissionBytes = await require('../partner').service.getAdmissionStorageBytes(this._id);
+  const usedBytes = (result[0]?.total || 0) + admissionBytes;
   const maxBytes  = resolveQuota(this.toObject(), 'maxDocumentStorageMB') * 1024 * 1024;
   
   return (usedBytes + additionalBytes) <= maxBytes;

@@ -20,6 +20,7 @@ const repo      = require('./notification.repository');
 const channels  = require('./channels');
 const templates = require('./templates');
 const config    = require('../../shared/configs/general.config');
+const privateContent = require('./notification.private');
 const { featureOfTemplate } = require('./notification.features');
 // Lazy: the entitlement service reaches the campus facade, which is a module hub.
 const entitlementJobs = () => require('../../shared/lib/entitlement').jobs;
@@ -51,7 +52,7 @@ const contactFor = (channel, recipient) => {
  *   the status) — EMPTY when the sending module is not active on the recipient's
  *   campus (§9.4).
  */
-async function notify({ recipient, channels: chans, template, data = {}, locale, groupKey = null }) {
+async function notify({ recipient, channels: chans, template, data = {}, locale, groupKey = null, session = null }) {
   if (!recipient || !recipient.id || !recipient.model) {
     throw new Error('notify: recipient { id, model } is required');
   }
@@ -93,7 +94,7 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
   // 1) Build + persist one row per channel (snapshot of the render).
   const rows = requested.map((channel) => {
     const { subject, body } = templates.render(template, channel, data, useLocale);
-    return {
+    return privateContent.protect({
       recipientId:    recipient.id,
       recipientModel: recipient.model,
       schoolCampus:   recipient.campusId || null,
@@ -104,19 +105,21 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
       subject,
       body,
       to: contactFor(channel, recipient),
-      status: 'pending',
+      status: session && channel === 'inapp' ? 'sent' : 'pending',
       attempts: 0,
       maxAttempts,
       groupKey,
-    };
+    });
   });
 
-  const created = await repo.createMany(rows);
+  const created = await (session ? repo.createMany(rows, { session }) : repo.createMany(rows));
 
   // 2) Deliver (best-effort, never throws to the caller).
-  await Promise.all(created.map((doc) => deliver(doc)));
+  const statuses = session ? null : await Promise.all(created.map((doc) => deliver(doc)));
 
-  return created.map((d) => (typeof d.toObject === 'function' ? d.toObject() : d));
+  return created.map((doc, index) => ({
+    ...privateContent.publicRow(doc), ...(statuses && { status: statuses[index] }),
+  }));
 }
 
 /**
@@ -126,6 +129,11 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
 async function deliver(doc) {
   const channel = channels.get(doc.channel);
   try {
+    const feature = featureOfTemplate(doc.template);
+    if (feature && doc.schoolCampus && !(await entitlementJobs().isEmissionAllowed(doc.schoolCampus, feature))) {
+      await repo.markSkipped(doc._id, 'The emitting module is not enabled');
+      return 'skipped';
+    }
     if (!channel) {
       await repo.markSkipped(doc._id, `Unknown channel '${doc.channel}'`);
       return 'skipped';
@@ -139,11 +147,20 @@ async function deliver(doc) {
       await repo.markSkipped(doc._id, `No ${doc.channel} address for recipient`);
       return 'skipped';
     }
-    await channel.send({ to: doc.to, subject: doc.subject, body: doc.body });
+    const rendered = privateContent.reveal(doc);
+    if (doc.template === 'admission.access') {
+      const token = new URLSearchParams(new URL(rendered.data.link).hash.slice(1)).get('access');
+      try { await require('../partner').service.admissionAccess.authenticate(token); } catch (error) {
+        if (error.statusCode !== 410) throw error;
+        await repo.markSkipped(doc._id, 'Private dossier access is no longer valid');
+        return 'skipped';
+      }
+    }
+    await channel.send({ to: doc.to, subject: rendered.subject, body: rendered.body });
     await repo.markSent(doc._id);
     return 'sent';
   } catch (err) {
-    await repo.markFailed(doc._id, err.message || String(err));
+    await repo.markFailed(doc._id, doc.privatePayload ? 'Private notification delivery failed' : (err.message || String(err)));
     return 'failed';
   }
 }
@@ -156,7 +173,14 @@ const getInbox = async ({ recipientId, unreadOnly = false, page = 1, limit = 20 
     repo.findInbox({ recipientId, unreadOnly, skip, limit }),
     repo.countInbox({ recipientId, unreadOnly }),
   ]);
-  return { data, total, page: Math.max(1, page), limit };
+  return {
+    data: data.map((row) => {
+      try { return privateContent.publicRow(privateContent.reveal(row)); } catch {
+        return privateContent.publicRow(row);
+      }
+    }),
+    total, page: Math.max(1, page), limit,
+  };
 };
 
 const getUnreadCount = (recipientId) => repo.countUnread(recipientId);

@@ -64,19 +64,19 @@ const normalizeCode = (code) => String(code || '').trim().toUpperCase().replace(
  * @param {string} [params.createdBy] Admin _id (audit)
  * @returns {Promise<{ activationUrl: string, code: string, expiresAt: Date }>}
  */
-async function issueActivationToken({ userModel, userId, campusId = null, email = null, name = '', locale, createdBy = null }) {
+async function issueActivationToken({ userModel, userId, campusId = null, email = null, name = '', locale, createdBy = null, session = null }) {
   if (!ActivationToken.ACTIVATION_MODELS.includes(userModel)) {
     throw new Error(`issueActivationToken: unsupported userModel '${userModel}'`);
   }
 
   // Invalidate any previous unused token for this account (single live link).
-  await ActivationToken.deleteMany({ userModel, userId, usedAt: null });
+  await ActivationToken.deleteMany({ userModel, userId, usedAt: null }, session ? { session } : undefined);
 
   const token     = crypto.randomBytes(32).toString('hex');
   const code      = generateShortCode();
   const expiresAt = new Date(Date.now() + TTL_HOURS * 3600 * 1000);
 
-  await ActivationToken.create({
+  const payload = {
     userModel,
     userId,
     campusId,
@@ -84,23 +84,29 @@ async function issueActivationToken({ userModel, userId, campusId = null, email 
     codeHash:  sha256(code),
     expiresAt,
     createdBy,
-  });
+  };
+  if (session) await ActivationToken.create([payload], { session });
+  else await ActivationToken.create(payload);
 
   const activationUrl = `${frontendBaseUrl()}/activate/${token}`;
 
-  // Fire-and-forget email + in-app notification. Inert without SMTP — never blocks.
+  // Transactional callers enqueue only; the existing worker delivers after commit.
+  let delivery = [];
   if (email) {
-    require('../notification').service.notify({
+    const intent = require('../notification').service.notify({
       recipient: { id: userId, model: userModel, email, campusId },
       channels:  ['inapp', 'email'],
       template:  'account.activate',
       data:      { name: name || '', link: activationUrl },
       locale,
-    }).catch((err) => console.error('[notify] account.activate failed:', err.message));
+      session,
+    });
+    if (session) delivery = await intent;
+    else intent.catch((err) => console.error('[notify] account.activate failed:', err.message));
   }
 
   // Returned ONCE — never retrievable again (only hashes are stored).
-  return { activationUrl, code, expiresAt };
+  return { activationUrl, code, expiresAt, ...(session && { delivery: delivery.map(({ _id, channel, status }) => ({ id: _id, channel, status })) }) };
 }
 
 /**

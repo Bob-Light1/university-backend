@@ -37,11 +37,11 @@ const Counter = mongoose.model('Counter', CounterSchema);
  * @param  {string} name  - Counter identifier (e.g. "result_2025")
  * @returns {Promise<number>}  Next sequence (starts at 1)
  */
-const nextSequence = async (name) => {
+const nextSequence = async (name, { session } = {}) => {
   const doc = await Counter.findOneAndUpdate(
     { _id: name },
     { $inc: { seq: 1 } },
-    { new: true, upsert: true, setDefaultsOnInsert: true }
+    { new: true, upsert: true, setDefaultsOnInsert: true, ...(session && { session }) }
   );
   return doc.seq;
 };

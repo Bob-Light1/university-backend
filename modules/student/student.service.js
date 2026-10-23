@@ -10,6 +10,7 @@
  *
  *  Student:
  *   - entityConfig: GenericEntityController config (campus.controller).
+ *   - createPendingStudent: validated transactional account creation (admission/import).
  *   - validateStudentBelongsToCampus: multi-tenant guard (result.crud,
  *     student.attendance.controller).
  *   - countStudents: configurable counter (staff.readonly, mentor ×2,
@@ -467,6 +468,8 @@ const getStudentAttendanceStats = (studentId, academicYear, semester, scope) =>
   studentRepo.getStudentAttendanceStats(studentId, academicYear, semester, scope);
 
 module.exports = {
+  /** Shared transactional admission/import creation below the HTTP layer. */
+  createPendingStudent: (...args) => require('./student.creation.service').createPendingStudent(...args),
   // Student
   entityConfig,
   validateStudentBelongsToCampus,

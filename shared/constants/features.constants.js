@@ -378,7 +378,7 @@ const FEATURE_REGISTRY = Object.freeze({
   },
   partner: {
     label: 'Partners & referrals', core: false, minState: null, records: [],
-    dependsOn: ['campus'], usesWhenAvailable: ['notification', 'settings'],
+    dependsOn: ['campus'], usesWhenAvailable: ['account', 'class', 'document', 'notification', 'settings', 'student'],
     routers: ['/api/partners'], minPlan: FEATURE_PLANS.PREMIUM, crons: [],
   },
   ai: {

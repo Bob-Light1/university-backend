@@ -6,6 +6,7 @@ const Student = require('../models/student.model'); // deliberate exception: Mod
 const studentRepo = require('../student.repository');
 const classService = require('../../class').service; // class module facade (§3)
 const studentConfig = require('../student.config');
+const studentCreation = require('../student.creation.service');
 
 const profileSvc = require('../../../shared/services/profile.service');
 
@@ -59,7 +60,7 @@ const exportConfig = {
 const importConfig = {
   name: 'Student',
   requiredFields: ['firstName', 'lastName', 'email'],
-  uniqueFields: ['email', 'matricule'],
+  uniqueFields: ['email', 'matricule', 'username'],
   defaultValues: {
     status: 'active',
     gender: 'male',
@@ -68,6 +69,8 @@ const importConfig = {
     'first_name': 'firstName',
     'last_name': 'lastName',
     'date_of_birth': 'dateOfBirth',
+    firstname: 'firstName', lastname: 'lastName', dateofbirth: 'dateOfBirth',
+    student_class: 'studentClass', studentclass: 'studentClass',
   },
   validators: {
     email: (value) => {
@@ -80,6 +83,7 @@ const importConfig = {
     },
   },
   transformer: (data, row) => {
+    if (row.studentClass) data.studentClass = row.studentClass;
     // Custom transformation
     if (row.class_name) {
       // TODO: Lookup class by name and set studentClass
@@ -109,6 +113,9 @@ const bulkController = new GenericBulkController(Student, {
   importFieldMapping: importConfig.fieldMapping,
   importValidators: importConfig.validators,
   importTransformer: importConfig.transformer,
+  importCreateEntity: studentCreation.createPendingStudent,
+  importValidateEntity: studentCreation.validatePendingStudent,
+  importTemplateColumns: ['studentClass'],
   defaultPassword: importConfig.defaultPassword,
   activation: { userModel: 'Student' },
   maxImportErrors: importConfig.maxErrors,

@@ -419,7 +419,7 @@ describe('hard-delete registry — lookup helpers', () => {
 
   it('lists only the entities a role may delete', () => {
     const forCampusManager = listEntries('CAMPUS_MANAGER').map((e) => e.key);
-    expect(forCampusManager).toEqual(['staff-role']);
+    expect(forCampusManager).toEqual(['staff-role', 'admission-attachment']);
 
     const forAdmin = listEntries('ADMIN').map((e) => e.key);
     expect(forAdmin).toContain('student');

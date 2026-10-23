@@ -110,6 +110,21 @@ const getCampusNumber = (campusId, { session } = {}) =>
 /** Full Mongoose document (instance methods — e.g. campus.canAddClass()). */
 const getCampusDocById = (campusId) => Campus.findById(campusId);
 
+/** Serialize admission/student capacity decisions within the caller's transaction. */
+const lockAdmissionCampus = (id, session) => Campus.findOneAndUpdate(
+  { _id: id, status: 'active' }, { $inc: { admissionWriteVersion: 1 } },
+  { new: true, session },
+).select('campus_number campusSlug campus_name admissionRequirements entitlement features defaultLanguage commissionConfig').lean();
+
+/** Read the campus-configurable required dossier categories. */
+const getAdmissionConfig = (id) => Campus.findById(id).select('admissionRequirements campus_name').lean();
+
+/** Update requirement categories; already submitted dossiers retain their own snapshot. */
+const setAdmissionConfig = (id, requirements) => Campus.findOneAndUpdate(
+  { _id: id, status: 'active' }, { $set: { admissionRequirements: requirements } },
+  { new: true, runValidators: true },
+).select('admissionRequirements campus_name').lean();
+
 const getCampusCommissionConfig = (campusId) =>
   Campus.findById(campusId).select('commissionConfig').lean();
 
@@ -226,6 +241,7 @@ const listActivePublicCampuses = (select) =>
     .select(select).sort({ campus_name: 1 }).lean();
 
 module.exports = {
+  lockAdmissionCampus, getAdmissionConfig, setAdmissionConfig,
   // controller
   create,
   findByEmail,

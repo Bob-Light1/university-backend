@@ -47,7 +47,7 @@ const upsertPreRegistrationLead = async ({
   campusId, partner, partnerCode,
   firstName, lastName, email, phone,
   programInterest, city, country,
-  source, utmParams, ipAddressHash, notifyNextBatch,
+  source, utmParams, ipAddressHash, notifyNextBatch, preferredLanguage = 'en', sendDossierAccess = false,
 }) => {
   const dupOr = [{ email }];
   if (phone) dupOr.push({ phone });
@@ -85,7 +85,7 @@ const upsertPreRegistrationLead = async ({
   const burstCount = await partnerRepo.countRecentLeadsByIp({ ipAddressHash, since: tenMinAgo });
   if (burstCount >= 5) fraudFlags.push('IP_BURST');
 
-  const lead = await partnerRepo.createLead({
+  const newLeadData = {
     schoolCampus:    campusId,
     partner:         partner?._id || null,
     partnerCode:     partnerCode || null,
@@ -104,7 +104,15 @@ const upsertPreRegistrationLead = async ({
     honeypotTripped: false,
     fraudFlags,
     notifyNextBatch: !!notifyNextBatch,
-  });
+    preferredLanguage,
+  };
+  const lead = sendDossierAccess
+    ? await mongoose.connection.transaction(async (session) => {
+      const created = await partnerRepo.createLead(newLeadData, { session });
+      await require('./admission.access.service').issueAccess(created._id, {}, { session, deliverNow: false });
+      return created;
+    })
+    : await partnerRepo.createLead(newLeadData);
 
   if (partner?._id) {
     partnerRepo.touchActivity(partner._id).catch(() => {});
@@ -322,6 +330,10 @@ const getLeadFunnelAggregates = async ({ campusId }) => {
 };
 
 module.exports = {
+  admission: require('./admission.service'),
+  admissionAccess: require('./admission.access.service'),
+  /** Retained applicant bytes charged to the shared campus storage budget. */
+  getAdmissionStorageBytes: (...args) => require('./admission.repository').getStorageBytes(...args),
   findActivePartnerByCode,
   upsertPreRegistrationLead,
   registerSessionAlert,

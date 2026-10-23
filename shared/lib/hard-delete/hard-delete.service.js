@@ -524,7 +524,7 @@ const removeFiles = async (entry, target) => {
   for (const file of entry.files(target)) {
     if (!file?.path) continue;
     try {
-      const ok = await deleteFile(file.folder, file.path);
+      const ok = typeof file.remove === 'function' ? await file.remove() : await deleteFile(file.folder, file.path);
       if (ok) removed.push(`${file.folder}/${file.path}`);
     } catch (err) {
       console.error(`⚠️ hard-delete: failed to remove file ${file.folder}/${file.path}:`, err.message);

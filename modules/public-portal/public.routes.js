@@ -68,6 +68,8 @@ const publicReadLimiter = createCustomLimiter(
 router.use((req, res, next) =>
   (req.method === 'GET' ? publicReadLimiter(req, res, next) : next()));
 
+router.use('/admission', require('./dossier.routes'));
+
 // ── CAMPUS ────────────────────────────────────────────────────────────────────
 // GET /api/public/campus-info?ref=PARTNER_CODE
 // GET /api/public/campus-info?slug=CAMPUS_SLUG

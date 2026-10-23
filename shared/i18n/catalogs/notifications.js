@@ -18,6 +18,7 @@
  */
 
 module.exports = {
+  ...require('./admission'),
   'account.welcome': {
     inapp: {
       subject: {

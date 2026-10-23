@@ -71,6 +71,9 @@ class GenericBulkController {
       fieldMapping: config.importFieldMapping || {},
       validators: config.importValidators || {},
       transformer: config.importTransformer,
+      createEntity: config.importCreateEntity,
+      validateEntity: config.importValidateEntity,
+      templateColumns: config.importTemplateColumns || [],
       defaultPassword: config.defaultPassword || 'Default@123',
       // Opt-in account-activation onboarding (no default password on import).
       activation: config.activation || null,

@@ -227,11 +227,13 @@ const findCitationDocuments = (ids) =>
  * Sum of imported file bytes within a scope (campus storage quota).
  * The caller provides the `$match` already cast to ObjectId. Returns the raw array.
  */
-const aggregateImportedStorageBytes = (matchStage) =>
-  Document.aggregate([
+const aggregateImportedStorageBytes = (matchStage, { session } = {}) => {
+  const query = Document.aggregate([
     { $match: matchStage },
     { $group: { _id: null, totalBytes: { $sum: '$importedFile.sizeBytes' } } },
   ]);
+  return session ? query.session(session) : query;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DOCUMENT VERSION

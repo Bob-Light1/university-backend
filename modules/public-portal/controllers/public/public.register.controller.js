@@ -157,6 +157,8 @@ const publicPreRegister = asyncHandler(async (req, res) => {
       utmParams:       utmParams || null,
       ipAddressHash:   req.ipHash,
       notifyNextBatch: !!notifyNextBatch,
+      preferredLanguage: typeof req.body.preferredLanguage === 'string'
+        ? (req.body.preferredLanguage === 'zh' ? 'zh-CN' : req.body.preferredLanguage).slice(0, 12) : 'en',
     },
   });
 

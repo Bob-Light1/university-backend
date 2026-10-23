@@ -16,7 +16,9 @@ const { escapeRegex } = require('../../shared/utils/validation-helpers');
 
 // ── Writes ────────────────────────────────────────────────────────────────────
 
-const createMany = (rows) => Notification.insertMany(rows);
+const createMany = (rows, options = undefined) => options
+  ? Notification.insertMany(rows, options)
+  : Notification.insertMany(rows);
 
 const markSent = (id) =>
   Notification.updateOne(
@@ -47,6 +49,7 @@ const findInbox = ({ recipientId, unreadOnly, skip = 0, limit = 20 }) => {
   const filter = { recipientId, channel: 'inapp' };
   if (unreadOnly) filter.readAt = null;
   return Notification.find(filter)
+    .select('+privatePayload')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(limit)
@@ -107,7 +110,7 @@ const claimForSend = (id) =>
     },
     { $set: { status: 'sending', workerClaimedAt: new Date() } },
     { new: true }
-  ).lean();
+  ).select('+privatePayload').lean();
 
 /**
  * Atomically claims a row for a MANUAL admin replay (`pending`/`failed`/`skipped`
@@ -119,7 +122,7 @@ const claimForRetry = (id) =>
     { _id: id, channel: { $in: ['email', 'whatsapp'] }, status: { $in: ['pending', 'failed', 'skipped'] } },
     { $set: { status: 'sending', workerClaimedAt: new Date() } },
     { new: true }
-  ).lean();
+  ).select('+privatePayload').lean();
 
 /** Requeues rows abandoned mid-send by a dead worker (`sending` older than `staleBefore` → `failed`). */
 const requeueStaleSending = (staleBefore) =>

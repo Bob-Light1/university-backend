@@ -56,7 +56,8 @@ const computeCampusStorageUsageMB = async (campusId) => {
     'importedFile.sizeBytes': { $exists: true, $ne: null },
   });
 
-  const totalBytes = result.length > 0 ? result[0].totalBytes : 0;
+  const admissionBytes = await require('../../partner').service.getAdmissionStorageBytes(campusId);
+  const totalBytes = (result.length > 0 ? result[0].totalBytes : 0) + admissionBytes;
   const totalMB    = totalBytes / (1024 * 1024);
 
   storageCache.set(cacheKey, { valueMB: totalMB, timestamp: Date.now() });

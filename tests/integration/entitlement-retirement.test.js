@@ -65,12 +65,15 @@ test.each([
 
 test('hydrating an old campus preserves its document storage quota', async () => {
   const Document = require('../../modules/document/models/document.model');
+  const admission = require('../../modules/partner').service;
+  const applicantBytes = jest.spyOn(admission, 'getAdmissionStorageBytes').mockResolvedValue(0);
   const aggregate = jest.spyOn(Document, 'aggregate').mockResolvedValue([{ total: 1024 * 1024 }]);
   try {
     const campus = Campus.hydrate({ _id: id, features: { maxDocumentStorageMB: 1 } });
     expect(await campus.canAddDocumentStorage(1)).toBe(false);
   } finally {
     aggregate.mockRestore();
+    applicantBytes.mockRestore();
   }
 });
 

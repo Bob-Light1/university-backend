@@ -64,6 +64,10 @@ if (process.argv[2]) process.argv[2] = path.resolve(process.argv[2]);
 process.chdir(runtimeDirectory);
 process.env.NODE_ENV = 'test';
 process.env.JWT_SECRET = require('node:crypto').randomBytes(48).toString('hex');
+process.env.PORTAL_API_KEY = require('node:crypto').randomBytes(32).toString('hex');
+process.env.PORTAL_API_KEYS = '';
+process.env.DOC_STORAGE_PROVIDER = 'local';
+process.env.UPLOAD_DIR = path.join(runtimeDirectory, 'uploads');
 const CHROME_EXECUTABLE = '/usr/bin/google-chrome';
 // The backend PDF pools must use the same installed browser as the UI harness.
 process.env.PUPPETEER_EXECUTABLE_PATH = CHROME_EXECUTABLE;
@@ -167,7 +171,7 @@ const api = async (method, p, token, body) => {
     pipe: true, timeout: 90000,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1440,1000'],
   });
-  await require('./product-home.visual').checkProductHome({
+  if (!process.env.VISUAL_ADMISSION_ONLY) await require('./product-home.visual').checkProductHome({
     browser, baseUrl: 'http://localhost:5173/', dist: DIST, shots: SHOTS, record: rec,
   });
 
@@ -182,6 +186,8 @@ const api = async (method, p, token, body) => {
     process.exit(2);
   });
 
+  // Diagnostic replay; the default command always retains every regression act.
+  if (!process.env.VISUAL_ADMISSION_ONLY) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 1000 });
 
@@ -1008,6 +1014,11 @@ const api = async (method, p, token, body) => {
   });
 
   await require('./ai.visual').checkAiWorkspace({
+    browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
+  });
+  }
+
+  await require('./admission.visual').checkAdmission({
     browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
   });
 

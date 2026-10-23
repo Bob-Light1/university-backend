@@ -53,6 +53,7 @@ const M = {
   Campus:            () => require('../../../modules/campus/campus.model'),
   Partner:           () => require('../../../modules/partner/models/partner.model'),
   PartnerLead:       () => require('../../../modules/partner/models/partner.lead.model'),
+  AdmissionAttachment: () => require('../../../modules/partner/models/admission.attachment.model'),
   PartnerCommission: () => require('../../../modules/partner/models/partner.commission.model'),
   Announcement:      () => require('../../../modules/announcement/models/announcement.model'),
   UserNotification:  () => require('../../../modules/announcement/models/user-notification.model'),
@@ -205,6 +206,7 @@ const REGISTRY = Object.freeze({
       block('ExamGrading',     'Exam gradings',             (id) => ({ student: id })),
       block('FeePayment',      'Recorded fee payments',     (id) => ({ student: id })),
       block('Income',          'Recorded income entries',   (id) => ({ student: id })),
+      block('PartnerLead',     'Admission record',          (id) => ({ student: id })),
       block('Document',        'Live GED documents',        (id) => ({ 'metadata.studentId': id, deletedAt: null })),
 
       // Operational rows — meaningless once the student is gone.
@@ -480,6 +482,18 @@ const REGISTRY = Object.freeze({
     ],
   },
 
+  'admission-attachment': {
+    label: 'Applicant attachment', model: M.AdmissionAttachment,
+    roles: ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'], campusPath: 'schoolCampus',
+    identifier: (doc) => String(doc._id), display: (doc) => doc.originalName,
+    requireArchivedFirst: true, redact: ['fileName'],
+    files: (doc) => [{
+      folder: `documents/${doc.schoolCampus}/admission`, path: doc.fileName,
+      remove: () => require('../../../modules/document').service.discardAdmissionFile(doc.schoolCampus, doc.fileName),
+    }],
+    relations: [block('PartnerLead', 'Submitted dossier snapshot', (id) => ({ 'dossier.attachmentIds': id }))],
+  },
+
   campus: {
     label: 'Campus',
     model: M.Campus,
@@ -513,6 +527,7 @@ const REGISTRY = Object.freeze({
       block('Announcement',    'Announcements',     (id) => ({ schoolCampus: id })),
       block('Partner',            'Partners',              (id) => ({ schoolCampus: id })),
       block('PartnerLead',        'Referred leads',        (id) => ({ schoolCampus: id })),
+      block('AdmissionAttachment', 'Applicant files',      (id) => ({ schoolCampus: id })),
       block('PartnerCommission',  'Partner commissions',   (id) => ({ schoolCampus: id })),
       block('PartnerApplication', 'Partner applications',  (id) => ({ schoolCampus: id })),
       block('StudentFee', 'Student fee lines',   (id) => ({ schoolCampus: id })),

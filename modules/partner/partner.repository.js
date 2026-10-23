@@ -37,6 +37,7 @@ const PartnerApplication = require('./models/partner.application.model');
 
 // "Safe" projection of a partner exposed to the front-end (no secret).
 const SAFE = '-password -__v';
+const PARTNER_LEAD_FIELDS = 'firstName lastName email phone programInterest source status partnerCode schoolCampus createdAt updatedAt partner';
 
 const normCode = (code) => String(code).toUpperCase().trim();
 
@@ -172,8 +173,10 @@ const findPartnerSummaryFields = (id, campusFilter) =>
   Partner.findOne({ _id: id, ...campusFilter }).select('_id firstName lastName partnerCode').lean();
 
 /** A partner's commission/tier config (commission engine). */
-const findPartnerForCommission = (partnerId) =>
-  Partner.findById(partnerId).select('commissionConfig tier schoolCampus').lean();
+const findPartnerForCommission = (partnerId, { session } = {}) => {
+  const query = Partner.findById(partnerId).select('commissionConfig tier schoolCampus');
+  return session ? query.session(session).lean() : query.lean();
+};
 
 /** Updates a scoped partner (manager fields, runValidators). */
 const updatePartnerScoped = (id, campusFilter, updates) =>
@@ -208,9 +211,10 @@ const listPartnersForExport = (filter) =>
 // ── LEADS ──────────────────────────────────────────────────────────────────────
 
 /** Creates a lead (no hook). @returns {Promise<Document>} */
-const createLead = async (data) => {
+const createLead = async (data, { session } = {}) => {
   const lead = new PartnerLead(data);
-  await lead.save();
+  if (session) await lead.save({ session });
+  else await lead.save();
   return lead;
 };
 
@@ -234,9 +238,10 @@ const countRecentLeadsByIp = ({ ipAddressHash, since }) =>
  * Paginated list of leads (filter already built, partner populated).
  * @returns {Promise<{data, total}>}
  */
-const paginateLeads = async (filter, { skip, limit }) => {
+const paginateLeads = async (filter, { skip, limit, partnerView = false }) => {
   const [data, total] = await Promise.all([
     PartnerLead.find(filter)
+      .select(partnerView ? PARTNER_LEAD_FIELDS : '-dossierAccessHash -dossierAccessExpiresAt')
       .populate('partner', 'firstName lastName partnerCode')
       .sort({ createdAt: -1 }).skip(skip).limit(limit).lean({ virtuals: true }),
     PartnerLead.countDocuments(filter),
@@ -246,7 +251,8 @@ const paginateLeads = async (filter, { skip, limit }) => {
 
 /** Single scoped lead (filter built by the caller, partner populated). */
 const findLeadScoped = (filter) =>
-  PartnerLead.findOne(filter).populate('partner', 'firstName lastName partnerCode tier').lean({ virtuals: true });
+  PartnerLead.findOne(filter).select(filter.partner ? PARTNER_LEAD_FIELDS : '-dossierAccessHash -dossierAccessExpiresAt')
+    .populate('partner', 'firstName lastName partnerCode tier').lean({ virtuals: true });
 
 /** Non-honeypot campus-scoped lead, lean read (transition/deletion precondition). */
 const findLeadForWrite = (id, campusFilter) =>
@@ -381,9 +387,9 @@ const findCommissionByLead = (leadId) =>
   PartnerCommission.findOne({ lead: leadId }).lean();
 
 /** Creates a commission (no hook). @returns {Promise<Document>} */
-const createCommission = async (data) => {
+const createCommission = async (data, { session } = {}) => {
   const commission = new PartnerCommission(data);
-  await commission.save();
+  await commission.save(session ? { session } : undefined);
   return commission;
 };
 

@@ -36,6 +36,9 @@ const { FEATURE_KEYS } = require('../../shared/constants/features.constants');
  * suppressed is the activation email nobody can sign in without.
  */
 const TEMPLATE_FEATURES = Object.freeze({
+  'admission.access': 'public-portal',
+  'admission.admitted': 'partner',
+  'admission.enrolled': 'partner',
   generic:            null,          // caller-authored content — attributable to nothing
   'account.welcome':  'account',     // core
   'account.activate': 'account',     // core

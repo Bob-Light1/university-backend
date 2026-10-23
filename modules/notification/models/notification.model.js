@@ -27,6 +27,7 @@ const STATUSES  = ['pending', 'sending', 'sent', 'failed', 'skipped', 'read'];
 const RECIPIENT_MODELS = [
   'Admin', 'Director', 'Campus', 'Teacher',
   'Student', 'Parent', 'Mentor', 'Staff', 'Partner',
+  'PartnerLead',
 ];
 
 const notificationSchema = new mongoose.Schema(
@@ -41,6 +42,7 @@ const notificationSchema = new mongoose.Schema(
     template: { type: String, required: true, trim: true }, // template key
     locale:   { type: String, default: 'en' },
     data:     { type: mongoose.Schema.Types.Mixed, default: {} }, // render variables (re-render on retry)
+    privatePayload: { type: String, select: false, default: undefined },
 
     // ── Rendered content (snapshot at send time) ──────────────────────────────
     subject: { type: String, default: null }, // title (email/inapp)

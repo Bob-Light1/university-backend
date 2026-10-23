@@ -9,6 +9,7 @@
 jest.mock('../../modules/notification/models/notification.model', () => {
   const makeChain = (result) => {
     const q = {};
+    q.select = jest.fn(() => q);
     q.sort = jest.fn(() => q);
     q.skip = jest.fn(() => q);
     q.limit = jest.fn(() => q);
@@ -19,7 +20,11 @@ jest.mock('../../modules/notification/models/notification.model', () => {
     insertMany:        jest.fn((rows) => Promise.resolve(rows.map((r, i) => ({ _id: `n${i}`, ...r })))),
     find:              jest.fn(() => makeChain([{ _id: '1' }])),
     findById:          jest.fn(() => ({ lean: jest.fn().mockResolvedValue({ _id: '1' }) })),
-    findOneAndUpdate:  jest.fn(() => ({ lean: jest.fn().mockResolvedValue({ _id: '1', status: 'sending' }) })),
+    findOneAndUpdate:  jest.fn(() => {
+      const q = { lean: jest.fn().mockResolvedValue({ _id: '1', status: 'sending' }) };
+      q.select = jest.fn(() => q);
+      return q;
+    }),
     countDocuments:    jest.fn().mockResolvedValue(7),
     updateOne:         jest.fn().mockResolvedValue({ modifiedCount: 1 }),
     updateMany:        jest.fn().mockResolvedValue({ modifiedCount: 4 }),
