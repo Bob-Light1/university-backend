@@ -10,11 +10,11 @@
 > `QA_TEST_STRATEGY.md` l'est pour le dispositif de test, dont il reprend
 > volontairement la convention.
 >
-> **Statut** : v4.1 — cadrage établi d'après l'état **mesuré** du code, et non
-> d'après le catalogue commercial qui le précède. Mesures refaites sur les
-> **quatre** briques le **2026-08-22** (§15). Phase 1-A livrée ; **phase 1-B en
-> cours** — sa ligne 6 (frais — reçu et échéancier) est **livrée le 2026-09-02**,
-> première ligne de la phase à l'être ; phases 2 à 4 non démarrées.
+> **Status**: v4.2 — phase 1-A delivered; phase 1-B in progress, with rows
+> 2, 3, 6, 13, 14 and 16 delivered. Current 1-B remaining-effort forecast:
+> **25–38 person-days**, dated **2026-10-23** (§5.1). Phases 2–4 have not started.
+> Original four-brick measurements (§15) and programme/cost baselines remain
+> dated snapshots; §0 owns current delivery status.
 >
 > **Prérequis de lecture** : `CLAUDE.md` (les quatre briques, les invariants
 > d'isolation et de suppression). Documents dont cette feuille de route dérive :
@@ -38,7 +38,10 @@
 > JSDoc, messages de log, noms de fichiers — reste en anglais**, conformément au
 > §0 de `CLAUDE.md`.
 >
-> **Révisions** : **v4.1 (2026-09-02)** — **clôture de la ligne 6 de la phase
+> **Revisions**: **v4.2 (2026-10-23)** — owner-requested 1-B remaining-effort
+> forecast, **25–38 person-days**, with a rounded 36-person-day planning allowance.
+> Correct row-12 spreadsheet readiness; preserve product decisions, acceptance
+> boundaries and historical programme/cost baselines. **v4.1 (2026-09-02)** — **clôture de la ligne 6 de la phase
 > 1-B** (D-R18). L'étape 10 du patron §12 est jouée et promue en harnais
 > permanent, ce qui fait remonter un défaut d'en-tête CORS invisible à toute la
 > suite d'intégration. Le restant de la phase passe de 32–47 à **30–44 j**, le
@@ -99,6 +102,14 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 ---
 
 ## §0 — Tableau de bord des phases
+
+2026-10-23: owner-requested phase 1-B remaining-effort forecast: **25–38 person-days**,
+with a **36-person-day planning allowance** (midpoint plus 15% reserve, rounded).
+[The row-by-row forecast](#51--remaining-effort-forecast--2026-10-23) replaces
+30–44 days for current 1-B planning. It includes delivery checks and independent
+CH-0 review effort, while external waiting time remains unbounded. Only 1-B is
+re-estimated; programme totals, costs and later-phase figures below remain dated
+planning baselines. Product decisions, phase order and acceptance statuses are unchanged.
 
 2026-10-22: the owner authorizes the independent custom manual-QA Workbench and
 its first online phase. [Integration and update protocol](MANUAL_QA_WORKBENCH.md)
@@ -196,7 +207,7 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 30–44 j | 2026-10-17 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 25–38 d; see §5.1 | 2026-10-23 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -204,6 +215,10 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 
 **États autorisés** : `À FAIRE` · `EN COURS` · `BLOQUÉ (motif)` · `LIVRÉ` ·
 `ABANDONNÉ (motif)`.
+
+Historical programme baseline (2026-09-02): the following totals, completion
+ratio and critical-path figures predate the 2026-10-23 1-B forecast. They are
+retained for traceability; they are not an updated programme forecast.
 
 **Total hors application mobile native** : **210 à 272 jours·développeur**, soit
 **15,75 à 20,40 M XAF** au taux du §9. L'application mobile (25–35 j) fait l'objet
@@ -323,6 +338,9 @@ phase 3 ; la v4 corrige (phase 1-B, ligne 13).
 
 ## §3 — La chaîne des phases et sa règle d'ordonnancement
 
+The diagram retains the 2026-09-02 effort baseline. Current 1-B remaining
+effort is **25–38 person-days**; see §5.1. Phase dependencies remain authoritative.
+
 ```
   1-A ──▶ 1-B ──▶  2  ──▶  3  ──▶ 4-A
  livré   30–44 j  42–57 j  47–63 j  20–28 j
@@ -404,7 +422,8 @@ produirait un chiffre invérifiable.
 
 ## §5 — Phase 1-B · L'inachevé, à fermer avant tout le reste
 
-**État** : `EN COURS` · **Charge** : **30–44 j** · **Dépend de** : 1-A
+**Status**: `EN COURS` · **Remaining effort**: **25–38 person-days**
+(2026-10-23; §5.1) · **Depends on**: 1-A.
 
 C'est la phase la plus rentable du document, et la moins visible. Chaque ligne
 est un travail déjà payé à 70–90 % **dont la valeur reste nulle tant que la
@@ -413,6 +432,9 @@ production, un pipeline de préinscription qui ne crée aucun étudiant, une
 migration d'entitlement jamais lancée sur la base réelle.
 
 Les quatre premières lignes sont des **dépendances directes de la phase 2**.
+
+The charge column below retains original work-item estimates, including delivered
+work. Use §5.1 for current remaining effort; do not sum this column as a forecast.
 
 | # | Chantier | Briques | Ce qui existe déjà | Ce qui manque | Charge | État |
 |---|---|---|---|---|---|---|
@@ -427,7 +449,7 @@ Les quatre premières lignes sont des **dépendances directes de la phase 2**.
 | 9 | Teacher HR files | `B1·B2` | Versioned GED and teacher-linked documents; unsafe business expiry field/index retired under row 14 | Dedicated HR category, expiry warnings instead of deletion, and position-change history. Do not reintroduce business TTL; existing databases need the row-14 migration before expiry metadata is introduced | 2–3 d | `À FAIRE` |
 | 10 | Orientation & suivi scolaire | `B1·B2` | Détection précoce déjà calculée par les analytics d'examen et le service de résultats | Notes de suivi par élève, signalement explicite, recommandations d'orientation, restitution dans les portails parent et mentor | 2–3 j | `À FAIRE` |
 | 11 | Catalogue de langues — **et sa réconciliation entre briques** | `B2·B4` | B2 : 10 locales × 18 espaces de noms, RTL fonctionnel, sélecteur et préférence utilisateur. B4 : **8 locales**, dont **le latin déjà livré et complet** (`partner/src/messages/la.json`, 288 lignes comme toutes les autres) | **Les deux catalogues divergent, et personne ne l'avait relevé** : 5 codes strictement communs, `zh-CN` sur B2 contre `zh` sur B4, `el` livré sur B4 et vendu nulle part, `es`/`ja`/`pt`/`ru` absents de B4. Manquent sur B2 : lingala, haoussa **et latin** (36 + 18 fichiers, ce dernier traduisible depuis B4) ; sur B4 : lingala et haoussa. Plus l'arbitrage du catalogue canonique et l'alignement des codes de locale entre les deux briques. **Traite l'écart 2 du §11** (D-R9) | 5–7 j | `À FAIRE` |
-| 12 | Import / export — volet tableur | `B1·B2` | CSV en lecture et en écriture partout : étudiants, enseignants, résultats, prospects | Lecture et écriture XLSX. La v2 inclut « migration depuis CSV/Excel » dans chaque palier et annonce un export Excel du tableau de bord financier ; aucune dépendance tableur n'est installée | 1–2 j | `À FAIRE` |
+| 12 | Spreadsheet import/export | `B1·B2` | ExcelJS is installed; shared XLSX parsing/export/template services, student/teacher routes and ERP import/export dialogs exist | Verify existing coverage and complete remaining result/lead/finance spreadsheet paths and consumer acceptance. Row remains open; existing helpers do not establish full delivery | 1–2 d | `À FAIRE` |
 | 13 | Public portal — CI and test foundation | `B4·B1` | Six Vitest suites / 39 cases, blocking root CI, patched dependencies, twelve backend antifraud cases and reusable loopback browser QA | Source/local acceptance complete: 1,708 Jest, 18 portal browser, 174 ERP browser and 67 course checks pass. [Evidence and exceptions](features/public-portal-test-foundation.md). First hosted CI run awaits an authorized push | 2–3 d | `LIVRÉ` |
 | 14 | GED — business-document TTL retirement | `B1` | Unused expiry field and business TTL retired; explicit installed-index migration; existing danger-zone teardown retained | Source/local acceptance complete: 1,696 Jest, 12 real-TTL/CLI and 174 browser checks pass. [Scope and rollout](features/ged-expiry-safety.md). Existing databases require migration on release; general DTO assignment remains a separate defect | 1–2 d | `LIVRÉ` |
 | 15 | Quotas dérivés du palier | `B1·B2` | `Campus.quotas` réellement appliqué par `canAddStudent` / `canAddTeacher` / `canAddClass` / `canAddDocumentStorage` | **La grille du §10 vend au-dessus de ce que le code applique** : elle facture « par campus de **2 000 élèves** » et « hébergement **≤ 20 Go** » quand `DEFAULT_QUOTAS` vaut **1 000 élèves et 5 Go** — le 1 001ᵉ élève et le 5,1ᵉ Go sont refusés à un client qui a payé pour le double et le quadruple. Les quotas sont aujourd'hui une dérogation par campus, jamais une propriété du palier : les dériver de `PLAN_PRESETS`, ou aligner la grille (D-R10) | 1–2 j | `À FAIRE` |
@@ -439,9 +461,62 @@ refinement is implemented (90/90 browser checks, 73 backend suites passed). Rele
 validation remains blocked by existing dependency advisories and legacy ERP lint
 errors; see the feature note. Existing phase work and estimates are unchanged.
 
-**Total Phase 1-B : 30–44 j** — *la v3 annonçait 26–37 j ; l'audit de la v4 a
-ajouté trois lignes (13 à 15) et élargi la ligne 11 (32–47 j) ; la **ligne 6 est
-livrée** le 2026-09-02 et sort du restant (−2 à −3 j).*
+**Historical 1-B baseline: 30–44 days (2026-09-02).** This superseded estimate
+followed row 6 delivery; it is preserved in the revision history and §9 cost tables.
+
+### 5.1 — Remaining-effort forecast — 2026-10-23
+
+**Estimate: 25–38 person-days; planning allowance: 36 person-days.** This is an
+engineering forecast from repository inspection and the dated delivery evidence,
+not measured implementation time or a delivery-date commitment. Confidence is
+moderate: several work items still need a frozen product contract.
+
+| Row | Remaining work | Person-days | Basis and condition |
+|---|---|---|---|
+| 1 | Independent CH-0 acceptance | 0.5–1 | Another person reviews original/expanded fixture volumes, runs the self-check and signs acceptance under QA D-14; implementation is complete |
+| 4 | AI target acceptance | 1–2 | Run and analyse the prepared real-provider protocol once a target, representative data and an approved workload exist; assumes no major SLO failure |
+| 5 | Online admission | 5–7 | Complete B1/B2/B4 dossier, private files, atomic student/status/commission creation, activation and notification delivery; lower end for manager-only files, upper end for candidate access/configuration within OA-1–OA-3 alternatives |
+| 7 | WhatsApp Business | 3–4 | Approved-template integration, explicit consent, delivery webhook, four business events and implementation of the selected D-R11 commercial policy |
+| 8 | Cross-module audit | 4–6 | Shared append-only mutation events, post-publication emitters, campus-scoped export and configurable retention; this is broader than reusing existing document logs |
+| 9 | Teacher HR files | 2–3 | Reuse GED/teacher references; add HR classification, expiry alerts and position history without business TTL |
+| 10 | Guidance and student follow-up | 2–3 | Persist notes, flags and recommendations; expose permitted views to parent/mentor roles |
+| 11 | Locale reconciliation | 5–7 | Catalogue decision D-R9, missing translations, locale-code alignment, both consumers and RTL/locale acceptance; assumes timely competent language review |
+| 12 | Spreadsheet completion | 1–2 | Reuse actual ExcelJS services and existing student/teacher/UI paths; audit remaining result/lead/finance coverage, complete it and validate XLSX round trips |
+| 15 | Tier-derived quotas | 1–2 | D-R10 decision and approved capacity values, override/migration compatibility, effective quota checks and ERP presentation |
+| — | Phase closure and release handover | 0.5–1 | Consolidate remaining acceptance evidence and release prerequisites, including row-13 hosted CI and row-14 installed-index migration; execution still needs its own authorization |
+| **Total** | **Remaining implementation and acceptance effort** | **25–38** | **Delivered rows 2, 3, 6, 13, 14 and 16 add zero feature-development days** |
+
+The sum includes the full CLAUDE.md §12 workflow within each feature: design,
+all affected consumers/environment wiring, eleven registries, localized text,
+fixtures where required, meaningful tests, ordered audits, full applicable checks,
+browser QA and manual-case updates. Closure time does not repeat those checks.
+The CH-0 allowance belongs to an independent reviewer, not self-signoff by the implementer.
+
+The midpoint is 31.5 person-days; adding 15% gives 36.225, rounded to a
+**36-person-day planning allowance**. Applying that reserve to both range endpoints
+gives approximately **29–44 person-days**. This is one contingency allowance for
+ordinary findings/rework, not an additional feature or a second QA budget.
+
+At one full-time contributor, 36 working days correspond to just over seven
+five-day working weeks, assuming the independent reviewer and external inputs
+are available when needed. Calendar waiting time is excluded: OA-1–OA-3, D-R9,
+D-R10 and D-R11 answers; Meta account/template readiness; competent translation
+review; CH-0 reviewer availability; and AI infrastructure/provider availability.
+The dated Meta lead-time assumption in §9.5 is not a newly verified schedule.
+Major AI performance remediation, additional scope and building target hosting
+require a revised estimate. This forecast authorizes none of those decisions or executions.
+
+Readiness checks on 2026-10-23: clean backend `main` at `2851e74`; reviewed §0,
+§3, phase rows and §14, the admission/CH-0/AI acceptance notes and actual shared
+spreadsheet services, routes and ERP dialogs. `package.json` declares ExcelJS;
+the old row-12 assertion that no spreadsheet dependency exists was incorrect.
+WhatsApp currently emits free-form text, and tier presets currently define feature
+sets rather than capacity values. These are source observations; no application
+or browser suites were rerun, and no delivery status was promoted.
+
+Manual QA impact: this planning-only update changes no product behaviour or case
+steps, so no Workbench case needs adding, revision or archival. Future feature
+delivery includes the case updates required by the Workbench integration protocol.
 
 ---
 
@@ -630,6 +705,10 @@ le place à **43–57 %**. Les deux tiers du restant ne sont d'ailleurs pas des
 fonctionnalités (§9.3) — ce que la v2 chiffrait à zéro.
 
 ### 9.3 Charge et coût de production restants
+
+Historical 2026-09-02 programme/cost baseline. The current 1-B effort forecast is
+in §5.1; this request does not re-estimate later phases or revise commercial prices.
+The following table and §9.7 sensitivity table are not current remaining-cost forecasts.
 
 | Phase | Nature | Charge | Cumul | Coût |
 |---|---|---|---|---|
