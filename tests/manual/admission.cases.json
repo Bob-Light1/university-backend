@@ -1,0 +1,96 @@
+[
+  {
+    "code": "ERP-ADM-001",
+    "body": {
+      "title": "Prepare a private admission dossier",
+      "objective": "Verify campus requirements and manager/candidate file handling before submission.",
+      "prerequisites": "Owned local synthetic ERP and candidate portal with matching API configuration. Separate browser contexts for an administrator, campus-A manager and candidate. Supply accounts and the candidate private link separately; never attach credentials or links as evidence. Use a fresh draft lead and passive synthetic PDF/PNG/JPEG files.",
+      "steps": [
+        { "action": "As the manager, open the lead dossier, select identity as a required category and save. Attempt submission without an identity file.", "expected": "Requirements belong to campus A. Submission is refused and the lead remains editable; the missing category is identified." },
+        { "action": "Upload a passive PDF as identity, download it, then archive it while the dossier is a draft.", "expected": "The private download preserves the filename and content. The archived file is distinguished from live files and cannot satisfy the requirement." },
+        { "action": "Request a candidate link and open the separately supplied link in the candidate context. Upload a synthetic identity file and submit the dossier.", "expected": "The fragment disappears from the URL. Only this candidate's dossier appears. Submission succeeds and freezes file editing; the manager sees the submitted dossier after refresh." },
+        { "action": "As an administrator, change the current campus requirements after submission, then reopen the submitted dossier.", "expected": "The submitted snapshot is preserved; configuration changes do not silently invalidate or reopen the submitted dossier." }
+      ],
+      "minutes": 10,
+      "domain": "Admission",
+      "bricks": ["B1", "B2", "B4"],
+      "roadmap": "Phase 1-B, row 5",
+      "source": "backend/docs/architecture/features/online-admission.md; backend/tests/fixtures/admission.visual.js; backend/tests/fixtures/admission.journey.js"
+    }
+  },
+  {
+    "code": "ERP-ADM-002",
+    "body": {
+      "title": "Restrict admission decisions to directors and administrators",
+      "objective": "Distinguish dossier preparation, admission authority and enrollment finalization.",
+      "prerequisites": "Owned local synthetic ERP. Separate manager, director and administrator contexts with credentials supplied privately. Two fresh submitted campus-A leads; no actual payment is needed.",
+      "steps": [
+        { "action": "Open a submitted dossier as the campus manager and inspect the available decisions. Attempt an admitted transition through the manager's authenticated API session.", "expected": "The manager cannot pronounce admission. The API refuses the transition with 403 and the stored status remains dossier_submitted." },
+        { "action": "Open the first dossier as a director and pronounce admission; repeat on the second dossier as an administrator.", "expected": "Both authorized decisions succeed and are recorded in status history. No payment prerequisite is imposed." },
+        { "action": "Refresh the manager's dossier view after the authorized admission.", "expected": "The admitted status and enrollment form appear; the manager can prepare finalization without receiving admission authority." }
+      ],
+      "minutes": 10,
+      "domain": "Admission",
+      "bricks": ["B1", "B2"],
+      "roadmap": "Phase 1-B, row 5",
+      "source": "backend/shared/constants/admission.constants.js; backend/tests/fixtures/admission.journey.js; frontend/src/campus/components/partners/LeadDetailDrawer.jsx"
+    }
+  },
+  {
+    "code": "ERP-ADM-003",
+    "body": {
+      "title": "Finalize enrollment and preserve retry consistency",
+      "objective": "Verify pending student creation, activation delivery and optional partner commission without duplicate enrollment.",
+      "prerequisites": "Owned local synthetic ERP with one direct admitted lead and one partner-referred admitted lead. Campus A has available student capacity and a live class. Manager credentials supplied separately. External mail may be disabled; use only synthetic contacts and keep activation secrets out of evidence.",
+      "steps": [
+        { "action": "As the manager, finalize the direct lead with valid birth date, gender, unique username and a live campus-A class.", "expected": "One pending student is linked to the enrolled lead. Activation is shown once with its delivery state; disabled mail is explicitly skipped. No partner commission is created for this direct lead." },
+        { "action": "Refresh the dossier and replay enrollment with its current revision, then inspect the linked student and activation display.", "expected": "The same student is returned and no duplicate student or commission is created. Refresh/retry does not reveal the initial activation secret again." },
+        { "action": "Finalize the referred lead using another unique username and inspect its partner commission through the authorized management surface.", "expected": "The lead, pending student, activation intent and single partner commission agree on the enrollment. No partial success is displayed." },
+        { "action": "On a separate fresh admitted lead, attempt enrollment with an existing username or a class from another campus.", "expected": "Enrollment is refused without creating a student, commission or activation intent; the lead stays admitted so corrected data can be submitted." }
+      ],
+      "minutes": 10,
+      "domain": "Admission",
+      "bricks": ["B1", "B2"],
+      "roadmap": "Phase 1-B, row 5",
+      "source": "backend/tests/fixtures/admission.journey.js; backend/tests/fixtures/admission.visual.js; backend/modules/partner/admission.service.js"
+    }
+  },
+  {
+    "code": "ERP-ADM-004",
+    "body": {
+      "title": "Isolate dossiers and enforce private access states",
+      "objective": "Verify campus and ownership boundaries, entitlement behavior and candidate recovery after stale or revoked access.",
+      "prerequisites": "Owned local synthetic ERP and candidate portal. Separate campus-A manager, campus-B manager, same-campus partner and administrator contexts; two synthetic candidate dossiers. Provide private links and credentials separately. Repeat ERP rendering in light and dark themes and candidate rendering in French desktop and Arabic mobile.",
+      "steps": [
+        { "action": "Try opening the campus-A management dossier as the campus-B manager and as the same-campus partner; use candidate A's session to request candidate B's file.", "expected": "All unauthorized reads are refused without disclosing the other dossier or file. Partner lead views contain no private dossier or activation data." },
+        { "action": "Set partner to read_only and then hidden as an administrator. Reload the manager's screen and try a management mutation under each state.", "expected": "Read-only keeps history readable and refuses the manager's mutation. Hidden removes access. Global administrator behavior follows its existing explicit entitlement exemption." },
+        { "action": "Restore partner, then set public-portal to read_only and hidden in turn. Reload the candidate page and attempt a write.", "expected": "Read-only permits dossier reading and refuses writes. Hidden clears private data and shows the same invalid-access state as inaccessible content." },
+        { "action": "Restore enabled state. Make a concurrent draft edit before a candidate upload; retry explicitly after the conflict. Then revoke the candidate access and reload.", "expected": "The conflict refreshes the revision before retry and does not silently repeat the upload. Revocation removes previously displayed data. Private access is absent from persistent browser storage and URL history." }
+      ],
+      "minutes": 10,
+      "domain": "Admission",
+      "bricks": ["B1", "B2", "B4"],
+      "roadmap": "Phase 1-B, row 5",
+      "source": "backend/tests/fixtures/admission.visual.js; backend/tests/fixtures/admission.journey.js; partner/src/components/forms/AdmissionDossier.tsx"
+    }
+  },
+  {
+    "code": "ERP-ADM-005",
+    "body": {
+      "title": "Archive and permanently remove synthetic admission attachments safely",
+      "objective": "Verify retained storage accounting and existing danger-zone safeguards for applicant files.",
+      "prerequisites": "Owned disposable local synthetic ERP only. A draft lead has a synthetic attachment and another submitted lead has an attachment referenced by its submission snapshot. Authorized manager/admin accounts supplied privately. Obtain file IDs and quota figures through authorized APIs. Never use real applicant documents.",
+      "steps": [
+        { "action": "Archive the draft attachment and compare campus storage usage before and after archive.", "expected": "The file becomes archived and stops satisfying live requirements, but retained bytes remain charged to campus storage." },
+        { "action": "Request the archived attachment's danger-zone impact preview and attempt permanent deletion without the required confirmation or fresh authorization.", "expected": "The preview identifies the attachment. Missing guards refuse deletion and preserve both record and private object." },
+        { "action": "Complete the existing danger-zone confirmation, fresh password and reason controls for the disposable archived attachment; reload storage usage.", "expected": "Guarded deletion removes the private object and record, records the deletion audit and invalidates cached storage usage. Do not retain password or confirmation credentials in evidence." },
+        { "action": "Try archiving or permanently removing the attachment referenced by the submitted dossier.", "expected": "The submitted-file safeguard refuses removal and preserves the dossier snapshot and private object. No TTL or unguarded business-record deletion is involved." }
+      ],
+      "minutes": 10,
+      "domain": "Admission",
+      "bricks": ["B1", "B2"],
+      "roadmap": "Phase 1-B, row 5",
+      "source": "backend/tests/fixtures/admission.journey.js; backend/shared/lib/hard-delete/hard-delete.registry.js; backend/docs/architecture/features/online-admission.md"
+    }
+  }
+]

@@ -1,7 +1,8 @@
 # Online admission — phase 1-B row 5
 
 Date: 2026-10-23.
-Status: IMPLEMENTATION IN PROGRESS — backend and staged consumers; acceptance incomplete.
+Last acceptance review: 2026-10-29.
+Status: IMPLEMENTATION IN PROGRESS — synchronized consumers; acceptance gates remain open.
 
 ## Problem and scope
 
@@ -267,25 +268,25 @@ This records intended work; each row must be checked against the final build.
 - [x] OA-1–OA-3 answered and exact contract frozen before dependent code.
 - [x] Design updated from implemented behavior; expand-only migration has dry-run
       and disposable-database evidence, with no historical automatic conversion.
-- [ ] Complete backend and every affected consumer, environment wiring included
+- [x] Complete backend and every affected consumer, environment wiring included
       (`FRONTEND_URL`, `PORTAL_URL`, `VITE_API_BASE_URL`, `ERP_API_URL` and mail/
       storage settings). No secrets or generated credentials in documentation.
 - [x] Campus/ownership/deletion/entitlement rules and all eleven registries reviewed.
-- [ ] Repository, service, facade and route tests; role denial, cross-campus and
+- [x] Repository, service, facade and route tests; role denial, cross-campus and
       same-campus partner isolation; incomplete data/files; direct/referred leads;
       concurrent requests, conflicts, rollback, quota and notification failure.
-- [ ] Reproduce current admission authorization and enrollment consistency gaps
+- [x] Reproduce current admission authorization and enrollment consistency gaps
       with meaningful regression checks before correction.
-- [ ] Feature audit, platform audit, then test audit in `CLAUDE.md` §12 order;
+- [x] Feature audit, platform audit, then test audit in `CLAUDE.md` §12 order;
       every finding closed by a regression seen failing before its fix, every new
       test seen failing deliberately at least once.
 - [ ] Full Jest, backend lint/audit, applicable fixture self-check and journey,
       course structural checks, ERP build/touched lint/locale checks, and portal
       test/lint/build/typecheck/audit. Record actual runs separately from history.
-- [ ] Browser QA in both themes, administrator/director and campus-manager roles,
+- [x] Browser QA in both themes, administrator/director and campus-manager roles,
       candidate flow if selected, and enabled/read-only/hidden scoped states;
       permanent assertions and inspected screenshots.
-- [ ] Engineering map, roadmap dashboard/phase row, applicable QA dashboard and
+- [x] Engineering map, roadmap dashboard/phase row, applicable QA dashboard and
       repository handoffs updated; mark delivered only after all required checks.
 
 ## Current implementation and acceptance — 2026-10-23
@@ -342,6 +343,7 @@ regressions, while execution logs are temporary acceptance artifacts.
 | F2 — Unicode download returned HTTP 500, then used inherited `no-cache` | RFC 5987 filename plus private `no-store`; both failures observed separately; real HTTP/unit replay passed. |
 | F3 — multipart filename decoding corrupted non-Latin names | Recover valid UTF-8 decoded as Latin-1 without corrupting native names; `admission-files.test.js` failed then passed. |
 | F4 — candidate retained stale revision/data after conflict/revocation | Actual component-handler tests failed for conflict and 404/410, then passed after refresh/clear; permanent browser scenario still awaits replay. |
+| F5 — NextURL loopback normalization rejected the actual origin and accepted another local hostname | Compare browser Origin against the actual HTTP Host and request protocol, never X-Forwarded-Host. The real candidate session returned 403 before correction; two handler regressions failed before the fix, a forwarded-host mutant was rejected, and the restored portal suite passes 55 cases. |
 | P1 — queued mail ignored revocation or a module frozen after enqueue | Recheck capability and emission state at delivery; two `notification-private` regressions failed then passed. |
 | P2 — damaged ciphertext broke the entire recipient inbox | Per-row redacted fallback; regression failed then passed. |
 | P3 — ordinary student imports bypassed new shared capacity/class rules | Shared pending creation callbacks and validated import mapping; real import/last-place race failed then passed. |
@@ -350,6 +352,7 @@ regressions, while execution logs are temporary acceptance artifacts.
 | P6 — recovery could expose contact existence through provider latency | Enqueue only; initial intake creates lead and durable encrypted invitation atomically. Access-service regression failed then passed. |
 | P7 — encrypted mail could be redirected by editing stored destination | Authenticated encryption binds recipient, destination, campus, channel and template; regression failed then passed. |
 | P8 — new upstream redirect advisories blocked dependency gate | Existing-range lock update 1.16.0 → 1.16.1; two real loopback tests fail on old version and pass on patched version; no new exception. |
+| P9 — registry failure was interpreted as a clean audit with stale exceptions | Reject error/malformed reports and abnormal subprocess outcomes before reporting findings. Eight new `audit-gate.test.js` cases failed before correction and pass afterward; existing exceptions are retained. |
 
 Platform boundaries: admission charges retained archived bytes alongside GED
 imports; it does not claim to redesign all pre-existing GED write races or its
@@ -415,20 +418,63 @@ Actual current runs:
 | 10 | Structural figures/prose, review indices and generated hooks updated; complete course guard passes 67/67. No existing source path moved. |
 | 11 | Backend engineering map updated; consumer map/contract/handoffs prepared with their sources. |
 
+### Acceptance continuation — 2026-10-29
+
+The current owner request resumes logical implementation and asks for scoped local
+commits. Backend, ERP and portal started clean at their admission checkpoints;
+no previous checkpoint changes remain to save. Current corrections are P9 above,
+F5 in portal commit `0f2852f` (audit correction `eda0f81`, course inventory
+`cef4cf0`), and browser-scenario synchronization/diagnostics:
+
+- Wait for the specific MUI option and the previous menu's closure before the next
+  selection. The first real pass failed class selection in all four role/theme
+  combinations; the synchronized replay reached successful enrollment.
+- Target the activation Dialog rather than the Drawer, which also has a dialog
+  role. The next pass exposed this ambiguous selector in all four combinations.
+  Reload enrollment afterward and assert the one-time activation dialog stays closed.
+- Assert the candidate session response explicitly and skip dependent scenarios
+  when initialization fails, preventing a cascade of orphan response waits.
+- Preserve full journey error stacks for actionable diagnostics.
+
+Checks actually run in this session:
+
+| Check | Result |
+|---|---|
+| Full backend Jest | 94 suites / 1,776 tests pass, including eight new audit-failure cases. Initial sandbox run could not bind HTTP ports; the permitted loopback replay passed. |
+| Backend lint | Pass, 39 existing warnings; touched scripts/tests also pass after final changes. |
+| Admission real-data journey | 40/40 pass on its owned disposable replica set. Earlier startup/connection timeouts did not establish acceptance. |
+| General API/data journey | 25/25 pass on its owned disposable replica set. |
+| ERP production build | Pass with VITE_API_BASE_URL explicitly targeting the owned loopback API. No ERP source change was needed. |
+| Portal tests/lint/TypeScript/build | Eight files / 55 tests pass; lint, types and rebuilt production portal pass. Two origin tests failed before the fix; the forwarded-host mutant failed, was restored and the 13-case handler replay passed. |
+| Course references/solutions | 67/67 executable solutions pass, 14 snippets skipped, all cited paths resolve. The portal's exact source-line count failed at 4,358 vs 4,356; its assertion and prose were updated together without relaxing the guard. |
+| Full browser replay | 202/202 pass (exit 0), including 28 admission checks. Actual compiled ERP and portal; ADMIN/CAMPUS_MANAGER, light/dark, three entitlement states, French desktop and Arabic mobile candidate flows. Screenshots visually inspected. |
+| Dependency audits | Backend and portal gates cannot obtain a valid npm report. Backend now reports the network failure correctly; neither gate is accepted and no exception/dependency was changed. |
+| Manual case payload | Five case bodies and all technical source references validate; registration/execution are separate gates. |
+
+The eleven-registry review above still applies: no API route, model, module key,
+job, fixture count, translation inventory or public facade changed in this
+continuation. Registry 11 consumer/security references and the course's exact
+inventory are updated with their respective changes. CH-* acceptance and the
+roadmap estimate remain unchanged.
+
 ### Remaining delivery gates
 
-Automatic approval review rejected the next local browser command because its
-review quota was exhausted; it was not executed, and the reason was not an unsafe
-action determination. Do not bypass this control. Approved source synchronization and pre-commit checks resumed after the owner
-requested commits. The earlier rejected browser action did not run; browser, latest production build, final full regression replay and manual
-acceptance remain delivery gates.
+The historical 2026-10-23 automatic-review quota rejection did not execute its
+browser command. The current session's permitted local validations supersede that
+execution blocker; it is not a standing ban or evidence of browser acceptance.
 
-Manual cases **ERP-ADM-001–005 are proposed, not registered**. The owner says the
-validation account will receive ERP-project editor access. Verify membership and
-upsert through the Workbench CLI, preserving historical campaigns/results; never
-use the service key to elevate access. Prepared payload:
-`/tmp/admission/manual-cases.json`. The cases cover manager/candidate files and
-requirements, decision authority, enrollment/activation/idempotence, scope/states,
-and archive/permanent-delete safeguards. No fixture password or access link is
-stored in their bodies. Registration is a closure requirement, not waived by the
-execution blocker. Keep roadmap row 5 in progress until all gates pass.
+Restore registry access and rerun backend and portal dependency gates. The full
+browser pass and screenshot inspection are complete. Keep row 5 in progress until
+the dependency gates and Workbench case-registration requirement pass; preparing
+cases or passing browser checks does not record a manual campaign verdict.
+
+Manual cases **ERP-ADM-001–005 are prepared, not registered or executed**. The
+previous temporary payload disappeared between sessions. Their durable source is
+[tests/manual/admission.cases.json](../../../tests/manual/admission.cases.json),
+with [import instructions](../../../tests/manual/README.md). They cover file and
+requirement handling, admission authority, enrollment/activation/idempotence,
+scope/states and archive/permanent-delete safeguards. The current hosted login
+attempt failed at the network layer, before ERP editor membership could be
+verified. Restore access, verify that membership and import through the existing
+Workbench CLI. Do not elevate access with a service key, rewrite historical
+campaign snapshots or infer manual verdicts from automated results.

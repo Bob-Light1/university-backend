@@ -1,74 +1,74 @@
 # Current task and handoff
 
-Last updated: 2026-10-23.
-Status: IN PROGRESS — phase 1-B row 5 online admission.
-Backend: main. The owner now explicitly requests appropriate commits for each brick.
-Preserve the roadmap estimate and unrelated Workbench phase-2 implementation.
+Last updated: 2026-10-29.
+Status: LOCAL FUNCTIONAL CHECKS COMPLETE; phase 1-B row 5 remains IN PROGRESS pending
+valid dependency audits and Workbench case registration.
+Branch: main. The owner requests logical continuation and appropriate local commits.
+No push, deployment, production DDL or historical enrollment conversion.
 
-## Objective and decisions
+## Objective and approved decisions
 
-Continue the roadmap and chain the next task after completion, preserving phase order.
-OA-1–OA-3 are approved: candidate/private emailed link and manager uploads;
-campus-configurable required categories, none by default; manager/director/admin
-finalize enrollment. Only director/admin pronounces admission; no payment prerequisite.
-[Online admission](architecture/features/online-admission.md) owns the contract and evidence.
+Continue admission acceptance in roadmap order, preserving the dated effort
+forecast and independent Workbench phase-2 work. OA-1–OA-3 remain approved:
+candidate/private-email-link and manager uploads; campus-configurable requirements,
+none by default; management enrollment. Only director/admin pronounces admission;
+no payment prerequisite. [Online admission](architecture/features/online-admission.md)
+owns the contract, audits and evidence. Session start: backend 5e55a77, ERP e1f85a2
+and portal 08494b9, all three clean; those checkpoint commits were already complete.
 
-## Implementation milestone
+## Changes and verified milestone
 
-Backend dossier, private storage/capabilities, transactional enrollment/commission/
-activation/outbox, shared student creation/import capacity, guarded attachment deletion,
-private notification encryption and migration preparation are implemented. ERP and
-portal sources are synchronized into their actual repositories from the reviewed
-21-file ERP and 28-file portal manifests. Checksum guards passed and existing
-AGENTS/context manual-QA documentation is preserved. The current request saves
-these changes as repository-specific checkpoint commits; it does not close admission.
+- Backend scripts/audit-gate.js rejects incomplete/error registry reports and
+  abnormal subprocess outcomes before interpreting findings. Eight regressions
+  failed before correction and pass afterward. No dependency/exception changed.
+- Portal src/lib/admission-proxy.ts compares Origin with the actual Host/protocol,
+  preserving loopback hostname distinctions despite NextURL normalization.
+  Two handler regressions failed before correction; a forwarded-host mutant was
+  rejected/restored and the clean replay passes. Portal contract/map updated.
+- Admission browser scenarios wait for menu transitions, select the activation
+  Dialog instead of the Drawer, assert activation is absent after reload and
+  diagnose failed candidate sessions before dependent actions. Journey failures
+  retain error stacks. tests/manual/admission.cases.json durably stores the five
+  prepared cases; its README explains scoped, history-preserving CLI import.
+- Course F2.4 exact assertion and prose now measure 4,358 portal source lines.
+  Curriculum patch version/changelog updated; author-review status remains.
 
-Checks actually run: full Jest 92 suites / 1,756 tests passes before the two final
-contract/dependency suites; real admission journey 40/40; backend lint passes with
-39 warnings; dependency audit gate passes with its two existing named exceptions.
-The redirect dependency regression fails both cases on 1.16.0 and passes on 1.16.1.
-Seven temporary backend mutants were killed and restored; clean four-suite replay
-passes 28 tests; a later five-suite replay including mirrors passes 38. ERP build
-succeeds with explicit local API configuration.
-Portal tests pass 52 after all nine proxy mutants are restored; lint and types
-pass. Final production build and browser QA remain pending. Course structural figures/prose are updated; the complete replay is now green.
-Current pre-commit replay: seven backend suites / 44 tests pass against the
-synchronized consumers; portal 52 tests, lint and TypeScript pass; ERP touched lint
-and 190 locale/namespace combinations pass. The full course guard passes all
-67 executable solutions, skips 14 documented snippets and resolves its references.
+Checks actually run: backend Jest 94 suites / 1,776 tests; backend lint (39 existing
+warnings), plus final touched-file lint; admission journey 40/40; base journey
+25/25; ERP build with explicit loopback API; portal 55 tests, lint, TypeScript and
+rebuilt production build; course 67/67 and all references; full browser 202/202
+(exit 0), including 28 admission checks. Captures inspected for ADMIN and
+CAMPUS_MANAGER in both themes, read-only/hidden manager states, French desktop
+and Arabic mobile candidates, including read-only views. JSON/source references,
+local documentation links and whitespace checks pass. No base fixture changes.
+Initial sandbox port denials and MongoDB startup/connection timeouts were replayed;
+they are not counted as successful checks. Earlier browser failures are retained
+as regression evidence; their corrected full replay passes.
 
-Browser diagnostics did not reach acceptance: the initial staged SPA had no API
-configuration. Its build now targets the owned loopback API. A full browser replay
-and screenshot inspection are required. Three candidate conflict/revoked-access
-state regressions failed through the real component handlers and pass after correction.
+## Remaining gates and next action
 
-## Remaining acceptance and current commit request
+Both dependency gates fail to obtain a valid npm registry report; the corrected
+backend now diagnoses that network failure instead of falsely claiming zero
+findings and stale exceptions. Restore registry access and rerun both gates.
 
-An earlier local browser command was rejected because automatic approval review
-had exhausted its usage quota; it was not executed. Approved scoped source
-synchronization and pre-commit checks are now available. Final browser, production
-build and manual-case acceptance remain unfinished; do not mark row 5 delivered.
-No permission is needed again for the local commits explicitly requested by the owner.
+ERP-ADM-001–005 are prepared, not registered or executed. Hosted Workbench login
+fails at the network layer, before the validation account's ERP editor membership
+can be verified. Restore access, verify membership and import the durable payload
+through the documented CLI. Never use the service key to elevate membership or
+rewrite campaign snapshots/results. Do not infer manual verdicts from automated QA.
 
-Manual cases ERP-ADM-001–005 are prepared in `/tmp/admission/manual-cases.json`.
-The owner says the validation account will receive ERP-project editor access;
-verify membership and then upsert through the Workbench CLI. No case is registered
-yet. Never use a service key to elevate membership. No secrets belong in documents.
-
-## Next action
-
-The redirect patch, roadmap forecast and manual-QA documentation are committed
-separately. Save the current backend/ERP/portal admission checkpoint and green
-course update in their own repositories as explicitly requested. Preserve unrelated
-Workbench phase-2 files. Keep row 5 in progress and record remaining acceptance.
-No push, deployment, production DDL or historical conversion.
+The completed corrections, acceptance evidence and course inventory are saved
+with scoped conventional commits in their own repositories. No ERP source changes
+were needed. Portal correction: 0f2852f; backend audit correction: eda0f81;
+course inventory: cef4cf0.
+Keep row 5 in progress until the two external gates above pass; then review its
+remaining acceptance and continue phase 1-B in order. Do not repeat already-green
+local checks unless source changes or a new concern justifies a replay.
 
 ## Retained external acceptance
 
 [Roadmap §5.1](architecture/ERP_ROADMAP.md#51--remaining-effort-forecast--2026-10-23)
-owns the completed estimate (25–38 person-days; planning allowance 36).
-Row 12 was inspected but not started as a dedicated delivery. GED installed-index
-rollout remains a release task under [GED expiry safety](architecture/features/ged-expiry-safety.md).
-AI target SLOs, independent CH-0 and administrator acceptance remain with their
-owning notes. Row 13 hosted CI awaits an authorized push. No CH-2/CH-4 or phase-2
-work is started by this regression maintenance.
+owns 25–38 person-days (planning allowance 36). GED installed-index rollout stays
+with [GED expiry safety](architecture/features/ged-expiry-safety.md). AI target SLOs,
+independent CH-0 and administrator acceptance remain with their owning notes.
+Row 13 hosted CI awaits an authorized push. No CH-2/CH-4 or ERP phase-2 work started.

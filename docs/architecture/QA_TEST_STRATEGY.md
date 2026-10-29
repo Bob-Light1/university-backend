@@ -87,6 +87,17 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-29 admission regression maintenance: full backend Jest passes 94 suites /
+1,776 tests; portal tests pass 55 cases, with lint/types/production builds green.
+Owned admission and base journeys pass 40/40 and 25/25; the course guard passes
+67/67. Invalid audit reports and loopback-origin validation have observed
+red/green regressions. Full browser acceptance passes 202/202, including all
+28 admission checks; screenshots are inspected. npm registry and
+hosted Workbench network failures keep dependency gates and case registration
+open; [the admission note](features/online-admission.md) owns current evidence.
+ERP-ADM-001–005 have a durable payload, without recorded manual verdicts.
+No CH-* status or independent acceptance changes.
+
 2026-10-23 admission regression maintenance (phase 1-B row 5, in progress):
 the owned admission journey passes 40 checks; full Jest passes 92 suites /
 1,756 tests before the final contract/dependency additions, whose targeted runs

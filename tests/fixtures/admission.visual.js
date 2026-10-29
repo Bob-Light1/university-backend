@@ -53,8 +53,11 @@ async function checkAdmission({ browser, accounts, dist, shots, record }) {
     await handle.asElement().click(); await handle.dispose();
   };
   const select = async (page, id, value) => {
-    await page.click(`#${id}`); await page.waitForSelector('[role="listbox"]');
-    await page.click(`[role="option"][data-value="${value}"]`);
+    await page.click(`#${id}`);
+    const option = `[role="option"][data-value="${value}"]`;
+    await page.waitForSelector(option, { visible: true });
+    await page.click(option);
+    await page.waitForSelector('[role="listbox"]', { hidden: true });
   };
   const setInput = async (page, name, value) => page.$eval(`input[name="${name}"]`, (element, next) => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(element, next);
@@ -138,12 +141,15 @@ async function checkAdmission({ browser, accounts, dist, shots, record }) {
             await button(page, catalog.enrollment); const response = await enrolled; assert.equal(response.status(), 200);
             const result = (await response.json()).data;
             assert.equal(result.student.status, 'pending'); assert(result.activation?.code);
-            await page.waitForSelector('[role="dialog"]');
-            assert(await page.$eval('[role="dialog"]', (element, title) => element.innerText.includes(title), catalog.activation.title));
-            await button(page, catalog.close, '[role="dialog"] button');
-            await page.waitForSelector('[role="dialog"]', { hidden: true });
+            const dialog = '.MuiDialog-root [role="dialog"]';
+            await page.waitForSelector(dialog, { visible: true });
+            assert(await page.$eval(dialog, (element, title) => element.innerText.includes(title), catalog.activation.title), 'Activation dialog uses the loaded locale');
+            await button(page, catalog.close, `${dialog} button`);
+            await page.waitForSelector(dialog, { hidden: true });
             assert.equal(await Student.countDocuments({ _id: result.student._id }), 1);
             await page.screenshot({ path: path.join(shots, `admission-enrolled-${role.toLowerCase()}-${theme}.png`) });
+            await openLead();
+            assert.equal(await page.$(dialog), null, 'Reloading enrollment does not reveal activation again');
           });
           for (const mode of [F.READ_ONLY, F.HIDDEN]) {
             await state(mode);
@@ -197,20 +203,25 @@ async function checkAdmission({ browser, accounts, dist, shots, record }) {
       const privateLink = require('../../modules/notification/notification.private').reveal(mail).data.link;
       const fragment = new URL(privateLink).hash;
       const scenario = async (label, work) => {
-        try { await work(); record(`Admission candidate/${locale}: ${label}`, true); }
-        catch (error) { record(`Admission candidate/${locale}: ${label}`, false, error.message); }
+        try { await work(); record(`Admission candidate/${locale}: ${label}`, true); return true; }
+        catch (error) { record(`Admission candidate/${locale}: ${label}`, false, error.message); return false; }
       };
       try {
-        await scenario('private fragment becomes an HttpOnly cookie without storage or URL leakage', async () => {
+        const ready = await scenario('private fragment becomes an HttpOnly cookie without storage or URL leakage', async () => {
+          const exchange = page.waitForResponse((response) => response.url().endsWith('/api/admission/session') && response.request().method() === 'POST');
+          exchange.catch(() => {});
           await page.goto(`${origin}/${locale}/admission${fragment}`, { waitUntil: 'networkidle2' });
+          const response = await exchange;
+          assert.equal(response.status(), 200, `Candidate session exchange: HTTP ${response.status()}`);
           await page.waitForFunction(() => document.querySelector('[data-testid="candidate-status"]'));
           assert(!page.url().includes('#access='));
           const cookie = (await context.cookies(origin + '/api/admission/dossier')).find((item) => item.name === 'admission_access');
-          assert(cookie?.httpOnly && cookie.sameSite === 'Strict');
+          assert(cookie?.httpOnly && cookie.secure && cookie.sameSite === 'Strict');
           assert.equal(await page.evaluate(() => Object.keys(localStorage).length + Object.keys(sessionStorage).length), 0);
           assert.equal(await page.evaluate(() => document.documentElement.dir), locale === 'ar' ? 'rtl' : 'ltr');
           assert(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1));
         });
+        if (!ready) continue;
         await scenario('a concurrent edit refreshes the revision before an explicit upload retry', async () => {
           await Lead.updateOne({ _id: lead._id }, { $inc: { 'dossier.revision': 1 } });
           const conflict = page.waitForResponse((response) => response.url().endsWith('/api/admission/dossier/files') && response.request().method() === 'POST');

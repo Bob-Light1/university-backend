@@ -103,6 +103,16 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-10-29: continued row-5 acceptance corrects incomplete dependency-audit handling
+and candidate same-origin validation, with observed red/green regressions.
+Current checks pass 1,776 backend tests, 55 portal tests, 40 admission journey
+checks, 25 base journey checks and 67 course solutions; both consumers build.
+Full browser replay passes 202/202 (28 admission checks), with inspected
+screenshots. npm registry and hosted Workbench network
+failures leave final dependency gates and ERP-ADM-001–005 registration open.
+[Current evidence](features/online-admission.md#acceptance-continuation--2026-10-29)
+owns the result; row 5 remains `EN COURS`. Phase order and the dated forecast stay unchanged.
+
 2026-10-23: the owner requests continued phase-1-B implementation and explicitly
 approves admission OA-1–OA-3: candidate/private-email-link plus manager uploads,
 campus-configurable required pieces with none required by default, and enrollment
@@ -454,7 +464,7 @@ work. Use §5.1 for current remaining effort; do not sum this column as a foreca
 | 2 | Campus entitlement | `B1·B2` | Unified configuration; legacy schema paths and AI-only routes retired; raw legacy reads and both audit ledgers preserved; workspace/shortcut guards verified in both themes. [Delivery evidence](features/entitlement-legacy-retirement.md) | Complete: pre-retirement browser 126/126, final browser 134/134 and all applicable §12 checks pass | 1 j | `LIVRÉ` |
 | 3 | Authentication hardening | `B1·B2` | All nine roles: 15-minute live access JWTs, rotating seven-day HttpOnly refresh sessions, current/all-device revocation and account-wide temporary lockout; existing activation, roles, campus/ownership guards and login rate limits retained | Backend and ERP consumer delivered; disposable MongoDB, browser and regression evidence in [the session note](features/auth-session-hardening.md). Legacy tokens require fresh login on deployment | 3–4 d | `LIVRÉ` |
 | 4 | AI module — operational acceptance | `B1·B2·B3` | M0–M6 implemented; existing ERP chat/search/analytics/advisor screens; D2 benchmark completed on 2026-07-07, owner retained bge-m3 (1024d) | Deployed-target chat/search SLOs remain open; local browser QA and corrections completed on 2026-10-16. [Work and evidence](features/ai-operational-acceptance.md). Historical local timings are not target acceptance | 2–3 d | `EN COURS` |
-| 5 | Online admission | `B1·B2·B4` | Seven-status pipeline and approved D-R24/D-R25 contract; dossier/private storage, atomic pending-student/commission/activation and synchronized ERP/candidate consumers implemented | [Acceptance in progress](features/online-admission.md): final browser/regression checks; register proposed ERP-ADM-001–005 cases after editor membership verification. Checkpoint commits requested; no release or historical conversion | 3–4 d | `EN COURS` |
+| 5 | Online admission | `B1·B2·B4` | Seven-status pipeline and approved D-R24/D-R25 contract; dossier/private storage, atomic pending-student/commission/activation and synchronized ERP/candidate consumers implemented | [Acceptance in progress](features/online-admission.md): browser 202/202 with inspected screenshots; final npm audits and ERP-ADM-001–005 registration await network access and verified editor membership. Durable manual payload prepared; no release or historical conversion | 3–4 d | `EN COURS` |
 | 6 | Frais — reçus et échéancier | `B1·B2` | Reçu PDF rendu à la demande (`GET /finance/payments/:id/receipt`, langue de l'**étudiant**, pool Puppeteer partagé) ; cadence avant échéance J-7 / J-3 / Jour J sur son propre marqueur `remindersSent[]` ; les deux briques câblées, i18n × 10 | **Rien — les dix étapes du §12 sont tenues.** L'étape 10 a été jouée le 2026-09-02 et **écrite dans `npm run test:visual`** plutôt que passée à la main (précédent D-R7) : le harnais passe de 16 à **36 contrôles**, tous verts — deux thèmes par la *préférence* de l'utilisateur, `CAMPUS_MANAGER` + `STUDENT`, et les trois états d'entitlement dont `hidden`, refusé tant que le module porte des écritures et donc **vu** sur un campus vidé des siennes. Elle a trouvé un défaut que rien d'autre ne pouvait voir : le nom du reçu ne survivait pas au cross-origin (§9⑲ de la note), corrigé et fermé par un test vu rouge. 1 566 tests verts. Détail : `docs/architecture/features/fee-receipts-and-reminders.md` §9⑲ | 2–3 j | `LIVRÉ` |
 | 7 | Notifications WhatsApp Business | `B1` | Canal Meta Cloud API en appel natif, inerte sans jeton, préférence par utilisateur | Gabarits approuvés par Meta — obligatoires hors de la fenêtre de 24 h, donc pour la quasi-totalité des envois ERP ; consentement explicite ; webhook de statut ; câblage des quatre événements vendus | 2–3 j | `À FAIRE` |
 | 8 | Journal d'audit transverse | `B1` | Trois registres append-only : audit documentaire, registre de suppression, historique de statut des prospects | Journal unique de toutes les mutations post-publication, export d'audit, rétention configurable par campus. **Traite l'écart 3 du §11** | 3–4 j | `À FAIRE` |

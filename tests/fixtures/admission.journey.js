@@ -213,4 +213,4 @@ async function main() {
     process.chdir(previousDirectory); fs.rmSync(runtime, { recursive: true, force: true });
   }
 }
-main().catch((error) => { console.error(error.message); process.exitCode = 1; });
+main().catch((error) => { console.error(error); process.exitCode = 1; });
