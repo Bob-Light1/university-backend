@@ -79,8 +79,8 @@ const runAudit = () => {
   try {
     return execFileSync('npm', ['audit', '--json'], { encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
   } catch (err) {
-    if (err.stdout) return err.stdout;
-    throw err;
+    if (err.status === 1 && !err.signal && err.stdout) return err.stdout;
+    throw new Error('Dependency audit could not complete');
   }
 };
 
@@ -116,7 +116,17 @@ const collectRootAdvisories = (vulnerabilities) => {
 // ── Report ────────────────────────────────────────────────────────────────────
 
 const main = () => {
-  const report = JSON.parse(runAudit());
+  let report;
+  try {
+    report = JSON.parse(runAudit());
+    if (!report || report.error || !report.vulnerabilities
+      || typeof report.vulnerabilities !== 'object' || Array.isArray(report.vulnerabilities)) {
+      throw new Error('Invalid audit report');
+    }
+  } catch {
+    console.error('Dependency audit could not complete; check registry access and retry.');
+    process.exit(1);
+  }
   const roots  = collectRootAdvisories(report.vulnerabilities || {});
   const accepted = new Map(ACCEPTED.map((a) => [a.ghsa, a]));
 

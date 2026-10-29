@@ -427,6 +427,12 @@ installer. Keep both exceptions keyed by their exact GHSA IDs; a new advisory
 still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
 `tests/unit/audit-gate.test.js` verifies unknown findings and stale exceptions fail.
 
+Registry failures are not advisory reports. The gate rejects npm errors, missing
+or malformed findings, unexpected subprocess exits and signals before printing
+totals or diagnosing stale exceptions. Its eight failure regressions were observed
+red before correction on 2026-10-29. A failed network request must never cause an
+exception to be removed or establish a clean dependency audit.
+
 **`package.json` carries six `overrides`, all load-bearing** — none is cosmetic:
 - `proxy-addr: ^2.0.8` — patches GHSA-jqcg-44mw-7w3h in Express proxy trust; preserves normal loopback trust and rejects spoofing through incorrectly mapped IPv6 subnets.
 - `source-map-js: ^1.2.2` — patches GHSA-68fv-2mgg-jv7q on the sanitize-html/PostCSS path.

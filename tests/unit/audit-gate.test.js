@@ -20,14 +20,18 @@ function finding(name, ids) {
 }
 
 /** Execute the real CLI with only its audit subprocess and output replaced. */
-function runGate(vulnerabilities) {
+function runGate(vulnerabilities, { report = { vulnerabilities }, raw, status = 1, signal = null } = {}) {
   const output = [];
   const exitSignal = new Error('audit exit');
   let exitCode = 0;
   const execFileSync = jest.fn(() => {
+    const stdout = raw ?? JSON.stringify(report);
+    if (status === 0 && !signal) return stdout;
     // npm audit returns nonzero even when the only findings are accepted.
     const error = new Error('npm audit found vulnerabilities');
-    error.stdout = JSON.stringify({ vulnerabilities });
+    error.stdout = stdout;
+    error.status = status;
+    error.signal = signal;
     throw error;
   });
   try {
@@ -67,4 +71,21 @@ test.each(archiveIds)('a resolved exception %s must be removed', (removedId) => 
   const result = runGate({ 'extract-zip': finding('extract-zip', archiveIds.filter((id) => id !== removedId)) });
   expect(result.exitCode).toBe(1);
   expect(result.output).toContain(`STALE     ${removedId}`);
+});
+
+test.each([
+  ['registry error', { report: { error: { code: 'ECONNRESET' } } }],
+  ['missing findings', { report: {} }],
+  ['null findings', { report: { vulnerabilities: null } }],
+  ['array findings', { report: { vulnerabilities: [] } }],
+  ['error alongside findings', { report: { error: { code: 'EAI_AGAIN' }, vulnerabilities: {} } }],
+  ['malformed JSON', { raw: '{' }],
+  ['unexpected exit status', { status: 2 }],
+  ['terminated subprocess', { status: null, signal: 'SIGTERM' }],
+])('an incomplete audit (%s) fails without diagnosing stale exceptions', (_label, options) => {
+  const result = runGate({ 'extract-zip': finding('extract-zip', archiveIds) }, options);
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain('Dependency audit could not complete');
+  expect(result.output).not.toContain('STALE');
+  expect(result.output).not.toContain('npm audit:');
 });
