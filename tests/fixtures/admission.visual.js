@@ -109,7 +109,10 @@ async function checkAdmission({ browser, accounts, dist, shots, record }) {
           phase = 'lead drawer'; await openLead();
           await scenario('private dossier renders in the persisted theme and uploads a real file', async () => {
             assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), theme);
-            await page.waitForFunction(() => !document.querySelector('[data-testid="admission-file"]').disabled);
+            await page.waitForFunction(() => {
+              const control = document.querySelector('[data-testid="admission-file"]')?.closest('label');
+              return control && control.getAttribute('aria-disabled') !== 'true' && !control.classList.contains('Mui-disabled');
+            });
             const uploaded = page.waitForResponse((response) => response.url().endsWith('/dossier/files') && response.request().method() === 'POST');
             await (await page.$('[data-testid="admission-file"]')).uploadFile(filePath);
             assert.equal((await uploaded).status(), 201);

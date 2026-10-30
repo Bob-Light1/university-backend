@@ -1,69 +1,82 @@
 # Current task and handoff
 
-Last updated: 2026-10-29.
-Status: LOCAL FUNCTIONAL CHECKS COMPLETE; phase 1-B row 5 remains IN PROGRESS pending
-valid dependency audits and Workbench case registration.
-Branch: main. The owner requests logical continuation and appropriate local commits.
+Last updated: 2026-10-30.
+Status: LOCAL SECURITY AND QA COMMITS COMPLETE.
+Final full browser acceptance still requires a verified replay result.
+Phase 1-B row 5 remains IN PROGRESS pending ERP Workbench editor access and case registration.
+Branch: main. Owner requests logical continuation and appropriate local commits.
 No push, deployment, production DDL or historical enrollment conversion.
 
-## Objective and approved decisions
+## Objective and approved scope
 
-Continue admission acceptance in roadmap order, preserving the dated effort
-forecast and independent Workbench phase-2 work. OA-1–OA-3 remain approved:
-candidate/private-email-link and manager uploads; campus-configurable requirements,
-none by default; management enrollment. Only director/admin pronounces admission;
-no payment prerequisite. [Online admission](architecture/features/online-admission.md)
-owns the contract, audits and evidence. Session start: backend 5e55a77, ERP e1f85a2
-and portal 08494b9, all three clean; those checkpoint commits were already complete.
+Finish admission acceptance before further phase-1-B implementation. Preserve OA-1–OA-3,
+D-R24/D-R25, the dated effort forecast, independent CH-* acceptance and separate
+Workbench phase-2 work. The [admission note](architecture/features/online-admission.md)
+owns the contract, audits and acceptance evidence. Starting repositories were clean:
+backend 0f56abc, portal 0f2852f, ERP e1f85a2. Earlier implementation and browser
+corrections were already committed; their checks remain historical evidence.
 
-## Changes and verified milestone
+## Changes and historical checks from the prior handoff
 
-- Backend scripts/audit-gate.js rejects incomplete/error registry reports and
-  abnormal subprocess outcomes before interpreting findings. Eight regressions
-  failed before correction and pass afterward. No dependency/exception changed.
-- Portal src/lib/admission-proxy.ts compares Origin with the actual Host/protocol,
-  preserving loopback hostname distinctions despite NextURL normalization.
-  Two handler regressions failed before correction; a forwarded-host mutant was
-  rejected/restored and the clean replay passes. Portal contract/map updated.
-- Admission browser scenarios wait for menu transitions, select the activation
-  Dialog instead of the Drawer, assert activation is absent after reload and
-  diagnose failed candidate sessions before dependent actions. Journey failures
-  retain error stacks. tests/manual/admission.cases.json durably stores the five
-  prepared cases; its README explains scoped, history-preserving CLI import.
-- Course F2.4 exact assertion and prose now measure 4,358 portal source lines.
-  Curriculum patch version/changelog updated; author-review status remains.
+- Restored registry access reveals body-parser and Zod high advisories plus a
+  withdrawn portal braces exception. Backend body-parser moves 1.20.6 → 1.20.9
+  within Express's existing range; its required qs/side-channel locks move with it.
+- Portal Zod moves 4.4.3 → 4.6.7. Its withdrawn braces exception is removed;
+  policy tests retain synthetic exceptions rather than obsolete production entries.
+  Four malformed-report assertions fail before record-shape checks, then all 14
+  policy cases pass.
+- Both PDF engines explicitly select CDP. Zod 3 remains only in the unused BiDi
+  parser with a named exception/removal condition, without forcing Zod 4 across
+  the parser's major-version contract. Real engines launch and an academic PDF
+  renders while Zod/BiDi module loading is refused.
+- New gzip regression crashes with old body-parser and passes after correction;
+  patched gzip/deflate preserve JSON and server health. The Zod collection-bound
+  assertion fails on old Zod. CDP and exact-ID/stale-exception checks fail before
+  their corrections, then all 17 targeted backend checks pass.
+- Full backend Jest: 96 suites / 1,780 tests pass. Backend lint: zero errors,
+  39 existing warnings. Portal: nine suites / 64 tests, lint, TypeScript and
+  production build pass with an explicit loopback API target. Both dependency
+  gates pass; backend retains three named unreachable-path exceptions, portal none.
+- Portal browser smoke passes 18/18, including form submissions/refusals and real
+  image optimization. The final ERP/admission browser replay result is unverified
+  after two readiness failures; do not assume the earlier process is still running.
+- Course F2.2/F2.4/F2.5 assertions/prose track 96 backend and nine portal suites;
+  curriculum patch version/changelog updated, author-review status preserved.
+  Original guard failed before these updates; all 67 solutions and references now pass.
 
-Checks actually run: backend Jest 94 suites / 1,776 tests; backend lint (39 existing
-warnings), plus final touched-file lint; admission journey 40/40; base journey
-25/25; ERP build with explicit loopback API; portal 55 tests, lint, TypeScript and
-rebuilt production build; course 67/67 and all references; full browser 202/202
-(exit 0), including 28 admission checks. Captures inspected for ADMIN and
-CAMPUS_MANAGER in both themes, read-only/hidden manager states, French desktop
-and Arabic mobile candidates, including read-only views. JSON/source references,
-local documentation links and whitespace checks pass. No base fixture changes.
-Initial sandbox port denials and MongoDB startup/connection timeouts were replayed;
-they are not counted as successful checks. Earlier browser failures are retained
-as regression evidence; their corrected full replay passes.
+## Commit verification — 2026-10-30
 
-## Remaining gates and next action
+- The backend dependency gate passes with registry access: no unaccepted
+  high/critical advisories and three documented exceptions.
+- The targeted audit-policy and compressed-request suites pass all 16 tests.
+  The PDF regression initially times out at 95 seconds; an isolated rerun with
+  `PUPPETEER_EXECUTABLE_PATH=/tmp/chromium` passes in 4.2 seconds. No timeout
+  threshold or assertion is weakened.
+- Touched backend files pass ESLint. Portal Vitest passes nine suites / 64 tests
+  and its dependency gate passes without exceptions. All 64 checked local
+  documentation targets resolve, and whitespace checks pass in the three repositories.
+- The course checker passes all 67 executable solutions and every cited path;
+  its 14 illustrative snippets remain intentionally skipped.
+- Full Jest, browser and production-build results above are historical checks,
+  not reruns during commit preparation.
+- Security changes are committed as backend `7348602` and portal `f1be5c6`.
+  Browser-readiness fixes and this acceptance record are saved together; course
+  inventories belong to their separate repository. No push or deployment.
 
-Both dependency gates fail to obtain a valid npm registry report; the corrected
-backend now diagnoses that network failure instead of falsely claiming zero
-findings and stale exceptions. Restore registry access and rerun both gates.
+## Workbench access and next action
 
-ERP-ADM-001–005 are prepared, not registered or executed. Hosted Workbench login
-fails at the network layer, before the validation account's ERP editor membership
-can be verified. Restore access, verify membership and import the durable payload
-through the documented CLI. Never use the service key to elevate membership or
-rewrite campaign snapshots/results. Do not infer manual verdicts from automated QA.
+Hosted login now succeeds with the existing validation account, but its user-JWT
+project query cannot see ERP multi-campus. The owner answered yes to granting
+editor access; subsequent checks still show no ERP membership. No service key,
+membership mutation or manual verdict was used. Verify actual project-scoped
+editor/admin access before importing the durable five-case payload with the
+existing CLI: [manual cases](../tests/manual/README.md).
 
-The completed corrections, acceptance evidence and course inventory are saved
-with scoped conventional commits in their own repositories. No ERP source changes
-were needed. Portal correction: 0f2852f; backend audit correction: eda0f81;
-course inventory: cef4cf0.
-Keep row 5 in progress until the two external gates above pass; then review its
-remaining acceptance and continue phase 1-B in order. Do not repeat already-green
-local checks unless source changes or a new concern justifies a replay.
+ERP-ADM-001–005 remain prepared, not registered or executed. Preserve campaign
+snapshots and results. Obtain the final browser replay result, inspect captures
+and record results. The owner's commit request is complete locally; remaining
+admission acceptance is follow-up work, not authorization to advance product phases.
+Keep row 5 open until case registration and the final acceptance review pass.
 
 ## Retained external acceptance
 

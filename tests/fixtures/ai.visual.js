@@ -166,6 +166,7 @@ async function checkAiWorkspace({ browser, accounts, dist, shots, record }) {
           const locale = await page.evaluate(() => JSON.parse(localStorage.getItem('user')).preferredLanguage || 'en');
           catalog = JSON.parse(fs.readFileSync(path.join(dist, 'locales', locale, 'ai.json')));
           await scenario('renders usage, four tabs and persisted theme', async () => {
+            await page.waitForSelector('[role="tab"]');
             assert.equal(await page.$$eval('[role="tab"]', es => es.length), 4);
             const text = await page.$eval('main', e => e.innerText);
             assert(text.includes(catalog.usage.title));

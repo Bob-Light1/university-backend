@@ -87,6 +87,17 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-30 admission security maintenance: backend 96 suites / 1,780 tests,
+portal nine suites / 64 tests, both dependency gates, lint/types/build, portal
+browser 18/18 and course 67/67 pass. Old body-parser and Zod assertions fail
+before the dependency corrections; four portal malformed-report assertions and
+the backend CDP/exception checks fail before correction. Two readiness races
+in the first full browser replay (200/202) are corrected; the final replay result
+remains unverified. These full-suite totals are prior closeout evidence, not
+commit-preparation reruns. Hosted Workbench login works, but ERP editor access and registration of
+ERP-ADM-001–005 remain open. [Current evidence](features/online-admission.md)
+owns the acceptance; no CH-* status or independent acceptance changes.
+
 2026-10-29 admission regression maintenance: full backend Jest passes 94 suites /
 1,776 tests; portal tests pass 55 cases, with lint/types/production builds green.
 Owned admission and base journeys pass 40/40 and 25/25; the course guard passes

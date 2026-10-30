@@ -353,6 +353,7 @@ regressions, while execution logs are temporary acceptance artifacts.
 | P7 — encrypted mail could be redirected by editing stored destination | Authenticated encryption binds recipient, destination, campus, channel and template; regression failed then passed. |
 | P8 — new upstream redirect advisories blocked dependency gate | Existing-range lock update 1.16.0 → 1.16.1; two real loopback tests fail on old version and pass on patched version; no new exception. |
 | P9 — registry failure was interpreted as a clean audit with stale exceptions | Reject error/malformed reports and abnormal subprocess outcomes before reporting findings. Eight new `audit-gate.test.js` cases failed before correction and pass afterward; existing exceptions are retained. |
+| P10 — restored registry access exposed body-parser/Zod findings and a withdrawn portal exception | Patch body-parser within Express's existing range and portal Zod within v4; retire the withdrawn braces exception. Preserve Zod 3 only in the unused BiDi parser, with explicit CDP launches, a real PDF/module-loading guard and a named removal condition. Current closeout evidence below distinguishes this exception from patched dependencies. |
 
 Platform boundaries: admission charges retained archived bytes alongside GED
 imports; it does not claim to redesign all pre-existing GED write races or its
@@ -457,24 +458,94 @@ continuation. Registry 11 consumer/security references and the course's exact
 inventory are updated with their respective changes. CH-* acceptance and the
 roadmap estimate remain unchanged.
 
+### Dependency closeout continuation — 2026-10-30
+
+The next owner-requested continuation starts clean at backend `0f56abc`, portal
+`0f2852f` and ERP `e1f85a2`. Registry reports now succeed and expose two blocking
+roots plus a stale portal exception. The prior network diagnosis remains historical.
+
+- [GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828):
+  update body-parser 1.20.6 → 1.20.9 within Express's existing dependency range,
+  including its required qs/side-channel lock changes. A real split compressed
+  request crashes the old gzip decoder with an unhandled error. Patched gzip and
+  deflate preserve the decoded JSON, complete the request and answer a health probe.
+  The vulnerable version is isolated in `/tmp`; the committed lock stays patched.
+- [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5):
+  update the portal's actual form dependency from Zod 4.4.3 to 4.6.7. Oversized
+  bounded arrays/maps/sets must fail before visiting elements; bounded collections
+  still parse. The oversized-array assertion fails against 4.4.3 and the patched
+  permanent test passes. No portal exception is added.
+- Backend Zod 3 exists only under Puppeteer's chromium-bidi 14, whose declared
+  dependency is Zod ^3.24.1. Its parser is unused by the application. Explicitly
+  select CDP in both PDF engines and retain this exact advisory under a named
+  unreachable-path exception, with a removal/reassessment condition. The real
+  regression launches both engines and renders an academic PDF while refusing
+  Zod/BiDi module loading. The protocol assertion and both new audit-policy
+  regressions failed before correction. No incompatible Zod-major override.
+- Remove the portal's
+  [withdrawn braces advisory](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm)
+  from its production allowlist. Keep exception-policy coverage with an explicit
+  synthetic fixture; a default production report has no exception. A returned high
+  advisory still blocks the gate. Removing the final exception exposes acceptance
+  of malformed findings/lock arrays; four assertions fail before the record-shape
+  correction, then all 14 policy cases pass.
+
+Prior closeout checks: 96 backend suites / 1,780 tests, backend lint (39 existing warnings),
+17 targeted backend checks, nine portal suites / 64 tests, portal lint/TypeScript/
+production build, and 18/18 portal browser checks pass. Both dependency gates pass:
+three documented unreachable backend exceptions and none in the portal. This does
+not claim zero npm findings. The first full browser replay finishes at 200/202:
+AI tabs were counted before rendering, and the admission scenario checked a hidden
+input instead of its disabled label. Await the rendered tab and the actual enabled
+upload control, preserving all final assertions. The final replay result remains
+unverified; the old handoff does not establish that a process is still running.
+The first course guard fails on the changed exact inventories; F2.2/F2.4/F2.5 prose
+and assertions are synchronized to 96 backend and nine portal suites, preserving
+author-review status and dated mutation experiments. All 67 executable solutions
+and cited references pass after synchronization.
+
+Commit preparation on 2026-10-30 reruns the backend dependency gate successfully
+with registry access. The audit-policy and compressed-request suites pass 16 tests.
+The PDF regression initially times out at 95 seconds; an isolated run using the
+already extracted Chromium binary passes in 4.2 seconds without changing its
+assertions or timeout. This does not replace the full browser acceptance gate.
+Touched backend files pass ESLint; portal tests pass all nine suites / 64 tests
+and its dependency gate passes without exceptions. All 64 checked local
+documentation targets resolve; whitespace checks pass in all three affected repos.
+The course reference/solution replay also passes all 67 executables, with the
+14 declared illustrative snippets skipped.
+
+The existing eleven-registry review still applies: registries 1–9 need no change
+to mounts, facades, sellable keys, deletion, jobs, fixture counts, translations or
+consumer API wiring. Registry 10's exact test inventories and registry 11's security
+reference are updated. No new course pattern, QA work item or product phase starts.
+The current manual cases remain ERP-ADM-001–005; dependency maintenance adds no
+separate business flow and does not establish their manual verdicts.
+
+Hosted Workbench login now succeeds, but the available validation account's user
+JWT still cannot see ERP multi-campus. The owner answered yes to granting editor
+access; follow-up checks do not yet show membership. No service key, membership
+elevation, campaign snapshot change or submitted-result mutation is used.
+
 ### Remaining delivery gates
 
 The historical 2026-10-23 automatic-review quota rejection did not execute its
 browser command. The current session's permitted local validations supersede that
 execution blocker; it is not a standing ban or evidence of browser acceptance.
 
-Restore registry access and rerun backend and portal dependency gates. The full
-browser pass and screenshot inspection are complete. Keep row 5 in progress until
-the dependency gates and Workbench case-registration requirement pass; preparing
-cases or passing browser checks does not record a manual campaign verdict.
+Both dependency gates now pass. Obtain the final browser replay result and
+inspect captures, then register the existing Workbench cases after verifying
+project-scoped editor/admin access. Keep row 5 in progress until the remaining
+acceptance and case-registration requirements pass. Preparing cases or passing
+browser checks does not record a manual campaign verdict.
 
 Manual cases **ERP-ADM-001–005 are prepared, not registered or executed**. The
 previous temporary payload disappeared between sessions. Their durable source is
 [tests/manual/admission.cases.json](../../../tests/manual/admission.cases.json),
 with [import instructions](../../../tests/manual/README.md). They cover file and
 requirement handling, admission authority, enrollment/activation/idempotence,
-scope/states and archive/permanent-delete safeguards. The current hosted login
-attempt failed at the network layer, before ERP editor membership could be
-verified. Restore access, verify that membership and import through the existing
-Workbench CLI. Do not elevate access with a service key, rewrite historical
+scope/states and archive/permanent-delete safeguards. Hosted login now works, but
+the validation identity cannot see the ERP project. Verify current editor/admin
+membership and import through the existing Workbench CLI. Do not elevate access
+with a service key, rewrite historical
 campaign snapshots or infer manual verdicts from automated results.
