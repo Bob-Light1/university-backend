@@ -161,6 +161,7 @@ const getBrowser = async () => {
 
   _launchPromise = resolveChromePath().then((executablePath) =>
     puppeteer.launch({
+      protocol:        'cdp',
       headless:        chromium.headless ?? true,
       executablePath,
       args:            chromium.args,

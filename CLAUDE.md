@@ -413,7 +413,7 @@ high or critical — *and* on an accepted entry that has stopped being reported,
 cannot outlive its reason unnoticed. Adding an exception means writing `reason` and `removeWhen`
 next to it; accept only what the deployment provably cannot reach.
 
-Two named entries stand today: **GHSA-jmr9-qjv8-65gv** and **GHSA-7pqw-9j4j-h8q3**
+Three named entries stand today. **GHSA-jmr9-qjv8-65gv** and **GHSA-7pqw-9j4j-h8q3**
 (`extract-zip`), reachable only from the browser
 *download* path this backend never runs. It is unfixable in place: upstream removed the dependency in
 `@puppeteer/browsers` 3.x, which is ESM-only and needs Node ≥ 22.12, as is every `puppeteer-core`
@@ -426,6 +426,20 @@ reachability was rechecked against both PDF services and the installed browser
 installer. Keep both exceptions keyed by their exact GHSA IDs; a new advisory
 still blocks CI. Remove or reassess them when fixed, removed, or made reachable.
 `tests/unit/audit-gate.test.js` verifies unknown findings and stale exceptions fail.
+
+**GHSA-mrhx-c7xc-m3w5** affects the Zod 3 parser installed by `chromium-bidi` under
+Puppeteer 24. Both PDF engines explicitly select `protocol: 'cdp'`; no application
+input uses Zod. The real `tests/integration/pdf-protocol.test.js` launches both
+engines and renders an academic PDF while refusing Zod/BiDi module loading. The
+published fix is Zod 4.6.6, outside this parser's Zod 3 contract. Remove the
+exception when a compatible dependency update patches/removes that path; reassess
+before introducing BiDi, Firefox or application Zod parsing. The separate portal
+uses patched Zod 4.6.7 and has no audit exception.
+
+The 2026-10-30 admission closeout updates `body-parser` 1.20.6 to 1.20.9 within
+Express's existing range, fixing GHSA-27r3-jxmh-p828. The real compressed-request
+regression reproduces the old gzip process crash; patched gzip/deflate requests
+preserve their JSON and leave the server healthy. No Express major upgrade.
 
 Registry failures are not advisory reports. The gate rejects npm errors, missing
 or malformed findings, unexpected subprocess exits and signals before printing

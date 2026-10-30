@@ -16,6 +16,9 @@
  *   (2) is what stops the allowlist from rotting: an exception outlives its
  *   reason silently, and the next reader takes it for a standing decision.
  *
+ *   Archive extraction and the unused BiDi parser have deployment-specific
+ *   exceptions; all new advisory IDs still block the gate.
+ *
  *   Advisories are keyed by their ROOT GHSA id, not by package name: one root
  *   advisory surfaces once per package it propagates through (extract-zip →
  *   @puppeteer/browsers → puppeteer-core is one decision, not three).
@@ -66,6 +69,21 @@ const ACCEPTED = Object.freeze([
       'A patched extract-zip release becomes available, the dependency is removed ' +
       'during the Puppeteer/runtime migration, or any browser-download/archive ' +
       'extraction path becomes reachable in this deployment. Reassess before enabling it.',
+  },
+  {
+    ghsa: 'GHSA-mrhx-c7xc-m3w5',
+    module: 'zod',
+    reason:
+      'Unreachable BiDi protocol parser. Zod is installed only by chromium-bidi ' +
+      'under puppeteer-core 24. Both PDF engines explicitly launch Chrome with ' +
+      'protocol cdp, never webDriverBiDi, and application inputs are not passed ' +
+      'to Zod. tests/integration/pdf-protocol.test.js runs both real engines and ' +
+      'rejects loading zod or chromium-bidi. The portal uses patched Zod 4 separately.',
+    removeWhen:
+      'A compatible Puppeteer/CDP dependency update removes or patches Zod 3; ' +
+      'reassess before enabling BiDi, Firefox or any application Zod parser. ' +
+      'The published fix is Zod 4.6.6, outside chromium-bidi 14\'s Zod ^3.24.1 ' +
+      'contract; do not force a major Zod override into that protocol parser.',
   },
 ]);
 

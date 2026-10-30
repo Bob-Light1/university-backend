@@ -10,6 +10,7 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.resolve(__dirname, '../../scripts/audit-gate.js'), 'utf8');
 const archiveIds = ['GHSA-jmr9-qjv8-65gv', 'GHSA-7pqw-9j4j-h8q3'];
+const bidiId = 'GHSA-mrhx-c7xc-m3w5';
 
 /** Build an npm advisory response without invoking the registry. */
 function finding(name, ids) {
@@ -17,6 +18,11 @@ function finding(name, ids) {
     severity: 'high',
     via: ids.map((id) => ({ name, title: id, severity: 'high', url: `https://github.com/advisories/${id}` })),
   };
+}
+
+/** Include the unused BiDi parser finding in current registry fixtures. */
+function currentFindings() {
+  return { 'extract-zip': finding('extract-zip', archiveIds), zod: finding('zod', [bidiId]) };
 }
 
 /** Execute the real CLI with only its audit subprocess and output replaced. */
@@ -53,18 +59,24 @@ function runGate(vulnerabilities, { report = { vulnerabilities }, raw, status = 
   return { exitCode, output: output.join('\n') };
 }
 
-test('both documented archive advisories are accepted by their exact IDs', () => {
-  expect(runGate({ 'extract-zip': finding('extract-zip', archiveIds) }).exitCode).toBe(0);
+test('documented archive and unused BiDi advisories are accepted by their exact IDs', () => {
+  expect(runGate(currentFindings()).exitCode).toBe(0);
 });
 
 test.each(['sharp', 'extract-zip'])('an additional advisory for %s still blocks CI', (name) => {
-  const report = { 'extract-zip': finding('extract-zip', archiveIds) };
+  const report = currentFindings();
   const id = name === 'sharp' ? 'GHSA-rgj7-g3m4-5g8c' : 'GHSA-test-new1-new2';
   if (name === 'extract-zip') report[name].via.push(...finding(name, [id]).via);
   else report[name] = finding(name, [id]);
   const result = runGate(report);
   expect(result.exitCode).toBe(1);
   expect(result.output).toContain(`BLOCKING  ${id}`);
+});
+
+test('the unused BiDi exception becomes stale when its finding disappears', () => {
+  const result = runGate({ 'extract-zip': finding('extract-zip', archiveIds) });
+  expect(result.exitCode).toBe(1);
+  expect(result.output).toContain(`STALE     ${bidiId}`);
 });
 
 test.each(archiveIds)('a resolved exception %s must be removed', (removedId) => {

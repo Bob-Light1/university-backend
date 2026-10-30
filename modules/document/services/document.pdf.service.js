@@ -73,6 +73,7 @@ const initPool = async () => {
 
   for (let i = 0; i < POOL_SIZE; i++) {
     const browser = await puppeteer.launch({
+      protocol:        'cdp',
       headless:        chromium.headless ?? true,
       executablePath,
       args:            chromium.args,
