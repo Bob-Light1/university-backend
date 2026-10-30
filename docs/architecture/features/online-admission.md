@@ -280,7 +280,7 @@ This records intended work; each row must be checked against the final build.
 - [x] Feature audit, platform audit, then test audit in `CLAUDE.md` §12 order;
       every finding closed by a regression seen failing before its fix, every new
       test seen failing deliberately at least once.
-- [ ] Full Jest, backend lint/audit, applicable fixture self-check and journey,
+- [x] Full Jest, backend lint/audit, applicable fixture self-check and journey,
       course structural checks, ERP build/touched lint/locale checks, and portal
       test/lint/build/typecheck/audit. Record actual runs separately from history.
 - [x] Browser QA in both themes, administrator/director and campus-manager roles,
@@ -527,16 +527,74 @@ JWT still cannot see ERP multi-campus. The owner answered yes to granting editor
 access; follow-up checks do not yet show membership. No service key, membership
 elevation, campaign snapshot change or submitted-result mutation is used.
 
+### Acceptance replay — 2026-10-31
+
+**Current automated acceptance passes**, including the final complete browser
+replay and inspected captures. Row 5 stays in progress pending Workbench case
+registration and final acceptance review. The owner requests logical continuation
+and local commits; starting commits are backend `35f824d`, ERP `e1f85a2` and portal
+`f1be5c6`. This continuation changes documentation only and preserves the initially
+modified backend handoff. No new product scope or later phase starts.
+
+| Current check | Result |
+|---|---|
+| Full backend Jest | 96 suites / 1,780 tests pass with installed Chrome; final run 249.2 seconds. |
+| Admission units and disposable journey | 24/24 unit tests and 40/40 real-data checks pass. |
+| Backend lint | Zero errors; 39 existing warnings. |
+| Both actual dependency gates | Pass; three documented backend exceptions, none in the portal. |
+| ERP consumer | Production build, lint of eight admission JavaScript files and all 190 locale/namespace combinations pass. |
+| Portal consumer | Nine suites / 64 tests, lint, TypeScript and production build pass. |
+| Portal browser smoke | 18/18, covering eight locales, RTL, forms/refusals, attribution, key isolation and real Sharp optimization. |
+| Complete ERP browser replay | 202/202, including all 28 admission checks; normal complete harness, no admission-only filter. |
+
+Both consumers build in owned temporary roots from read-only links to their
+current sources, with explicit loopback API/media origins. Vite runner config
+loading avoids writes into sibling dependencies. Copy the portal CLI scripts:
+a linked audit entry point fails its `import.meta.url` path comparison and exits
+without running the audit. Only the actual gate message establishes execution. No sibling source or
+environment file changes. Fixture and course sources are unchanged; their prior
+acceptance records remain dated historical evidence, not current reruns.
+
+Retain the failed attempts: sandboxed admission units first refuse local listening
+with `EPERM`; their permitted rerun passes. The first complete Jest replay finishes
+95/96 suites and 1,779/1,780 tests after extracted Chromium exceeds its unchanged
+30-second startup budget. The isolated installed-Chrome PDF check and final full
+run pass. The hard-delete diagnostic passes all 207 tests. Portal browser smoke
+also has a cold-launch timeout before its unchanged 18/18 retry. Two piped ERP
+browser attempts terminate with signal 143 around five minutes; a detached attempt
+produces no startup evidence. The direct persistent-terminal replay completes
+with exit 0. No assertion, test pattern or per-test timeout is weakened.
+
+Inspected captures cover administrator and campus manager in light/dark themes,
+enabled/read-only/hidden management access, enrolled dossiers after the one-time
+activation dialog closes, French desktop candidate access and Arabic mobile RTL,
+including readable read-only files. Layouts, translated states and scoped refusals
+render correctly. Captures remain ignored under
+`tests/fixtures/.generated/admission-closeout-2026-10-31-pty/`; final log:
+`/tmp/erp-admission-visual-pty-2026-10-31.log`. No credentials enter documentation.
+
+Workbench Node 24 user-credential login succeeds at both current checks; its
+user-JWT query still returns one visible project and no ERP multi-campus access.
+The owner is asked for project-scoped editor access. No service key, membership
+elevation, case import, campaign snapshot change or manual verdict is performed.
+ERP-ADM-001–005 remain prepared, not registered or executed.
+
+The existing eleven-registry review remains applicable: no route, facade,
+commercial key, model/deletion rule, job, fixture count, translation, consumer
+contract or source path changes. The engineering map remains accurate; roadmap,
+QA dashboard and handoff now reference the current evidence. No independent CH-*
+acceptance, AI target SLO, release or later-phase status changes.
+
 ### Remaining delivery gates
 
 The historical 2026-10-23 automatic-review quota rejection did not execute its
 browser command. The current session's permitted local validations supersede that
 execution blocker; it is not a standing ban or evidence of browser acceptance.
 
-Both dependency gates now pass. Obtain the final browser replay result and
-inspect captures, then register the existing Workbench cases after verifying
-project-scoped editor/admin access. Keep row 5 in progress until the remaining
-acceptance and case-registration requirements pass. Preparing cases or passing
+Both dependency gates and the final 202/202 browser replay pass; captures are
+inspected. Register the existing Workbench cases after verifying project-scoped
+editor/admin access, then complete the final acceptance review. Keep row 5 in
+progress until those remaining requirements pass. Preparing cases or passing
 browser checks does not record a manual campaign verdict.
 
 Manual cases **ERP-ADM-001–005 are prepared, not registered or executed**. The

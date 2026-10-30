@@ -87,6 +87,15 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-10-31 admission automated acceptance: backend 96 suites / 1,780 tests,
+40/40 admission journey, portal 64 tests, both builds, lint/types/locales and
+both dependency gates pass. Portal browser passes 18/18; complete ERP browser
+passes **202/202**, including all 28 admission checks, with inspected captures.
+Initial Chrome startup failures and interrupted runs remain in the
+[current evidence](features/online-admission.md#acceptance-replay--2026-10-31).
+ERP-ADM-001–005 registration/final review awaits ERP editor access; no manual
+verdict, CH-* status or independent acceptance changes.
+
 2026-10-30 admission security maintenance: backend 96 suites / 1,780 tests,
 portal nine suites / 64 tests, both dependency gates, lint/types/build, portal
 browser 18/18 and course 67/67 pass. Old body-parser and Zod assertions fail
