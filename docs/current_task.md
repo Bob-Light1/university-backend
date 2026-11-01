@@ -1,7 +1,7 @@
 # Current task and handoff
 
-Last updated: 2026-10-31.
-Status: LOCAL AUTOMATED ADMISSION ACCEPTANCE COMPLETE; row 5 remains IN PROGRESS.
+Last updated: 2026-11-01.
+Status: MANUAL ADMISSION REGISTRATION BLOCKED BY ERP PROJECT ACCESS; row 5 remains IN PROGRESS.
 Branch: main. Owner requests logical continuation and appropriate local commits.
 No push, deployment, production DDL or historical enrollment conversion.
 
@@ -9,15 +9,34 @@ No push, deployment, production DDL or historical enrollment conversion.
 
 Finish phase 1-B row 5 acceptance before further product implementation. Preserve
 OA-1–OA-3, D-R24/D-R25, phase order, the dated effort forecast and independent CH-*
-acceptance. The [admission note](architecture/features/online-admission.md#acceptance-replay--2026-10-31)
+acceptance. The [admission note](architecture/features/online-admission.md#manual-acceptance-readiness-review--2026-11-01)
 owns the contract, audits, current results and retained failed attempts.
 
-Verified starting commits: backend `35f824d`, ERP `e1f85a2`, portal `f1be5c6`.
-The backend handoff was initially modified; this continuation preserves its work.
-Only documentation changes now: admission evidence, roadmap dashboard/row 5,
-QA dashboard and this handoff. Both consumer working trees remain clean.
+Verified clean starting commits: backend `e1dfe39`, ERP `e1f85a2`, portal `f1be5c6`.
+Only documentation changes: explicit unchecked manual acceptance gate, admission
+readiness evidence, roadmap dashboard/row 5, QA dashboard and this handoff.
+Both consumer working trees remain clean; no API consumer changes are required.
 
-## Current completed checks
+## Checks performed on 2026-11-01
+
+- Reviewed the five durable manual cases against applied Workbench validator
+  `202610220004`, admission constants/transition service, attachment blocker and
+  permanent journey/browser assertions. Local payload/reference check passes:
+  five unique expected IDs, nineteen action/expected pairs, eight existing source
+  references. ERP-ADM-001–005 need no body revision; they are still not registered.
+- The sandboxed network attempt fails with `AuthRetryableFetchError`. Its permitted
+  retry passes Auth login and user-JWT project query: one visible project, zero
+  ERP multi-campus projects. Project editor/admin membership cannot be verified.
+  No service credential or membership/case/campaign/result mutation is used.
+  A request to grant access through member management is pending with the owner.
+- Reviewed source checkpoints and the existing ordered audit/eleven-registry
+  evidence. No source or fixture structure changes; no application suite rerun.
+- Documentation links/anchors, whitespace, tracking and final diff are checked
+  before the scoped local documentation commit.
+
+## Historical automated acceptance — 2026-10-31
+
+These unchanged-source results are retained evidence, not checks rerun today.
 
 - Full Jest: 96 suites / 1,780 tests pass with installed Chrome. Admission units
   pass 24/24; the owned disposable admission journey passes 40/40.
@@ -34,20 +53,14 @@ QA dashboard and this handoff. Both consumer working trees remain clean.
 - Earlier Chrome startup failures and two signal-143 browser interruptions are
   retained in the canonical note. A direct persistent terminal completes the
   final replay. No assertion, test pattern or per-test timeout is weakened.
-- Workbench Node 24 login succeeds at both current checks, but the user-JWT
-  query sees one project and no ERP multi-campus access. No service key or
-  membership mutation is used. The owner is asked for project-scoped editor access.
-
-No fixture or source-structure change occurs; prior course/fixture acceptance is
-historical evidence, not a rerun. Documentation links, whitespace and Git tracking
-are checked before the scoped commit.
 
 ## Remaining manual gate and next action
 
 ERP-ADM-001–005 remain prepared, not registered or executed. Their durable source
 and import procedure are in [manual cases](../tests/manual/README.md). Verify actual
-ERP editor/admin membership, import through the existing user-scoped CLI, verify
-the five saved cases, then complete the final admission acceptance review. Preserve
+ERP editor/admin membership after the owner's access update, import through the
+existing user-scoped CLI, compare the five saved bodies with the durable payload,
+then complete the final admission acceptance review. Preserve
 existing revisions, campaign snapshots and submitted results. Automated browser
 checks do not establish manual verdicts. Keep row 5 in progress until these gates pass.
 

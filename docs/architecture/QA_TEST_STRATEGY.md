@@ -87,6 +87,13 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-11-01 admission manual readiness: five prepared case bodies, nineteen
+action/expected pairs and eight source references pass local review against the
+applied Workbench payload constraints. Hosted user login/project query pass, but
+ERP project access remains absent. [Readiness evidence](features/online-admission.md#manual-acceptance-readiness-review--2026-11-01)
+keeps ERP-ADM-001–005 registration/final review open. Application suites are not
+rerun; no manual verdict or CH-* acceptance changes.
+
 2026-10-31 admission automated acceptance: backend 96 suites / 1,780 tests,
 40/40 admission journey, portal 64 tests, both builds, lint/types/locales and
 both dependency gates pass. Portal browser passes 18/18; complete ERP browser

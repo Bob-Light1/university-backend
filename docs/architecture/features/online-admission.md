@@ -288,6 +288,9 @@ This records intended work; each row must be checked against the final build.
       permanent assertions and inspected screenshots.
 - [x] Engineering map, roadmap dashboard/phase row, applicable QA dashboard and
       repository handoffs updated; mark delivered only after all required checks.
+- [ ] Register ERP-ADM-001–005 through a verified Workbench editor/admin identity,
+      verify the saved bodies, then complete final acceptance review. Prepared
+      payloads and automated passes do not establish manual execution verdicts.
 
 ## Current implementation and acceptance — 2026-10-23
 
@@ -584,6 +587,35 @@ commercial key, model/deletion rule, job, fixture count, translation, consumer
 contract or source path changes. The engineering map remains accurate; roadmap,
 QA dashboard and handoff now reference the current evidence. No independent CH-*
 acceptance, AI target SLO, release or later-phase status changes.
+
+### Manual acceptance readiness review — 2026-11-01
+
+Verified a clean backend at `e1dfe39`, ERP at `e1f85a2` and portal at `f1be5c6`.
+These are the unchanged sources covered by the 2026-10-31 automated evidence;
+the application suites and browser harness were not rerun for this documentation
+continuation. The existing ordered audits and eleven-registry review still apply.
+
+Reviewed all five durable manual cases against the Workbench's applied strict
+case-body validator (`202610220004`), admission constants, transition service,
+attachment deletion blocker and permanent journey/browser assertions. A local
+payload check passes: five unique expected IDs, nineteen nonempty action/expected
+pairs and eight existing source references across the backend and consumers.
+No case-body revision is needed. This is preparation evidence, not hosted RPC
+validation, case registration or manual execution.
+
+The sandboxed access attempt fails with `AuthRetryableFetchError`; the permitted
+network retry succeeds. Using only the existing validation account and publishable
+configuration, Auth login and the user-JWT project query pass, returning one
+visible project and **zero ERP multi-campus projects**. Project-scoped editor/admin
+membership therefore remains unverified. No service credential, membership change,
+case import, campaign write or result submission is used. The owner is asked to
+grant the validation account access through the existing member-management flow.
+
+The definition-of-done checklist now explicitly exposes this open manual gate.
+Row 5 remains in progress. Once access is available, use the existing CLI to import
+the prepared cases, compare all five saved bodies with the durable payload and
+complete the final acceptance review. Existing manual campaign snapshots/results,
+independent CH-* acceptance, AI target SLOs and release boundaries remain unchanged.
 
 ### Remaining delivery gates
 
