@@ -1,8 +1,9 @@
 # Online admission — phase 1-B row 5
 
 Date: 2026-10-23.
-Last acceptance review: 2026-10-29.
-Status: IMPLEMENTATION IN PROGRESS — synchronized consumers; acceptance gates remain open.
+Last acceptance review: 2026-11-01.
+Status: SOURCE DELIVERY AND LOCAL ACCEPTANCE COMPLETE — manual cases registered;
+no manual execution verdict or deployment is claimed.
 
 ## Problem and scope
 
@@ -288,13 +289,14 @@ This records intended work; each row must be checked against the final build.
       permanent assertions and inspected screenshots.
 - [x] Engineering map, roadmap dashboard/phase row, applicable QA dashboard and
       repository handoffs updated; mark delivered only after all required checks.
-- [ ] Register ERP-ADM-001–005 through a verified Workbench editor/admin identity,
+- [x] Register ERP-ADM-001–005 through a verified Workbench editor/admin identity,
       verify the saved bodies, then complete final acceptance review. Prepared
       payloads and automated passes do not establish manual execution verdicts.
 
 ## Current implementation and acceptance — 2026-10-23
 
-Status: implementation in progress, **not delivered**. Backend, ERP and portal sources are synchronized in their own repositories.
+At this 2026-10-23 checkpoint, implementation was in progress and not delivered.
+The 2026-11-01 final acceptance below supersedes that status. Backend, ERP and portal sources are synchronized in their own repositories.
 The owner requests repository-specific checkpoint commits while the feature
 remains in progress; this does not establish final delivery acceptance. No push,
 deployment, production DDL or historical student conversion has run.
@@ -617,25 +619,71 @@ the prepared cases, compare all five saved bodies with the durable payload and
 complete the final acceptance review. Existing manual campaign snapshots/results,
 independent CH-* acceptance, AI target SLOs and release boundaries remain unchanged.
 
+### Case registration and final acceptance — 2026-11-01
+
+The owner grants the existing validation account access in **ERP multi-campus**.
+A fresh user-JWT check confirms an active `editor` membership in the intended
+project. Authentication uses the existing account credentials and publishable
+configuration; no service key or membership mutation is used by the import.
+
+The existing Workbench CLI imports the durable
+[admission payload](../../../tests/manual/admission.cases.json) through `save_case`.
+All five saved bodies and their authored revision bodies match the payload exactly;
+all five cases are active. An identical second CLI import leaves the complete
+queried project state unchanged.
+
+| Case | Registered revision | Coverage |
+|---|---|---|
+| ERP-ADM-001 | 1 | Requirements, private files and submission snapshots |
+| ERP-ADM-002 | 1 | Admission authority and manager preparation |
+| ERP-ADM-003 | 1 | Enrollment, activation and commission retry consistency |
+| ERP-ADM-004 | 1 | Campus/ownership boundaries, entitlement and private access |
+| ERP-ADM-005 | 1 | Archive accounting and guarded attachment deletion |
+
+Before/after reads verify that the ten existing cases and their ten revisions
+are unchanged. The project now has fifteen cases and fifteen revisions;
+campaign, campaign-item and execution counts remain zero. No historical campaign
+snapshot or result is altered, and no manual verdict is inferred or submitted.
+The independent technical-acceptance project is not modified.
+
+Final acceptance reconciles the completed definition-of-done checklist, ordered
+feature/platform/test audits and eleven-registry review with the 2026-10-31
+automated acceptance and inspected browser captures. Backend `0711bbe` differs
+from the tested `35f824d` only in documentation; ERP `e1f85a2` and portal `f1be5c6`
+are unchanged. No application suite is rerun for this registration/documentation
+closeout. Current checks are hosted editor access, CLI import, exact saved-body
+and revision comparison, preservation of existing rows, idempotent reimport and
+documentation link/anchor, whitespace and tracking checks.
+
+**Phase 1-B row 5 is delivered at source/local acceptance level.** Registration
+completes its remaining acceptance gate; a future manual campaign remains a
+separate activity. Phase 1-B itself, independent CH-* and administrator acceptance,
+AI target SLOs, the dated effort forecast and deployment authorization are unchanged.
+No route, facade, commercial key, model/deletion rule, job, fixture count,
+translation, consumer contract or source path changes; the engineering map and
+existing eleven-registry review remain accurate.
+
 ### Remaining delivery gates
 
 The historical 2026-10-23 automatic-review quota rejection did not execute its
 browser command. The current session's permitted local validations supersede that
 execution blocker; it is not a standing ban or evidence of browser acceptance.
 
-Both dependency gates and the final 202/202 browser replay pass; captures are
-inspected. Register the existing Workbench cases after verifying project-scoped
-editor/admin access, then complete the final acceptance review. Keep row 5 in
-progress until those remaining requirements pass. Preparing cases or passing
-browser checks does not record a manual campaign verdict.
+No source/local acceptance gate remains for row 5. Both dependency gates and the
+2026-10-31 complete browser replay pass; captures were inspected. The final review
+above records case registration without claiming manual campaign verdicts.
 
-Manual cases **ERP-ADM-001–005 are prepared, not registered or executed**. The
-previous temporary payload disappeared between sessions. Their durable source is
+Manual cases **ERP-ADM-001–005 are registered at revision 1, not executed**.
+Their durable source is
 [tests/manual/admission.cases.json](../../../tests/manual/admission.cases.json),
 with [import instructions](../../../tests/manual/README.md). They cover file and
 requirement handling, admission authority, enrollment/activation/idempotence,
-scope/states and archive/permanent-delete safeguards. Hosted login now works, but
-the validation identity cannot see the ERP project. Verify current editor/admin
-membership and import through the existing Workbench CLI. Do not elevate access
-with a service key, rewrite historical
-campaign snapshots or infer manual verdicts from automated results.
+scope/states and archive/permanent-delete safeguards. Future edits still require
+verified editor/admin membership and optimistic revision checks. Preserve campaign
+snapshots and submitted results.
+
+Release remains outside this task: existing installations require the documented
+GED installed-index rollout and admission preparation/reconciliation procedures.
+No push, deployment, production DDL or automatic historical enrollment conversion
+is authorized or performed. Row-13 hosted CI and the independent CH-0/AI acceptance
+boundaries remain with their owning work items.

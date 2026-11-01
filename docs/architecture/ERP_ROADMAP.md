@@ -103,6 +103,16 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-11-01 admission source delivery and local acceptance are complete. After the
+owner grants ERP access, an active Workbench editor imports ERP-ADM-001–005 at
+revision 1 through the existing CLI. All five saved/revision bodies match the
+durable payload; identical reimport creates no changes. The ten existing cases
+and revisions are preserved; no campaign or execution is created. The
+[final acceptance](features/online-admission.md#case-registration-and-final-acceptance--2026-11-01)
+closes row 5 as `LIVRÉ`, using unchanged-source automated/browser evidence dated
+2026-10-31. No manual verdict, release or independent CH-* acceptance is claimed.
+Phase order and the dated §5.1 forecast remain unchanged.
+
 2026-11-01 admission manual-gate review: unchanged backend/consumer checkpoints
 verified; all five prepared cases satisfy the reviewed strict Workbench payload
 constraints and their eight source references exist. Hosted user login succeeds,
@@ -257,7 +267,7 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 25–38 d; see §5.1 | 2026-10-23 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 25–38 d; dated forecast, see §5.1 | 2026-11-01 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -492,7 +502,7 @@ work. Use §5.1 for current remaining effort; do not sum this column as a foreca
 | 2 | Campus entitlement | `B1·B2` | Unified configuration; legacy schema paths and AI-only routes retired; raw legacy reads and both audit ledgers preserved; workspace/shortcut guards verified in both themes. [Delivery evidence](features/entitlement-legacy-retirement.md) | Complete: pre-retirement browser 126/126, final browser 134/134 and all applicable §12 checks pass | 1 j | `LIVRÉ` |
 | 3 | Authentication hardening | `B1·B2` | All nine roles: 15-minute live access JWTs, rotating seven-day HttpOnly refresh sessions, current/all-device revocation and account-wide temporary lockout; existing activation, roles, campus/ownership guards and login rate limits retained | Backend and ERP consumer delivered; disposable MongoDB, browser and regression evidence in [the session note](features/auth-session-hardening.md). Legacy tokens require fresh login on deployment | 3–4 d | `LIVRÉ` |
 | 4 | AI module — operational acceptance | `B1·B2·B3` | M0–M6 implemented; existing ERP chat/search/analytics/advisor screens; D2 benchmark completed on 2026-07-07, owner retained bge-m3 (1024d) | Deployed-target chat/search SLOs remain open; local browser QA and corrections completed on 2026-10-16. [Work and evidence](features/ai-operational-acceptance.md). Historical local timings are not target acceptance | 2–3 d | `EN COURS` |
-| 5 | Online admission | `B1·B2·B4` | Seven-status pipeline and approved D-R24/D-R25 contract; dossier/private storage, atomic pending-student/commission/activation and synchronized ERP/candidate consumers implemented | [Acceptance in progress](features/online-admission.md#manual-acceptance-readiness-review--2026-11-01): 2026-10-31 automated acceptance passes, including full Jest, both consumer builds, dependency gates, portal browser 18/18 and complete ERP browser 202/202 with inspected captures. On 2026-11-01, the five manual payloads/references pass local review, but ERP-ADM-001–005 registration/final review still awaits verified ERP editor membership; hosted login works. No release or historical conversion | 3–4 d | `EN COURS` |
+| 5 | Online admission | `B1·B2·B4` | Seven-status pipeline and approved D-R24/D-R25 contract; dossier/private storage, atomic pending-student/commission/activation and synchronized ERP/candidate consumers implemented | Source/local acceptance complete: [final review](features/online-admission.md#case-registration-and-final-acceptance--2026-11-01) accepts the 2026-10-31 full automated checks and inspected 202/202 browser replay. ERP-ADM-001–005 are registered at revision 1 with exact saved-body checks, preserved existing cases/revisions and idempotent reimport. No manual verdict, deployment or historical conversion claimed | 3–4 d | `LIVRÉ` |
 | 6 | Frais — reçus et échéancier | `B1·B2` | Reçu PDF rendu à la demande (`GET /finance/payments/:id/receipt`, langue de l'**étudiant**, pool Puppeteer partagé) ; cadence avant échéance J-7 / J-3 / Jour J sur son propre marqueur `remindersSent[]` ; les deux briques câblées, i18n × 10 | **Rien — les dix étapes du §12 sont tenues.** L'étape 10 a été jouée le 2026-09-02 et **écrite dans `npm run test:visual`** plutôt que passée à la main (précédent D-R7) : le harnais passe de 16 à **36 contrôles**, tous verts — deux thèmes par la *préférence* de l'utilisateur, `CAMPUS_MANAGER` + `STUDENT`, et les trois états d'entitlement dont `hidden`, refusé tant que le module porte des écritures et donc **vu** sur un campus vidé des siennes. Elle a trouvé un défaut que rien d'autre ne pouvait voir : le nom du reçu ne survivait pas au cross-origin (§9⑲ de la note), corrigé et fermé par un test vu rouge. 1 566 tests verts. Détail : `docs/architecture/features/fee-receipts-and-reminders.md` §9⑲ | 2–3 j | `LIVRÉ` |
 | 7 | Notifications WhatsApp Business | `B1` | Canal Meta Cloud API en appel natif, inerte sans jeton, préférence par utilisateur | Gabarits approuvés par Meta — obligatoires hors de la fenêtre de 24 h, donc pour la quasi-totalité des envois ERP ; consentement explicite ; webhook de statut ; câblage des quatre événements vendus | 2–3 j | `À FAIRE` |
 | 8 | Journal d'audit transverse | `B1` | Trois registres append-only : audit documentaire, registre de suppression, historique de statut des prospects | Journal unique de toutes les mutations post-publication, export d'audit, rétention configurable par campus. **Traite l'écart 3 du §11** | 3–4 j | `À FAIRE` |

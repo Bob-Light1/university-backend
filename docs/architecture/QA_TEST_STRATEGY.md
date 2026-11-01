@@ -87,6 +87,14 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-11-01 admission final acceptance: ERP-ADM-001–005 are registered at revision 1
+in the real ERP Workbench project through verified editor access and the existing
+CLI. Five exact saved/revision-body comparisons and identical reimport pass;
+the ten pre-existing cases/revisions remain unchanged. No campaign, snapshot or
+execution is created. [Final evidence](features/online-admission.md#case-registration-and-final-acceptance--2026-11-01)
+closes product row 5 at source/local acceptance level using the unchanged-source
+2026-10-31 automated/browser results. No manual verdict or CH-* status changes.
+
 2026-11-01 admission manual readiness: five prepared case bodies, nineteen
 action/expected pairs and eight source references pass local review against the
 applied Workbench payload constraints. Hosted user login/project query pass, but
