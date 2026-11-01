@@ -119,7 +119,7 @@ const upsertPreRegistrationLead = async ({
   }
 
   // Anti-fraud alert to the campus manager (Campus account) on IP burst.
-  // In-app + email (the latter inert without SMTP); fire-and-forget, never
+  // In-app, email and consented WhatsApp; fire-and-forget, never
   // impacts pre-registration. Contact resolved via the campus facade, chained
   // so as not to block the response to the lead.
   if (fraudFlags.includes('IP_BURST')) {
@@ -133,7 +133,7 @@ const upsertPreRegistrationLead = async ({
           phone:  contact?.manager_phone,
           locale: contact?.defaultLanguage,
         },
-        channels: ['inapp', 'email'],
+        channels: ['inapp', 'email', 'whatsapp'],
         template: 'fraud.alert',
         data:     { count: burstCount },
       }))

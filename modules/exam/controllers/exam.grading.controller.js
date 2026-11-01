@@ -33,12 +33,12 @@ const {
 const { examAnalyticsWorker } = require('../exam-analytics.worker');
 const notification = require('../../notification').service;
 
-// Notifies a student that their exam grade has been published (in-app, best-effort:
+// Notifies a student that their exam grade has been published (best-effort:
 // never fails the publication — same contract as the result.published event).
-const notifyExamGraded = (studentId, campusId, email, locale, name, prefs) =>
+const notifyExamGraded = (studentId, campusId, email, locale, name, prefs, phone) =>
   notification.notify({
-    recipient: { id: studentId, model: 'Student', campusId, email, prefs },
-    channels: ['inapp', 'email'], // email inert without SMTP → skipped
+    recipient: { id: studentId, model: 'Student', campusId, email, phone, prefs },
+    channels: ['inapp', 'email', 'whatsapp'],
     template: 'exam.graded',
     data: { name: name || '' },
     locale,
@@ -408,6 +408,7 @@ const publishGrades = async (req, res) => {
     // (best-effort; locale from UserPreferences, single source of truth).
     const studentIds = recipients.map((g) => g.student);
     let emailByStudent = new Map();
+    let phoneByStudent = new Map();
     let nameByStudent = new Map();
     let prefsByStudent = new Map();
     let localeByStudent = new Map();
@@ -417,6 +418,7 @@ const publishGrades = async (req, res) => {
         require('../../settings').service.getPreferredLanguages(studentIds),
       ]);
       emailByStudent = new Map(contacts.map((c) => [String(c._id), c.email]));
+      phoneByStudent = new Map(contacts.map((c) => [String(c._id), c.phone]));
       nameByStudent  = new Map(contacts.map((c) => [String(c._id), c.firstName]));
       prefsByStudent = new Map(contacts.map((c) => [String(c._id), c.notificationPrefs]));
       localeByStudent = locales;
@@ -430,6 +432,7 @@ const publishGrades = async (req, res) => {
       localeByStudent.get(String(g.student)),
       nameByStudent.get(String(g.student)),
       prefsByStudent.get(String(g.student)),
+      phoneByStudent.get(String(g.student)),
     ));
 
     return sendSuccess(res, 200, `${result.modifiedCount} grade(s) published.`, {

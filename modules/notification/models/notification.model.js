@@ -1,6 +1,7 @@
 'use strict';
 
 const mongoose = require('mongoose');
+const { DELIVERY, DELIVERY_RANK } = require('../../../shared/constants/whatsapp.constants');
 
 /**
  * @file notification.model.js — notifications log & inbox.
@@ -60,6 +61,15 @@ const notificationSchema = new mongoose.Schema(
     // requeue rows abandoned by a dead worker (status stuck at `sending`).
     workerClaimedAt: { type: Date, default: null },
 
+    whatsapp: {
+      messageId: { type: String, default: null, maxlength: 300 },
+      phoneNumberId: { type: String, default: null, maxlength: 100 },
+      deliveryStatus: { type: String, enum: Object.values(DELIVERY), default: DELIVERY.UNKNOWN },
+      deliveryRank: { type: Number, default: DELIVERY_RANK[DELIVERY.UNKNOWN] },
+      statusAt: { type: Date, default: null },
+      submissionStartedAt: { type: Date, default: null },
+    },
+
     // Optional grouping key (deduplication / threading by the caller).
     groupKey: { type: String, default: null },
   },
@@ -70,6 +80,7 @@ const notificationSchema = new mongoose.Schema(
 notificationSchema.index({ recipientId: 1, channel: 1, readAt: 1, createdAt: -1 });
 // Retry worker: external sends to replay.
 notificationSchema.index({ status: 1, channel: 1, attempts: 1 });
+notificationSchema.index({ 'whatsapp.messageId': 1 }, { sparse: true });
 
 notificationSchema.statics.CHANNELS         = CHANNELS;
 notificationSchema.statics.STATUSES         = STATUSES;

@@ -9,17 +9,7 @@ const settingsRepo        = require('./settings.repository');
 // (settings is in the static closure of campus → cycle if static require).
 const getCampusDefaults = (...args) => require('../campus').service.getCampusDefaults(...args);
 
-const MODEL_MAP = {
-  ADMIN:          'Admin',
-  DIRECTOR:       'Director',
-  CAMPUS_MANAGER: 'Campus',
-  TEACHER:        'Teacher',
-  STUDENT:        'Student',
-  PARENT:         'Parent',
-  MENTOR:         'Mentor',
-  STAFF:          'Staff',
-  PARTNER:        'Partner',
-};
+const MODEL_MAP = require('./settings.constants').USER_MODELS;
 
 /**
  * Lazy-upsert UserPreferences at login time.
@@ -90,4 +80,5 @@ module.exports = {
   getPreferredLanguage,
   getPreferredLanguages,
   getLoginPrefs,
+  whatsappConsent: require('./whatsapp-consent.service'),
 };

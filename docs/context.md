@@ -107,3 +107,9 @@ and agent handoff. Consult its README for verified hosting status and setup.
 Each product change must reference affected manual case IDs or explain its lack
 of manual-QA impact. This support does not replace automated checks, CH-* acceptance
 or the product-roadmap phase order. Initial campaigns target local synthetic ERP data.
+
+WhatsApp Business: [contract, acceptance and activation](architecture/features/whatsapp-business.md),
+notification.service.whatsapp for delivery/usage/callbacks and
+settings.service.whatsappConsent for explicit identity-owned permission. The ERP
+account menu exposes consent for all nine roles; the delivery log distinguishes
+provider acceptance from actual receipts. No Meta provisioning is implied.

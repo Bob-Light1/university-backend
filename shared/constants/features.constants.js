@@ -154,6 +154,13 @@ const DEFAULT_QUOTAS = Object.freeze({
   maxDocumentStorageMB: 5120,
 });
 
+/** D-R11: reserved WhatsApp submissions per campus and UTC calendar month. */
+const WHATSAPP_MONTHLY_LIMITS = Object.freeze({
+  [FEATURE_PLANS.FREE]: 500,
+  [FEATURE_PLANS.STANDARD]: 2000,
+  [FEATURE_PLANS.PREMIUM]: 5000,
+});
+
 // ─── Registry ─────────────────────────────────────────────────────────────────
 
 /**
@@ -223,7 +230,7 @@ const FEATURE_REGISTRY = Object.freeze({
     // Delivery backbone of every other module. The retry job drains the whole
     // platform, so it is hygiene rather than any single module's emission.
     label: 'Notifications', core: true, minState: null, records: [],
-    dependsOn: [], usesWhenAvailable: [],
+    dependsOn: ['campus'], usesWhenAvailable: ['settings'],
     routers: ['/api/notifications'], minPlan: FEATURE_PLANS.FREE,
     crons: [{ name: 'notification-retry', nature: CRON_NATURE.HYGIENE }],
   },
@@ -480,6 +487,7 @@ module.exports = {
   FEATURE_ERROR_CODES,
   MAX_UNTIL_MONTHS,
   DEFAULT_QUOTAS,
+  WHATSAPP_MONTHLY_LIMITS,
   FEATURE_REGISTRY,
   UNGATED_MOUNTS,
   FEATURE_KEYS,

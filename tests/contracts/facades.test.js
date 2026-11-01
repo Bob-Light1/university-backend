@@ -69,6 +69,17 @@ describe('API inter-modules — fonctions de service attendues', () => {
     });
   });
 
+  test('notification and settings expose their WhatsApp orchestration through facades', () => {
+    const { whatsapp } = require('../../modules/notification').service;
+    expect(typeof whatsapp.getConsent).toBe('function');
+    expect(typeof whatsapp.updateConsent).toBe('function');
+    expect(typeof whatsapp.getUsage).toBe('function');
+    expect(typeof whatsapp.receive).toBe('function');
+    const { whatsappConsent } = require('../../modules/settings').service;
+    expect(typeof whatsappConsent.read).toBe('function');
+    expect(typeof whatsappConsent.update).toBe('function');
+  });
+
   test('settings.service expose la constante SUPPORTED_TIMEZONES', () => {
     const { SUPPORTED_TIMEZONES } = require('../../modules/settings').service;
     expect(SUPPORTED_TIMEZONES).toBeDefined();

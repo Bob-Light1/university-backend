@@ -1,81 +1,59 @@
 # Current task and handoff
 
 Last updated: 2026-11-01.
-Status: COMPLETED — phase 1-B row 5 source delivery and local acceptance.
-Branch: main. Owner requests logical continuation and appropriate local commits.
-No push, deployment, production DDL or historical enrollment conversion.
+Status: COMPLETED — phase 1-B row 7 WhatsApp Business, source/local acceptance.
+Branch: main. Owner requests scoped local commits; no push, deployment or live send.
 
-## Objective and approved scope
+## Delivered objective and decisions
 
-Finish admission acceptance, including registration of ERP-ADM-001–005 in the
-independent Workbench. Preserve OA-1–OA-3, D-R24/D-R25, phase order, the dated
-forecast and independent CH-* acceptance. The
-[final admission review](architecture/features/online-admission.md#case-registration-and-final-acceptance--2026-11-01)
-owns the contract, ordered audits, dated checks and retained failed attempts.
+The [canonical contract and final evidence](architecture/features/whatsapp-business.md)
+own implementation, ordered audits, negative regressions and real activation.
+D-R11 selects monthly campus/tier quotas 500/2,000/5,000 reserved attempts,
+blocking until the next UTC month. Four event families: results, exam grades,
+fee reminders and campus fraud alerts. No Meta account/configuration exists;
+the owner explicitly accepts local validation plus a real-activation runbook.
 
-Verified clean starting commits: backend `0711bbe`, ERP `e1f85a2`, portal `f1be5c6`.
-Backend changes since automated acceptance at `35f824d` are documentation only;
-consumer sources remain unchanged and clean. This closeout updates the admission
-note, roadmap dashboard/row 5, QA dashboard and handoff. No consumer or engineering
-map change is required; the existing eleven-registry review remains applicable.
+Backend: approved localized template transport, settings-owned phone-bound consent,
+atomic usage model/repository and campus teardown, signed raw-body callbacks,
+canonical legacy targets, scoped replay and submission fencing, all four emitters.
+The ERP exposes consent in all nine account menus, removes legacy WhatsApp switches,
+and shows delivery state and campus usage in ten locales. No public-portal/AI
+contract or environment change is needed. Course inventories/prose are refreshed;
+author-review markers remain. The required dependency gate also patches the
+transitive follow-redirects lock to 1.16.2 with two observed red/green regressions.
 
-## Current completed checks — 2026-11-01
+## Observed verification
 
-- The owner corrects project selection and adds the existing validation account
-  to ERP multi-campus. Fresh user-JWT login confirms an active `editor` membership.
-  The earlier absent-access checks remain dated in the admission note.
-- The existing Workbench CLI imports all five durable manual cases through
-  `save_case`, using only publishable configuration and the existing user account.
-  ERP-ADM-001–005 are active at revision 1. All five saved bodies and authored
-  revision bodies exactly match `tests/manual/admission.cases.json`.
-- Before/after comparison preserves the ten existing cases and ten revisions.
-  The ERP project now has fifteen cases/revisions; campaign, campaign-item and
-  execution counts remain zero. No manual verdict is submitted or inferred.
-- A second identical CLI import leaves all queried cases, revisions, campaigns,
-  campaign items and executions unchanged. No service credential, membership
-  mutation, independent Workbench source change or technical-project write occurs.
-- Earlier local payload review passed five unique IDs, nineteen action/expected
-  pairs and eight existing source references against the applied strict validator.
-- Final acceptance reconciles the completed checklist, three ordered audits,
-  eleven registries and the unchanged-source automated/browser evidence below.
-  Documentation link/anchor, whitespace, tracking and diff checks precede the
-  scoped local commit. No application suite is rerun for documentation/registration.
+- Full Jest: 99 suites / 1,815 tests. After the shared-settings mapping extraction:
+  four targeted suites / 39 tests, then all 102 facade assertions pass.
+- Owned WhatsApp API/data journey: 48/48; existing fixture self-check: 36/36,
+  including byte-identical reseeding and all nine logins; base API journey: 25/25.
+- Backend lint: zero errors / 39 existing warnings; final harness lint clean.
+  Dependency gate passes with the same three named exceptions.
+- Actual ERP production build, touched lint and 190 locale combinations pass.
+  The unchanged portal is rebuilt for existing admission browser regressions.
+- Full browser: 224/224, including 22 WhatsApp checks; both themes, admin and
+  campus manager, all originating entitlement states. Six final WhatsApp captures
+  are inspected. Focused flags are unset for this complete run.
+- Final course guard: 67/67 executable solutions and reference checks pass.
+- ERP-WA-001–005 registered via the existing editor/CLI; exact saved/revision
+  bodies, preserved 15 prior cases/revisions, idempotent reimport. Fresh read-only
+  confirmation finds 20 cases/revisions and no campaigns/executions. No manual verdict.
 
-## Historical automated acceptance — 2026-10-31
+All 25 audit mutations were detected; the 31 new WhatsApp unit tests were observed
+red. Partial-index, legacy receipt/phone, facade-export and redirect corrections
+have recorded red/green evidence. Browser closing/entry animation readiness races
+are corrected without weakening assertions/deadlines. Interrupted and failed
+attempts remain in the canonical note. Local logs/captures are ignored under
+`tests/fixtures/.generated/whatsapp-closeout-2026-11-01/`; no generated credentials
+or screenshots are staged. Engineering map, roadmap row/§0 and QA dashboard agree.
 
-These results are retained evidence, not checks rerun for this closeout.
+## Remaining boundary
 
-- Full Jest: 96 suites / 1,780 tests; admission units 24/24; owned disposable
-  admission journey 40/40. Backend lint: zero errors, 39 existing warnings.
-- Both actual dependency gates pass, with three named backend exceptions and none
-  in the portal. Both consumer builds, ERP touched lint/locales 190/190, portal
-  tests 64/64, lint, TypeScript and browser smoke 18/18 pass.
-- Complete ERP browser replay: 202/202, including 28 admission checks, exit 0;
-  captures inspected across roles, themes, commercial states, enrolled dossiers,
-  French desktop and Arabic mobile candidate flows. Final log:
-  `/tmp/erp-admission-visual-pty-2026-10-31.log`; ignored captures:
-  `tests/fixtures/.generated/admission-closeout-2026-10-31-pty/`.
-- Earlier Chrome startup failures and signal-143 interruptions remain in the
-  canonical note. No assertion, pattern or per-test timeout is weakened.
+No implementation work remains within the approved local boundary. Real Meta
+account/sender provisioning, approved templates, current Graph version, deployment
+indexes/configuration and signed public callback acceptance require a separately
+authorized activation following the runbook. This handoff does not authorize it.
 
-## Remaining work and next action
-
-No source/local acceptance work remains for row 5; roadmap status is `LIVRÉ`.
-ERP-ADM-001–005 are registered, not manually executed. Future campaigns require
-an owned synthetic ERP environment and actual observed verdicts; registration
-neither creates a campaign nor changes independent acceptance requirements.
-
-Resume roadmap §3 within phase 1-B for the next implementation task. Row 7's
-WhatsApp contract still needs D-R11 and Meta/template readiness; do not invent
-those product choices. This completed handoff does not itself authorize a new
-feature, release or independent Workbench increment.
-
-## Retained acceptance boundaries
-
-- Roadmap §5.1 retains its dated 2026-10-23 forecast of 25–38 person-days
-  (planning allowance 36); row 5 closure does not silently recalculate it.
-- GED installed-index rollout and admission preparation/reconciliation remain
-  release prerequisites in their owning notes; no production migration occurs.
-- AI target SLOs, independent CH-0 and administrator acceptance remain open in
-  their owning work items. Row-13 hosted CI awaits an authorized push.
-- No CH-2/CH-4, ERP phase-2 or independent Workbench phase-2 implementation starts.
+CH-0 independent acceptance, deployed AI SLOs, GED release indexes and hosted
+portal CI retain their owning gates. No CH-2/CH-4 or phase-2 implementation starts.

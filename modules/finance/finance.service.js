@@ -87,9 +87,9 @@ async function notifyFeeBalance(fee, template) {
     await notification.notify({
       recipient: {
         id: studentId, model: 'Student', campusId: fee.schoolCampus,
-        email: contact?.email, prefs: contact?.notificationPrefs,
+        email: contact?.email, phone: contact?.phone, prefs: contact?.notificationPrefs,
       },
-      channels: ['inapp', 'email'], // email inert without SMTP → skipped
+      channels: ['inapp', 'email', 'whatsapp'],
       template,
       locale,
       data: {

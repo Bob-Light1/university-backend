@@ -1,4 +1,4 @@
-# Admission manual cases
+# Manual QA cases
 
 [admission.cases.json](admission.cases.json) is the durable source for
 ERP-ADM-001–005 in the independent QA Workbench. The
@@ -28,3 +28,12 @@ Run these cases only against an owned local synthetic ERP environment. Accounts,
 activation codes and private candidate links are provided separately. Use the
 recorded build references and capture the observed outcome rather than inferring
 success from automated test results.
+
+## WhatsApp Business
+
+[whatsapp.cases.json](whatsapp.cases.json) owns ERP-WA-001–005. Import it with the
+same verified ERP editor identity and existing CLI. The
+[WhatsApp feature note](../../docs/architecture/features/whatsapp-business.md)
+owns acceptance and the real-provider activation boundary. Provider checks use
+an owned intercepted transport, never actual paid sends or real contact data.
+No campaign/execution is created by registration.

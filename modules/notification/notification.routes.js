@@ -4,6 +4,7 @@ const express = require('express');
 const router  = express.Router();
 
 const ctrl = require('./controllers/notification.controller');
+const whatsapp = require('./controllers/whatsapp.controller');
 const { authenticate, authorize } = require('../../shared/middleware/auth');
 const { apiLimiter } = require('../../shared/middleware/rate-limiter');
 
@@ -13,7 +14,19 @@ const ALL_ROLES = [
 ];
 const MGMT_ROLES = ['ADMIN', 'DIRECTOR', 'CAMPUS_MANAGER'];
 
+/** @route GET /api/notifications/whatsapp/webhook @desc Meta verification handshake @access Public, verify-token protected */
+router.get('/whatsapp/webhook', apiLimiter, whatsapp.verify);
+/** @route POST /api/notifications/whatsapp/webhook @desc Signed delivery receipts @access Public, HMAC protected */
+router.post('/whatsapp/webhook', apiLimiter, whatsapp.receive);
+
 router.use(authenticate);
+
+/** @route GET /api/notifications/my/whatsapp-consent @desc Own explicit consent @access All authenticated roles */
+router.get('/my/whatsapp-consent', authorize(ALL_ROLES), apiLimiter, whatsapp.getConsent);
+/** @route PUT /api/notifications/my/whatsapp-consent @desc Own consent grant or withdrawal @access All authenticated roles */
+router.put('/my/whatsapp-consent', authorize(ALL_ROLES), apiLimiter, whatsapp.updateConsent);
+/** @route GET /api/notifications/whatsapp-usage @desc Campus monthly cost allowance @access Management */
+router.get('/whatsapp-usage', authorize(MGMT_ROLES), apiLimiter, whatsapp.usage);
 
 // ========================================
 // USER INBOX  (/my/* before /:id to avoid the parameter collision)

@@ -53,9 +53,9 @@ const notifyResultPublished = async (studentId, campusId) => {
     await notification.notify({
       recipient: {
         id: studentId, model: 'Student', campusId,
-        email: contact?.email, prefs: contact?.notificationPrefs,
+        email: contact?.email, phone: contact?.phone, prefs: contact?.notificationPrefs,
       },
-      channels: ['inapp', 'email'], // email inert without SMTP → skipped
+      channels: ['inapp', 'email', 'whatsapp'],
       template: 'result.published',
       data: { name: contact?.firstName || '' },
       locale,

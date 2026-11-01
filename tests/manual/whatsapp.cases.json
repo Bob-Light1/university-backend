@@ -1,0 +1,172 @@
+[
+  {
+    "code": "ERP-WA-001",
+    "body": {
+      "title": "Grant and withdraw explicit WhatsApp consent",
+      "objective": "Verify voluntary phone-bound permission without migrating legacy channel flags.",
+      "prerequisites": "Owned local synthetic ERP and matching frontend build. Credentials are supplied privately. Provider-dependent checks require the isolated WhatsApp fixture with intercepted Meta transport; never use a real number, token or paid provider call. Keep credentials, consent phone data, raw callbacks and private payloads out of evidence. Registration does not certify an executed verdict.",
+      "steps": [
+        {
+          "action": "Sign in as a synthetic student, then open WhatsApp notifications from the account menu. Repeat as a campus manager and administrator, in light and dark themes.",
+          "expected": "The four notification families and withdrawal instructions are translated. No permission is granted by a pre-existing profile checkbox."
+        },
+        {
+          "action": "Enable consent and enter a local-only phone number, then attempt to save.",
+          "expected": "Validation refuses the number; no consent grant is persisted."
+        },
+        {
+          "action": "Use the same synthetic international number as the profile, explicitly check consent and save. Reopen the dialog.",
+          "expected": "The consent flag and bound number persist for this identity only."
+        },
+        {
+          "action": "Uncheck consent and save; trigger a new synthetic event through the owned test fixture.",
+          "expected": "Consent is withdrawn. No provider call occurs; the in-app event remains available. Other users retain their own consent state."
+        }
+      ],
+      "minutes": 10,
+      "domain": "Notifications",
+      "bricks": [
+        "B1",
+        "B2"
+      ],
+      "roadmap": "Phase 1-B, row 7",
+      "source": "backend/docs/architecture/features/whatsapp-business.md; backend/tests/fixtures/whatsapp.journey.js; backend/tests/fixtures/whatsapp.visual.js"
+    }
+  },
+  {
+    "code": "ERP-WA-002",
+    "body": {
+      "title": "Apply campus and tier monthly WhatsApp quotas",
+      "objective": "Verify atomic cost accounting, isolation and exhaustion without actual Meta traffic.",
+      "prerequisites": "Owned local synthetic ERP and matching frontend build. Credentials are supplied privately. Provider-dependent checks require the isolated WhatsApp fixture with intercepted Meta transport; never use a real number, token or paid provider call. Keep credentials, consent phone data, raw callbacks and private payloads out of evidence. Registration does not certify an executed verdict.",
+      "steps": [
+        {
+          "action": "In an owned disposable fixture, enable a supported campus tier and configure the intercepted provider. Open the notification delivery log.",
+          "expected": "The current UTC month, reserved count, tier ceiling and remaining allowance are displayed. Limits are 500, 2,000 and 5,000 for free, standard and premium."
+        },
+        {
+          "action": "Place the current bucket one below its ceiling using the fixture, then concurrently trigger twelve eligible synthetic events.",
+          "expected": "Exactly one additional submission occurs. The reserved count reaches the ceiling and never exceeds it; in-app delivery remains available."
+        },
+        {
+          "action": "As campus A manager, request campus B usage and attempt to replay a campus B notification.",
+          "expected": "Usage remains scoped to campus A; the foreign notification cannot be replayed or disclosed."
+        },
+        {
+          "action": "Inspect a different campus and a prior UTC-month bucket.",
+          "expected": "Counters are independent by campus and UTC month. Missing/custom plans grant zero provider allowance. Failed or uncertain reserved submissions are not refunded."
+        }
+      ],
+      "minutes": 10,
+      "domain": "Notifications",
+      "bricks": [
+        "B1",
+        "B2"
+      ],
+      "roadmap": "Phase 1-B, row 7",
+      "source": "backend/docs/architecture/features/whatsapp-business.md; backend/tests/fixtures/whatsapp.journey.js; backend/tests/fixtures/whatsapp.visual.js"
+    }
+  },
+  {
+    "code": "ERP-WA-003",
+    "body": {
+      "title": "Send only approved templates for the four event families",
+      "objective": "Verify exact-language approved payloads and originating-module entitlement.",
+      "prerequisites": "Owned local synthetic ERP and matching frontend build. Credentials are supplied privately. Provider-dependent checks require the isolated WhatsApp fixture with intercepted Meta transport; never use a real number, token or paid provider call. Keep credentials, consent phone data, raw callbacks and private payloads out of evidence. Registration does not certify an executed verdict.",
+      "steps": [
+        {
+          "action": "With Meta credentials absent, trigger results, exam grades, fee reminders and campus fraud events in the owned fixture.",
+          "expected": "No external call is made. In-app/email behavior is preserved and the WhatsApp channel is explicitly skipped."
+        },
+        {
+          "action": "Configure only synthetic approved template pairs in the intercepted provider, then trigger eligible events with current matching consent.",
+          "expected": "Requests use type template and the configured approved name/language. Fee reminders include the cadence-specific text and ordered amount, currency and due-date parameters."
+        },
+        {
+          "action": "Remove approval for the recipient language, then retry a preflight-skipped row.",
+          "expected": "No free-text or English fallback occurs and no submission slot is consumed."
+        },
+        {
+          "action": "Set the originating module to read_only, hidden and enabled in the disposable fixture; refresh the campus log after each state.",
+          "expected": "Frozen/hidden emitters do not submit. Enabled emitters obey consent and quota. Existing notification history remains readable because notification is core."
+        }
+      ],
+      "minutes": 10,
+      "domain": "Notifications",
+      "bricks": [
+        "B1",
+        "B2"
+      ],
+      "roadmap": "Phase 1-B, row 7",
+      "source": "backend/docs/architecture/features/whatsapp-business.md; backend/tests/fixtures/whatsapp.journey.js; backend/tests/fixtures/whatsapp.visual.js"
+    }
+  },
+  {
+    "code": "ERP-WA-004",
+    "body": {
+      "title": "Authenticate and reconcile Meta delivery receipts",
+      "objective": "Verify byte-exact signature authentication and monotonic provider status.",
+      "prerequisites": "Owned local synthetic ERP and matching frontend build. Credentials are supplied privately. Provider-dependent checks require the isolated WhatsApp fixture with intercepted Meta transport; never use a real number, token or paid provider call. Keep credentials, consent phone data, raw callbacks and private payloads out of evidence. Registration does not certify an executed verdict.",
+      "steps": [
+        {
+          "action": "Use the owned callback fixture to test the verification challenge with correct and incorrect tokens, then submit unsigned and body-tampered callbacks.",
+          "expected": "Only the correct verification token receives the exact plain-text challenge. Invalid or missing HMAC signatures are refused without notification mutation."
+        },
+        {
+          "action": "Submit a valid signed delivered receipt for a known synthetic sender, recipient and message.",
+          "expected": "The delivery log shows delivered separately from provider acceptance; no in-app read flag is modified."
+        },
+        {
+          "action": "Replay the delivered receipt, submit an older sent/failed receipt, then submit a correctly signed read receipt.",
+          "expected": "Duplicate/older states cannot regress delivery. Read advances the provider receipt and survives refresh."
+        },
+        {
+          "action": "Submit a signed receipt with a different sender or recipient, and a callback for an unknown message.",
+          "expected": "No known notification is changed and no new inbox notification is created."
+        }
+      ],
+      "minutes": 10,
+      "domain": "Notifications",
+      "bricks": [
+        "B1",
+        "B2"
+      ],
+      "roadmap": "Phase 1-B, row 7",
+      "source": "backend/docs/architecture/features/whatsapp-business.md; backend/tests/fixtures/whatsapp.journey.js; backend/tests/fixtures/whatsapp.visual.js"
+    }
+  },
+  {
+    "code": "ERP-WA-005",
+    "body": {
+      "title": "Prevent duplicate or unsafe WhatsApp replays",
+      "objective": "Verify submission fencing, error privacy and legacy-row compatibility.",
+      "prerequisites": "Owned local synthetic ERP and matching frontend build. Credentials are supplied privately. Provider-dependent checks require the isolated WhatsApp fixture with intercepted Meta transport; never use a real number, token or paid provider call. Keep credentials, consent phone data, raw callbacks and private payloads out of evidence. Registration does not certify an executed verdict.",
+      "steps": [
+        {
+          "action": "With the intercepted provider, simulate an acceptance timeout and run both the retry worker and a management replay.",
+          "expected": "The reserved slot remains counted. The outcome is shown as unconfirmed/failed with a translated safe reason; no second provider request occurs."
+        },
+        {
+          "action": "Attempt a replay as another-campus manager and as a same-campus partner.",
+          "expected": "The management action is refused without exposing the notification or sending anything."
+        },
+        {
+          "action": "Replay a synthetic legacy notification that has no WhatsApp receipt metadata, after configuring approval and matching consent.",
+          "expected": "A single submission initializes its receipt state and the matching signed callback advances it normally."
+        },
+        {
+          "action": "Remove the unique usage index only inside a fresh owned disposable fixture and trigger an eligible event.",
+          "expected": "The provider call is refused before reservation/submission. The real preparation script can restore the required index without changing business records."
+        }
+      ],
+      "minutes": 10,
+      "domain": "Notifications",
+      "bricks": [
+        "B1",
+        "B2"
+      ],
+      "roadmap": "Phase 1-B, row 7",
+      "source": "backend/docs/architecture/features/whatsapp-business.md; backend/tests/fixtures/whatsapp.journey.js; backend/tests/fixtures/whatsapp.visual.js"
+    }
+  }
+]

@@ -25,6 +25,15 @@ const UserPreferencesSchema = new Schema(
       index: true,
     },
 
+    // Legacy actor channel flags never grant permission to submit to Meta.
+    whatsappConsent: {
+      enabled: { type: Boolean, default: false },
+      phone: { type: String, default: null, maxlength: 16 },
+      version: { type: String, default: null, maxlength: 30 },
+      grantedAt: { type: Date, default: null },
+      revokedAt: { type: Date, default: null },
+    },
+
     // ── Language & Region ─────────────────────────────────────────────────────
     preferredLanguage: {
       type: String,

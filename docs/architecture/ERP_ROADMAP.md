@@ -11,7 +11,7 @@
 > volontairement la convention.
 >
 > **Status**: v4.2 — phase 1-A delivered; phase 1-B in progress, with rows
-> 2, 3, 6, 13, 14 and 16 delivered. Current 1-B remaining-effort forecast:
+> 2, 3, 5, 6, 7, 13, 14 and 16 delivered. Current 1-B remaining-effort forecast:
 > **25–38 person-days**, dated **2026-10-23** (§5.1). Phases 2–4 have not started.
 > Original four-brick measurements (§15) and programme/cost baselines remain
 > dated snapshots; §0 owns current delivery status.
@@ -102,6 +102,18 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 ---
 
 ## §0 — Tableau de bord des phases
+
+2026-11-01 WhatsApp Business row 7 is delivered at source/local acceptance level:
+approved template pairs, explicit consent, monthly campus quotas 500/2,000/5,000,
+signed receipts and the four approved event families. Full Jest passes 99 suites /
+1,815 tests; owned WhatsApp journey 48/48, complete browser 224/224 with inspected
+captures, fixture/base checks 36/36 and 25/25, ERP build/locales/lint, dependency
+gate and course 67/67 pass. ERP-WA-001–005 are registered with exact body and
+history-preservation checks; no manual verdict is claimed. The owner explicitly
+selects local acceptance because no Meta account/configuration exists; the
+[contract and activation runbook](features/whatsapp-business.md) retain that
+external operational boundary. No deployment, price revision, later-phase or
+CH-* acceptance change; the dated §5.1 forecast is unchanged.
 
 2026-11-01 admission source delivery and local acceptance are complete. After the
 owner grants ERP access, an active Workbench editor imports ERP-ADM-001–005 at
@@ -504,7 +516,7 @@ work. Use §5.1 for current remaining effort; do not sum this column as a foreca
 | 4 | AI module — operational acceptance | `B1·B2·B3` | M0–M6 implemented; existing ERP chat/search/analytics/advisor screens; D2 benchmark completed on 2026-07-07, owner retained bge-m3 (1024d) | Deployed-target chat/search SLOs remain open; local browser QA and corrections completed on 2026-10-16. [Work and evidence](features/ai-operational-acceptance.md). Historical local timings are not target acceptance | 2–3 d | `EN COURS` |
 | 5 | Online admission | `B1·B2·B4` | Seven-status pipeline and approved D-R24/D-R25 contract; dossier/private storage, atomic pending-student/commission/activation and synchronized ERP/candidate consumers implemented | Source/local acceptance complete: [final review](features/online-admission.md#case-registration-and-final-acceptance--2026-11-01) accepts the 2026-10-31 full automated checks and inspected 202/202 browser replay. ERP-ADM-001–005 are registered at revision 1 with exact saved-body checks, preserved existing cases/revisions and idempotent reimport. No manual verdict, deployment or historical conversion claimed | 3–4 d | `LIVRÉ` |
 | 6 | Frais — reçus et échéancier | `B1·B2` | Reçu PDF rendu à la demande (`GET /finance/payments/:id/receipt`, langue de l'**étudiant**, pool Puppeteer partagé) ; cadence avant échéance J-7 / J-3 / Jour J sur son propre marqueur `remindersSent[]` ; les deux briques câblées, i18n × 10 | **Rien — les dix étapes du §12 sont tenues.** L'étape 10 a été jouée le 2026-09-02 et **écrite dans `npm run test:visual`** plutôt que passée à la main (précédent D-R7) : le harnais passe de 16 à **36 contrôles**, tous verts — deux thèmes par la *préférence* de l'utilisateur, `CAMPUS_MANAGER` + `STUDENT`, et les trois états d'entitlement dont `hidden`, refusé tant que le module porte des écritures et donc **vu** sur un campus vidé des siennes. Elle a trouvé un défaut que rien d'autre ne pouvait voir : le nom du reçu ne survivait pas au cross-origin (§9⑲ de la note), corrigé et fermé par un test vu rouge. 1 566 tests verts. Détail : `docs/architecture/features/fee-receipts-and-reminders.md` §9⑲ | 2–3 j | `LIVRÉ` |
-| 7 | Notifications WhatsApp Business | `B1` | Canal Meta Cloud API en appel natif, inerte sans jeton, préférence par utilisateur | Gabarits approuvés par Meta — obligatoires hors de la fenêtre de 24 h, donc pour la quasi-totalité des envois ERP ; consentement explicite ; webhook de statut ; câblage des quatre événements vendus | 2–3 j | `À FAIRE` |
+| 7 | WhatsApp Business notifications | `B1·B2` | Approved localized templates, explicit consent, signed callbacks, scoped delivery log and all four event families; D-R11 monthly limits 500/2,000/5,000 | Source/local acceptance complete: [evidence and activation runbook](features/whatsapp-business.md#acceptance-replay--2026-11-01), 1,815 Jest tests, 48/48 WhatsApp journey, inspected 224/224 browser replay and ERP-WA-001–005 registered. Real Meta activation remains external under the owner-approved boundary | 2–3 j | `LIVRÉ` |
 | 8 | Journal d'audit transverse | `B1` | Trois registres append-only : audit documentaire, registre de suppression, historique de statut des prospects | Journal unique de toutes les mutations post-publication, export d'audit, rétention configurable par campus. **Traite l'écart 3 du §11** | 3–4 j | `À FAIRE` |
 | 9 | Teacher HR files | `B1·B2` | Versioned GED and teacher-linked documents; unsafe business expiry field/index retired under row 14 | Dedicated HR category, expiry warnings instead of deletion, and position-change history. Do not reintroduce business TTL; existing databases need the row-14 migration before expiry metadata is introduced | 2–3 d | `À FAIRE` |
 | 10 | Orientation & suivi scolaire | `B1·B2` | Détection précoce déjà calculée par les analytics d'examen et le service de résultats | Notes de suivi par élève, signalement explicite, recommandations d'orientation, restitution dans les portails parent et mentor | 2–3 j | `À FAIRE` |
@@ -1065,8 +1077,8 @@ l'usage, ce qui est pire.
 
 ## §12 — Décisions porteur en attente
 
-Dix arbitrages restent ouverts. Aucun n'est technique : chacun change ce qui est
-construit, ou ce qui est vendu — pas comment.
+The following owner decisions and recorded outcomes govern product scope.
+Unresolved choices remain explicit; a recommendation is not an approved decision.
 
 **Les cinq premiers sont urgents** : quatre portent sur ce qu'un client va lire
 dans une proposition écrite, le cinquième sur une opération irréversible.
@@ -1076,7 +1088,7 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R8** | **Quelle grille de prix fait foi ?** Trois documents en portent deux, sous les mêmes trois noms : paliers de modules à 195 / 355 / 560 k XAF (ici) contre 0 / 99 / 299 € (`CAMPUS_ENTITLEMENT_DESIGN.md` D-D, recopiés de la grille du module IA) | (a) Ce §10 fait foi, le 0/99/299 € redevient la grille du **seul add-on IA**, et D-D est corrigée ; (b) l'inverse ; (c) une troisième grille recalculée | **(a)** — c'est la seule des deux qui ait un coût de revient en face (§9.4) et un point mort (§9.8). Et **renommer les paliers commerciaux** : un palier facturé 195 000 XAF ne peut pas s'appeler `free`, même si la clé technique le reste | **Toute proposition écrite à un client**, et §10 tout entier |
 | **D-R9** | **Quel est le catalogue de langues canonique ?** B2 en porte 10, B4 en porte 8, 5 codes seulement sont communs, `zh-CN` d'un côté et `zh` de l'autre | (a) Union alignée sur les deux briques ; (b) intersection ; (c) catalogue par brique, assumé et documenté | **(a)** — un visiteur qui passe du portail à l'ERP ne doit pas perdre sa langue. Soit 14 langues après la phase 1-B | Phase 1-B, ligne 11 · support de vente |
 | **D-R10** | **Quelle capacité est vendue par campus ?** La grille facture 2 000 élèves et 20 Go ; le code en applique 1 000 et 5 Go | (a) Dériver les quotas du palier (`PLAN_PRESETS`) ; (b) aligner la grille sur `DEFAULT_QUOTAS` ; (c) dérogation manuelle à chaque vente | **(a)** — (c) est l'état actuel, et il tient uniquement tant que personne n'oublie | Phase 1-B, ligne 15 · §10.1 |
-| **D-R11** | **Comment WhatsApp est-il facturé ?** Le canal est dans `notification`, clé du noyau, donc vendu dès l'Essentiel ; Meta facture au message hors fenêtre de 24 h, soit 38 à 75 % du prix de ce palier (§9.4) | (a) Quota mensuel de messages par palier ; (b) canal remonté au Standard ; (c) refacturation au message | **(a)** — un quota se met dans le registre, qui sait déjà les appliquer, et ne retire rien à personne | Phase 1-B, ligne 7 · marge de l'Essentiel |
+| **D-R11** | **Closed 2026-11-01: monthly WhatsApp quotas per campus and tier** | Owner selects 500 / 2,000 / 5,000 reserved submissions for free / standard / premium, blocking until the next UTC month | Four existing event families confirmed; no Meta configuration exists, so complete local acceptance and document real activation | Phase 1-B row 7; [contract](features/whatsapp-business.md) |
 | **D2** *(from `PHASE3_AI_DESIGN.md`)* | Embedding benchmark completed on 2026-07-07; toy FR/EN/AR corpus, not a production quality measurement | Recorded owner decision: retain bge-m3 (1024d) | Closed in the [AI design §15/D2](PHASE3_AI_DESIGN.md); no new benchmark or embedding migration is required by row 4 | Phase 1-B row 4; local browser acceptance completed on 2026-10-16, target load remains open |
 | **D-K** | Politique de version de contrat | Cadence des versions majeures et durée de support de chacune | À trancher **avant** la phase 2 : c'est ce qui décide de la durée de vie commerciale d'un paquet | Phase 2, ligne 2 |
 | **D-G** | Granularité de vente à l'unité | (a) La clé de registre est l'unité ; (b) sous-fonctionnalités sur le modèle de la grille IA | **(a) par défaut**, (b) seulement quand un module le justifie — le module IA le fait déjà | Phase 4-B |
@@ -1124,6 +1136,8 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R23** | 2026-10-16 | Continue phase 1-B by retiring business-document TTL (row 14), a risk-reducing prerequisite before admission attachments and HR expiry metadata under §3 | Owner requested continuation; row 4 local work is complete and target infrastructure is unavailable. Retire the unused field and provide targeted index DDL without record deletion, new expiry policy or deployment. [Delivery evidence](features/ged-expiry-safety.md); existing databases need explicit release migration. Preserve other acceptance boundaries, phase order and dated estimates |
 | **D-R24** | 2026-10-16 | Protect the public admission funnel with row-13 tests and CI before extending row 5, under §3. For row 5, the owner confirms admission by DIRECTOR / ADMIN only, campus-manager dossier preparation, and no automatic payment prerequisite in this version | Owner requested continued phase 1-B work and answered the admission questions explicitly. [Foundation scope/evidence](features/public-portal-test-foundation.md). These choices do not implement student conversion, authorize deployment or close other acceptance boundaries |
 | **D-R25** | 2026-10-23 | Resume row 5 with OA-1 candidate/private-email-link and manager uploads, OA-2 campus-configurable required attachments with none by default, and OA-3 manager/director/administrator enrollment finalization | Owner explicitly answered all three choices while requesting continued roadmap implementation. D-R24, phase order, release authorization and independent acceptance boundaries remain unchanged. [Admission contract](features/online-admission.md) |
+
+| **D-R26** | 2026-11-01 | The owner authorizes phase 1-B row 7, selects D-R11 monthly campus/tier quotas 500/2,000/5,000 and confirms result publication, exam grades, fee reminders and campus fraud alerts | No Meta account/configuration exists. Complete source/local acceptance, document real activation and make scoped local commits; no live send, deployment, pricing revision or later-phase work. [Contract](features/whatsapp-business.md) |
 
 ---
 

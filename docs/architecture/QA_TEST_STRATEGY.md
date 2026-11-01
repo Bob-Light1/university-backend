@@ -87,6 +87,17 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-11-01 WhatsApp Business local acceptance: 99 Jest suites / 1,815 tests,
+48/48 owned WhatsApp API/data checks, fixture 36/36, base journey 25/25 and course
+67/67 pass. Complete ERP browser replay passes 224/224, including 22 WhatsApp
+checks and inspected consent/log captures in both themes for global/scoped roles
+and all three originating-module states. ERP build/lint/locales and the dependency
+gate pass. ERP-WA-001–005 are registered through verified editor access with exact
+body checks, preserved prior cases/revisions and idempotent import; no manual
+execution verdict. [Evidence and retained failures](features/whatsapp-business.md#acceptance-replay--2026-11-01)
+close product row 7 within the owner's explicit source/local boundary. Meta
+activation stays external. No CH-* status or independent acceptance changes.
+
 2026-11-01 admission final acceptance: ERP-ADM-001–005 are registered at revision 1
 in the real ERP Workbench project through verified editor access and the existing
 CLI. Five exact saved/revision-body comparisons and identical reimport pass;

@@ -41,3 +41,13 @@ test('custom sensitive header names containing regular-expression characters are
   const headers = await redirected({ 'X^Private': 'synthetic-secret', 'X|Private': 'synthetic-secret', 'X-Ordinary': 'keep' }, ['X^Private', 'X|Private']);
   expect(headers['x^private']).toBeUndefined(); expect(headers['x|private']).toBeUndefined(); expect(headers['x-ordinary']).toBe('keep');
 });
+
+test.each([false, true])('cross-realm sensitive header names survive validation (array headers: %s)', async (arrayHeaders) => {
+  const sensitiveHeaders = require('node:vm').runInNewContext("['X-API-Key']");
+  expect(Array.isArray(sensitiveHeaders)).toBe(true);
+  expect(sensitiveHeaders instanceof Array).toBe(false);
+  const input = arrayHeaders ? ['X-API-Key', 'synthetic-private', 'X-Ordinary', 'keep'] : { 'X-API-Key': 'synthetic-private', 'X-Ordinary': 'keep' };
+  const headers = await redirected(input, sensitiveHeaders);
+  expect(headers['x-api-key']).toBeUndefined();
+  expect(headers['x-ordinary']).toBe('keep');
+});

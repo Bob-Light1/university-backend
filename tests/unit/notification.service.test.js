@@ -121,7 +121,7 @@ describe('notify', () => {
 
 describe('runRetryJob', () => {
   const docA = { _id: 'a', channel: 'email', to: 'a@b.c', subject: 's', body: 'b' };
-  const docB = { _id: 'b', channel: 'whatsapp', to: '+237', subject: null, body: 'b' };
+  const docB = { _id: 'b', channel: 'email', to: 'second@fixture.test', subject: null, body: 'b' };
 
   test('balaie les sending bloqués, claime puis rejoue chaque ligne et agrège les statuts', async () => {
     repo.requeueStaleSending.mockResolvedValue({ modifiedCount: 0 });
@@ -129,8 +129,8 @@ describe('runRetryJob', () => {
     repo.claimForSend.mockImplementation((id) => Promise.resolve(id === 'a' ? docA : docB));
     channels.get.mockImplementation((name) =>
       name === 'email'
-        ? makeChannel()
-        : makeChannel({ send: jest.fn().mockRejectedValue(new Error('429')) })
+        ? makeChannel({ send: jest.fn(async ({ to }) => { if (to === 'second@fixture.test') throw new Error('429'); }) })
+        : makeChannel()
     );
 
     const res = await service.runRetryJob();

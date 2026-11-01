@@ -46,17 +46,7 @@ async function buildDefaultsFromCampus(campusId) {
 // ── Helper: derive campusId + userModel from JWT payload ──────────────────────
 function extractIdentity(req) {
   const { id, role, campusId } = req.user ?? {};
-  const MODEL_MAP = {
-    ADMIN:          'Admin',
-    DIRECTOR:       'Director',
-    CAMPUS_MANAGER: 'Campus',
-    TEACHER:        'Teacher',
-    STUDENT:        'Student',
-    PARENT:         'Parent',
-    MENTOR:         'Mentor',
-    STAFF:          'Staff',
-    PARTNER:        'Partner',
-  };
+  const MODEL_MAP = require('../settings.constants').USER_MODELS;
   return {
     userId:    id,
     userModel: MODEL_MAP[role] || 'Admin',

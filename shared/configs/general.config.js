@@ -34,7 +34,11 @@ const config = {
     whatsapp: {
       token:         process.env.WHATSAPP_TOKEN,
       phoneNumberId: process.env.WHATSAPP_PHONE_ID,
-      apiVersion:    process.env.WHATSAPP_API_VERSION || 'v21.0',
+      apiVersion:    process.env.WHATSAPP_API_VERSION || '',
+      appSecret:     process.env.WHATSAPP_APP_SECRET || '',
+      verifyToken:   process.env.WHATSAPP_VERIFY_TOKEN || '',
+      approvedTemplates: process.env.WHATSAPP_APPROVED_TEMPLATES || '{}',
+      timeoutMs: 10000,
     },
     // Delivery attempts before giving up (external channels only).
     maxAttempts: parseInt(process.env.NOTIFICATION_MAX_ATTEMPTS, 10) || 3,

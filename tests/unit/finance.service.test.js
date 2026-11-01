@@ -89,7 +89,7 @@ describe('createFee', () => {
     await flush();
     expect(notification.notify).toHaveBeenCalledWith(expect.objectContaining({
       template: 'payment.reminder',
-      channels: ['inapp', 'email'],
+      channels: ['inapp', 'email', 'whatsapp'],
       recipient: expect.objectContaining({ id: 'stud-1', model: 'Student', email: 'stud@example.test' }),
       data: expect.objectContaining({ amount: 250, currency: 'XAF' }),
       locale: 'fr',
@@ -327,7 +327,7 @@ describe('runDueSoonJob', () => {
 
     expect(notification.notify).toHaveBeenCalledWith(expect.objectContaining({
       template: 'payment.due_in_3d',
-      channels: ['inapp', 'email'],
+      channels: ['inapp', 'email', 'whatsapp'],
       recipient: expect.objectContaining({ id: 'stud-1', model: 'Student' }),
       data: expect.objectContaining({ amount: 100, currency: 'XAF' }),
       locale: 'fr', // the STUDENT's language, from UserPreferences

@@ -75,9 +75,11 @@ const getLog = asyncHandler(async (req, res) => {
 const retry = asyncHandler(async (req, res) => {
   if (!isValidObjectId(req.params.id)) return sendNotFound(res, 'Notification');
   try {
-    const status = await service.retryOne(req.params.id);
+    const campusFilter = buildCampusFilter(req.user, req.query.campusId);
+    const status = await service.retryOne(req.params.id, campusFilter);
     return sendSuccess(res, 200, 'Notification delivery replayed', { status });
   } catch (err) {
+    if (err.statusCode === 403 || /campus/i.test(err.message)) return sendForbidden(res, err.message);
     if (/not found/i.test(err.message)) return sendNotFound(res, 'Notification');
     throw err; // unexpected → global error handler (no raw leak to the client)
   }

@@ -57,6 +57,8 @@ const fs = require('fs'); const path = require('path'); const http = require('ht
 // This harness creates accounts and publishes documents. Keep dotenv and external
 // integrations outside the owned fixture, including when launched with npm run test:visual.
 if (process.env.NODE_ENV === 'production') throw new Error('Visual fixture refuses production mode.');
+// Read the diagnostic flag before removing provider-related environment values.
+const whatsappOnly = process.env.VISUAL_WHATSAPP_ONLY === '1';
 const callerDirectory = process.cwd();
 const runtimeDirectory = fs.mkdtempSync(path.join(require('node:os').tmpdir(), 'erp-visual-'));
 if (process.env.SPA_DIST) process.env.SPA_DIST = path.resolve(process.env.SPA_DIST);
@@ -95,6 +97,8 @@ const DIST = process.env.SPA_DIST
   || path.resolve(__dirname, '../../../frontend/dist');
 /** Where the screenshots land; they are the artefact a human actually reads. */
 const SHOTS = process.argv[2] || path.resolve(__dirname, '.generated/visual');
+// Focused diagnostics do not replace the full acceptance run with both flags unset.
+const sharedActs = !whatsappOnly && !process.env.VISUAL_ADMISSION_ONLY;
 fs.mkdirSync(SHOTS, { recursive: true });
 const results = [];
 const rec = (l, ok, d = '') => { results.push({ l, ok, d }); console.log(`  ${ok ? '✓' : '✗'} ${l}${d ? ` — ${d}` : ''}`); };
@@ -171,7 +175,7 @@ const api = async (method, p, token, body) => {
     pipe: true, timeout: 90000,
     args: ['--no-sandbox', '--disable-dev-shm-usage', '--window-size=1440,1000'],
   });
-  if (!process.env.VISUAL_ADMISSION_ONLY) await require('./product-home.visual').checkProductHome({
+  if (sharedActs) await require('./product-home.visual').checkProductHome({
     browser, baseUrl: 'http://localhost:5173/', dist: DIST, shots: SHOTS, record: rec,
   });
 
@@ -187,7 +191,7 @@ const api = async (method, p, token, body) => {
   });
 
   // Diagnostic replay; the default command always retains every regression act.
-  if (!process.env.VISUAL_ADMISSION_ONLY) {
+  if (sharedActs) {
   const page = await browser.newPage();
   await page.setViewport({ width: 1440, height: 1000 });
 
@@ -1018,7 +1022,11 @@ const api = async (method, p, token, body) => {
   });
   }
 
-  await require('./admission.visual').checkAdmission({
+  if (!whatsappOnly) await require('./admission.visual').checkAdmission({
+    browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
+  });
+
+  await require('./whatsapp.visual').checkWhatsapp({
     browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
   });
 

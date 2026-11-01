@@ -76,6 +76,12 @@ Admission orchestration is exposed by `partner.service.admission` and
 normalization/storage by the document facade. See the
 [admission contract](docs/architecture/features/online-admission.md).
 
+WhatsApp delivery is exposed through `notification.service.whatsapp`; explicit
+phone-bound consent is owned by `settings.service.whatsappConsent`. Operational
+monthly `WhatsAppUsage` records belong to notification and use `schoolCampus`.
+The [WhatsApp contract](docs/architecture/features/whatsapp-business.md) owns the
+four emitter families, quotas, signed callbacks and real activation procedure.
+
 Modules: `admin · campus · student · teacher · parent · mentor · staff · class · level · subject · department · course · result · document · exam · academic-print · partner · announcement · gaet · settings · notification · finance · public-portal · account · ai`.
 
 ---
@@ -491,6 +497,12 @@ lock from 1.16.0 to 1.16.1 within its existing range. This fixes
 and custom sensitive header names across real loopback redirects; both tests
 fail on 1.16.0 and pass on 1.16.1. The existing audit exceptions are unchanged.
 
+The 2026-11-01 WhatsApp closeout updates that transitive lock to 1.16.2 within
+the same range for GHSA-mrwp-f3q8-3g9p. The redirect integration now also uses
+real `node:vm` cross-realm sensitive-header arrays in object and array header
+forms. Both new assertions failed on 1.16.1 and passed on 1.16.2; the audit gate
+passes with the same three named exceptions.
+
 Development uses Node 20's native `--watch --watch-preserve-output`, replacing
 nodemon's unpatched `braces` dependency path (GHSA-vfj7-8cjw-p6xm, 2026-10-05).
 `tests/integration/dev-watch.test.js` checks actual imported-file restart and
@@ -508,6 +520,9 @@ SIGTERM cleanup. The production startup command is unaffected.
 /api/print          /api/partners       /api/announcements  /api/gaet
 /api/settings       /api/notifications  /api/finance        /api/account
 /api/account/session  (GET inspect; POST refresh, logout, revoke, logout-all)
+/api/notifications/my/whatsapp-consent  (GET/PUT own explicit consent)
+/api/notifications/whatsapp-usage  (GET campus-scoped management usage)
+/api/notifications/whatsapp/webhook  (public GET verification; signed POST receipts)
 /api/partners/admission/config  (GET/PUT campus requirements)
 /api/partners/leads/:id/dossier  (management metadata, files, access rotation/revocation)
 /api/public/admission  (private candidate dossier/files/submit, uniform request-access)
@@ -551,7 +566,7 @@ Operational share expiry and weekly retention soft deletion retain their policie
 
 **Academic-print** (`/api/print`) — print jobs persisted in MongoDB (`PrintJob` model); atomic worker claim + cron sweep of pending/stale jobs.
 
-**Notification** (`/api/notifications`) — multi-channel (in-app + email) with templates; recipient-language i18n via `UserPreferences`; retry cron flushing external sends.
+**Notification** (`/api/notifications`) — in-app/email and consented WhatsApp templates; recipient-language i18n via `UserPreferences`. WhatsApp requires an exact configured approved template/language pair, current phone-bound consent and an atomic campus/UTC-month slot (500/2,000/5,000 for free/standard/premium). Its required campus model dependency is declared in the feature registry. Planless/custom campuses have zero allowance. Signed raw-body Meta callbacks advance separate delivery receipts; manual replay reads and claims enforce campus scope. `scripts/prepare-whatsapp.js` inspects expected indexes by default, creates them only with `--apply`, and exports exact submission bodies with `--catalog`. The installed complete unique usage index is checked before reserving. No Meta credential belongs in the ERP build. [Contract and activation](docs/architecture/features/whatsapp-business.md).
 
 Activation and candidate-access links are encrypted in `privatePayload` using a
 domain-separated key derived from `JWT_SECRET`. Ordinary snapshots and API logs
@@ -618,6 +633,9 @@ newest first (latest 20). See `docs/architecture/features/entitlement-legacy-ret
 
 Admission adds no cron: its encrypted durable mail uses the existing notification
 retry job. Capability expiry is enforced at access and delivery time.
+WhatsApp adds no reset job: UTC-month buckets reset allowance naturally. A started
+submission is never automatically or manually repeated; callbacks reconcile uncertain
+outcomes. Preflight-skipped rows can be explicitly replayed after readiness changes.
 
 | Schedule | Job |
 |---|---|

@@ -13,6 +13,7 @@
 
 const Notification    = require('./models/notification.model');
 const { escapeRegex } = require('../../shared/utils/validation-helpers');
+const { DELIVERY, DELIVERY_RANK } = require('../../shared/constants/whatsapp.constants');
 
 // ── Writes ────────────────────────────────────────────────────────────────────
 
@@ -117,9 +118,9 @@ const claimForSend = (id) =>
  * → `sending`, ignoring the attempt cap). Excludes `sending` (already in flight)
  * and terminal `sent`/`read`, so a manual retry never races the cron on a row.
  */
-const claimForRetry = (id) =>
+const claimForRetry = (id, campusFilter = {}) =>
   Notification.findOneAndUpdate(
-    { _id: id, channel: { $in: ['email', 'whatsapp'] }, status: { $in: ['pending', 'failed', 'skipped'] } },
+    { ...campusFilter, _id: id, channel: { $in: ['email', 'whatsapp'] }, status: { $in: ['pending', 'failed', 'skipped'] } },
     { $set: { status: 'sending', workerClaimedAt: new Date() } },
     { new: true }
   ).select('+privatePayload').lean();
@@ -131,7 +132,35 @@ const requeueStaleSending = (staleBefore) =>
     { $set: { status: 'failed', workerClaimedAt: null } }
   );
 
-const findById = (id) => Notification.findById(id).lean();
+const findById = (id, campusFilter = {}) => Notification.findOne({ ...campusFilter, _id: id }).lean();
+
+/** Fence every possible provider request, even after timeout or process death. */
+const startWhatsappSubmission = (id, phoneNumberId, phone) => Notification.updateOne(
+  { _id: id, channel: 'whatsapp', 'whatsapp.submissionStartedAt': null },
+  { $set: { to: phone, 'whatsapp.submissionStartedAt': new Date(), 'whatsapp.phoneNumberId': phoneNumberId,
+    'whatsapp.deliveryStatus': DELIVERY.UNKNOWN, 'whatsapp.deliveryRank': DELIVERY_RANK[DELIVERY.UNKNOWN] } }
+);
+
+/** Provider acceptance is distinct from delivery; do not overwrite a racing callback. */
+const acceptWhatsapp = async (id, messageId) => {
+  await Notification.updateOne({ _id: id, $or: [{ 'whatsapp.messageId': null }, { 'whatsapp.messageId': messageId }] },
+    { $set: { 'whatsapp.messageId': messageId, status: 'sent', sentAt: new Date(), lastError: null, workerClaimedAt: null }, $inc: { attempts: 1 } });
+  await Notification.updateOne({ _id: id, 'whatsapp.deliveryRank': { $lt: DELIVERY_RANK[DELIVERY.ACCEPTED] } },
+    { $set: { 'whatsapp.deliveryStatus': DELIVERY.ACCEPTED, 'whatsapp.deliveryRank': DELIVERY_RANK[DELIVERY.ACCEPTED] } });
+};
+
+/** A signed callback must match sender, recipient, correlation and message identity. */
+const recordWhatsappStatus = ({ notificationId, messageId, phoneNumberId, phone, status, rank, at }) => {
+  const identity = notificationId
+    ? { _id: notificationId, $or: [{ 'whatsapp.messageId': null }, { 'whatsapp.messageId': messageId }] }
+    : { 'whatsapp.messageId': messageId };
+  return Notification.updateOne({
+    ...identity, channel: 'whatsapp', to: phone,
+    'whatsapp.phoneNumberId': phoneNumberId, 'whatsapp.submissionStartedAt': { $ne: null },
+    'whatsapp.deliveryRank': { $lt: rank },
+  }, { $set: { 'whatsapp.messageId': messageId, 'whatsapp.deliveryStatus': status,
+    'whatsapp.deliveryRank': rank, 'whatsapp.statusAt': at, status: 'sent', workerClaimedAt: null } });
+};
 
 // ── Admin log ─────────────────────────────────────────────────────────────────
 
@@ -168,4 +197,7 @@ module.exports = {
   requeueStaleSending,
   findById,
   paginateLog,
+  startWhatsappSubmission,
+  acceptWhatsapp,
+  recordWhatsappStatus,
 };

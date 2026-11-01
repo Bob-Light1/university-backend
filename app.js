@@ -84,7 +84,10 @@ app.use(cors(corsOptions));
 app.set('trust proxy', 1);
 
 // Body parsers
-app.use(express.json({ limit: '10mb' })); // Limit JSON body size
+app.use(express.json({ limit: '10mb', verify: (req, _res, buffer) => {
+  // Meta signs the exact bytes; parsed/re-serialized JSON is not equivalent.
+  if (req.originalUrl.split('?')[0] === '/api/notifications/whatsapp/webhook') req.whatsappRawBody = buffer;
+} }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(mongoSanitize());
 app.use(cookieParser());

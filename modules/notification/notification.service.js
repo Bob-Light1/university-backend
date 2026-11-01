@@ -21,6 +21,8 @@ const channels  = require('./channels');
 const templates = require('./templates');
 const config    = require('../../shared/configs/general.config');
 const privateContent = require('./notification.private');
+const whatsapp = require('./whatsapp.service');
+const { normalizePhone, REASONS } = require('../../shared/constants/whatsapp.constants');
 const { featureOfTemplate } = require('./notification.features');
 // Lazy: the entitlement service reaches the campus facade, which is a module hub.
 const entitlementJobs = () => require('../../shared/lib/entitlement').jobs;
@@ -31,7 +33,7 @@ const CHANNELS = Notification.CHANNELS;
 // Contact detail required per channel (inapp has none).
 const contactFor = (channel, recipient) => {
   if (channel === 'email')    return recipient.email || null;
-  if (channel === 'whatsapp') return recipient.phone || null;
+  if (channel === 'whatsapp') return normalizePhone(recipient.phone);
   return null;
 };
 
@@ -40,9 +42,9 @@ const contactFor = (channel, recipient) => {
  *
  * @param {Object} params
  * @param {Object} params.recipient   { id, model, email?, phone?, campusId?, locale?, prefs? }
- *   `prefs` ({ inapp, email, whatsapp }) — when supplied, external channels the
- *   recipient opted out of are dropped (in-app is never gated). Transactional
- *   emitters omit it so their delivery is never suppressed.
+ *   `prefs` ({ inapp, email, whatsapp }) — email opt-outs are honoured when
+ *   supplied (in-app is never gated). WhatsApp always uses
+ *   current phone-bound consent instead of the legacy actor flag.
  * @param {string[]} [params.channels] subset of ['inapp','email','whatsapp'] (default ['inapp'])
  * @param {string} params.template     template key (see templates/index.js)
  * @param {Object} [params.data]       render variables
@@ -80,11 +82,11 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
   // Honour the recipient's notification preferences when the caller supplies them.
   // Per the facade rule (§3) the foundation never queries the recipient's model —
   // the emitter passes `prefs` in alongside the contact details. The in-app inbox
-  // is the baseline channel and is NEVER gated; only external channels (email /
-  // whatsapp) can be opted out of. Transactional emitters omit `prefs` on purpose.
+  // is the baseline and is NEVER gated. Email follows this legacy flag;
+  // WhatsApp is gated by current consent at delivery, even without `prefs`.
   const prefs = recipient.prefs;
   if (prefs && typeof prefs === 'object') {
-    requested = requested.filter((c) => c === 'inapp' || prefs[c] !== false);
+    requested = requested.filter((c) => c === 'inapp' || c === 'whatsapp' || prefs[c] !== false);
     if (!requested.length) requested = ['inapp']; // always keep an inbox copy
   }
 
@@ -115,7 +117,11 @@ async function notify({ recipient, channels: chans, template, data = {}, locale,
   const created = await (session ? repo.createMany(rows, { session }) : repo.createMany(rows));
 
   // 2) Deliver (best-effort, never throws to the caller).
-  const statuses = session ? null : await Promise.all(created.map((doc) => deliver(doc)));
+  const statuses = session ? null : await Promise.all(created.map(async (doc) => {
+    if (doc.channel !== 'whatsapp') return deliver(doc);
+    const claimed = await repo.claimForSend(doc._id);
+    return claimed ? deliver(claimed) : 'sending';
+  }));
 
   return created.map((doc, index) => ({
     ...privateContent.publicRow(doc), ...(statuses && { status: statuses[index] }),
@@ -131,7 +137,7 @@ async function deliver(doc) {
   try {
     const feature = featureOfTemplate(doc.template);
     if (feature && doc.schoolCampus && !(await entitlementJobs().isEmissionAllowed(doc.schoolCampus, feature))) {
-      await repo.markSkipped(doc._id, 'The emitting module is not enabled');
+      await repo.markSkipped(doc._id, doc.channel === 'whatsapp' ? REASONS.MODULE : 'The emitting module is not enabled');
       return 'skipped';
     }
     if (!channel) {
@@ -140,12 +146,24 @@ async function deliver(doc) {
     }
     // in-app: persistence is enough → sent. External: skip if not configured.
     if (doc.channel !== 'inapp' && !channel.isConfigured()) {
-      await repo.markSkipped(doc._id, `Channel '${doc.channel}' not configured`);
+      await repo.markSkipped(doc._id, doc.channel === 'whatsapp' ? REASONS.CONFIG : `Channel '${doc.channel}' not configured`);
       return 'skipped';
     }
     if (doc.channel !== 'inapp' && !doc.to) {
-      await repo.markSkipped(doc._id, `No ${doc.channel} address for recipient`);
+      await repo.markSkipped(doc._id, doc.channel === 'whatsapp' ? REASONS.PHONE : `No ${doc.channel} address for recipient`);
       return 'skipped';
+    }
+    if (doc.channel === 'whatsapp') {
+      const prepared = await whatsapp.prepare(doc);
+      if (prepared.reason) {
+        await repo.markSkipped(doc._id, prepared.reason);
+        return 'skipped';
+      }
+      const fence = await repo.startWhatsappSubmission(doc._id, config.notification.whatsapp.phoneNumberId, normalizePhone(doc.to));
+      if (fence.modifiedCount !== 1) return 'sending';
+      const accepted = await channel.send({ to: doc.to, template: prepared.template, notificationId: doc._id });
+      await repo.acceptWhatsapp(doc._id, accepted.messageId);
+      return 'sent';
     }
     const rendered = privateContent.reveal(doc);
     if (doc.template === 'admission.access') {
@@ -160,7 +178,8 @@ async function deliver(doc) {
     await repo.markSent(doc._id);
     return 'sent';
   } catch (err) {
-    await repo.markFailed(doc._id, doc.privatePayload ? 'Private notification delivery failed' : (err.message || String(err)));
+    await repo.markFailed(doc._id, doc.channel === 'whatsapp' ? REASONS.FAILED
+      : doc.privatePayload ? 'Private notification delivery failed' : (err.message || String(err)));
     return 'failed';
   }
 }
@@ -200,16 +219,17 @@ const getLog = ({ campusFilter, channel, status, recipientId, search, page = 1, 
  * WhatsApp messages from an accidental double click.
  * @returns {Promise<string>} resulting status
  */
-const retryOne = async (id) => {
-  const doc = await repo.findById(id);
+const retryOne = async (id, campusFilter = {}) => {
+  const doc = await repo.findById(id, campusFilter);
   if (!doc) throw new Error('Notification not found');
+  if (doc.channel === 'whatsapp' && doc.whatsapp?.submissionStartedAt) return doc.status;
   if (doc.channel === 'inapp') return doc.status === 'read' ? 'read' : 'sent';
   if (doc.status === 'sent' || doc.status === 'read') return doc.status;
   // Atomic claim so a manual replay never races the cron (or another admin) on the
   // same row. A null claim means the row is already in flight or terminal.
-  const claimed = await repo.claimForRetry(id);
+  const claimed = await repo.claimForRetry(id, campusFilter);
   if (!claimed) {
-    const current = await repo.findById(id);
+    const current = await repo.findById(id, campusFilter);
     return current ? current.status : 'sent';
   }
   return deliver(claimed);
@@ -271,4 +291,5 @@ module.exports = {
   runRetryJob,
   CHANNELS,
   TEMPLATE_KEYS: templates.TEMPLATE_KEYS,
+  whatsapp,
 };

@@ -58,6 +58,7 @@ const M = {
   Announcement:      () => require('../../../modules/announcement/models/announcement.model'),
   UserNotification:  () => require('../../../modules/announcement/models/user-notification.model'),
   Notification:      () => require('../../../modules/notification/models/notification.model'),
+  WhatsAppUsage:     () => require('../../../modules/notification/models/whatsapp-usage.model'),
   UserPreferences:   () => require('../../../modules/settings/models/userPreferences.model'),
   AuthSession:       () => require('../../../modules/account/session.model'),
   LoginState:        () => require('../../../modules/account/login-state.model'),
@@ -549,6 +550,7 @@ const REGISTRY = Object.freeze({
       // Nothing here outlives the campus: they are either derived from rows the BLOCKs above
       // already force to zero, or campus-local content with no cross-tenant meaning.
       cascade('Notification',     'Notification history',        (id) => ({ schoolCampus: id })),
+      cascade('WhatsAppUsage', 'WhatsApp monthly usage', (id) => ({ schoolCampus: id })),
       cascade('UserNotification', 'Announcement read receipts',  (id) => ({ schoolCampus: id })),
       cascade('UserPreferences',  'User preferences',            (id) => ({ campusId: id })),
       cascade('ActivationToken',  'Pending activation tokens',   (id) => ({ campusId: id })),
