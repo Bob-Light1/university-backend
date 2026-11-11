@@ -276,6 +276,14 @@ Plus four structural rules:
 
 Every attempt is audited, not just the successful ones: a wrong password, a mismatched phrase, a forged or expired ticket and an aborted transaction all write a `DeletionAudit` row (`outcome: 'failed'`), alongside `'blocked'` and `'completed'`.
 
+Existing audit sources also include `DocumentAudit`, the embedded result correction
+`auditLog`, and partner lead status history. They do not yet constitute the shared
+post-publication journal planned in roadmap phase 1-B row 8. The deletion ledger
+currently enriches `filesRemoved` after external storage cleanup through
+`DeletionAudit.updateOne()`; its append-only description does not mean that all
+updates are blocked. Deletion guards must cover model queries, document instances
+and bulk writes separately; a query hook alone does not protect the other paths.
+
 The audit write is never allowed to be what fails. Every DeletionAudit payload is built by one `buildAuditPayload()` in the service — so a field cannot be present on the success row and missing on the refusal row — and its free-text fields are **truncated** to `AUDIT_FIELD_LIMITS` (the same constants the schema declares) instead of being handed to Mongoose to reject. A rejected write does not degrade gracefully: on the success path the row is created *inside* the transaction, so it aborts the deletion and makes the entity permanently undeletable; on the refusal path the row is simply lost. `Blocked by: …` over the `campus` entry's thirty-odd BLOCK relations overruns `failureReason` on its own — that is a live case, not a defensive one.
 
 The confirmation phrase is built from `resolveIdentifier()`, which falls back to the id on a blank identifier as well as a null one. `doc.matricule || doc.username` returns `''` when neither is set, and `??` lets it through: the phrase would collapse to a bare `DELETE` (typeable by accident) and `entityIdentifier` (required) would fail the audit write.
