@@ -19,6 +19,7 @@
  */
 
 const mongoose = require('mongoose');
+const protectAuditDeletions = require('../protect-audit-deletions');
 const { DELETION_OUTCOME, RELATION_MODE, AUDIT_FIELD_LIMITS } = require('./hard-delete.constants');
 
 /** One line of the impact report, as computed at execution time. */
@@ -111,20 +112,7 @@ DeletionAuditSchema.index({ entityType: 1, performedAt: -1 });
 
 // ── Append-Only Enforcement ───────────────────────────────────────────────────
 
-/**
- * Deletion of an audit row is never legitimate: it is the sole surviving trace of an
- * irreversible operation. These hooks fail loudly rather than silently allowing a purge.
- */
-const refuseDeletion = function () {
-  throw new Error('DeletionAudit records are immutable — deletion is not permitted');
-};
-
-// `deleteOne` is registered for BOTH middleware kinds: Mongoose treats
-// `Model.deleteOne()` (query) and `doc.deleteOne()` (document) as separate hooks, and
-// leaving either one open would leave a way to purge the ledger.
-DeletionAuditSchema.pre('deleteOne', { document: true, query: true }, refuseDeletion);
-DeletionAuditSchema.pre('deleteMany', refuseDeletion);
-DeletionAuditSchema.pre('findOneAndDelete', refuseDeletion);
+DeletionAuditSchema.plugin(protectAuditDeletions);
 
 const DeletionAudit = mongoose.model('DeletionAudit', DeletionAuditSchema);
 

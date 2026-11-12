@@ -13,6 +13,7 @@
  */
 
 const mongoose = require('mongoose');
+const protectAuditDeletions = require('../../../shared/lib/protect-audit-deletions');
 
 // ── Audit Action Enum ─────────────────────────────────────────────────────────
 
@@ -101,21 +102,7 @@ DocumentAuditSchema.index({ performedBy: 1, performedAt: -1 });
 
 // ── Append-Only Enforcement ───────────────────────────────────────────────────
 
-/**
- * These hooks prevent accidental or intentional deletion of audit records.
- * Audit integrity is non-negotiable for regulatory compliance.
- */
-DocumentAuditSchema.pre('deleteOne', function () {
-  throw new Error('DocumentAudit records are immutable — deletion is not permitted');
-});
-
-DocumentAuditSchema.pre('findOneAndDelete', function () {
-  throw new Error('DocumentAudit records are immutable — deletion is not permitted');
-});
-
-DocumentAuditSchema.pre('deleteMany', function () {
-  throw new Error('DocumentAudit records are immutable — deletion is not permitted');
-});
+DocumentAuditSchema.plugin(protectAuditDeletions);
 
 // ── Statics ───────────────────────────────────────────────────────────────────
 

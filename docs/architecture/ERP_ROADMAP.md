@@ -103,6 +103,19 @@ fichier fait foi ; la vue rendue est un instantané daté, jamais l'inverse.
 
 ## §0 — Tableau de bord des phases
 
+2026-11-12: row-8 retention guards and the required Mongoose patch pass the full
+101-suite / 1,837-test Jest replay, fixture self-check 36/36 and base journey
+25/25; the sequential course guard passes 67/67. The separate retention proof
+passes 24/24. The [feature note](features/cross-module-audit.md)
+owns dated gates and the remaining unified-journal work; row 8 stays in progress.
+
+2026-11-11: phase 1-B row 8 resumes with owner-approved permanent audit retention
+and configurable consultation, limited to post-publication mutations. The first
+increment protects existing document/deletion ledgers against bulk deletion;
+[scope and evidence](features/cross-module-audit.md) distinguish this prerequisite
+from the shared journal, emitters, export and consultation configuration still to
+implement. No phase-2 work, deployment or pricing change starts.
+
 2026-11-01 WhatsApp Business row 7 is delivered at source/local acceptance level:
 approved template pairs, explicit consent, monthly campus quotas 500/2,000/5,000,
 signed receipts and the four approved event families. Full Jest passes 99 suites /
@@ -279,7 +292,7 @@ are unchanged. Original administrator acceptance and CH-2/4/5 boundaries remain.
 | ID | Phase | État | Dépend de | Charge | Dernière MAJ |
 |---|---|---|---|---|---|
 | **1-A** | Le socle livré | `LIVRÉ` | — | — | 2026-08-21 |
-| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 25–38 d; dated forecast, see §5.1 | 2026-11-01 |
+| **1-B** | L'inachevé, à fermer | `EN COURS` | 1-A | 25–38 d; dated forecast, see §5.1 | 2026-11-12 |
 | **2** | Le socle de fabrication | `À FAIRE` | 1-B *(fixture recettée)* | 42–57 j | 2026-08-21 |
 | **3** | L'ERP complet, sous filet | `À FAIRE` | 2 | 47–63 j | 2026-08-21 |
 | **4-A** | Pédagogie & vie scolaire | `À FAIRE` | 3 | 20–28 j | 2026-08-21 |
@@ -517,7 +530,7 @@ work. Use §5.1 for current remaining effort; do not sum this column as a foreca
 | 5 | Online admission | `B1·B2·B4` | Seven-status pipeline and approved D-R24/D-R25 contract; dossier/private storage, atomic pending-student/commission/activation and synchronized ERP/candidate consumers implemented | Source/local acceptance complete: [final review](features/online-admission.md#case-registration-and-final-acceptance--2026-11-01) accepts the 2026-10-31 full automated checks and inspected 202/202 browser replay. ERP-ADM-001–005 are registered at revision 1 with exact saved-body checks, preserved existing cases/revisions and idempotent reimport. No manual verdict, deployment or historical conversion claimed | 3–4 d | `LIVRÉ` |
 | 6 | Frais — reçus et échéancier | `B1·B2` | Reçu PDF rendu à la demande (`GET /finance/payments/:id/receipt`, langue de l'**étudiant**, pool Puppeteer partagé) ; cadence avant échéance J-7 / J-3 / Jour J sur son propre marqueur `remindersSent[]` ; les deux briques câblées, i18n × 10 | **Rien — les dix étapes du §12 sont tenues.** L'étape 10 a été jouée le 2026-09-02 et **écrite dans `npm run test:visual`** plutôt que passée à la main (précédent D-R7) : le harnais passe de 16 à **36 contrôles**, tous verts — deux thèmes par la *préférence* de l'utilisateur, `CAMPUS_MANAGER` + `STUDENT`, et les trois états d'entitlement dont `hidden`, refusé tant que le module porte des écritures et donc **vu** sur un campus vidé des siennes. Elle a trouvé un défaut que rien d'autre ne pouvait voir : le nom du reçu ne survivait pas au cross-origin (§9⑲ de la note), corrigé et fermé par un test vu rouge. 1 566 tests verts. Détail : `docs/architecture/features/fee-receipts-and-reminders.md` §9⑲ | 2–3 j | `LIVRÉ` |
 | 7 | WhatsApp Business notifications | `B1·B2` | Approved localized templates, explicit consent, signed callbacks, scoped delivery log and all four event families; D-R11 monthly limits 500/2,000/5,000 | Source/local acceptance complete: [evidence and activation runbook](features/whatsapp-business.md#acceptance-replay--2026-11-01), 1,815 Jest tests, 48/48 WhatsApp journey, inspected 224/224 browser replay and ERP-WA-001–005 registered. Real Meta activation remains external under the owner-approved boundary | 2–3 j | `LIVRÉ` |
-| 8 | Cross-module audit journal | `B1` | Domain audit sources: document events, permanent-deletion attempts, embedded result corrections and lead status history; these are not a unified journal | Shared post-publication mutation events, campus-scoped export and configurable consultation. Existing deletion guards need instance/bulk coverage; deletion-ledger file cleanup enrichment currently uses an update | 3–4 d | `À FAIRE` |
+| 8 | Cross-module audit journal | `B1` | Existing document/deletion ledgers now share query, instance and bulk deletion guards; source inventory includes embedded result corrections and lead history. [Design and prerequisite evidence](features/cross-module-audit.md) | Shared post-publication events and transactional emitters, campus-scoped export and configurable consultation; permanently retain archived history. This prerequisite does not deliver the unified journal | 3–4 d | `EN COURS` |
 | 9 | Teacher HR files | `B1·B2` | Versioned GED and teacher-linked documents; unsafe business expiry field/index retired under row 14 | Dedicated HR category, expiry warnings instead of deletion, and position-change history. Do not reintroduce business TTL; existing databases need the row-14 migration before expiry metadata is introduced | 2–3 d | `À FAIRE` |
 | 10 | Orientation & suivi scolaire | `B1·B2` | Détection précoce déjà calculée par les analytics d'examen et le service de résultats | Notes de suivi par élève, signalement explicite, recommandations d'orientation, restitution dans les portails parent et mentor | 2–3 j | `À FAIRE` |
 | 11 | Catalogue de langues — **et sa réconciliation entre briques** | `B2·B4` | B2 : 10 locales × 18 espaces de noms, RTL fonctionnel, sélecteur et préférence utilisateur. B4 : **8 locales**, dont **le latin déjà livré et complet** (`partner/src/messages/la.json`, 288 lignes comme toutes les autres) | **Les deux catalogues divergent, et personne ne l'avait relevé** : 5 codes strictement communs, `zh-CN` sur B2 contre `zh` sur B4, `el` livré sur B4 et vendu nulle part, `es`/`ja`/`pt`/`ru` absents de B4. Manquent sur B2 : lingala, haoussa **et latin** (36 + 18 fichiers, ce dernier traduisible depuis B4) ; sur B4 : lingala et haoussa. Plus l'arbitrage du catalogue canonique et l'alignement des codes de locale entre les deux briques. **Traite l'écart 2 du §11** (D-R9) | 5–7 j | `À FAIRE` |
@@ -1138,6 +1151,7 @@ dans une proposition écrite, le cinquième sur une opération irréversible.
 | **D-R25** | 2026-10-23 | Resume row 5 with OA-1 candidate/private-email-link and manager uploads, OA-2 campus-configurable required attachments with none by default, and OA-3 manager/director/administrator enrollment finalization | Owner explicitly answered all three choices while requesting continued roadmap implementation. D-R24, phase order, release authorization and independent acceptance boundaries remain unchanged. [Admission contract](features/online-admission.md) |
 
 | **D-R26** | 2026-11-01 | The owner authorizes phase 1-B row 7, selects D-R11 monthly campus/tier quotas 500/2,000/5,000 and confirms result publication, exam grades, fee reminders and campus fraud alerts | No Meta account/configuration exists. Complete source/local acceptance, document real activation and make scoped local commits; no live send, deployment, pricing revision or later-phase work. [Contract](features/whatsapp-business.md) |
+| **D-R27** | 2026-11-11 | Resume phase 1-B with row 8 and local commits. The owner selects permanent event retention with configurable consultation, and post-publication mutations without general read/download tracking | Existing source/local rows remain delivered; CH-0 independent acceptance and target AI SLOs remain open. Begin by closing the confirmed bulk-deletion bypass in existing audit ledgers; [scope and evidence](features/cross-module-audit.md) keep the unified journal and remaining consumers explicitly in progress |
 
 ---
 

@@ -281,8 +281,13 @@ Existing audit sources also include `DocumentAudit`, the embedded result correct
 post-publication journal planned in roadmap phase 1-B row 8. The deletion ledger
 currently enriches `filesRemoved` after external storage cleanup through
 `DeletionAudit.updateOne()`; its append-only description does not mean that all
-updates are blocked. Deletion guards must cover model queries, document instances
-and bulk writes separately; a query hook alone does not protect the other paths.
+updates are blocked. Both schemas install the shared
+`shared/lib/protect-audit-deletions.js` plugin before compilation: it refuses query
+and instance deletion, plus entire bulk batches containing a deletion. On the
+pre-patch Mongoose 8.24.4, an instance deletion already reached the query guard;
+bulk deletion bypassed individual operation hooks and required its own guard.
+The [row-8 note](docs/architecture/features/cross-module-audit.md) records the
+permanent-retention decision and remaining shared-journal work.
 
 The audit write is never allowed to be what fails. Every DeletionAudit payload is built by one `buildAuditPayload()` in the service — so a field cannot be present on the success row and missing on the refusal row — and its free-text fields are **truncated** to `AUDIT_FIELD_LIMITS` (the same constants the schema declares) instead of being handed to Mongoose to reject. A rejected write does not degrade gracefully: on the success path the row is created *inside* the transaction, so it aborts the deletion and makes the entity permanently undeletable; on the refusal path the row is simply lost. `Blocked by: …` over the `campus` entry's thirty-odd BLOCK relations overruns `failureReason` on its own — that is a live case, not a defensive one.
 
@@ -460,6 +465,14 @@ or malformed findings, unexpected subprocess exits and signals before printing
 totals or diagnosing stale exceptions. Its eight failure regressions were observed
 red before correction on 2026-10-29. A failed network request must never cause an
 exception to be removed or establish a clean dependency audit.
+
+The 2026-11-11 audit-retention prerequisite updates Mongoose 8.24.4 to 8.24.7
+and its required mquery 5.0.0 to 5.0.1, without a driver or major-version change.
+Six isolated real-library regressions cover connection-configured filter
+sanitization, discriminator casting, inherited-property writes and virtual paths;
+the owned MongoDB retention journey also exercises actual connection-option
+sanitization. All six fail on 8.24.4 and pass on 8.24.7. The dependency gate's
+three existing exceptions are unchanged. [Evidence and upstream references](docs/architecture/features/cross-module-audit.md).
 
 **`package.json` carries six `overrides`, all load-bearing** — none is cosmetic:
 - `proxy-addr: ^2.0.8` — patches GHSA-jqcg-44mw-7w3h in Express proxy trust; preserves normal loopback trust and rejects spoofing through incorrectly mapped IPv6 subnets.

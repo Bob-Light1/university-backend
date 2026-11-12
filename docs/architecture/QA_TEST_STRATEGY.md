@@ -87,6 +87,14 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-11-12 regression maintenance for phase 1-B row 8: existing audit-ledger
+deletion guards and the Mongoose security patch pass 101 Jest suites / 1,837
+tests, fixture self-check 36/36, base API journey 25/25 and sequential course guard
+67/67. The dedicated retention journey separately passes 24/24. The shared journal remains in progress;
+[scope and dated evidence](features/cross-module-audit.md) own acceptance of this
+prerequisite. CH-1 is maintained; CH-0 independent acceptance and all later CH-*
+statuses remain unchanged.
+
 2026-11-01 WhatsApp Business local acceptance: 99 Jest suites / 1,815 tests,
 48/48 owned WhatsApp API/data checks, fixture 36/36, base journey 25/25 and course
 67/67 pass. Complete ERP browser replay passes 224/224, including 22 WhatsApp
@@ -234,7 +242,7 @@ CH-0 independent acceptance or deliver CH-2/CH-4/CH-6.
 | ID | Chantier | Couche | État | Dépend de | Effort | Intervenant | Dernière MAJ |
 |---|---|---|---|---|---|---|---|
 | **CH-0** | Deterministic multi-campus fixture | 0 | `EN COURS` — independent acceptance pending | — | 1 sem. | Codex | 2026-10-04 |
-| **CH-1** | Backend unit foundation | 1 | `EN PLACE` — maintained | — | ongoing | Codex | 2026-10-17 |
+| **CH-1** | Backend unit foundation | 1 | `EN PLACE` — maintained | — | ongoing | Codex | 2026-11-12 |
 | **CH-2** | Matrice API : auth · rôle · isolation campus | 2 | `À FAIRE` | CH-0 | 1–2 sem. | — | 2026-08-20 |
 | **CH-3** | Tests composant frontend | 3 | `À FAIRE` | — *(CH-2 pour les handlers MSW, §7.2)* | 2–3 sem. | — | 2026-08-20 |
 | **CH-4** | E2E déterministe (Playwright) | 4 | `À FAIRE` | CH-0 | 2–3 sem. | — | 2026-08-20 |
