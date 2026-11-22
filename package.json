@@ -19,7 +19,9 @@
     "test:watch": "jest --watch",
     "test:portal": "node tests/integration/portal-browser.js",
     "test:whatsapp": "node tests/fixtures/whatsapp.journey.js",
-    "test:audit-retention": "node tests/fixtures/audit-retention.journey.js"
+    "test:audit-retention": "node tests/fixtures/audit-retention.journey.js",
+    "test:audit-journal": "node tests/fixtures/audit-journal.journey.js",
+    "test:announcement-audit": "node tests/fixtures/announcement-audit.journey.js"
   },
   "engines": {
     "node": "20.x"

@@ -1,22 +1,11 @@
 'use strict';
 
-/**
- * @file announcement.repository.js — couche de persistance du domaine announcement.
- *
- * SEUL fichier du module autorisé à toucher les models Announcement &
- * UserNotification. Controllers et service appellent ce repository.
- * Étape 0 de la préparation Postgres — voir POSTGRES_MIGRATION_ASSESSMENT.md §7.
- *
- * Les filtres Mongo (isolation campus, visibilité, soft-delete) sont construits
- * ICI à partir de paramètres de domaine — la couche HTTP n'écrit plus de requête
- * Mongoose. Lectures en `.lean()` ; écritures par load→mutate→save (préserve les
- * setters/validations du schéma).
- */
+/** @file announcement.repository.js @description Announcement persistence, campus scope and session-aware mutation primitives. */
 
 const Announcement     = require('./models/announcement.model');
 const UserNotification = require('./models/user-notification.model');
-const { escapeRegex, isValidObjectId } = require('../../shared/utils/validation-helpers');
-const { notDeletedFilter, deletedOnlyFilter, softDeletePatch } = require('../../shared/utils/soft-delete');
+const { escapeRegex, isValidObjectId, buildCampusFilter } = require('../../shared/utils/validation-helpers');
+const { notDeletedFilter, deletedOnlyFilter } = require('../../shared/utils/soft-delete');
 
 /**
  * Not-deleted fragment for Announcement — derived, never hand-written.
@@ -27,6 +16,7 @@ const { notDeletedFilter, deletedOnlyFilter, softDeletePatch } = require('../../
  * ones, so the convention is declared in STRATEGY_OVERRIDES rather than inferred here.
  */
 const NOT_DELETED = notDeletedFilter(Announcement);
+const { STATUS, OPERATION } = require('./announcement.constants');
 
 /**
  * Deleted-only fragment — the exact complement of {@link NOT_DELETED}, derived from the same
@@ -36,7 +26,7 @@ const NOT_DELETED = notDeletedFilter(Announcement);
  */
 const DELETED_ONLY = deletedOnlyFilter(Announcement);
 
-// ── Constructeurs de filtres internes ─────────────────────────────────────────
+// Internal scope filters.
 
 /**
  * Guards against a campus-isolation breach: a scoped role with a missing or
@@ -73,7 +63,7 @@ const adminScope = ({ isGlobalRole, campusId, requestedCampusId, deleted = false
 // User-visible scope: published, not expired, targeting their role.
 const visibleScope = (campusId, role) => ({
   schoolCampus: requireCampus(campusId),
-  status:       'published',
+  status:       STATUS.PUBLISHED,
   ...NOT_DELETED,
   $and: [
     { $or: [{ expiresAt: null }, { expiresAt: { $gt: new Date() } }] },
@@ -83,10 +73,11 @@ const visibleScope = (campusId, role) => ({
 
 // ── ADMIN ─────────────────────────────────────────────────────────────────────
 
+/** Create the draft payload assembled by the management controller. */
 const create = (data) => Announcement.create(data);
 
 /**
- * Liste paginée pour l'admin (tri épinglé d'abord, puis récent).
+ * Paginated management list, sorted by pin state then creation date.
  *
  * @param {boolean} [deleted=false] - List soft-deleted announcements instead of live ones.
  * @returns {Promise<{data: Object[], total: number}>}
@@ -116,29 +107,26 @@ const paginateForAdmin = async ({
 const findForAdmin = ({ id, isGlobalRole, campusId }) =>
   Announcement.findOne({ _id: id, ...adminScope({ isGlobalRole, campusId }) }).lean();
 
-/**
- * Applique des champs à une annonce (load→assign→save, dans la portée admin).
- * Préserve les validations du schéma et propage les ValidationError à l'appelant.
- * @returns {Promise<Object|null>} doc mis à jour, ou null si introuvable/hors portée
- */
-const applyUpdate = async ({ id, isGlobalRole, campusId }, fields) => {
-  const doc = await Announcement.findOne({ _id: id, ...adminScope({ isGlobalRole, campusId }) });
-  if (!doc) return null;
-  Object.assign(doc, fields);
-  await doc.save();
-  return doc;
+/** Run the owning service callback with automatic transaction retries and guaranteed cleanup. */
+const withTransaction = async (callback) => {
+  const session = await Announcement.db.startSession();
+  try { return await session.withTransaction(() => callback(session)); }
+  finally { await session.endSession(); }
 };
 
-/**
- * Soft-deletes an announcement within the caller's scope.
- *
- * Keeps the deletion marker on the same derived source as the read filters: writing the
- * wrong field is the symmetric bug to filtering on the wrong one, and just as silent.
- *
- * @param {{id: string, isGlobalRole: boolean, campusId: string}} scope
- * @returns {Promise<Document|null>} The deleted announcement, or null when out of scope.
- */
-const softDelete = (scope) => applyUpdate(scope, softDeletePatch(Announcement));
+/** Load a mutable document using authenticated campus scope within the transaction. */
+const loadForMutation = ({ id, user }, session) => {
+  let campus;
+  try { campus = buildCampusFilter(user); }
+  catch (error) { error.code = 'CAMPUS_ISOLATION'; throw error; }
+  return Announcement.findOne({ _id: id, ...campus, ...NOT_DELETED }).session(session);
+};
+
+/** Save through setters/hooks, then re-read the actual persisted state for projection. */
+const saveMutation = async (doc, session) => {
+  await doc.save({ session });
+  return Announcement.findById(doc._id).session(session).lean();
+};
 
 // ── USER (visible announcements + read receipts) ──────────────────────────────
 
@@ -157,8 +145,8 @@ const listReadAmong = async (userId, announcementIds) => {
 };
 
 /**
- * Liste paginée des annonces visibles par l'utilisateur (épinglé puis récent).
- * `excludeIds` permet le filtre "non lues".
+ * Paginated visible announcements, sorted by pin state then publication date.
+ * `excludeIds` supports the unread-only filter.
  * @returns {Promise<{data: Object[], total: number}>}
  */
 const paginateVisible = async ({ campusId, role, type, excludeIds, skip, limit }) => {
@@ -173,17 +161,17 @@ const paginateVisible = async ({ campusId, role, type, excludeIds, skip, limit }
   return { data, total };
 };
 
-/** Ids distincts des annonces visibles (pour le calcul du non-lu). */
+/** Distinct visible announcement IDs for unread counts. */
 const distinctVisibleIds = ({ campusId, role }) =>
   Announcement.find(visibleScope(campusId, role)).distinct('_id');
 
-/** Ids des annonces visibles (lecture lean). */
+/** Visible announcement IDs without hydration. */
 const listVisibleIds = async ({ campusId, role }) => {
   const docs = await Announcement.find(visibleScope(campusId, role)).select('_id').lean();
   return docs.map((d) => d._id);
 };
 
-/** Nombre d'annonces lues parmi une liste d'ids. */
+/** Count receipts among a bounded list of announcements. */
 const countReadAmong = (userId, announcementIds) =>
   UserNotification.countDocuments({ userId, announcement: { $in: announcementIds } });
 
@@ -200,7 +188,7 @@ const upsertReadReceipt = ({ userId, announcementId, campusId }) =>
   );
 
 /**
- * Marque en lot toutes les annonces visibles non encore lues.
+ * Mark every visible unread announcement as read.
  * @returns {Promise<{visibleCount: number, marked: number}>}
  */
 const markAllVisibleRead = async ({ userId, campusId, role }) => {
@@ -228,30 +216,33 @@ const markAllVisibleRead = async ({ userId, campusId, role }) => {
 
 // ── CRON ────────────────────────────────────────────────────────────────────
 
-/** Archives expired published announcements. @returns {Promise<number>} modified */
-const archiveExpired = async (now) => {
-  const r = await Announcement.updateMany(
-    { status: 'published', ...NOT_DELETED, expiresAt: { $ne: null, $lte: now } },
-    { $set: { status: 'archived', archivedAt: now } },
-  );
-  return r.modifiedCount || 0;
+/** Build the exact due predicate used both for discovery and transactional recheck. */
+const dueFilter = (operation, now) => {
+  if (operation === OPERATION.EXPIRE) return {
+    ...NOT_DELETED, status: STATUS.PUBLISHED, expiresAt: { $ne: null, $lte: now },
+  };
+  if (operation === OPERATION.UNPIN) return {
+    ...NOT_DELETED, pinned: true, pinnedUntil: { $ne: null, $lte: now },
+  };
+  throw new Error('Unknown announcement sweep operation.');
 };
 
-/** Unpins announcements whose pinnedUntil date has passed. @returns {Promise<number>} modified */
-const unpinExpired = async (now) => {
-  const r = await Announcement.updateMany(
-    { pinned: true, ...NOT_DELETED, pinnedUntil: { $ne: null, $lte: now } },
-    { $set: { pinned: false, pinnedUntil: null } },
-  );
-  return r.modifiedCount || 0;
-};
+/** Bounded keyset discovery; no whole-collection materialization or multi-row unaudited update. */
+const listDue = (operation, now, { afterId, limit }) => Announcement.find({
+  ...dueFilter(operation, now), ...(afterId ? { _id: { $gt: afterId } } : {}),
+}).sort({ _id: 1 }).limit(limit).select('_id').lean();
+
+/** Recheck the current due state and campus from storage, never from job discovery metadata. */
+const loadDue = (id, operation, now, session) =>
+  Announcement.findOne({ _id: id, ...dueFilter(operation, now) }).session(session);
 
 module.exports = {
   create,
   paginateForAdmin,
   findForAdmin,
-  applyUpdate,
-  softDelete,
+  withTransaction,
+  loadForMutation,
+  saveMutation,
   listReadAmong,
   paginateVisible,
   distinctVisibleIds,
@@ -260,6 +251,6 @@ module.exports = {
   findVisibleById,
   upsertReadReceipt,
   markAllVisibleRead,
-  archiveExpired,
-  unpinExpired,
+  listDue,
+  loadDue,
 };

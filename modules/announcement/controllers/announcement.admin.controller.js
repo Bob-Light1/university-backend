@@ -1,5 +1,7 @@
 'use strict';
 
+/** @file announcement.admin.controller.js @description HTTP management handlers with transactional workflow delegation. */
+const mutationService = require('../announcement.mutation.service');
 const announcementRepo = require('../announcement.repository');
 const {
   sendSuccess,
@@ -8,6 +10,7 @@ const {
   sendPaginated,
   sendNotFound,
   sendForbidden,
+  asyncHandler,
 } = require('../../../shared/utils/response-helpers');
 const { isValidObjectId } = require('../../../shared/utils/validation-helpers');
 
@@ -22,6 +25,7 @@ const isGlobalRole = (role) => ['ADMIN', 'DIRECTOR'].includes(role);
  */
 const handleError = (res, err, context, fallback) => {
   if (err.code === 'CAMPUS_ISOLATION') return sendForbidden(res, 'Campus access denied.');
+  if (err.statusCode === 400) return sendError(res, 400, err.message);
   if (err.name === 'ValidationError') {
     return sendError(res, 400, Object.values(err.errors)[0]?.message || 'Validation failed.');
   }
@@ -30,19 +34,12 @@ const handleError = (res, err, context, fallback) => {
   return sendError(res, 500, fallback);
 };
 
-// Rejects a non-null date that is not strictly in the future. Returns an error
-// message string, or null when valid.
-const futureDateError = (value, label) => {
-  if (value === undefined || value === null || value === '') return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return `Invalid ${label}.`;
-  if (d.getTime() <= Date.now()) return `${label} must be in the future.`;
-  return null;
-};
+const { futureDateError } = require('../announcement.validation');
 
 // ─── CREATE ──────────────────────────────────────────────────────────────────
 
-const createAnnouncement = async (req, res) => {
+/** Handle createAnnouncement with the established response envelope. */
+const createAnnouncement = asyncHandler(async (req, res) => {
   try {
     const { title, content, type, targetRoles, pinned, pinnedUntil, expiresAt } = req.body;
 
@@ -87,11 +84,12 @@ const createAnnouncement = async (req, res) => {
   } catch (err) {
     return handleError(res, err, 'createAnnouncement', 'Failed to create announcement.');
   }
-};
+});
 
 // ─── LIST ─────────────────────────────────────────────────────────────────────
 
-const getAllAnnouncements = async (req, res) => {
+/** Handle getAllAnnouncements with the established response envelope. */
+const getAllAnnouncements = asyncHandler(async (req, res) => {
   try {
     const { page = 1, limit = 20, status, type, targetRole, pinned, search, campusId, deleted } = req.query;
     const safePage  = Math.max(1, Number(page)  || 1);
@@ -130,11 +128,12 @@ const getAllAnnouncements = async (req, res) => {
   } catch (err) {
     return handleError(res, err, 'getAllAnnouncements', 'Failed to fetch announcements.');
   }
-};
+});
 
 // ─── GET ONE ─────────────────────────────────────────────────────────────────
 
-const getOneAnnouncement = async (req, res) => {
+/** Handle getOneAnnouncement with the established response envelope. */
+const getOneAnnouncement = asyncHandler(async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
     const announcement = await announcementRepo.findForAdmin({
@@ -146,143 +145,67 @@ const getOneAnnouncement = async (req, res) => {
   } catch (err) {
     return handleError(res, err, 'getOneAnnouncement', 'Failed to fetch announcement.');
   }
-};
+});
 
-// ─── UPDATE ───────────────────────────────────────────────────────────────────
-
-const updateAnnouncement = async (req, res) => {
+/** Apply an allowlisted update; service checks publication state in the transaction. */
+const updateAnnouncement = asyncHandler(async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
-
-    const current = await announcementRepo.findForAdmin(scope);
-    if (!current) return sendNotFound(res, 'Announcement');
-
-    if (current.status === 'published') {
-      return sendError(res, 400, 'Published announcements cannot be edited. Archive it first.');
-    }
-
-    const allowed = ['title', 'content', 'type', 'targetRoles', 'pinned', 'pinnedUntil', 'expiresAt'];
-    const fields = {};
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) fields[key] = req.body[key];
-    }
-
-    if (fields.expiresAt) {
-      const expiryErr = futureDateError(fields.expiresAt, 'expiry date');
-      if (expiryErr) return sendError(res, 400, expiryErr);
-    }
-    // Validate auto-unpin against the resulting pinned state (incoming or current).
-    const willBePinned = fields.pinned !== undefined ? fields.pinned : current.pinned;
-    if (willBePinned && fields.pinnedUntil) {
-      const pinErr = futureDateError(fields.pinnedUntil, 'auto-unpin date');
-      if (pinErr) return sendError(res, 400, pinErr);
-    }
-
-    const announcement = await announcementRepo.applyUpdate(scope, fields);
+    const announcement = await mutationService.updateAnnouncement(req.params.id, req.user, req.body);
     if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement updated.', announcement);
   } catch (err) {
     return handleError(res, err, 'updateAnnouncement', 'Failed to update announcement.');
   }
-};
+});
 
-// ─── PUBLISH ──────────────────────────────────────────────────────────────────
-
-const publishAnnouncement = async (req, res) => {
+/** Publish a draft or archived announcement with sticky audit eligibility. */
+const publishAnnouncement = asyncHandler(async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
-
-    const current = await announcementRepo.findForAdmin(scope);
-    if (!current) return sendNotFound(res, 'Announcement');
-
-    if (current.status === 'published') {
-      return sendError(res, 400, 'Announcement is already published.');
-    }
-    if (current.expiresAt && new Date(current.expiresAt) <= new Date()) {
-      return sendError(res, 400, 'Announcement has already expired. Update or clear expiresAt before publishing.');
-    }
-
-    const announcement = await announcementRepo.applyUpdate(scope, {
-      status: 'published', publishedAt: new Date(), archivedAt: null,
-    });
+    const announcement = await mutationService.publishAnnouncement(req.params.id, req.user);
     if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement published.', announcement);
   } catch (err) {
     return handleError(res, err, 'publishAnnouncement', 'Failed to publish announcement.');
   }
-};
+});
 
-// ─── ARCHIVE ──────────────────────────────────────────────────────────────────
-
-const archiveAnnouncement = async (req, res) => {
+/** Archive within the authenticated campus and record an eligible lifecycle change. */
+const archiveAnnouncement = asyncHandler(async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
-
-    const current = await announcementRepo.findForAdmin(scope);
-    if (!current) return sendNotFound(res, 'Announcement');
-
-    if (current.status === 'archived') {
-      return sendError(res, 400, 'Announcement is already archived.');
-    }
-
-    const announcement = await announcementRepo.applyUpdate(scope, {
-      status: 'archived', archivedAt: new Date(),
-    });
+    const announcement = await mutationService.archiveAnnouncement(req.params.id, req.user);
     if (!announcement) return sendNotFound(res, 'Announcement');
     return sendSuccess(res, 200, 'Announcement archived.', announcement);
   } catch (err) {
     return handleError(res, err, 'archiveAnnouncement', 'Failed to archive announcement.');
   }
-};
+});
 
-// ─── PIN TOGGLE ───────────────────────────────────────────────────────────────
-
-const togglePin = async (req, res) => {
+/** Toggle the current transactional pin state. */
+const togglePin = asyncHandler(async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
-
-    const current = await announcementRepo.findForAdmin(scope);
-    if (!current) return sendNotFound(res, 'Announcement');
-
-    const nextPinned = !current.pinned;
-    const fields = { pinned: nextPinned };
-    if (!nextPinned) {
-      fields.pinnedUntil = null;
-    } else if (req.body.pinnedUntil !== undefined && req.body.pinnedUntil !== null) {
-      const pinErr = futureDateError(req.body.pinnedUntil, 'auto-unpin date');
-      if (pinErr) return sendError(res, 400, pinErr);
-      fields.pinnedUntil = req.body.pinnedUntil;
-    }
-
-    const announcement = await announcementRepo.applyUpdate(scope, fields);
+    const announcement = await mutationService.togglePin(req.params.id, req.user, req.body);
     if (!announcement) return sendNotFound(res, 'Announcement');
-
-    const action = announcement.pinned ? 'pinned' : 'unpinned';
-    return sendSuccess(res, 200, `Announcement ${action}.`, announcement);
+    return sendSuccess(res, 200, `Announcement ${announcement.pinned ? 'pinned' : 'unpinned'}.`, announcement);
   } catch (err) {
     return handleError(res, err, 'togglePin', 'Failed to update pin status.');
   }
-};
+});
 
-// ─── SOFT DELETE ──────────────────────────────────────────────────────────────
-
-const deleteAnnouncement = async (req, res) => {
+/** Soft-delete with the model-derived marker and the same transaction as its audit event. */
+const deleteAnnouncement = asyncHandler(async (req, res) => {
   try {
     if (!isValidObjectId(req.params.id)) return sendError(res, 400, 'Invalid announcement ID format.');
-    const scope = { id: req.params.id, isGlobalRole: isGlobalRole(req.user.role), campusId: req.user.campusId };
-
-    const announcement = await announcementRepo.softDelete(scope);
+    const announcement = await mutationService.deleteAnnouncement(req.params.id, req.user);
     if (!announcement) return sendNotFound(res, 'Announcement');
-
     return sendSuccess(res, 200, 'Announcement deleted.');
   } catch (err) {
     return handleError(res, err, 'deleteAnnouncement', 'Failed to delete announcement.');
   }
-};
+});
 
 module.exports = {
   createAnnouncement,

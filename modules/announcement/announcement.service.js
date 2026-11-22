@@ -1,13 +1,6 @@
-/**
- * @file announcement.service.js
- * API publique du module announcement.
- * (Les autres modules / server.js ne touchent JAMAIS directement aux models — §3.)
- */
+'use strict';
 
+/** @file announcement.service.js @description Announcement workflow and nightly maintenance facade. */
 const { runExpiryJob } = require('./announcement.expiry.cron');
 
-module.exports = {
-  // Nightly cron (archive expired announcements + unpin).
-  // Scheduled by server.js: cron.schedule('0 1 * * *', service.runExpiryJob)
-  runExpiryJob,
-};
+module.exports = { runExpiryJob, ...require('./announcement.mutation.service') };

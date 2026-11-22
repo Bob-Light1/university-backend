@@ -1,11 +1,9 @@
 'use strict';
 
+/** @file announcement.model.js @description Campus announcement lifecycle and internal publication eligibility. */
 const mongoose = require('mongoose');
 
-const ROLES = [
-  'STUDENT', 'TEACHER', 'PARENT', 'PARTNER',
-  'STAFF', 'MENTOR', 'CAMPUS_MANAGER', 'DIRECTOR', 'ADMIN', 'ALL',
-];
+const { ROLES, STATUS, TYPES } = require('../announcement.constants');
 
 const announcementSchema = new mongoose.Schema(
   {
@@ -28,8 +26,8 @@ const announcementSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['info', 'warning', 'urgent', 'event'],
-      default: 'info',
+      enum: TYPES,
+      default: TYPES[0],
     },
     // Roles that can see this announcement. 'ALL' means every authenticated user on the campus.
     targetRoles: {
@@ -46,9 +44,10 @@ const announcementSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ['draft', 'published', 'archived'],
-      default: 'draft',
+      enum: Object.values(STATUS),
+      default: STATUS.DRAFT,
     },
+    auditEligible: { type: Boolean, default: false },
     expiresAt:   { type: Date, default: null },
     publishedAt: { type: Date, default: null },
     archivedAt:  { type: Date, default: null },

@@ -1013,6 +1013,10 @@ const api = async (method, p, token, body) => {
     browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
   });
 
+  await require('./announcement-audit.visual').checkAnnouncementAudit({
+    browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
+  });
+
   await require('./auth-session.visual').checkAuthSessions({
     browser, accounts: acc, dist: DIST, shots: SHOTS, record: rec,
   });

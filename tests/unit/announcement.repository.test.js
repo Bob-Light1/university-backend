@@ -1,151 +1,90 @@
 'use strict';
 
-/**
- * Repository layer — announcement module (R1).
- * Locks down the filters (admin campus isolation + visible scope), the
- * load→mutate→save semantics of applyUpdate, and the cron queries. Models mocked (no DB).
- */
-
+/** @file announcement.repository.test.js @description Campus/deletion filters and transactional announcement persistence contracts. */
 jest.mock('../../modules/announcement/models/announcement.model', () => {
-  const makeChain = (result) => {
-    const q = {};
-    q.sort = jest.fn(() => q);
-    q.skip = jest.fn(() => q);
-    q.limit = jest.fn(() => q);
-    q.select = jest.fn(() => q);
-    q.lean = jest.fn().mockResolvedValue(result);
-    q.distinct = jest.fn().mockResolvedValue(result);
-    return q;
+  const chain = () => {
+    const query = {};
+    for (const name of ['sort', 'skip', 'limit', 'select', 'session']) query[name] = jest.fn(() => query);
+    query.lean = jest.fn().mockResolvedValue([]);
+    query.distinct = jest.fn().mockResolvedValue([]);
+    return query;
   };
-  let nextDoc = null;
   return {
-    // Announcement carries BOTH markers: `status: 'archived'` is the expiry state written by
-    // the nightly cron on a live record, and deletion is `deletedAt`. STRATEGY_OVERRIDES
-    // settles it on `modelName`, so the mock must carry the name as well as the schema.
-    modelName:      'Announcement',
-    schema:         require('../helpers/soft-delete-stub').softDeleteSchemaStub(['status', 'deletedAt']),
-    create:         jest.fn((d) => Promise.resolve({ _id: 'new', ...d })),
-    find:           jest.fn(() => makeChain([{ _id: '1' }])),
-    findOne:        jest.fn(() => {
-      const p = Promise.resolve(nextDoc);
-      p.lean = jest.fn().mockResolvedValue(nextDoc);
-      return p;
-    }),
-    countDocuments: jest.fn().mockResolvedValue(3),
-    updateMany:     jest.fn().mockResolvedValue({ modifiedCount: 2 }),
-    __setDoc: (d) => { nextDoc = d; },
+    modelName: 'Announcement',
+    schema: require('../helpers/soft-delete-stub').softDeleteSchemaStub(['status', 'deletedAt']),
+    db: { startSession: jest.fn() },
+    find: jest.fn(chain), findOne: jest.fn(chain), findById: jest.fn(chain),
+    create: jest.fn(), countDocuments: jest.fn().mockResolvedValue(0),
   };
 });
-
-jest.mock('../../modules/announcement/models/user-notification.model', () => {
-  const chain = { select: jest.fn().mockReturnThis(), lean: jest.fn().mockResolvedValue([]) };
-  return {
-    find:           jest.fn(() => chain),
-    countDocuments: jest.fn().mockResolvedValue(0),
-    updateOne:      jest.fn().mockResolvedValue({}),
-    bulkWrite:      jest.fn().mockResolvedValue({}),
-  };
-});
-
+jest.mock('../../modules/announcement/models/user-notification.model', () => ({}));
 const Announcement = require('../../modules/announcement/models/announcement.model');
-const repo = require('../../modules/announcement/announcement.repository');
+const repository = require('../../modules/announcement/announcement.repository');
+const { STATUS, OPERATION, SWEEP_PAGE_SIZE } = require('../../modules/announcement/announcement.constants');
+const { notDeletedFilter, deletedOnlyFilter } = require('../../shared/utils/soft-delete');
+const A = 'aaaaaaaaaaaaaaaaaaaaaaaa'; const B = 'bbbbbbbbbbbbbbbbbbbbbbbb';
+const session = { withTransaction: jest.fn(callback => callback()), endSession: jest.fn() };
+beforeEach(() => { jest.clearAllMocks(); Announcement.db.startSession.mockResolvedValue(session); });
 
-// Valid 24-hex ObjectId strings (campusIds are always ObjectIds in production).
-const C1 = 'aaaaaaaaaaaaaaaaaaaaaaaa';
-const C2 = 'bbbbbbbbbbbbbbbbbbbbbbbb';
-
-beforeEach(() => {
-  jest.clearAllMocks();
-  Announcement.__setDoc(null);
-});
-
-describe('paginateForAdmin — isolation campus', () => {
-  test('rôle non-global → verrouillé sur son campus + non supprimés', async () => {
-    await repo.paginateForAdmin({ isGlobalRole: false, campusId: C1, skip: 0, limit: 20 });
-    const filter = Announcement.find.mock.calls[0][0];
-    expect(filter).toMatchObject({ deletedAt: null, schoolCampus: C1 });
+describe('management scope', () => {
+  test('scoped callers cannot select another campus', async () => {
+    await repository.paginateForAdmin({ isGlobalRole: false, campusId: A, requestedCampusId: B, skip: 0, limit: 20 });
+    expect(Announcement.find.mock.calls[0][0]).toEqual({ ...notDeletedFilter(Announcement), schoolCampus: A });
   });
-
-  test('rôle non-global sans campusId → refus (anti-fuite cross-campus)', async () => {
-    await expect(
-      repo.paginateForAdmin({ isGlobalRole: false, campusId: undefined, skip: 0, limit: 20 })
-    ).rejects.toMatchObject({ code: 'CAMPUS_ISOLATION' });
+  test.each([undefined, 'invalid'])('missing or malformed campus %s fails closed', async campusId => {
+    await expect(repository.paginateForAdmin({ isGlobalRole: false, campusId })).rejects.toMatchObject({ code: 'CAMPUS_ISOLATION' });
   });
-
-  test('rôle non-global avec campusId invalide → refus', async () => {
-    await expect(
-      repo.paginateForAdmin({ isGlobalRole: false, campusId: 'not-an-id', skip: 0, limit: 20 })
-    ).rejects.toMatchObject({ code: 'CAMPUS_ISOLATION' });
+  test('global callers can narrow to an actual campus', async () => {
+    await repository.paginateForAdmin({ isGlobalRole: true, requestedCampusId: B });
+    expect(Announcement.find.mock.calls[0][0]).toEqual({ ...notDeletedFilter(Announcement), schoolCampus: B });
   });
-
-  test('rôle global + campus demandé → ciblé sur ce campus', async () => {
-    await repo.paginateForAdmin({ isGlobalRole: true, campusId: C1, requestedCampusId: C2, skip: 0, limit: 20 });
-    expect(Announcement.find.mock.calls[0][0]).toMatchObject({ deletedAt: null, schoolCampus: C2 });
-  });
-
-  test('rôle global + campus demandé invalide → ignoré (pas de CastError)', async () => {
-    await repo.paginateForAdmin({ isGlobalRole: true, requestedCampusId: 'garbage', skip: 0, limit: 20 });
-    expect(Announcement.find.mock.calls[0][0]).toEqual({ deletedAt: null });
-  });
-
-  test('rôle global sans campus demandé → pas de restriction campus', async () => {
-    await repo.paginateForAdmin({ isGlobalRole: true, campusId: C1, skip: 0, limit: 20 });
-    const filter = Announcement.find.mock.calls[0][0];
-    expect(filter).toEqual({ deletedAt: null });
-  });
-
-  test('tri épinglé puis récent', async () => {
-    const chain = Announcement.find();
-    Announcement.find.mockClear();
-    Announcement.find.mockReturnValueOnce(chain);
-    await repo.paginateForAdmin({ isGlobalRole: true, skip: 0, limit: 20 });
-    expect(chain.sort).toHaveBeenCalledWith({ pinned: -1, createdAt: -1 });
+  test('trash keeps the owning campus and uses its derived deletion convention', async () => {
+    await repository.paginateForAdmin({ isGlobalRole: false, campusId: A, deleted: true });
+    expect(Announcement.find.mock.calls[0][0]).toEqual({ ...deletedOnlyFilter(Announcement), schoolCampus: A });
   });
 });
 
-describe('applyUpdate — load→assign→save', () => {
-  test('introuvable → null', async () => {
-    Announcement.__setDoc(null);
-    expect(await repo.applyUpdate({ id: 'x', isGlobalRole: true }, { status: 'archived' })).toBeNull();
+describe('transaction primitives', () => {
+  test('loads with authenticated scope and the active session', () => {
+    const query = repository.loadForMutation({ id: A, user: { role: 'CAMPUS_MANAGER', campusId: A } }, session);
+    expect(Announcement.findOne).toHaveBeenCalledWith({ _id: A, schoolCampus: A, ...notDeletedFilter(Announcement) });
+    expect(query.session).toHaveBeenCalledWith(session);
   });
-
-  test('assigne les champs et save', async () => {
-    const save = jest.fn().mockResolvedValue();
-    Announcement.__setDoc({ _id: '1', status: 'draft', save });
-    const out = await repo.applyUpdate({ id: '1', isGlobalRole: false, campusId: C1 }, { status: 'published' });
-    expect(out.status).toBe('published');
-    expect(save).toHaveBeenCalledTimes(1);
-    // the admin scope (campus + not deleted) is applied to the search
-    expect(Announcement.findOne.mock.calls[0][0]).toMatchObject({ _id: '1', deletedAt: null, schoolCampus: C1 });
+  test('refuses a scoped user without a campus before querying', () => {
+    expect(() => repository.loadForMutation({ id: A, user: { role: 'STAFF' } }, session)).toThrow();
+    expect(Announcement.findOne).not.toHaveBeenCalled();
+  });
+  test('saves and reads persisted after-state with the same session', async () => {
+    const doc = { _id: A, save: jest.fn() };
+    await repository.saveMutation(doc, session);
+    expect(doc.save).toHaveBeenCalledWith({ session });
+    expect(Announcement.findById).toHaveBeenCalledWith(A);
+    const query = Announcement.findById.mock.results[0].value;
+    expect(query.session).toHaveBeenCalledWith(session); expect(query.lean).toHaveBeenCalled();
+  });
+  test('returns the transaction result and ends the session', async () => {
+    await expect(repository.withTransaction(async actual => { expect(actual).toBe(session); return 42; })).resolves.toBe(42);
+    expect(session.endSession).toHaveBeenCalledTimes(1);
+  });
+  test('propagates failure and still ends the session', async () => {
+    const error = new Error('Synthetic transaction failure');
+    await expect(repository.withTransaction(async () => { throw error; })).rejects.toBe(error);
+    expect(session.endSession).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('findVisibleById — portée de visibilité', () => {
-  test('filtre publié + non supprimé + campus', async () => {
-    Announcement.__setDoc({ _id: '1' });
-    await repo.findVisibleById({ id: '1', campusId: C1, role: 'STUDENT' });
-    const filter = Announcement.findOne.mock.calls[0][0];
-    expect(filter).toMatchObject({ _id: '1', schoolCampus: C1, status: 'published', deletedAt: null });
-    expect(Array.isArray(filter.$and)).toBe(true);
-  });
-});
-
-describe('cron', () => {
-  test('archiveExpired : filtre publié+expiré, $set archived, renvoie modifiedCount', async () => {
-    const now = new Date();
-    const n = await repo.archiveExpired(now);
-    const [filter, update] = Announcement.updateMany.mock.calls[0];
-    expect(filter).toMatchObject({ status: 'published', deletedAt: null });
-    expect(filter.expiresAt).toEqual({ $ne: null, $lte: now });
-    expect(update).toEqual({ $set: { status: 'archived', archivedAt: now } });
-    expect(n).toBe(2);
-  });
-
-  test('unpinExpired : filtre épinglé+échu, $set unpin', async () => {
-    const now = new Date();
-    await repo.unpinExpired(now);
-    const [filter, update] = Announcement.updateMany.mock.calls[0];
-    expect(filter).toMatchObject({ pinned: true, deletedAt: null });
-    expect(update).toEqual({ $set: { pinned: false, pinnedUntil: null } });
+describe('bounded due discovery and transactional recheck', () => {
+  test.each([OPERATION.EXPIRE, OPERATION.UNPIN])('%s repeats the same due filter in the transaction', async operation => {
+    const now = new Date('2026-11-20T09:00:00Z');
+    await repository.listDue(operation, now, { afterId: A, limit: SWEEP_PAGE_SIZE });
+    repository.loadDue(B, operation, now, session);
+    const discovery = Announcement.find.mock.calls[0][0]; const recheck = Announcement.findOne.mock.calls[0][0];
+    expect(discovery).toEqual({ ...recheck, _id: { $gt: A } });
+    expect(recheck).toMatchObject(notDeletedFilter(Announcement));
+    if (operation === OPERATION.EXPIRE) expect(recheck).toMatchObject({ status: STATUS.PUBLISHED, expiresAt: { $ne: null, $lte: now } });
+    else expect(recheck).toMatchObject({ pinned: true, pinnedUntil: { $ne: null, $lte: now } });
+    const query = Announcement.find.mock.results[0].value;
+    expect(query.sort).toHaveBeenCalledWith({ _id: 1 }); expect(query.limit).toHaveBeenCalledWith(SWEEP_PAGE_SIZE);
+    expect(Announcement.findOne.mock.results[0].value.session).toHaveBeenCalledWith(session);
   });
 });
