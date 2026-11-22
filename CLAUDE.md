@@ -82,7 +82,14 @@ monthly `WhatsAppUsage` records belong to notification and use `schoolCampus`.
 The [WhatsApp contract](docs/architecture/features/whatsapp-business.md) owns the
 four emitter families, quotas, signed callbacks and real activation procedure.
 
-Modules: `admin · campus · student · teacher · parent · mentor · staff · class · level · subject · department · course · result · document · exam · academic-print · partner · announcement · gaet · settings · notification · finance · public-portal · account · ai`.
+The internal `audit` facade exposes source declaration, retry-stable operation/mutation
+handles and session-required projected appends. Its `AuditEvent` model refuses updates,
+replacements, deletions and aggregation writes; campus and deletable source relations
+retain it. `scripts/prepare-audit-journal.js` inspects indexes by default and adds missing
+indexes only with `--apply`. Business emitters, eligibility preparation and consultation
+are still pending; see the [implementation checkpoint](docs/architecture/features/cross-module-audit.md#storagewriter-checkpoint--2026-11-12).
+
+Modules: `admin · campus · student · teacher · parent · mentor · staff · class · level · subject · department · course · result · document · exam · academic-print · partner · announcement · gaet · settings · notification · finance · public-portal · account · ai · audit`.
 
 ---
 
@@ -568,6 +575,15 @@ institutional notifications. Sender addresses remain explicit configuration.
 No API, persistence, scope or entitlement contract is added by this presentation work.
 
 ## 10. Special modules
+
+**Cross-module audit, in progress (phase 1-B row 8)** — the
+[v1 contract](docs/architecture/features/cross-module-audit.md) and
+[inspected writer inventory](docs/architecture/features/cross-module-audit-inventory.md)
+cover post-publication/effective-business mutations, permanent retention and
+management consultation. Existing audit deletion guards and the internal shared
+`audit` storage/writer are implemented. Production emitters, eligibility preparation,
+routes and ERP screen remain pending. Do not infer runtime unified-journal coverage
+from this foundation or the existing document/deletion ledgers and embedded histories.
 
 **Account sessions** (`/api/account/session`) — revocable short access tokens and rotating refresh cookies for all nine roles. `AuthSession` / `LoginState` are nullable `schoolCampus` operational records; no business soft-delete convention. Account/campus danger-zone cascades cover both. Expiry and account changes are enforced synchronously, independent of TTL cleanup. The expand-only `scripts/prepare-auth-sessions.js` prepares collections and indexes (`--apply`, dry-run by default); existing accounts need no rewrite. Release requires a fresh login for old tokens. See [contract and evidence](docs/architecture/features/auth-session-hardening.md). No new cron or entitlement key.
 

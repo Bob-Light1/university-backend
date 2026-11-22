@@ -87,6 +87,20 @@ règle ne souffre aucune exception, y compris dans les fichiers de test.
 
 ## §0 — Tableau de bord des chantiers
 
+2026-11-12 row-8 storage/writer implementation: the shared journal foundation has
+its own unit/registry and disposable-replica-set proof. The
+[checkpoint](features/cross-module-audit.md#storagewriter-checkpoint--2026-11-12)
+records 102 Jest suites / 1,905 passing tests, journal 32/32, fixture 36/36, base
+journey 25/25 and sequential course 67/67. No production emitter or manual workflow
+is connected; proposed ERP-AUD-001–008 remain unregistered. No CH-* acceptance
+status or independent-review gate changes.
+
+2026-11-12 row-8 design continuation: the [journal contract](features/cross-module-audit.md)
+records mutation/transaction/ownership acceptance and proposed manual case IDs
+ERP-AUD-001–008. This documentation-only milestone registers no case, executes no
+application test and changes no CH-* status or independent acceptance gate. The
+earlier November 12 test results below belong to the retention prerequisite.
+
 2026-11-12 regression maintenance for phase 1-B row 8: existing audit-ledger
 deletion guards and the Mongoose security patch pass 101 Jest suites / 1,837
 tests, fixture self-check 36/36, base API journey 25/25 and sequential course guard

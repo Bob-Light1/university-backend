@@ -1,6 +1,6 @@
 P# Project context
 
-Last documentation review: 2026-09-19.
+Last documentation review: 2026-11-12.
 This map helps with navigation; the code describes the implemented behavior.
 It does not certify a deployment or passing tests.
 
@@ -61,6 +61,9 @@ the roadmap owns its delivery status.
 - Academic activities: `result`, `exam`, `academic-print`, `gaet`; attendance and schedules in `student` / `teacher`.
 - Management and communication: `finance`, `document`, `announcement`, `notification`, `settings`.
 - Recruitment and assistance: `partner`, `public-portal`, `ai`.
+- Cross-module accountability: `audit` has an internal storage/writer facade;
+  production emitters and HTTP consultation remain pending. See the
+  [journal contract and checkpoint](architecture/features/cross-module-audit.md).
 
 ## Runtime dependencies
 
