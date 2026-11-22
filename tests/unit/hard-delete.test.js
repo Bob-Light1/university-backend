@@ -318,7 +318,7 @@ describe('hard-delete registry — RETAIN is declared, never implicit', () => {
       .filter((r) => r.mode === RELATION_MODE.RETAIN)
       .map((r) => r.model);
 
-    expect(campusRetains).toEqual(expect.arrayContaining(['DocumentAudit', 'DeletionAudit']));
+    expect(campusRetains).toEqual(expect.arrayContaining(['DocumentAudit', 'DeletionAudit', 'AuditEvent']));
   });
 
   it('stays confined to provenance and ledgers', () => {
@@ -331,7 +331,7 @@ describe('hard-delete registry — RETAIN is declared, never implicit', () => {
       'StudentAttendance', 'TeacherAttendance',  // recordedBy / justifiedBy — required fields
       'StudentSchedule',   'TeacherSchedule',    // publishedBy / lastModifiedBy, department snapshot
       'Result',                                   // classManager — signatory of a published result
-      'DocumentAudit',     'DeletionAudit',      // append-only ledgers
+      'DocumentAudit',     'DeletionAudit', 'AuditEvent', // permanent ledgers
     ];
 
     retains.forEach(([, relation]) => expect(ALLOWED).toContain(relation.model));

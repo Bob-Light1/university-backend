@@ -93,6 +93,7 @@ const M = {
   QuizSession:       () => require('../../../modules/public-portal/models/quiz.session.model'),
   Testimonial:       () => require('../../../modules/public-portal/models/testimonial.model'),
   DeletionAudit:     () => require('./deletion-audit.model'),
+  AuditEvent:        () => require('../../../modules/audit/models/audit-event.model'),
 };
 
 // ── Relation builders ─────────────────────────────────────────────────────────
@@ -575,6 +576,7 @@ const REGISTRY = Object.freeze({
       // transaction. Their campusId is expected to point at a removed campus.
       retain('DocumentAudit', 'GED audit trail (kept)',      (id) => ({ campusId: id })),
       retain('DeletionAudit', 'Deletion ledger (kept)',      (id) => ({ campusId: id })),
+      retain('AuditEvent', 'Shared mutation journal (kept)', (id) => ({ schoolCampus: id })),
     ],
   },
 
@@ -622,6 +624,12 @@ const REGISTRY = Object.freeze({
     customExecutor: 'document',
   },
 });
+
+// Raw source IDs deliberately have no populated model dependency. Declare retained
+// history on the three currently deletable source types as well as on the tenant.
+for (const [key, entityType] of Object.entries({ course: 'Course', announcement: 'Announcement', document: 'Document' })) {
+  REGISTRY[key].relations.push(retain('AuditEvent', 'Shared mutation journal (kept)', id => ({ entityType, entityId: id })));
+}
 
 /**
  * Resolves a registry entry by key.

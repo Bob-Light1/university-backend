@@ -13,7 +13,7 @@
  */
 
 const MODULES = [
-  'academic-print', 'admin', 'ai', 'announcement', 'campus', 'class', 'course',
+  'academic-print', 'admin', 'ai', 'announcement', 'audit', 'campus', 'class', 'course',
   'department', 'document', 'exam', 'finance', 'gaet', 'level', 'mentor',
   'notification', 'parent', 'partner', 'public-portal', 'result', 'settings',
   'staff', 'student', 'subject', 'teacher',
@@ -32,6 +32,8 @@ describe('Forme de façade { routes, service } pour chaque module', () => {
 describe('API inter-modules — fonctions de service attendues', () => {
   // [module, [functions exposed and consumed elsewhere]]
   const CONTRACTS = [
+    ['audit', ['defineSource', 'createOperation', 'createMutation', 'appendMutation']],
+    ['announcement', ['updateAnnouncement', 'publishAnnouncement', 'archiveAnnouncement', 'togglePin', 'deleteAnnouncement', 'archiveExpired', 'unpinExpired', 'runExpiryJob']],
     ['campus',  ['getCampusName', 'getCampusDefaults', 'getCampusNotificationContact', 'getCampusDocById', 'getActiveCampusBySlug', 'listActivePublicCampuses', 'getCampusAiEntitlement']],
     ['class',   ['countClassesOnCampus', 'resolveClassesForSchedule', 'getClassCampusRef', 'findClassForBulk', 'addTeacherToClasses', 'setClassManager']],
     ['subject', ['countSubjectsOnCampus', 'listCampusSubjects', 'getSubjectCampusRef', 'resolveSubjectForSchedule']],

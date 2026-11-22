@@ -10,11 +10,12 @@
  * Existing insertion and update behavior is deliberately preserved.
  *
  * @param {import('mongoose').Schema} schema
+ * @param {{ errorFactory?: Function }} [options] Optional domain-specific deletion error.
  * @returns {void}
  */
-const protectAuditDeletions = (schema) => {
-  const deletionError = (modelName) =>
-    new Error(`${modelName} records are immutable — deletion is not permitted`);
+const protectAuditDeletions = (schema, options = {}) => {
+  const deletionError = options.errorFactory || ((modelName) =>
+    new Error(`${modelName} records are immutable — deletion is not permitted`));
 
   /** @returns {never} Rejects an individual ledger deletion before database access. */
   const refuseDeletion = function () {
